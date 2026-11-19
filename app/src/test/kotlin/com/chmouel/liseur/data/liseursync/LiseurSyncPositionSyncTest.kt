@@ -1091,8 +1091,10 @@ class LiseurSyncPositionSyncTest {
                     "VALUES ('$LOCAL', '{\"href\":\"/c1.xhtml\"}', 0.4, $NOW, 1)",
             )
         }
-        helper.runMigrationsAndValidate(name, 79, true, *LiseurDatabase.MIGRATIONS).close()
-        val migrated = Room.databaseBuilder(context, LiseurDatabase::class.java, name).build()
+        helper.runMigrationsAndValidate(name, 80, true, *LiseurDatabase.MIGRATIONS).close()
+        val migrated = Room.databaseBuilder(context, LiseurDatabase::class.java, name)
+            .addMigrations(*LiseurDatabase.MIGRATIONS)
+            .build()
         try {
             connect(database = migrated)
             migrated.bookDao().upsert(local())

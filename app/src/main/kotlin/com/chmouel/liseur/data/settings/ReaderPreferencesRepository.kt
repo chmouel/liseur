@@ -22,7 +22,9 @@ private val Context.readerPrefsStore: DataStore<Preferences> by preferencesDataS
 internal val READER_BACKUP_TYPES = mapOf(
     "font" to BackupValueType.STRING, "font_size" to BackupValueType.DOUBLE,
     "theme" to BackupValueType.STRING, "line_height" to BackupValueType.DOUBLE,
-    "page_margins" to BackupValueType.DOUBLE, "brightness" to BackupValueType.FLOAT,
+    "page_margins" to BackupValueType.DOUBLE, "top_margin" to BackupValueType.DOUBLE,
+    "bottom_margin" to BackupValueType.DOUBLE, "sync_vertical_margins" to BackupValueType.BOOLEAN,
+    "brightness" to BackupValueType.FLOAT,
     "page_turn_style" to BackupValueType.STRING, "page_turn_animation" to BackupValueType.BOOLEAN,
     "footer_mode" to BackupValueType.STRING, "footer_left" to BackupValueType.STRING,
     "footer_right" to BackupValueType.STRING, "column_mode" to BackupValueType.STRING,
@@ -72,6 +74,9 @@ class ReaderPreferencesRepository(private val store: DataStore<Preferences>) {
         val THEME = stringPreferencesKey("theme")
         val LINE_HEIGHT = doublePreferencesKey("line_height")
         val PAGE_MARGINS = doublePreferencesKey("page_margins")
+        val TOP_MARGIN = doublePreferencesKey("top_margin")
+        val BOTTOM_MARGIN = doublePreferencesKey("bottom_margin")
+        val SYNC_VERTICAL_MARGINS = booleanPreferencesKey("sync_vertical_margins")
         val BRIGHTNESS = floatPreferencesKey("brightness")
         val PAGE_TURN_STYLE = stringPreferencesKey("page_turn_style")
 
@@ -106,6 +111,9 @@ class ReaderPreferencesRepository(private val store: DataStore<Preferences>) {
             themeChoice = ReaderThemeChoice.fromId(p[Keys.THEME]),
             lineHeight = p[Keys.LINE_HEIGHT],
             pageMargins = p[Keys.PAGE_MARGINS],
+            topMargin = p[Keys.TOP_MARGIN],
+            bottomMargin = p[Keys.BOTTOM_MARGIN],
+            syncVerticalMargins = p[Keys.SYNC_VERTICAL_MARGINS] ?: true,
             brightness = p[Keys.BRIGHTNESS],
             pageTurnStyle = pageTurnStyleFrom(
                 stored = p[Keys.PAGE_TURN_STYLE],
@@ -143,6 +151,38 @@ class ReaderPreferencesRepository(private val store: DataStore<Preferences>) {
 
     suspend fun setPageMargins(value: Double?) {
         setNullableDouble(Keys.PAGE_MARGINS, TypographyRange.PAGE_MARGINS.sanitize(value))
+    }
+
+    suspend fun setTopMargin(value: Double?) {
+        setNullableDouble(Keys.TOP_MARGIN, TypographyRange.VERTICAL_MARGINS.sanitize(value))
+    }
+
+    suspend fun setBottomMargin(value: Double?) {
+        setNullableDouble(Keys.BOTTOM_MARGIN, TypographyRange.VERTICAL_MARGINS.sanitize(value))
+    }
+
+    suspend fun setVerticalMargins(value: Double?) {
+        val safe = TypographyRange.VERTICAL_MARGINS.sanitize(value)
+        store.edit {
+            if (safe == null) {
+                it.remove(Keys.TOP_MARGIN)
+                it.remove(Keys.BOTTOM_MARGIN)
+            } else {
+                it[Keys.TOP_MARGIN] = safe
+                it[Keys.BOTTOM_MARGIN] = safe
+            }
+        }
+    }
+
+    suspend fun setSyncVerticalMargins(sync: Boolean) {
+        store.edit { prefs ->
+            prefs[Keys.SYNC_VERTICAL_MARGINS] = sync
+            if (sync) {
+                val (top, bottom) = syncedVerticalMargins(prefs[Keys.TOP_MARGIN], prefs[Keys.BOTTOM_MARGIN])
+                if (top == null) prefs.remove(Keys.TOP_MARGIN) else prefs[Keys.TOP_MARGIN] = top
+                if (bottom == null) prefs.remove(Keys.BOTTOM_MARGIN) else prefs[Keys.BOTTOM_MARGIN] = bottom
+            }
+        }
     }
 
     suspend fun setBrightness(value: Float?) {

@@ -788,6 +788,12 @@ private fun LiseurApp(
                             onFontSize = { scope.launch { readerPreferences.setFontSize(it) } },
                             onLineHeight = { scope.launch { readerPreferences.setLineHeight(it) } },
                             onPageMargins = { scope.launch { readerPreferences.setPageMargins(it) } },
+                            onTopMargin = { scope.launch { readerPreferences.setTopMargin(it) } },
+                            onBottomMargin = { scope.launch { readerPreferences.setBottomMargin(it) } },
+                            onVerticalMargins = { scope.launch { readerPreferences.setVerticalMargins(it) } },
+                            onSyncVerticalMargins = {
+                                scope.launch { readerPreferences.setSyncVerticalMargins(it) }
+                            },
                             onBrightness = { scope.launch { readerPreferences.setBrightness(it) } },
                             onColumnMode = { scope.launch { readerPreferences.setColumnMode(it) } },
                             onFooterMode = { scope.launch { readerPreferences.setFooterMode(it) } },

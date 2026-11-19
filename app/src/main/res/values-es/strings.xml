@@ -643,9 +643,13 @@
     <string name="reader_spacing_default">Predeterminado</string>
     <string name="reader_spacing_relaxed">Holgado</string>
     <string name="reader_margins">Márgenes</string>
-    <string name="reader_margins_narrow">Estrechos</string>
-    <string name="reader_margins_default">Predeterminados</string>
-    <string name="reader_margins_wide">Anchos</string>
+    <string name="reader_side_margins">Márgenes laterales</string>
+    <string name="reader_vertical_margins">Márgenes superior e inferior</string>
+    <string name="reader_top_margin">Margen superior</string>
+    <string name="reader_bottom_margin">Margen inferior</string>
+    <string name="reader_sync_vertical_margins">Sincronizar superior e inferior</string>
+    <string name="reader_margin_multiplier_value">%1$s×</string>
+    <string name="reader_margin_dp_value">%1$d dp</string>
     <string name="reader_columns">Columnas</string>
     <string name="reader_columns_auto">Automático</string>
     <string name="reader_columns_one">1</string>

@@ -713,9 +713,13 @@
     <string name="reader_spacing_default">Výchozí</string>
     <string name="reader_spacing_relaxed">Volnější</string>
     <string name="reader_margins">Okraje</string>
-    <string name="reader_margins_narrow">Úzké</string>
-    <string name="reader_margins_default">Výchozí</string>
-    <string name="reader_margins_wide">Široké</string>
+    <string name="reader_side_margins">Boční okraje</string>
+    <string name="reader_vertical_margins">Horní a dolní okraj</string>
+    <string name="reader_top_margin">Horní okraj</string>
+    <string name="reader_bottom_margin">Dolní okraj</string>
+    <string name="reader_sync_vertical_margins">Sladit horní a dolní</string>
+    <string name="reader_margin_multiplier_value">%1$s×</string>
+    <string name="reader_margin_dp_value">%1$d dp</string>
     <string name="reader_columns">Sloupce</string>
     <string name="reader_columns_auto">Automaticky</string>
     <string name="reader_columns_one">1</string>

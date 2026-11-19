@@ -31,6 +31,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.intl.Locale
 import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.ui.settings.search.SettingsEntries
@@ -336,15 +339,17 @@ fun DefaultableSpacingSlider(
     enabled: Boolean,
     note: String?,
     onChanged: (Double?) -> Unit,
+    formatValue: @Composable (Double?) -> String = { spacingLabel(it) },
 ) {
     var thumb by remember(value) { mutableFloatStateOf(spacingThumb(value, range)) }
+    val valueText = formatValue(value)
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             ReadingSectionLabel(label)
-            ReadingSectionLabel(spacingLabel(value))
+            ReadingSectionLabel(valueText)
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Slider(
@@ -354,7 +359,12 @@ fun DefaultableSpacingSlider(
                 onValueChangeFinished = { onChanged(spacingCommit(thumb, range)) },
                 valueRange = range.min.toFloat()..range.max.toFloat(),
                 steps = range.steps,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .weight(1f)
+                    .semantics {
+                        contentDescription = label
+                        stateDescription = valueText
+                    },
             )
             IconButton(
                 enabled = enabled,

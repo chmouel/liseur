@@ -643,9 +643,13 @@
     <string name="reader_spacing_default">Par défaut</string>
     <string name="reader_spacing_relaxed">Aéré</string>
     <string name="reader_margins">Marges</string>
-    <string name="reader_margins_narrow">Étroites</string>
-    <string name="reader_margins_default">Par défaut</string>
-    <string name="reader_margins_wide">Larges</string>
+    <string name="reader_side_margins">Marges latérales</string>
+    <string name="reader_vertical_margins">Marges haut et bas</string>
+    <string name="reader_top_margin">Marge haute</string>
+    <string name="reader_bottom_margin">Marge basse</string>
+    <string name="reader_sync_vertical_margins">Synchroniser haut et bas</string>
+    <string name="reader_margin_multiplier_value">%1$s×</string>
+    <string name="reader_margin_dp_value">%1$d dp</string>
     <string name="reader_columns">Colonnes</string>
     <string name="reader_columns_auto">Auto</string>
     <string name="reader_columns_one">1</string>

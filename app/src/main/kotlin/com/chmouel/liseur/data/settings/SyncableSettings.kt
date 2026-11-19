@@ -111,6 +111,29 @@ fun syncableSettings(
         },
     ),
     SyncableSetting(
+        key = "reader.top_margin",
+        read = { reader.prefs.first().topMargin.orUnset() },
+        write = { raw ->
+            writeNumber(raw, TypographyRange.VERTICAL_MARGINS, nullable = true) {
+                reader.setTopMargin(it)
+            }
+        },
+    ),
+    SyncableSetting(
+        key = "reader.bottom_margin",
+        read = { reader.prefs.first().bottomMargin.orUnset() },
+        write = { raw ->
+            writeNumber(raw, TypographyRange.VERTICAL_MARGINS, nullable = true) {
+                reader.setBottomMargin(it)
+            }
+        },
+    ),
+    SyncableSetting(
+        key = "reader.sync_vertical_margins",
+        read = { reader.prefs.first().syncVerticalMargins.toString() },
+        write = { raw -> writeBoolean(raw) { reader.setSyncVerticalMargins(it) } },
+    ),
+    SyncableSetting(
         key = "reader.page_turn_style",
         read = { reader.prefs.first().pageTurnStyle.id },
         write = { raw ->
@@ -362,7 +385,7 @@ private suspend fun writeNumber(
     // would push its own rounding back over the choice that was made.
     // A build whose notches are finer is a build this one cannot follow,
     // which is the same answer it gives an unrecognised font.
-    if (range is TypographyRange.Slider && range.snap(v) != v) return false
+    if (range is TypographyRange.Slider && range.snapsStoredValues && range.snap(v) != v) return false
     set(v)
     return true
 }

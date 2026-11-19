@@ -695,9 +695,13 @@
     <string name="reader_spacing_default">Обычный</string>
     <string name="reader_spacing_relaxed">Свободный</string>
     <string name="reader_margins">Поля</string>
-    <string name="reader_margins_narrow">Узкие</string>
-    <string name="reader_margins_default">Обычные</string>
-    <string name="reader_margins_wide">Широкие</string>
+    <string name="reader_side_margins">Боковые поля</string>
+    <string name="reader_vertical_margins">Верхнее и нижнее поля</string>
+    <string name="reader_top_margin">Верхнее поле</string>
+    <string name="reader_bottom_margin">Нижнее поле</string>
+    <string name="reader_sync_vertical_margins">Связать верх и низ</string>
+    <string name="reader_margin_multiplier_value">%1$s×</string>
+    <string name="reader_margin_dp_value">%1$d dp</string>
     <string name="reader_columns">Колонки</string>
     <string name="reader_columns_auto">Авто</string>
     <string name="reader_columns_one">1</string>

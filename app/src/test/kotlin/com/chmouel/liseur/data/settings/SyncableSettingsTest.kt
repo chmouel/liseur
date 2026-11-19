@@ -104,6 +104,9 @@ class SyncableSettingsTest {
                 "reader.theme",
                 "reader.line_height",
                 "reader.page_margins",
+                "reader.top_margin",
+                "reader.bottom_margin",
+                "reader.sync_vertical_margins",
                 "reader.page_turn_style",
                 "reader.footer_mode",
                 "reader.footer_left",
@@ -179,6 +182,8 @@ class SyncableSettingsTest {
         val nullable = listOf(
             "reader.line_height",
             "reader.page_margins",
+            "reader.top_margin",
+            "reader.bottom_margin",
             "reader.hyphens",
             "reader.letter_spacing",
             "reader.word_spacing",
@@ -189,6 +194,8 @@ class SyncableSettingsTest {
         // Set, then put back to "whatever the publisher asked for".
         r.setLineHeight(1.4)
         r.setPageMargins(1.2)
+        r.setTopMargin(24.0)
+        r.setBottomMargin(32.0)
         r.setHyphens(true)
         r.setLetterSpacing(0.05)
         r.setWordSpacing(0.1)
@@ -205,6 +212,8 @@ class SyncableSettingsTest {
         val prefs = r.prefs.first()
         assertNull(prefs.lineHeight)
         assertNull(prefs.pageMargins)
+        assertNull(prefs.topMargin)
+        assertNull(prefs.bottomMargin)
         assertNull(prefs.hyphens)
         assertNull(prefs.letterSpacing)
         assertNull(prefs.wordSpacing)
