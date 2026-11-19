@@ -1304,8 +1304,10 @@ changing reader behavior.
   Brightness commits once on lift; `ScreenBrightness` writes only on
   change and resets to the system only on dispose. Below 15% on non-e-ink
   panels, `resolveScreenBrightness` ramps a non-interactive software dim
-  scrim (`UltraDimOverlay`) while capping API 35+ `desiredHdrHeadroom` to
-  SDR; `ImageViewer` lifts the HDR cap and requests wide color gamut on
+  scrim (`UltraDimOverlay`, drawn last so it also covers the search and
+  contents panes) while capping API 35+ `desiredHdrHeadroom` to SDR; a swipe
+  that starts from the system level maps it back with
+  `readerBrightnessForWindow`; `ImageViewer` lifts the HDR cap and requests wide color gamut on
   capable panels while open.
 - Chrome reaches the screen edge: navigation-bar insets stay inside
   `ReadingScrubber` (its spacer when the panel is absent); no edge fades on

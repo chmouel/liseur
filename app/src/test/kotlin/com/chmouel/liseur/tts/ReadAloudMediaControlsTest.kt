@@ -112,4 +112,13 @@ class ReadAloudMediaControlsTest {
         assertNull(wholeBookProgressSubText(-1, 10))
         assertNull(wholeBookProgressSubText(11, 10))
     }
+
+    @Test
+    fun `sleep label refreshes when the whole minutes left change`() {
+        val timer = SleepTimer.Timed(minutes = 15, endsAt = 10 * SleepTimer.MINUTE_MS)
+        assertEquals(SleepTimer.MINUTE_MS, sleepLabelRefreshDelay(timer, now = 0))
+        assertEquals(1L, sleepLabelRefreshDelay(timer, now = SleepTimer.MINUTE_MS - 1))
+        assertEquals(30_000L, sleepLabelRefreshDelay(timer, now = 9 * SleepTimer.MINUTE_MS + 30_000))
+        assertNull(sleepLabelRefreshDelay(timer, now = 10 * SleepTimer.MINUTE_MS))
+    }
 }

@@ -60,7 +60,7 @@ class ReaderFoldPostureTest {
     }
 
     @Test
-    fun `vertical half-opened fold resolves to Book with minimum hinge gap`() {
+    fun `vertical half-opened fold resolves to Book`() {
         val posture = resolveReaderFoldPosture(
             windowWidthPx = 1800,
             windowHeightPx = 2200,
@@ -75,11 +75,10 @@ class ReaderFoldPostureTest {
         val book = posture as ReaderFoldPosture.Book
         assertEquals(IntRect(900, 0, 900, 2200), book.hingeBoundsPx)
         assertTrue(book.isHalfOpened)
-        assertEquals(48, book.hingeGapPx)
     }
 
     @Test
-    fun `vertical separating flat foldable resolves to Book with isHalfOpened false and padded hinge gap`() {
+    fun `vertical separating flat foldable resolves to Book with isHalfOpened false`() {
         val posture = resolveReaderFoldPosture(
             windowWidthPx = 1800,
             windowHeightPx = 2200,
@@ -94,7 +93,6 @@ class ReaderFoldPostureTest {
         val book = posture as ReaderFoldPosture.Book
         assertEquals(IntRect(880, 0, 920, 2200), book.hingeBoundsPx)
         assertFalse(book.isHalfOpened)
-        assertEquals(72, book.hingeGapPx)
     }
 
     @Test
@@ -137,7 +135,6 @@ class ReaderFoldPostureTest {
         val wideBook = ReaderFoldPosture.Book(
             hingeBoundsPx = IntRect(900, 0, 920, 2200),
             isHalfOpened = true,
-            hingeGapPx = 52,
         )
         assertEquals(
             ColumnMode.TWO,
@@ -158,7 +155,6 @@ class ReaderFoldPostureTest {
         val narrowBook = ReaderFoldPosture.Book(
             hingeBoundsPx = IntRect(200, 0, 220, 2200),
             isHalfOpened = true,
-            hingeGapPx = 52,
         )
         assertEquals(
             ColumnMode.AUTO,
@@ -184,41 +180,10 @@ class ReaderFoldPostureTest {
     }
 
     @Test
-    fun `bookPostureCssOverrides emits colGap in css pixels only for Book posture with positive density`() {
-        val book = ReaderFoldPosture.Book(
-            hingeBoundsPx = IntRect(890, 0, 910, 2200),
-            isHalfOpened = true,
-            hingeGapPx = 60,
-        )
-        assertEquals(
-            mapOf("--RS__colGap" to "30px"),
-            bookPostureCssOverrides(book, density = 2f),
-        )
-        assertEquals(
-            emptyMap<String, String>(),
-            bookPostureCssOverrides(book, density = 0f),
-        )
-        assertEquals(
-            emptyMap<String, String>(),
-            bookPostureCssOverrides(ReaderFoldPosture.Flat, density = 2f),
-        )
-        val tabletop = ReaderFoldPosture.Tabletop(
-            hingeBoundsPx = IntRect(0, 890, 2200, 910),
-            topPaneHeightPx = 890,
-            bottomPaneHeightPx = 890,
-        )
-        assertEquals(
-            emptyMap<String, String>(),
-            bookPostureCssOverrides(tabletop, density = 2f),
-        )
-    }
-
-    @Test
     fun `resolveBookLeafBounds selects the tapped leaf and avoids straddling the hinge`() {
         val book = ReaderFoldPosture.Book(
             hingeBoundsPx = IntRect(890, 0, 910, 2200),
             isHalfOpened = true,
-            hingeGapPx = 52,
         )
         assertEquals(
             BookLeafBounds(leftPx = 0, widthPx = 890),

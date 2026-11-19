@@ -15,8 +15,6 @@ import com.chmouel.liseur.ui.WidthClass
 import kotlinx.coroutines.flow.map
 
 private const val MIN_BOOK_LEAF_WIDTH_PX = 240
-private const val MIN_HINGE_GAP_PX = 48
-private const val HINGE_GAP_PADDING_PX = 32
 
 sealed interface ReaderFoldPosture {
     data object Flat : ReaderFoldPosture
@@ -24,7 +22,6 @@ sealed interface ReaderFoldPosture {
     data class Book(
         val hingeBoundsPx: IntRect,
         val isHalfOpened: Boolean,
-        val hingeGapPx: Int,
     ) : ReaderFoldPosture
 
     data class Tabletop(
@@ -50,12 +47,9 @@ fun resolveReaderFoldPosture(
     }
     val bounds = IntRect(boundsLeft, boundsTop, boundsRight, boundsBottom)
     if (orientationVertical) {
-        val hingeWidth = (boundsRight - boundsLeft).coerceAtLeast(0)
-        val hingeGapPx = maxOf(hingeWidth + HINGE_GAP_PADDING_PX, MIN_HINGE_GAP_PX)
         return ReaderFoldPosture.Book(
             hingeBoundsPx = bounds,
             isHalfOpened = isHalfOpened,
-            hingeGapPx = hingeGapPx,
         )
     }
     if (isHalfOpened) {
@@ -85,13 +79,6 @@ fun ColumnMode.effectiveFor(widthClass: WidthClass, posture: ReaderFoldPosture):
     }
     return effectiveFor(widthClass)
 }
-
-fun bookPostureCssOverrides(posture: ReaderFoldPosture, density: Float): Map<String, String> =
-    if (posture is ReaderFoldPosture.Book && density > 0f) {
-        mapOf("--RS__colGap" to "${(posture.hingeGapPx / density).toInt()}px")
-    } else {
-        emptyMap()
-    }
 
 data class BookLeafBounds(
     val leftPx: Int,
