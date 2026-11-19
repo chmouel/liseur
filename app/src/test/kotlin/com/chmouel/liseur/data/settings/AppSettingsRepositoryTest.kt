@@ -74,6 +74,20 @@ class AppSettingsRepositoryTest {
     }
 
     @Test
+    fun `vocabulary autosave defaults on and a saved opt out survives backup`() = runTest {
+        assertTrue(AppSettings().vocabularyAutoSave)
+        val repo = AppSettingsRepository(store("vocabulary-autosave.preferences_pb"))
+        assertTrue(repo.settings.first().vocabularyAutoSave)
+        assertFalse(repo.settings.first().dictionaryLookupEnabled)
+
+        repo.setVocabularyAutoSave(false)
+        assertFalse(repo.settings.first().vocabularyAutoSave)
+        val restored = AppSettingsRepository(store("vocabulary-autosave-restored.preferences_pb"))
+        restored.restoreBackupValues(repo.backupValues())
+        assertFalse(restored.settings.first().vocabularyAutoSave)
+    }
+
+    @Test
     fun `vocabulary settings restore within bounds and leave reminders device local`() = runTest {
         val source = AppSettingsRepository(store("vocabulary-source.preferences_pb"))
         source.setVocabularyAutoSave(true)
