@@ -162,7 +162,12 @@ def format_fdroid_run(run: dict) -> list[str]:
 
 
 def format_fdroid_metadata(metadata: str) -> list[str]:
-    keys = ("CurrentVersion:", "CurrentVersionCode:", "Binaries:", "AllowedAPKSigningKeys:")
+    keys = (
+        "CurrentVersion:",
+        "CurrentVersionCode:",
+        "Binaries:",
+        "AllowedAPKSigningKeys:",
+    )
     lines = [f"  {line}" for line in metadata.splitlines() if line.startswith(keys)]
     codes = [
         line.split(":", 1)[1].strip()
@@ -183,7 +188,9 @@ def format_merge_request(mr: dict) -> list[str]:
 def report_github() -> None:
     print(f"== GitHub releases ({GH_REPO}) ==")
     try:
-        releases = get_json(f"https://api.github.com/repos/{GH_REPO}/releases?per_page=3")
+        releases = get_json(
+            f"https://api.github.com/repos/{GH_REPO}/releases?per_page=3"
+        )
     except (OSError, ValueError, ApiError):
         print("  releases unavailable")
         return
@@ -193,8 +200,13 @@ def report_github() -> None:
 def report_fdroid() -> None:
     print(f"\n== F-Droid: published ({APP_ID}) ==")
     try:
-        print("\n".join(format_fdroid_packages(
-            get_json(f"https://f-droid.org/api/v1/packages/{APP_ID}"))))
+        print(
+            "\n".join(
+                format_fdroid_packages(
+                    get_json(f"https://f-droid.org/api/v1/packages/{APP_ID}")
+                )
+            )
+        )
     except (OSError, ValueError, ApiError):
         print("  not in the package index")
     try:
@@ -205,8 +217,13 @@ def report_fdroid() -> None:
 
     print("\n== F-Droid: last build run ==")
     try:
-        print("\n".join(format_fdroid_run(
-            get_json("https://f-droid.org/repo/status/running.json"))))
+        print(
+            "\n".join(
+                format_fdroid_run(
+                    get_json("https://f-droid.org/repo/status/running.json")
+                )
+            )
+        )
     except (OSError, ValueError, KeyError, ApiError):
         print("  status unavailable")
 
@@ -276,24 +293,32 @@ def access_token(key: dict, scope: str) -> str:
     """Trades a JWT signed with the service account's key for a token."""
     now = int(time.time())
     header = b64url(b'{"alg":"RS256","typ":"JWT"}')
-    claims = b64url(json.dumps({
-        "iss": key["client_email"],
-        "scope": scope,
-        "aud": "https://oauth2.googleapis.com/token",
-        "iat": now,
-        "exp": now + 3600,
-    }).encode())
+    claims = b64url(
+        json.dumps(
+            {
+                "iss": key["client_email"],
+                "scope": scope,
+                "aud": "https://oauth2.googleapis.com/token",
+                "iat": now,
+                "exp": now + 3600,
+            }
+        ).encode()
+    )
     unsigned = f"{header}.{claims}"
     signature = b64url(sign_rs256(key["private_key"], unsigned.encode()))
-    response = json.loads(request(
-        "https://oauth2.googleapis.com/token",
-        method="POST",
-        data=urllib.parse.urlencode({
-            "grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer",
-            "assertion": f"{unsigned}.{signature}",
-        }).encode(),
-        content_type="application/x-www-form-urlencoded",
-    ))
+    response = json.loads(
+        request(
+            "https://oauth2.googleapis.com/token",
+            method="POST",
+            data=urllib.parse.urlencode(
+                {
+                    "grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer",
+                    "assertion": f"{unsigned}.{signature}",
+                }
+            ).encode(),
+            content_type="application/x-www-form-urlencoded",
+        )
+    )
     return response["access_token"]
 
 
@@ -313,7 +338,10 @@ def service_account() -> tuple[dict | None, str]:
     except ValueError:
         return None, f"{PASS_PLAY_SERVICE_ACCOUNT} is not a JSON key; skipped"
     if not key.get("client_email") or not key.get("private_key"):
-        return None, f"{PASS_PLAY_SERVICE_ACCOUNT} has no client_email or private_key; skipped"
+        return (
+            None,
+            f"{PASS_PLAY_SERVICE_ACCOUNT} has no client_email or private_key; skipped",
+        )
     return key, ""
 
 
@@ -420,8 +448,11 @@ def summarize_counts(rows: list) -> dict[str, tuple[int, int]]:
     summary: dict[str, tuple[int, int]] = {}
     for row in rows:
         kind = next(
-            (d.get("stringValue") for d in row.get("dimensions") or []
-             if d.get("dimension") == "reportType"),
+            (
+                d.get("stringValue")
+                for d in row.get("dimensions") or []
+                if d.get("dimension") == "reportType"
+            ),
             None,
         )
         if not kind:
@@ -462,7 +493,9 @@ def format_issues(issues: list) -> list[str]:
         kind = ERROR_LABELS.get(kind, (kind, kind.lower()))[1]
         first = (issue.get("firstAppVersion") or {}).get("versionCode", "?")
         last = (issue.get("lastAppVersion") or {}).get("versionCode", "?")
-        versions = f"versionCode {first}" if first == last else f"versionCode {first}–{last}"
+        versions = (
+            f"versionCode {first}" if first == last else f"versionCode {first}–{last}"
+        )
         # The reference has these the other way round, but Play answers
         # with the exception or signal in location and the method or
         # library in cause.
@@ -473,7 +506,9 @@ def format_issues(issues: list) -> list[str]:
             + (f" at {where}" if where else "")
         )
         users = issue.get("distinctUsers", "?")
-        lines.append(f"    {kind}, {users} user{'' if users == '1' else 's'}, {versions}")
+        lines.append(
+            f"    {kind}, {users} user{'' if users == '1' else 's'}, {versions}"
+        )
         if issue.get("issueUri"):
             lines.append(f"    {issue['issueUri']}")
     return lines
@@ -485,7 +520,11 @@ def describe_reporting_error(error: Exception) -> str:
             return (
                 "the Play Developer Reporting API is not enabled for the service"
                 " account's Google Cloud project"
-                + (f"; enable it at {error.activation_url}" if error.activation_url else "")
+                + (
+                    f"; enable it at {error.activation_url}"
+                    if error.activation_url
+                    else ""
+                )
             )
         if error.status == 403:
             return (
@@ -535,18 +574,23 @@ def report_play_vitals(key: dict, days: int) -> None:
         "pageSize": str(TOP_ISSUES),
     }
     for edge, day in (("startTime", start), ("endTime", end)):
-        params.update({
-            f"interval.{edge}.year": str(day.year),
-            f"interval.{edge}.month": str(day.month),
-            f"interval.{edge}.day": str(day.day),
-            f"interval.{edge}.timeZone.id": ISSUES_TIMEZONE,
-        })
+        params.update(
+            {
+                f"interval.{edge}.year": str(day.year),
+                f"interval.{edge}.month": str(day.month),
+                f"interval.{edge}.day": str(day.day),
+                f"interval.{edge}.timeZone.id": ISSUES_TIMEZONE,
+            }
+        )
     try:
-        issues = get_json(
-            f"{REPORTING_API}/apps/{APP_ID}/errorIssues:search?"
-            + urllib.parse.urlencode(params),
-            token=token,
-        ).get("errorIssues") or []
+        issues = (
+            get_json(
+                f"{REPORTING_API}/apps/{APP_ID}/errorIssues:search?"
+                + urllib.parse.urlencode(params),
+                token=token,
+            ).get("errorIssues")
+            or []
+        )
     except (OSError, ValueError, ApiError) as e:
         print(f"  issues: {describe_reporting_error(e)}")
         return
@@ -560,7 +604,7 @@ def report_play(days: int) -> None:
         print(f"  {why}")
         return
     report_play_tracks(key)
-    report_play_vitals(key, days)
+    # report_play_vitals(key, days)
 
 
 def positive_int(value: str) -> int:
@@ -573,7 +617,9 @@ def positive_int(value: str) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
-        "--days", type=positive_int, default=7,
+        "--days",
+        type=positive_int,
+        default=7,
         help="how many days of Play vitals to count (default: 7)",
     )
     args = parser.parse_args()
