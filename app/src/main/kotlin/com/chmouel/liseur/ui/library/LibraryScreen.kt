@@ -56,6 +56,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Archive
 import androidx.compose.material.icons.outlined.Close
@@ -107,7 +108,6 @@ import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.TextButton
 import kotlinx.coroutines.flow.Flow
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -211,6 +211,7 @@ fun LibraryScreen(
     onResumeListening: (Book) -> Unit,
     onOpenSettings: () -> Unit,
     onOpenStats: () -> Unit,
+    onOpenVocabulary: () -> Unit,
     /** Opens the sheet that turns translation on; shown in the menu only when set. */
     onSetUpTranslation: (() -> Unit)? = null,
     onOpenTranslationSettings: () -> Unit,
@@ -837,6 +838,14 @@ fun LibraryScreen(
                                     onClick = {
                                         moreOpen = false
                                         onOpenStats()
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.vocabulary_title)) },
+                                    leadingIcon = { Icon(Icons.Outlined.BookmarkBorder, contentDescription = null) },
+                                    onClick = {
+                                        moreOpen = false
+                                        onOpenVocabulary()
                                     },
                                 )
                                 // Until translation works; once on, the

@@ -75,6 +75,7 @@ class SelectionActions(
     val onShare: () -> Unit,
     val layout: SelectionActionLayout = SelectionActionLayout.default,
     val onCopy: (() -> Unit)? = null,
+    val onSaveVocabulary: (() -> Unit)? = null,
     val onCitation: (() -> Unit)? = null,
     val onOpenWith: (() -> Unit)? = null,
     val onWebSearch: (() -> Unit)? = null,
@@ -320,6 +321,7 @@ private fun ActionButtons(
         val callback = when (action) {
             SelectionAction.NOTE -> actions.onNote
             SelectionAction.LOOK_UP -> actions.onLookUp.takeIf { lookUp }
+            SelectionAction.SAVE_VOCABULARY -> actions.onSaveVocabulary
             SelectionAction.COMPANION -> actions.onCompanion
             SelectionAction.SEARCH -> actions.onSearch
             SelectionAction.DELETE -> actions.onDelete
@@ -414,6 +416,7 @@ internal fun selectionLabelStyle(height: Dp): TextStyle {
 internal val SelectionAction.label: Int get() = when (this) {
     SelectionAction.NOTE -> R.string.annotation_note
     SelectionAction.LOOK_UP -> R.string.annotation_look_up
+    SelectionAction.SAVE_VOCABULARY -> R.string.vocabulary_save
     SelectionAction.COMPANION -> R.string.companion_action
     SelectionAction.SEARCH -> R.string.reader_search
     SelectionAction.DELETE -> R.string.annotation_delete

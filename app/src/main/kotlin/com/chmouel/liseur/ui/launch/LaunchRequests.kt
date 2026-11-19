@@ -6,7 +6,8 @@ import kotlinx.coroutines.flow.asStateFlow
 enum class LaunchTarget(val action: String) {
     CONTINUE("com.chmouel.liseur.action.CONTINUE_READING"),
     LIBRARY("com.chmouel.liseur.action.LIBRARY"),
-    STATS("com.chmouel.liseur.action.READING_STATISTICS");
+    STATS("com.chmouel.liseur.action.READING_STATISTICS"),
+    VOCABULARY("com.chmouel.liseur.action.VOCABULARY");
 
     companion object {
         fun fromAction(action: String?): LaunchTarget? = entries.firstOrNull { it.action == action }

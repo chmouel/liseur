@@ -1,0 +1,153 @@
+package com.chmouel.liseur.vocabulary
+
+import androidx.room.Room
+import androidx.test.core.app.ApplicationProvider
+import com.chmouel.liseur.data.db.LiseurDatabase
+import java.io.StringWriter
+import java.time.Instant
+import java.time.ZoneId
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.test.runTest
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+import org.readium.r2.shared.publication.Locator
+import org.json.JSONObject
+
+@Config(sdk = [35], application = android.app.Application::class)
+@RunWith(RobolectricTestRunner::class)
+class VocabularyTest {
+    @Test
+    fun `normalization keeps scripts and meaningful marks`() {
+        assertEquals("café", normalizeVocabularyWord("«CAFE\u0301!»", "fr"))
+        assertEquals("l'été", normalizeVocabularyWord("L’été,", "fr"))
+        assertEquals("ışık", normalizeVocabularyWord("IŞIK", "tr"))
+        assertEquals("北京", normalizeVocabularyWord("「北京」", "zh"))
+        assertEquals("𐐨", normalizeVocabularyWord("𐐀", "en"))
+        assertNull(normalizeVocabularyWord("…", "fr"))
+        assertNull(normalizeVocabularyWord("a".repeat(121), "en"))
+    }
+
+    @Test
+    fun `context isolates the sentence around the selected word`() {
+        assertEquals("It was twilight.", vocabularySentence("They left. It was ", "twilight", ". The moon rose.", "en"))
+        assertEquals("喜欢读书。", vocabularySentence("你好吗？喜欢", "读书", "。再见！", "zh"))
+    }
+
+    @Test
+    fun `recall preserves the original interval ladder for Good and caps long intervals`() {
+        assertEquals(listOf(30, 720, 1440, 2880, 5760, 10080, 21600, 43200),
+            (0..7).map { scheduleVocabulary(it, Recall.GOOD, 0).intervalMinutes })
+        assertEquals(VocabularySchedule(0, 5, 300_111), scheduleVocabulary(11, Recall.AGAIN, 111))
+        assertEquals(VocabularySchedule(1, 15, 900_000), scheduleVocabulary(1, Recall.HARD, 0))
+        assertEquals(VocabularySchedule(2, 720, 43_200_000), scheduleVocabulary(0, Recall.EASY, 0))
+        assertEquals(2_764_800, scheduleVocabulary(14, Recall.GOOD, 0).intervalMinutes)
+        val instant = Instant.parse("2026-03-29T22:30:00Z").toEpochMilli()
+        val midnight = Instant.parse("2026-03-29T22:00:00Z").toEpochMilli()
+        assertEquals(midnight, vocabularyDayStart(instant, ZoneId.of("Europe/Paris")))
+    }
+
+    @Test
+    fun `lookups deduplicate by normalized language and retain both passages`() = runTest {
+        withDatabase { db ->
+            val repo = VocabularyRepository(db)
+            val original = source("one")
+            val first = repo.collect(VocabularyLookup("“CHAT!”", "fr", original), null, null, 10)
+            assertNull(repo.collect(VocabularyLookup("dog", "en", original), null, null, 11, existingOnly = true))
+            val next = repo.collect(VocabularyLookup("chat", "fr", source("two")), "Petit félin", null, 12, existingOnly = true)
+            assertEquals(first, next)
+            repo.collect(VocabularyLookup("Chat", "fr", original), "Conversation en ligne", null, 13)
+            assertNotEquals(first, repo.collect(VocabularyLookup("chat", "en", original), "Talk", null, 14))
+            val id = checkNotNull(first)
+            assertEquals("Petit félin\nConversation en ligne", repo.dao.word(id)?.definition)
+            assertEquals(listOf(2, 1), repo.dao.occurrences(id).first().map { it.encounters })
+            assertEquals(listOf(id), repo.dao.words("", "two", 0, 0).first().map { it.wordId })
+            assertEquals(setOf("one", "two"), repo.dao.words("", null, 0, 0, grouped = true).first().map { it.groupUrl }.toSet())
+            repo.edit(id, "My definition", "Book club")
+            repo.enrich(id, "Another definition", null)
+            assertEquals("My definition", repo.dao.word(id)?.definition)
+            assertEquals(listOf(id), repo.dao.words("book club", null, 0, 0).first().map { it.wordId })
+        }
+    }
+
+    @Test
+    fun `review and undo persist progress and enforce daily limits`() = runBlocking {
+        withTimeout(15_000) {
+            withDatabase { db ->
+                val time = System.currentTimeMillis() - 1000
+                val repo = VocabularyRepository(db)
+                val firstId = checkNotNull(repo.collect(VocabularyLookup("basis", "en", null), null, null, time))
+                repo.collect(VocabularyLookup("apex", "en", null), null, null, time + 1)
+                val initial = repo.reviewQueue(null, 1, 0).first()
+                assertEquals(1, initial.dueCount)
+                assertEquals(firstId, initial.card?.id)
+                val card = checkNotNull(initial.card)
+                val undo = checkNotNull(repo.review(card, Recall.GOOD, 1, 1, time + 2))
+                assertNull(repo.review(card, Recall.EASY, 1, 1, time + 3))
+                val reopened = VocabularyRepository(db)
+                assertEquals(0, reopened.reviewQueue(null, 1, 1).first().dueCount)
+                assertEquals(1, reopened.reviewQueue(null, 1, 1).first().completedToday)
+                assertEquals(time + 2 + 30 * 60_000, reopened.dao.word(firstId)?.dueAt)
+                reopened.undoReview(undo)
+                assertEquals(card, reopened.reviewQueue(null, 1, 1).first().card)
+                assertTrue(reopened.dao.reviews(firstId).isEmpty())
+            }
+        }
+    }
+
+    @Test
+    fun `JSON preserves locators and progress while Anki CSV preserves escaped fields`() = runTest {
+        withDatabase { db ->
+            val repo = VocabularyRepository(db)
+            val time = System.currentTimeMillis() - 100
+            val locator = """{"href":"chapter.xhtml","type":"application/xhtml+xml","locations":{"fragments":["para"]},"text":{"highlight":"mot"}}"""
+            val occurrence = source("file:book").copy(locator = locator, locationKey = locator, sentence = "Le « mot ».")
+            val id = checkNotNull(repo.collect(VocabularyLookup("mot", "fr", occurrence), "Groupe, \"cité\"\r\nDeuxième ligne", null, time))
+            repo.review(checkNotNull(repo.dao.word(id)), Recall.EASY, 0, 0, time + 1)
+            val records = repo.export()
+            val json = StringWriter().also { writeVocabularyJson(records, it) }.toString()
+            val imported = readVocabulary(json.reader(), time + 5)
+            assertEquals(locator, imported.single().occurrences.single().locator)
+            assertEquals("chapter.xhtml", Locator.fromJSON(JSONObject(imported.single().occurrences.single().locator!!))?.href?.toString())
+            assertEquals(records.single().word.copy(id = 0), imported.single().word)
+            assertEquals(1, repo.import(imported))
+            assertEquals(records, repo.export())
+
+            val csv = StringWriter().also { writeVocabularyCsv(records, it) }.toString()
+            val portable = readVocabulary(csv.reader(), time + 5).single()
+            assertEquals(records.single().word.definition, portable.word.definition)
+            assertEquals(occurrence.sentence, portable.occurrences.single().sentence)
+            assertEquals(occurrence.bookTitle, portable.occurrences.single().bookTitle)
+            assertNull(portable.word.reviewedAt)
+            assertThrows(IllegalArgumentException::class.java) { readVocabulary("\"unterminated".reader()) }
+        }
+    }
+
+    private suspend fun withDatabase(test: suspend (LiseurDatabase) -> Unit) {
+        val database = Room.inMemoryDatabaseBuilder(
+            ApplicationProvider.getApplicationContext(), LiseurDatabase::class.java,
+        ).allowMainThreadQueries().build()
+        try {
+            test(database)
+        } finally {
+            database.close()
+        }
+    }
+
+    private fun source(book: String) = VocabularyOccurrence(
+        bookUrl = book,
+        bookTitle = "Title of $book",
+        locationKey = "chapter-one",
+        locator = null,
+        sentence = "That is the word.",
+        lastSeenAt = 0,
+    )
+}

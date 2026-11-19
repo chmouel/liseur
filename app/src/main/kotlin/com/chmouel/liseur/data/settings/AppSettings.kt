@@ -382,6 +382,11 @@ data class AppSettings(
     val vendorRefresh: Boolean = false,
     val definitionTarget: DefinitionTarget = DefinitionTarget.Default,
     val dictionaryLookupEnabled: Boolean = false,
+    val vocabularyAutoSave: Boolean = false,
+    val vocabularySaveContext: Boolean = true,
+    val vocabularyNewLimit: Int = 20,
+    val vocabularyReviewLimit: Int = 0,
+    val vocabularyReminders: Boolean = false,
     val dictionaryOnLongPress: Boolean = true,
     val dictionaryBaseUrl: String = DictionaryUrl.DEFAULT_BASE_URL,
     val dictionaryAltLanguage: String? = null,
@@ -589,6 +594,11 @@ class AppSettingsRepository(
         val VENDOR_REFRESH = booleanPreferencesKey("vendor_refresh")
         val DEFINITION_TARGET = stringPreferencesKey("definition_target")
         val DICTIONARY_ENABLED = booleanPreferencesKey("dictionary_lookup_enabled")
+        val VOCABULARY_AUTO_SAVE = booleanPreferencesKey("vocabulary_auto_save")
+        val VOCABULARY_SAVE_CONTEXT = booleanPreferencesKey("vocabulary_save_context")
+        val VOCABULARY_NEW_LIMIT = intPreferencesKey("vocabulary_new_limit")
+        val VOCABULARY_REVIEW_LIMIT = intPreferencesKey("vocabulary_review_limit")
+        val VOCABULARY_REMINDERS = booleanPreferencesKey("vocabulary_reminders")
         val DICTIONARY_ON_LONG_PRESS = booleanPreferencesKey("dictionary_on_long_press")
         val DICTIONARY_BASE_URL = stringPreferencesKey("dictionary_base_url")
         val DICTIONARY_ALT_LANGUAGE = stringPreferencesKey(DICTIONARY_ALT_LANGUAGE_NAME)
@@ -710,6 +720,11 @@ class AppSettingsRepository(
             vendorRefresh = p[Keys.VENDOR_REFRESH] ?: false,
             definitionTarget = DefinitionTarget.fromId(p[Keys.DEFINITION_TARGET]),
             dictionaryLookupEnabled = p[Keys.DICTIONARY_ENABLED] ?: false,
+            vocabularyAutoSave = p[Keys.VOCABULARY_AUTO_SAVE] ?: false,
+            vocabularySaveContext = p[Keys.VOCABULARY_SAVE_CONTEXT] ?: true,
+            vocabularyNewLimit = p[Keys.VOCABULARY_NEW_LIMIT] ?: 20,
+            vocabularyReviewLimit = p[Keys.VOCABULARY_REVIEW_LIMIT] ?: 0,
+            vocabularyReminders = p[Keys.VOCABULARY_REMINDERS] ?: false,
             dictionaryOnLongPress = p[Keys.DICTIONARY_ON_LONG_PRESS] ?: true,
             dictionaryBaseUrl = p[Keys.DICTIONARY_BASE_URL]?.let(DictionaryUrl::normalise)
                 ?: DictionaryUrl.DEFAULT_BASE_URL,
@@ -975,6 +990,25 @@ class AppSettingsRepository(
 
     suspend fun setDefinitionTarget(target: DefinitionTarget) {
         store.edit { it[Keys.DEFINITION_TARGET] = target.id }
+    }
+
+    suspend fun setVocabularyAutoSave(enabled: Boolean) {
+        store.edit { it[Keys.VOCABULARY_AUTO_SAVE] = enabled }
+    }
+
+    suspend fun setVocabularySaveContext(enabled: Boolean) {
+        store.edit { it[Keys.VOCABULARY_SAVE_CONTEXT] = enabled }
+    }
+
+    suspend fun setVocabularyReminders(enabled: Boolean) {
+        store.edit { it[Keys.VOCABULARY_REMINDERS] = enabled }
+    }
+
+    suspend fun setVocabularyLimits(newWords: Int, reviews: Int) {
+        store.edit {
+            it[Keys.VOCABULARY_NEW_LIMIT] = newWords.coerceIn(0, 9999)
+            it[Keys.VOCABULARY_REVIEW_LIMIT] = reviews.coerceIn(0, 9999)
+        }
     }
 
     suspend fun setDictionaryOnLongPress(enabled: Boolean) {

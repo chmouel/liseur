@@ -1,11 +1,16 @@
 package com.chmouel.liseur.data.db
 
+import androidx.room.AutoMigration
 import androidx.room.Database
 import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import com.chmouel.liseur.data.calibre.CredentialCipher
 import androidx.sqlite.SQLiteConnection
 import androidx.sqlite.execSQL
+import com.chmouel.liseur.vocabulary.VocabularyDao
+import com.chmouel.liseur.vocabulary.VocabularyOccurrence
+import com.chmouel.liseur.vocabulary.VocabularyReview
+import com.chmouel.liseur.vocabulary.VocabularyWord
 
 @Database(
     entities = [
@@ -48,8 +53,12 @@ import androidx.sqlite.execSQL
         BookAiPreferences::class,
         BookMetadata::class,
         SessionImportSource::class,
+        VocabularyWord::class,
+        VocabularyOccurrence::class,
+        VocabularyReview::class,
     ],
-    version = 80,
+    version = 81,
+    autoMigrations = [AutoMigration(from = 80, to = 81)],
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
@@ -92,6 +101,7 @@ abstract class LiseurDatabase : RoomDatabase() {
     abstract fun bookMetadataDao(): BookMetadataDao
 
     abstract fun sessionImportSourceDao(): SessionImportSourceDao
+    abstract fun vocabularyDao(): VocabularyDao
 
     companion object {
         val MIGRATION_79_80 = object : Migration(79, 80) {

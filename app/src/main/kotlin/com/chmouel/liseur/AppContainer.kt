@@ -479,6 +479,8 @@ class AppContainer(
     val readingPace = ReadingPaceRepository(context.applicationContext)
 
     val usageReporting = com.chmouel.liseur.insights.createUsageReporting(context.applicationContext)
+    internal val vocabulary by lazy { com.chmouel.liseur.vocabulary.VocabularyRepository(database) }
+
     val appSettings = AppSettingsRepository(context.applicationContext)
 
     val settingsBackup =
