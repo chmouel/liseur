@@ -1341,7 +1341,9 @@ changing reader behavior.
   keeps rating tiles fixed below it; the ring counts successful ratings
   since opening, minus undo, over that count plus the remaining queue.
   Pronunciation uses installed offline system TTS voices and hides for
-  unsupported languages.
+  unsupported languages. The shared card editor keeps drafts across rotation
+  and review-queue changes, confirms before discarding edits, and saves cleared
+  fields without deleting the word or changing its review schedule.
   Stats use book-scoped review timestamps and ratings: 14 local calendar
   days for the chart, 30 for recall (all ratings except Again), and the
   full history for the streak. Yesterday can continue a streak until

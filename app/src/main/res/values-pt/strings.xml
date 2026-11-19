@@ -2253,4 +2253,15 @@
     <string name="vocabulary_no_recent_reviews">Nenhuma revisão recente</string>
     <string name="vocabulary_session_progress">%1$d de %2$d revisões concluídas nesta sessão</string>
     <string name="vocabulary_daily_reviews">%1$s · Revisões: %2$d</string>
+    <string name="vocabulary_word_actions">Ações da palavra</string>
+    <string name="vocabulary_copy_word">Copiar palavra</string>
+    <string name="vocabulary_share_word">Compartilhar palavra</string>
+    <string name="vocabulary_edit_card">Editar cartão</string>
+    <string name="vocabulary_remove_word">Remover palavra</string>
+    <string name="vocabulary_meaning">Significado</string>
+    <string name="vocabulary_meaning_hint">Escreva o significado que você quer lembrar.</string>
+    <string name="vocabulary_meaning_help">Exibido ao revelar a resposta.</string>
+    <string name="vocabulary_personal_note">Nota pessoal (opcional)</string>
+    <string name="vocabulary_note_help">Um exemplo, uma associação ou uma dica para lembrar.</string>
+    <string name="vocabulary_discard_changes">Suas alterações neste cartão serão perdidas.</string>
 </resources>

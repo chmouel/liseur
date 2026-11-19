@@ -2186,4 +2186,15 @@
     <string name="vocabulary_no_recent_reviews">Aucune révision récente</string>
     <string name="vocabulary_session_progress">%1$d révisions sur %2$d terminées dans cette session</string>
     <string name="vocabulary_daily_reviews">%1$s · Révisions : %2$d</string>
+    <string name="vocabulary_word_actions">Actions du mot</string>
+    <string name="vocabulary_copy_word">Copier le mot</string>
+    <string name="vocabulary_share_word">Partager le mot</string>
+    <string name="vocabulary_edit_card">Modifier la fiche</string>
+    <string name="vocabulary_remove_word">Retirer le mot</string>
+    <string name="vocabulary_meaning">Sens</string>
+    <string name="vocabulary_meaning_hint">Écrivez le sens que vous voulez retenir.</string>
+    <string name="vocabulary_meaning_help">Affiché lorsque vous révélez la réponse.</string>
+    <string name="vocabulary_personal_note">Note personnelle (facultative)</string>
+    <string name="vocabulary_note_help">Un exemple, une association ou un aide-mémoire.</string>
+    <string name="vocabulary_discard_changes">Vos modifications de cette fiche seront perdues.</string>
 </resources>

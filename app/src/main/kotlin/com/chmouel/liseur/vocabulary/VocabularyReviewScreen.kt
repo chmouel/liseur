@@ -2,8 +2,10 @@ package com.chmouel.liseur.vocabulary
 
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -45,15 +47,26 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
@@ -66,6 +79,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.chmouel.liseur.R
 import com.chmouel.liseur.ui.LocalEInk
@@ -95,6 +109,7 @@ internal fun VocabularyReviewScreen(
     var submitting by remember { mutableStateOf(false) }
     var revealed by rememberSaveable(word?.id, word?.repetitions) { mutableStateOf(false) }
     var flying by remember(word?.id, word?.repetitions) { mutableStateOf(false) }
+    var editingWordId by rememberSaveable { mutableStateOf<Long?>(null) }
     suspend fun rate(rating: Recall): Boolean {
         val card = word ?: return false
         if (submitting) return false
@@ -152,6 +167,7 @@ internal fun VocabularyReviewScreen(
                         }
                     } else {
                         key(word.id, word.repetitions) {
+                            var menuOpen by remember { mutableStateOf(false) }
                             val occurrences by remember(word.id) { repository.dao.occurrences(word.id) }
                                 .collectAsStateWithLifecycle(emptyList())
                             val sources = occurrences.filter { bookUrl == null || it.bookUrl == bookUrl }
@@ -162,14 +178,26 @@ internal fun VocabularyReviewScreen(
                                 depth = (queue.dueCount - 1).coerceIn(0, 2),
                                 layers = MaterialTheme.colorScheme.surfaceContainerHighest to MaterialTheme.colorScheme.surfaceContainerHigh,
                                 shape = shape,
-                                enabled = revealed && !submitting,
+                                enabled = revealed && !submitting && !menuOpen,
                                 thresholds = ReviewSwipe,
                                 streak = word.streak,
                                 onSwipe = ::rate,
                                 onFlight = { flying = it },
                                 modifier = Modifier.fillMaxWidth(),
                             ) { swipes, actions ->
-                                ReviewCard(word, passage, revealed, swipes, scrollCard, speaker, { revealed = true }, onOpenPassage, actions)
+                                Box {
+                                    ReviewCard(
+                                        word, passage, revealed, swipes, scrollCard, speaker,
+                                        !submitting && !flying,
+                                        { revealed = true }, { menuOpen = true }, onOpenPassage, actions,
+                                    )
+                                    VocabularyWordMenu(
+                                        repository, word,
+                                        sources.firstOrNull { it.locator != null && it.bookUrl.isNotEmpty() },
+                                        menuOpen, { menuOpen = false }, onOpenPassage,
+                                        onEdit = { editingWordId = it },
+                                    )
+                                }
                             }
                         }
                     }
@@ -189,6 +217,9 @@ internal fun VocabularyReviewScreen(
                 }
             },
         )
+    }
+    editingWordId?.let { id ->
+        VocabularyWordEditor(repository, id) { editingWordId = null }
     }
 }
 
@@ -258,53 +289,67 @@ private fun ReviewCard(
     swipes: Boolean,
     scrollCard: Boolean,
     speaker: WordSpeaker,
+    enabled: Boolean,
     onReveal: () -> Unit,
+    onLongClick: () -> Unit,
     onOpenPassage: (VocabularyOccurrence) -> Unit,
     modifier: Modifier,
 ) {
     val scheme = MaterialTheme.colorScheme
     val eInk = LocalEInk.current
+    val haptics = LocalHapticFeedback.current
+    val shape = RoundedCornerShape(24.dp)
     var expanded by rememberSaveable { mutableStateOf(false) }
     var overflowing by remember { mutableStateOf(false) }
     val scroll = rememberScrollState()
     Surface(
-        onClick = onReveal,
-        shape = RoundedCornerShape(24.dp),
+        shape = shape,
         color = Color.Transparent,
         border = BorderStroke(1.dp, if (eInk) scheme.outline else scheme.outlineVariant),
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth().clip(shape).combinedClickable(
+            enabled = enabled,
+            onClick = onReveal,
+            onLongClickLabel = stringResource(R.string.vocabulary_word_actions),
+            hapticFeedbackEnabled = false,
+            onLongClick = {
+                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                onLongClick()
+            },
+        ),
     ) {
-        Column(
-            Modifier
-                .background(Brush.verticalGradient(listOf(
-                    if (eInk) scheme.surface else lerp(scheme.surface, scheme.primaryContainer, 0.35f),
-                    if (eInk) scheme.surface else scheme.surfaceContainerHigh,
-                )))
-                .then(if (scrollCard) Modifier.verticalScroll(scroll) else Modifier)
-                .padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    word.word, style = MaterialTheme.typography.displaySmall, fontFamily = FontFamily.Serif,
-                    fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f),
-                )
-                if (speaker.supports(word.language)) {
-                    IconButton(onClick = { speaker.speak(word) }) {
-                        Icon(Icons.AutoMirrored.Outlined.VolumeUp, stringResource(R.string.vocabulary_pronounce, word.word))
+        if (!revealed) {
+            ReviewCardFront(word, speaker, scrollCard)
+        } else {
+            Column(
+                Modifier
+                    .background(Brush.verticalGradient(listOf(
+                        if (eInk) scheme.surface else lerp(scheme.surface, scheme.primaryContainer, 0.35f),
+                        if (eInk) scheme.surface else scheme.surfaceContainerHigh,
+                    )))
+                    .then(if (scrollCard) Modifier.verticalScroll(scroll) else Modifier)
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        word.word, style = MaterialTheme.typography.displaySmall, fontFamily = FontFamily.Serif,
+                        fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f),
+                    )
+                    if (speaker.supports(word.language)) {
+                        IconButton(onClick = { speaker.speak(word) }) {
+                            Icon(Icons.AutoMirrored.Outlined.VolumeUp, stringResource(R.string.vocabulary_pronounce, word.word))
+                        }
                     }
                 }
-            }
-            if (word.language != "und") {
-                Surface(color = scheme.secondaryContainer, shape = RoundedCornerShape(50)) {
-                    Text(word.language.uppercase(Locale.ROOT), Modifier.padding(horizontal = 10.dp, vertical = 4.dp), style = MaterialTheme.typography.labelMedium)
+                if (word.language != "und") {
+                    Surface(color = scheme.secondaryContainer, shape = RoundedCornerShape(50)) {
+                        Text(word.language.uppercase(Locale.ROOT), Modifier.padding(horizontal = 10.dp, vertical = 4.dp), style = MaterialTheme.typography.labelMedium)
+                    }
                 }
-            }
-            if (revealed) {
                 Row {
                     Box(Modifier.size(width = 3.dp, height = 48.dp).background(if (eInk) scheme.onSurface else scheme.primary, RoundedCornerShape(2.dp)))
                     Column(Modifier.padding(start = 12.dp)) {
-                        SelectionContainer {
+                        SelectionContainer(Modifier.vocabularySelectionPress()) {
                             Text(
                                 word.definition ?: stringResource(R.string.vocabulary_no_definition),
                                 style = MaterialTheme.typography.bodyLarge,
@@ -320,7 +365,7 @@ private fun ReviewCard(
                         }
                     }
                 }
-                if (word.notes.isNotBlank()) SelectionContainer { Text(word.notes) }
+                if (word.notes.isNotBlank()) SelectionContainer(Modifier.vocabularySelectionPress()) { Text(word.notes) }
                 if (passage != null) {
                     Surface(color = scheme.surface.copy(alpha = 0.6f), shape = RoundedCornerShape(16.dp)) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -330,7 +375,7 @@ private fun ReviewCard(
                                     append(sentence)
                                     highlight?.let { addStyle(SpanStyle(background = scheme.primaryContainer, fontWeight = FontWeight.Bold), it.first, it.last + 1) }
                                 }
-                                SelectionContainer { Text(quote, fontStyle = FontStyle.Italic, style = MaterialTheme.typography.bodyLarge) }
+                                SelectionContainer(Modifier.vocabularySelectionPress()) { Text(quote, fontStyle = FontStyle.Italic, style = MaterialTheme.typography.bodyLarge) }
                             }
                             Text(passage.bookTitle, style = MaterialTheme.typography.labelMedium, color = scheme.onSurfaceVariant)
                         }
@@ -343,8 +388,89 @@ private fun ReviewCard(
                     }
                 }
                 if (swipes) Text(stringResource(R.string.vocabulary_swipe_hint), style = MaterialTheme.typography.labelSmall, color = scheme.onSurfaceVariant)
-            } else {
-                Text(stringResource(R.string.vocabulary_tap_to_reveal), style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReviewCardFront(word: VocabularyWord, speaker: WordSpeaker, scrollCard: Boolean) {
+    val scheme = MaterialTheme.colorScheme
+    val eInk = LocalEInk.current
+    val dark = scheme.surface.luminance() < 0.5f
+    val indigo = if (eInk) scheme.surface else lerp(scheme.surface, Color(0xFF515A93), if (dark) 0.38f else 0.10f)
+    val purple = if (eInk) scheme.surface else lerp(scheme.surface, Color(0xFF81709C), if (dark) 0.34f else 0.10f)
+    val accent = if (eInk) scheme.onSurface else if (dark) Color(0xFFC5BBF4) else Color(0xFF6A5AA6)
+    val scroll = rememberScrollState()
+    Box(Modifier.background(Brush.linearGradient(listOf(indigo, purple)))) {
+        if (!eInk) FrontTypographyTexture(scheme.onSurface, Modifier.matchParentSize())
+        Column(
+            Modifier.fillMaxWidth()
+                .then(if (scrollCard) Modifier.verticalScroll(scroll) else Modifier)
+                .padding(horizontal = 22.dp, vertical = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Row(verticalAlignment = Alignment.Top) {
+                Text(
+                    word.word,
+                    style = MaterialTheme.typography.displayMedium.copy(fontSize = 48.sp, lineHeight = 56.sp),
+                    fontFamily = FontFamily.Serif,
+                    fontWeight = FontWeight.Normal,
+                    modifier = Modifier.weight(1f).padding(top = 12.dp),
+                )
+                if (speaker.supports(word.language)) {
+                    IconButton(onClick = { speaker.speak(word) }) {
+                        Icon(Icons.AutoMirrored.Outlined.VolumeUp, stringResource(R.string.vocabulary_pronounce, word.word))
+                    }
+                }
+            }
+            if (word.language != "und") {
+                Surface(color = accent.copy(alpha = 0.12f), shape = RoundedCornerShape(50)) {
+                    Text(
+                        word.language.uppercase(Locale.ROOT),
+                        Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = if (eInk) scheme.onSurface else scheme.onSecondaryContainer,
+                    )
+                }
+            }
+            Box(Modifier.padding(top = 2.dp).size(width = 34.dp, height = 1.dp).background(accent, RoundedCornerShape(1.dp)))
+            Text(
+                stringResource(R.string.vocabulary_tap_to_reveal),
+                style = MaterialTheme.typography.bodyMedium,
+                fontStyle = FontStyle.Italic,
+                color = scheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun FrontTypographyTexture(color: Color, modifier: Modifier) {
+    Canvas(modifier.blur(0.7.dp).clearAndSetSemantics {}) {
+        val advance = 14.dp.toPx()
+        val height = 13.dp.toPx()
+        val ink = Brush.horizontalGradient(
+            0f to Color.Transparent,
+            0.5f to Color.Transparent,
+            0.76f to color.copy(alpha = 0.075f),
+            1f to Color.Transparent,
+        )
+        rotate(-9f, pivot = Offset(size.width * 0.8f, size.height * 0.75f)) {
+            repeat(5) { row ->
+                val baseline = size.height * 0.48f + row * 24.dp.toPx()
+                var x = size.width * 0.52f + (row % 3) * 9.dp.toPx()
+                repeat(14) { mark ->
+                    val width = advance * (0.45f + ((mark + row * 3) % 5) * 0.13f)
+                    val path = Path().apply {
+                        moveTo(x, baseline)
+                        cubicTo(x + width * 0.2f, baseline - height, x + width * 0.7f, baseline + height * 0.25f, x + width, baseline - height * 0.65f)
+                        moveTo(x + width * 0.55f, baseline - height * 0.8f)
+                        lineTo(x + width * 0.3f, baseline + height * 0.2f)
+                    }
+                    drawPath(path, ink, style = Stroke(width = 1.dp.toPx(), cap = StrokeCap.Round))
+                    x += width + advance * if (mark % 4 == 3) 0.65f else 0.18f
+                }
             }
         }
     }

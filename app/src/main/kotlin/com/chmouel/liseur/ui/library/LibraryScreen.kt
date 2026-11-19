@@ -276,6 +276,7 @@ fun LibraryScreen(
     /** A vocabulary word due for review, shown on Home. */
     homeVocabulary: com.chmouel.liseur.vocabulary.HomeVocabulary? = null,
     onReviewVocabulary: () -> Unit = {},
+    vocabularyMenu: @Composable (Long, Boolean, () -> Unit) -> Unit = { _, _, _ -> },
     /** Rates the Home word; answers how to take the rating back, or null when it was not taken. */
     onRateVocabulary: suspend (com.chmouel.liseur.vocabulary.HomeVocabulary, Recall) -> (suspend () -> Unit)? =
         { _, _ -> null },
@@ -1053,6 +1054,7 @@ fun LibraryScreen(
                         onOpenVocabulary = onOpenVocabulary,
                         onReviewVocabulary = onReviewVocabulary,
                         onRateVocabulary = rateVocabulary,
+                        vocabularyMenu = vocabularyMenu,
                         listState = homeState,
                         onBookSelected = openShelfBook,
                         onBookLongPress = { sheetBook = it },

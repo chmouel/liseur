@@ -95,7 +95,11 @@ your day streak. Review cards include notes and the original passage, with
 available. Reveal the answer, then choose Again, Hard, Good or Easy from the
 bottom tiles, or swipe left for Again and right for Good. The progress ring
 tracks this session; Undo restores the last rating. Home's **Words to review**
-card also supports swiping. The vocabulary menu on **Words** can export a JSON
+card also supports swiping. Hold a review or Home vocabulary card to copy,
+share, edit or remove the word, or return to its book. **Edit card** opens a
+full-screen editor for the meaning and an optional personal note, with a
+confirmation before discarding changes. Hold revealed text to select and copy it.
+The vocabulary menu on **Words** can export a JSON
 backup or an Anki-compatible CSV. Dictionary settings control automatic
 saving, and Vocabulary settings offer daily limits and reminders. Home
 shows the next word due, so you can check its meaning and start a review
