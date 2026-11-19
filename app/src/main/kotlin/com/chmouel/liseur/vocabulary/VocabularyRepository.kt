@@ -40,11 +40,12 @@ internal class VocabularyRepository(private val database: LiseurDatabase) {
             )
             if (existing != null) enrich(existing, definition, translationLanguage)
             lookup.occurrence?.let { source ->
+                val searchSentence = normalizeVocabularySearch(source.sentence.orEmpty())
                 val previous = dao.occurrence(id, source.bookUrl, source.locationKey)
                 if (previous == null) {
-                    dao.insertOccurrence(source.copy(wordId = id, lastSeenAt = now))
+                    dao.insertOccurrence(source.copy(wordId = id, lastSeenAt = now, searchSentence = searchSentence))
                 } else {
-                    dao.recordEncounter(previous.id, now, source.bookTitle, source.sentence)
+                    dao.recordEncounter(previous.id, now, source.bookTitle, source.sentence, searchSentence)
                 }
             }
             id
@@ -71,7 +72,7 @@ internal class VocabularyRepository(private val database: LiseurDatabase) {
             additions.isBlank() -> base
             else -> "$base\n$additions"
         }.take(24000)
-        val updated = word.copy(definition = merged, translationLanguage = translationLanguage)
+        val updated = word.copy(definition = merged, translationLanguage = translationLanguage).withSearchText()
         if (updated != word) dao.updateWord(updated)
     }
 
@@ -85,11 +86,15 @@ internal class VocabularyRepository(private val database: LiseurDatabase) {
         val imported = mutableSetOf<Long>()
         for ((word, sources, reviews) in records) {
             val existing = dao.findWord(word.normalized, word.language)
-            val id = existing?.id ?: dao.insertWord(word)
+            val id = existing?.id ?: dao.insertWord(word.withSearchText())
             imported += id
             if (existing != null) {
                 val newerReview = (word.reviewedAt ?: 0) > (existing.reviewedAt ?: 0)
+                val restoreDefinition = word.definitionEdited && !existing.definitionEdited
                 val replacement = existing.copy(
+                    definition = if (restoreDefinition) word.definition else existing.definition,
+                    translationLanguage = if (restoreDefinition) word.translationLanguage else existing.translationLanguage,
+                    definitionEdited = existing.definitionEdited || restoreDefinition,
                     addedAt = minOf(word.addedAt, existing.addedAt),
                     dueAt = if (newerReview) word.dueAt else existing.dueAt,
                     reviewedAt = if (newerReview) word.reviewedAt else existing.reviewedAt,
@@ -97,17 +102,19 @@ internal class VocabularyRepository(private val database: LiseurDatabase) {
                     intervalMinutes = if (newerReview) word.intervalMinutes else existing.intervalMinutes,
                     repetitions = maxOf(word.repetitions, existing.repetitions),
                     notes = existing.notes.ifBlank { word.notes },
-                )
+                ).withSearchText()
                 if (replacement != existing) dao.updateWord(replacement)
                 enrich(replacement, word.definition, word.translationLanguage)
             }
             for (source in sources) {
+                val searchSentence = normalizeVocabularySearch(source.sentence.orEmpty())
                 val saved = dao.occurrence(id, source.bookUrl, source.locationKey)
                 if (saved == null) {
-                    dao.insertOccurrence(source.copy(wordId = id))
+                    dao.insertOccurrence(source.copy(wordId = id, searchSentence = searchSentence))
                 } else {
                     val merged = saved.copy(
                         sentence = saved.sentence ?: source.sentence,
+                        searchSentence = if (saved.sentence == null) searchSentence else saved.searchSentence,
                         lastSeenAt = maxOf(saved.lastSeenAt, source.lastSeenAt),
                         encounters = maxOf(saved.encounters, source.encounters),
                     )
@@ -181,13 +188,17 @@ internal class VocabularyRepository(private val database: LiseurDatabase) {
         dao.deleteReview(undo.reviewId)
     }
 
+    suspend fun editSentence(id: Long, sentence: String) =
+        dao.editSentence(id, sentence, normalizeVocabularySearch(sentence))
+
     suspend fun edit(id: Long, definition: String, notes: String) = database.withTransaction {
         dao.word(id)?.let { word ->
             dao.updateWord(word.copy(
                 definition = definition.ifBlank { null },
+                translationLanguage = word.translationLanguage.takeUnless { definition.isBlank() },
                 notes = notes,
                 definitionEdited = word.definitionEdited || definition != word.definition.orEmpty(),
-            ))
+            ).withSearchText())
         }
     }
 }

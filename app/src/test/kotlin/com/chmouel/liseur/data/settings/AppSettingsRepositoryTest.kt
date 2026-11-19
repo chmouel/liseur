@@ -74,6 +74,31 @@ class AppSettingsRepositoryTest {
     }
 
     @Test
+    fun `vocabulary settings restore within bounds and leave reminders device local`() = runTest {
+        val source = AppSettingsRepository(store("vocabulary-source.preferences_pb"))
+        source.setVocabularyAutoSave(true)
+        source.setVocabularySaveContext(false)
+        source.setVocabularyLimits(12, 45)
+        source.setVocabularyReminders(true)
+        val backup = source.backupValues()
+        assertFalse(backup.has("vocabulary_reminders"))
+
+        val destination = AppSettingsRepository(store("vocabulary-restored.preferences_pb"))
+        destination.restoreBackupValues(backup)
+        val restored = destination.settings.first()
+        assertTrue(restored.vocabularyAutoSave)
+        assertFalse(restored.vocabularySaveContext)
+        assertEquals(12, restored.vocabularyNewLimit)
+        assertEquals(45, restored.vocabularyReviewLimit)
+        assertFalse(restored.vocabularyReminders)
+
+        backup.put("vocabulary_new_limit", -5).put("vocabulary_review_limit", 20000)
+        destination.restoreBackupValues(backup)
+        assertEquals(0, destination.settings.first().vocabularyNewLimit)
+        assertEquals(9999, destination.settings.first().vocabularyReviewLimit)
+    }
+
+    @Test
     fun `codex is available by default and disabling it survives settings backup`() = runTest {
         val repo = AppSettingsRepository(store("codex.preferences_pb"))
         assertTrue(repo.settings.first().codexEnabled)

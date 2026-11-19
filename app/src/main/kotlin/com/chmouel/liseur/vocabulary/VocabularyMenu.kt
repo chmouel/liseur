@@ -1,7 +1,9 @@
 package com.chmouel.liseur.vocabulary
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.provider.Settings
 import android.net.Uri
 import android.os.Build
 import android.widget.Toast
@@ -10,8 +12,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -23,7 +23,6 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -33,7 +32,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
@@ -45,6 +43,7 @@ import com.chmouel.liseur.R
 import com.chmouel.liseur.data.settings.AppSettings
 import com.chmouel.liseur.data.settings.AppSettingsRepository
 import com.chmouel.liseur.ui.launchPicker
+import com.chmouel.liseur.ui.settings.SwitchRow
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -160,14 +159,16 @@ internal fun VocabularySettingsDialog(
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    var showPermissionHelp by rememberSaveable { mutableStateOf(false) }
     fun setReminders(enabled: Boolean) {
+        showPermissionHelp = false
         scope.launch {
             preferences.setVocabularyReminders(enabled)
             VocabularyReminderWorker.schedule(context, enabled)
         }
     }
     val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) setReminders(true)
+        if (granted) setReminders(true) else showPermissionHelp = true
     }
     var newLimit by rememberSaveable { mutableStateOf(settings.vocabularyNewLimit.toString()) }
     var reviewLimit by rememberSaveable { mutableStateOf(settings.vocabularyReviewLimit.toString()) }
@@ -176,13 +177,13 @@ internal fun VocabularySettingsDialog(
         title = { Text(stringResource(R.string.vocabulary_settings)) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                VocabularySwitch(R.string.vocabulary_auto_save, settings.vocabularyAutoSave) {
+                SwitchRow(stringResource(R.string.vocabulary_auto_save), null, settings.vocabularyAutoSave, {
                     scope.launch { preferences.setVocabularyAutoSave(it) }
-                }
-                VocabularySwitch(R.string.vocabulary_save_context, settings.vocabularySaveContext) {
+                })
+                SwitchRow(stringResource(R.string.vocabulary_save_context), null, settings.vocabularySaveContext, {
                     scope.launch { preferences.setVocabularySaveContext(it) }
-                }
-                VocabularySwitch(R.string.vocabulary_reminders, settings.vocabularyReminders) { enabled ->
+                })
+                SwitchRow(stringResource(R.string.vocabulary_reminders), null, settings.vocabularyReminders, { enabled ->
                     if (enabled && Build.VERSION.SDK_INT >= 33 &&
                         ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
                     ) {
@@ -190,6 +191,13 @@ internal fun VocabularySettingsDialog(
                     } else {
                         setReminders(enabled)
                     }
+                })
+                if (showPermissionHelp) {
+                    Text(stringResource(R.string.vocabulary_reminder_permission))
+                    TextButton(onClick = {
+                        context.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                            .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName))
+                    }) { Text(stringResource(R.string.translation_open_settings)) }
                 }
                 Text(stringResource(R.string.vocabulary_unlimited))
                 OutlinedTextField(
@@ -221,12 +229,4 @@ internal fun VocabularySettingsDialog(
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.close)) } },
     )
-}
-
-@Composable
-private fun VocabularySwitch(label: Int, enabled: Boolean, onChange: (Boolean) -> Unit) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(stringResource(label), Modifier.weight(1f))
-        Switch(checked = enabled, onCheckedChange = onChange)
-    }
 }

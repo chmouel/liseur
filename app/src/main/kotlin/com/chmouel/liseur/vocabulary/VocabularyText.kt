@@ -49,3 +49,6 @@ internal fun vocabularyLocationKey(locator: String): String =
     Base64.getUrlEncoder().withoutPadding().encodeToString(
         MessageDigest.getInstance("SHA-256").digest(locator.toByteArray(Charsets.UTF_8)),
     )
+
+internal fun normalizeVocabularySearch(text: String): String =
+    Normalizer.normalize(text.lowercase(Locale.ROOT), Normalizer.Form.NFC)

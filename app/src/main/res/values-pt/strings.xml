@@ -2233,4 +2233,5 @@
     <string name="vocabulary_selection_too_long">Selecione uma palavra ou expressão curta.</string>
     <string name="vocabulary_reminders">Lembrete diário de revisão</string>
     <string name="vocabulary_reminder_message">Você tem palavras prontas para revisar.</string>
+    <string name="vocabulary_reminder_permission">Permita notificações do Liseur nas configurações do Android e depois ative o lembrete aqui.</string>
 </resources>

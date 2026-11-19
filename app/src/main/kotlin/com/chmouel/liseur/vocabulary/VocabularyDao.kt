@@ -31,7 +31,11 @@ data class VocabularyWord(
     val intervalMinutes: Int = 0,
     val repetitions: Int = 0,
     val definitionEdited: Boolean = false,
-)
+    val searchText: String = normalizeVocabularySearch("$word\n${definition.orEmpty()}\n$notes"),
+) {
+    internal fun withSearchText(): VocabularyWord =
+        copy(searchText = normalizeVocabularySearch("$word\n${definition.orEmpty()}\n$notes"))
+}
 
 @Entity(
     tableName = "vocabulary_occurrences",
@@ -53,6 +57,7 @@ data class VocabularyOccurrence(
     val sentence: String?,
     val lastSeenAt: Long,
     val encounters: Int = 1,
+    val searchSentence: String = normalizeVocabularySearch(sentence.orEmpty()),
 )
 
 @Entity(
@@ -143,13 +148,14 @@ interface VocabularyDao {
     @Query("""
         UPDATE vocabulary_occurrences
         SET encounters = encounters + 1, lastSeenAt = :now, bookTitle = :title,
+            searchSentence = CASE WHEN sentence IS NULL THEN :searchSentence ELSE searchSentence END,
             sentence = coalesce(sentence, :sentence)
         WHERE id = :id
     """)
-    suspend fun recordEncounter(id: Long, now: Long, title: String, sentence: String?)
+    suspend fun recordEncounter(id: Long, now: Long, title: String, sentence: String?, searchSentence: String)
 
-    @Query("UPDATE vocabulary_occurrences SET sentence = :sentence WHERE id = :id")
-    suspend fun editSentence(id: Long, sentence: String)
+    @Query("UPDATE vocabulary_occurrences SET sentence = :sentence, searchSentence = :searchSentence WHERE id = :id")
+    suspend fun editSentence(id: Long, sentence: String, searchSentence: String)
 
     @Query("""
         SELECT bookUrl, max(bookTitle) AS bookTitle FROM vocabulary_occurrences
@@ -212,11 +218,10 @@ interface VocabularyDao {
             CASE WHEN :grouped THEN max(o.bookTitle) END AS groupTitle
         FROM vocabulary_words w LEFT JOIN vocabulary_occurrences o ON o.wordId = w.id
         WHERE (:book IS NULL OR o.bookUrl = :book)
-          AND (:search = '' OR instr(w.normalized, :search) > 0 OR instr(lower(w.definition), :search) > 0
-               OR instr(lower(w.word), :search) > 0 OR instr(lower(w.notes), :search) > 0
+          AND (:search = '' OR instr(w.normalized, :search) > 0 OR instr(w.searchText, :search) > 0
                OR EXISTS (SELECT 1 FROM vocabulary_occurrences context WHERE context.wordId = w.id
                    AND (:book IS NULL OR context.bookUrl = :book)
-                   AND instr(lower(context.sentence), :search) > 0))
+                   AND instr(context.searchSentence, :search) > 0))
           AND (:status = 0 OR (:status = 1 AND w.repetitions = 0)
                OR (:status = 2 AND w.repetitions > 0 AND w.streak < 6)
                OR (:status = 3 AND w.streak >= 6))

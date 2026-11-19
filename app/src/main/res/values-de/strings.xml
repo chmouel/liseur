@@ -2178,4 +2178,5 @@
     <string name="vocabulary_selection_too_long">Wähle ein Wort oder einen kurzen Ausdruck.</string>
     <string name="vocabulary_reminders">Tägliche Lernerinnerung</string>
     <string name="vocabulary_reminder_message">Wörter warten auf deine Wiederholung.</string>
+    <string name="vocabulary_reminder_permission">Erlaube Liseur-Benachrichtigungen in den Android-Einstellungen und aktiviere dann hier die Erinnerung.</string>
 </resources>

@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 81,
-    "identityHash": "8bede9369ad23f532f8ceefccdd22c5b",
+    "identityHash": "2d35b5bbe72a9b2e6d782b02eecd1513",
     "entities": [
       {
         "tableName": "reading_progress",
@@ -3084,7 +3084,7 @@
       },
       {
         "tableName": "vocabulary_words",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `word` TEXT NOT NULL, `normalized` TEXT NOT NULL, `language` TEXT NOT NULL, `definition` TEXT, `translationLanguage` TEXT, `notes` TEXT NOT NULL, `addedAt` INTEGER NOT NULL, `dueAt` INTEGER NOT NULL, `reviewedAt` INTEGER, `streak` INTEGER NOT NULL, `intervalMinutes` INTEGER NOT NULL, `repetitions` INTEGER NOT NULL, `definitionEdited` INTEGER NOT NULL)",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `word` TEXT NOT NULL, `normalized` TEXT NOT NULL, `language` TEXT NOT NULL, `definition` TEXT, `translationLanguage` TEXT, `notes` TEXT NOT NULL, `addedAt` INTEGER NOT NULL, `dueAt` INTEGER NOT NULL, `reviewedAt` INTEGER, `streak` INTEGER NOT NULL, `intervalMinutes` INTEGER NOT NULL, `repetitions` INTEGER NOT NULL, `definitionEdited` INTEGER NOT NULL, `searchText` TEXT NOT NULL)",
         "fields": [
           {
             "fieldPath": "id",
@@ -3166,6 +3166,12 @@
             "columnName": "definitionEdited",
             "affinity": "INTEGER",
             "notNull": true
+          },
+          {
+            "fieldPath": "searchText",
+            "columnName": "searchText",
+            "affinity": "TEXT",
+            "notNull": true
           }
         ],
         "primaryKey": {
@@ -3198,7 +3204,7 @@
       },
       {
         "tableName": "vocabulary_occurrences",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `wordId` INTEGER NOT NULL, `bookUrl` TEXT NOT NULL, `bookTitle` TEXT NOT NULL, `locationKey` TEXT NOT NULL, `locator` TEXT, `sentence` TEXT, `lastSeenAt` INTEGER NOT NULL, `encounters` INTEGER NOT NULL, FOREIGN KEY(`wordId`) REFERENCES `vocabulary_words`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `wordId` INTEGER NOT NULL, `bookUrl` TEXT NOT NULL, `bookTitle` TEXT NOT NULL, `locationKey` TEXT NOT NULL, `locator` TEXT, `sentence` TEXT, `lastSeenAt` INTEGER NOT NULL, `encounters` INTEGER NOT NULL, `searchSentence` TEXT NOT NULL, FOREIGN KEY(`wordId`) REFERENCES `vocabulary_words`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
         "fields": [
           {
             "fieldPath": "id",
@@ -3250,6 +3256,12 @@
             "fieldPath": "encounters",
             "columnName": "encounters",
             "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "searchSentence",
+            "columnName": "searchSentence",
+            "affinity": "TEXT",
             "notNull": true
           }
         ],
@@ -3385,7 +3397,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '8bede9369ad23f532f8ceefccdd22c5b')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '2d35b5bbe72a9b2e6d782b02eecd1513')"
     ]
   }
 }

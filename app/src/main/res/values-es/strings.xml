@@ -2166,4 +2166,5 @@
     <string name="vocabulary_selection_too_long">Selecciona una palabra o una frase corta.</string>
     <string name="vocabulary_reminders">Recordatorio diario de repaso</string>
     <string name="vocabulary_reminder_message">Tienes palabras pendientes de repaso.</string>
+    <string name="vocabulary_reminder_permission">Permite las notificaciones de Liseur en los ajustes de Android y luego activa el recordatorio aquí.</string>
 </resources>

@@ -2242,4 +2242,5 @@
     <string name="vocabulary_selection_too_long">Select a word or short phrase.</string>
     <string name="vocabulary_reminders">Daily review reminder</string>
     <string name="vocabulary_reminder_message">You have words ready to review.</string>
+    <string name="vocabulary_reminder_permission">Allow Liseur notifications in Android settings, then turn on the reminder here.</string>
 </resources>

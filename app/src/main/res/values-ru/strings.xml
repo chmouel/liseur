@@ -2328,4 +2328,5 @@
     <string name="vocabulary_selection_too_long">Выберите слово или короткое выражение.</string>
     <string name="vocabulary_reminders">Ежедневное напоминание о повторении</string>
     <string name="vocabulary_reminder_message">Есть слова для повторения.</string>
+    <string name="vocabulary_reminder_permission">Разрешите уведомления Liseur в настройках Android, затем включите напоминание здесь.</string>
 </resources>

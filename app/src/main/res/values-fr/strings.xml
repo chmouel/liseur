@@ -2166,4 +2166,5 @@
     <string name="vocabulary_selection_too_long">Sélectionnez un mot ou une expression courte.</string>
     <string name="vocabulary_reminders">Rappel quotidien de révision</string>
     <string name="vocabulary_reminder_message">Des mots sont prêts à être révisés.</string>
+    <string name="vocabulary_reminder_permission">Autorisez les notifications de Liseur dans les réglages d’Android, puis activez le rappel ici.</string>
 </resources>
