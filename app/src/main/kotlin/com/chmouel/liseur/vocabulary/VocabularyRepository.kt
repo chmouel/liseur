@@ -1,6 +1,8 @@
 package com.chmouel.liseur.vocabulary
 
 import androidx.room.withTransaction
+import com.chmouel.liseur.insights.UsageEvent
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
@@ -19,7 +21,10 @@ internal data class VocabularyLookup(
     val normalized = normalizeVocabularyWord(word, language)
 }
 
-internal class VocabularyRepository(private val database: LiseurDatabase) {
+internal class VocabularyRepository(
+    private val database: LiseurDatabase,
+    private val report: (UsageEvent) -> Unit = {},
+) {
     val dao = database.vocabularyDao()
 
     suspend fun collect(
@@ -30,7 +35,7 @@ internal class VocabularyRepository(private val database: LiseurDatabase) {
         existingOnly: Boolean = false,
     ): Long? {
         val normalized = lookup.normalized ?: return null
-        return database.withTransaction {
+        val (id, created) = database.withTransaction {
             val existing = dao.findWord(normalized, lookup.language)
             if (existingOnly && existing == null) return@withTransaction null
             val id = existing?.id ?: dao.insertWord(
@@ -49,8 +54,10 @@ internal class VocabularyRepository(private val database: LiseurDatabase) {
                     dao.recordEncounter(previous.id, now, source.bookTitle, source.sentence, searchSentence)
                 }
             }
-            id
-        }
+            id to (existing == null)
+        } ?: return null
+        if (created) reportUsage(UsageEvent.VOCABULARY_WORD_SAVED)
+        return id
     }
 
     suspend fun enrich(id: Long, definition: String?, translationLanguage: String?) {
@@ -196,6 +203,8 @@ internal class VocabularyRepository(private val database: LiseurDatabase) {
             intervalMinutes = next.intervalMinutes, dueAt = next.dueAt, firstReview = first,
         ))
         VocabularyReviewUndo(id, word)
+    }.also {
+        if (it != null) reportUsage(UsageEvent.VOCABULARY_REVIEWED)
     }
 
     /** Rates the word Home shows, unless it has been reviewed since Home read it. */
@@ -214,6 +223,8 @@ internal class VocabularyRepository(private val database: LiseurDatabase) {
         ))
         dao.deleteReview(undo.reviewId)
         true
+    }.also {
+        if (it) reportUsage(UsageEvent.VOCABULARY_REVIEW_UNDONE)
     }
 
     suspend fun editSentence(id: Long, sentence: String) =
@@ -227,6 +238,16 @@ internal class VocabularyRepository(private val database: LiseurDatabase) {
                 notes = notes,
                 definitionEdited = word.definitionEdited || definition != word.definition.orEmpty(),
             ).withSearchText())
+        }
+    }
+
+    private fun reportUsage(event: UsageEvent) {
+        try {
+            report(event)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            // Reporting must not turn a committed action into a failed save or rating.
         }
     }
 }

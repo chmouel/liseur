@@ -3,6 +3,7 @@ package com.chmouel.liseur.vocabulary
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.chmouel.liseur.data.db.LiseurDatabase
+import com.chmouel.liseur.insights.UsageEvent
 import java.io.StringWriter
 import java.time.Instant
 import java.time.ZoneId
@@ -11,6 +12,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
@@ -101,6 +103,61 @@ class VocabularyTest {
                 assertEquals(card, reopened.reviewQueue(null, 1, 1).first().card)
                 assertTrue(reopened.dao.reviews(firstId).isEmpty())
             }
+        }
+    }
+
+    @Test
+    fun `usage counts only new words and accepted review or undo actions`() = runBlocking {
+        withDatabase { db ->
+            val events = mutableListOf<UsageEvent>()
+            val repo = VocabularyRepository(db) { events += it }
+            val time = System.currentTimeMillis() - 1000
+            val lookup = VocabularyLookup("basis", "en", source("one"))
+            assertNull(repo.collect(lookup, null, null, time, existingOnly = true))
+            assertNull(repo.collect(lookup.copy(word = "…"), null, null, time))
+            assertTrue(events.isEmpty())
+
+            val id = checkNotNull(repo.collect(lookup, "Foundation", null, time))
+            assertEquals(id, repo.collect(lookup, "A base", null, time))
+            repo.edit(id, "My meaning", "My note")
+            val card = checkNotNull(repo.dao.word(id))
+            val undo = checkNotNull(repo.review(card, Recall.GOOD, 20, 0, time + 1))
+            assertNull(repo.review(card, Recall.EASY, 20, 0, time + 2))
+            assertTrue(repo.undoReview(undo))
+            assertFalse(repo.undoReview(undo))
+
+            val home = checkNotNull(repo.homeCard(20, 0).first())
+            assertTrue(repo.review(home, Recall.AGAIN, 20, 0) != null)
+            assertNull(repo.review(home, Recall.GOOD, 20, 0))
+            assertEquals(listOf(
+                UsageEvent.VOCABULARY_WORD_SAVED,
+                UsageEvent.VOCABULARY_REVIEWED,
+                UsageEvent.VOCABULARY_REVIEW_UNDONE,
+                UsageEvent.VOCABULARY_REVIEWED,
+            ), events)
+        }
+    }
+
+    @Test
+    fun `usage runs after commit and reporting errors do not fail vocabulary actions`() = runBlocking {
+        withDatabase { db ->
+            val events = mutableListOf<UsageEvent>()
+            val repo = VocabularyRepository(db) {
+                assertFalse(db.inTransaction())
+                events += it
+                throw IllegalStateException("Reporting unavailable")
+            }
+            val time = System.currentTimeMillis() - 1000
+            val id = checkNotNull(repo.collect(VocabularyLookup("basis", "en", null), null, null, time))
+            val card = checkNotNull(repo.dao.word(id))
+            val undo = checkNotNull(repo.review(card, Recall.GOOD, 20, 0, time + 1))
+            assertTrue(repo.undoReview(undo))
+            assertEquals(card, repo.dao.word(id))
+            assertEquals(listOf(
+                UsageEvent.VOCABULARY_WORD_SAVED,
+                UsageEvent.VOCABULARY_REVIEWED,
+                UsageEvent.VOCABULARY_REVIEW_UNDONE,
+            ), events)
         }
     }
 
