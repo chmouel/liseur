@@ -84,11 +84,22 @@ and outcomes. Failure events carry only fixed broad categories. Automatic recap
 completions and manual requests measure different things, not a conversion.
 No request, response, title, name, server or error detail is included.
 
+Vocabulary Builder reports `vocabulary_opened` once per screen entry,
+`vocabulary_word_saved` for a newly collected word, `vocabulary_reviewed`
+for an accepted rating from Home or Review, and `vocabulary_review_undone`
+for a successful undo. Collection, rating and undo events run after the
+database transaction commits; repeat lookups, rejected ratings and failed
+undo attempts do not count. Imports do not emit collection events. All four
+use only the fixed `vocabulary` feature category, without word, passage,
+meaning, note or rating data. They follow the existing reporting opt-out;
+FOSS keeps the no-op reporter.
+
 Each project has a "Liseur usage" dashboard: daily and weekly active
-installations from `app_foregrounded`, total and unique counts of the four
-feature events, `$exception` counts by `app_version`, and installations by
-`app_version`. Use `app_version` for release comparisons. Turning reporting
-off and on resets identity, so counts are installations, not people.
+installations from `app_foregrounded`, total and unique counts for Reader,
+Read aloud, Translation and Companion, `$exception` counts by `app_version`,
+and installations by `app_version`. Use `app_version` for release comparisons.
+Turning reporting off and on resets identity, so counts are installations,
+not people.
 
 ## Verification
 

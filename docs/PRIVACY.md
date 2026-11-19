@@ -6,7 +6,7 @@ title: Liseur Privacy Policy
 
 **App:** Liseur (`com.chmouel.liseur`)
 **Developer:** Chmouel Boudjnah
-**Last updated:** 15 November 2026
+**Last updated:** 19 November 2026
 
 Liseur is an open-source ebook reader with no advertising or Liseur account.
 The F-Droid build has no analytics or crash reporting. Google Play releases
@@ -24,13 +24,19 @@ from while disabled.
 Previously transmitted reports are not deleted by this switch.
 
 Liseur sends explicit events for app foregrounding, opening books, read aloud,
-translation requests and Companion use. Companion events include opening a
-profile, Connections or Story, requesting a recap or story summary, completed
-automatic recaps, and whether a profile lookup started, succeeded, was
-cancelled or failed in a broad category (network, service or invalid response).
+translation requests, Vocabulary Builder and Companion use. Companion events
+include opening a profile, Connections or Story, requesting a recap or story
+summary, completed automatic recaps, and whether a profile lookup started,
+succeeded, was cancelled or failed in a broad category (network, service or
+invalid response).
 No request or response text or detailed error is included. Reports contain the
 feature name, app version, event time, approximate location (city and country)
 and a random installation identifier.
+
+Vocabulary Builder events record opening the screen, saving a newly collected
+word, successfully rating a card, and undoing a review. They do not include
+saved words, meanings, personal notes, passages or rating choices.
+
 Uncaught JVM crash reports include exception types, stack frames, the active
 screen category (such as Library, Reader or Settings) and JVM heap usage in
 megabytes, without exception messages. They do not contain book text, titles,

@@ -69,6 +69,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.chmouel.liseur.R
 import com.chmouel.liseur.container
 import com.chmouel.liseur.data.settings.AppSettings
+import com.chmouel.liseur.insights.UsageEvent
 import java.util.Locale
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -91,7 +92,8 @@ internal fun VocabularyScreen(
     /** Opens on the review, and leaves the screen when the review closes. */
     reviewOnly: Boolean = false,
 ) {
-    val preferences = LocalContext.current.container.appSettings
+    val context = LocalContext.current
+    val preferences = context.container.appSettings
     val settings by preferences.settings.collectAsStateWithLifecycle(initialValue = AppSettings())
     val newLimit = settings.vocabularyNewLimit
     val reviewLimit = settings.vocabularyReviewLimit
@@ -106,6 +108,13 @@ internal fun VocabularyScreen(
     var grouped by rememberSaveable { mutableStateOf(false) }
     var tab by rememberSaveable { mutableStateOf(if (reviewOnly) VocabularyTab.REVIEW else VocabularyTab.WORDS) }
     var sessionCount by rememberSaveable { mutableIntStateOf(0) }
+    var reportedOpening by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        if (!reportedOpening) {
+            context.container.usageReporting.capture(UsageEvent.VOCABULARY_OPENED)
+            reportedOpening = true
+        }
+    }
     val reviewBook = currentBook?.bookUrl ?: bookUrl
     val queue by remember(repository, reviewBook, newLimit, reviewLimit) {
         repository.reviewQueue(reviewBook, newLimit, reviewLimit)

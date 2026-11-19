@@ -174,6 +174,47 @@ class ReportingTest {
         }
     }
 
+    @Test fun vocabularyEventsSendOnlyFixedPropertiesAndRespectOptOut() = runBlocking {
+        val server = MockWebServer()
+        server.start(InetAddress.getByName("127.0.0.1"), 0)
+        val reports = PlayUsageReporting(context, token = "phc_test", host = server.url("/").toString())
+        val events = listOf(
+            UsageEvent.VOCABULARY_OPENED,
+            UsageEvent.VOCABULARY_WORD_SAVED,
+            UsageEvent.VOCABULARY_REVIEWED,
+            UsageEvent.VOCABULARY_REVIEW_UNDONE,
+        )
+        try {
+            repeat(events.size) { server.enqueue(MockResponse(code = 200, body = "{}")) }
+            events.forEach(reports::capture)
+            val expected = events.map { it.wireName }.toSet()
+            val received = mutableSetOf<String>()
+            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
+            while (received != expected && System.nanoTime() < deadline) {
+                reports.flush()
+                val request = server.takeRequest(250, TimeUnit.MILLISECONDS) ?: continue
+                val batch = JSONObject(request.body!!.utf8()).getJSONArray("batch")
+                for (index in 0 until batch.length()) {
+                    val sent = batch.getJSONObject(index)
+                    val name = sent.getString("event")
+                    assertTrue(name in expected)
+                    received += name
+                    val properties = sent.getJSONObject("properties")
+                    assertEquals("vocabulary", properties.getString("feature"))
+                    assertEquals(setOf("app_version", "feature", "\$process_person_profile"), properties.keys().asSequence().toSet())
+                }
+            }
+            assertEquals(expected, received)
+            reports.setEnabled(false)
+            events.forEach(reports::capture)
+            reports.flush()
+            assertNull(server.takeRequest(1, TimeUnit.SECONDS))
+        } finally {
+            reports.stop()
+            server.close()
+        }
+    }
+
     @Test fun crashesKeepTypesAndFramesWithoutMessagesOrFreeContext() {
         val failure = IllegalStateException("private book title", IllegalArgumentException("https://secret/token"))
         failure.stackTrace = arrayOf(StackTraceElement("com.chmouel.Reader", "open", "/private/book.epub", 42))
