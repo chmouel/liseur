@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -252,7 +253,7 @@ internal fun HomeLibrary(
             }
         }
         if (vocabulary != null) {
-            item(key = "home:vocabulary") {
+            item(key = "home:vocabulary:${vocabulary.id}") {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = gutter) {
                     HomeSectionHeader(
                         text = stringResource(R.string.home_vocabulary_title),
@@ -511,7 +512,7 @@ private fun VocabularyCard(
                         modifier = Modifier.padding(top = 6.dp),
                     )
                 }
-                var revealed by rememberSaveable(word.id) { mutableStateOf(false) }
+                var revealed by rememberSaveable { mutableStateOf(false) }
                 if (revealed) {
                     Text(
                         text = word.definition ?: stringResource(R.string.vocabulary_no_definition),
@@ -521,8 +522,7 @@ private fun VocabularyCard(
                         modifier = Modifier.padding(top = 10.dp),
                     )
                 }
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
+                FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.padding(top = 14.dp).fillMaxWidth(),
                 ) {
