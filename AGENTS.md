@@ -64,6 +64,9 @@ make check   # tests, lint and builds, when a change spans them
 - Preserve unrelated worktree changes; touch only files the task needs.
 - Ask before committing, amending, rebasing, resetting, force-pushing, or
   creating releases or tags. Add no `Co-authored-by` or AI trailers.
+- Keep PostHog and Play Console links, project ids and crash report ids
+  out of issues, PRs, commits and review replies. Quote the retraced stack
+  and counts instead.
 - Keep non-trivial logic pure and JVM-testable. Use the manual
   composition root, `ViewModel` + `StateFlow`, Room, DataStore and the
   existing package boundaries. Blocking network calls run on
