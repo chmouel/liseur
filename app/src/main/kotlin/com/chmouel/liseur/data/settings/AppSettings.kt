@@ -817,6 +817,9 @@ class AppSettingsRepository(
                 }.forEach { key -> it.remove(key) }
             }
             values.applyBackupJson(it, APP_BACKUP_TYPES)
+            for (key in listOf(Keys.VOCABULARY_NEW_LIMIT, Keys.VOCABULARY_REVIEW_LIMIT)) {
+                it[key]?.let { value -> it[key] = value.coerceIn(0, 9999) }
+            }
             if (values.has("volume_keys_mode") || values.has("volume_keys_turn_pages")) {
                 if (!values.has("volume_keys_mode")) {
                     it[Keys.VOLUME_KEY_MODE] =
@@ -1517,6 +1520,8 @@ internal val APP_BACKUP_TYPES = mapOf(
     "dictionary_on_long_press" to BackupValueType.BOOLEAN,
     "dictionary_lookup_enabled" to BackupValueType.BOOLEAN, "dictionary_base_url" to BackupValueType.STRING,
     DICTIONARY_ALT_LANGUAGE_NAME to BackupValueType.STRING,
+    "vocabulary_auto_save" to BackupValueType.BOOLEAN, "vocabulary_save_context" to BackupValueType.BOOLEAN,
+    "vocabulary_new_limit" to BackupValueType.INT, "vocabulary_review_limit" to BackupValueType.INT,
     "upload_policy" to BackupValueType.STRING, "stats_range" to BackupValueType.STRING,
     "weekly_goal_minutes" to BackupValueType.INT,
     "clear_translations_on_finish" to BackupValueType.BOOLEAN,

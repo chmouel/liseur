@@ -156,7 +156,7 @@ internal fun VocabularyScreen(
             } else {
                 val showGroups = grouped && bookUrl == null
                 val words by remember(search, bookUrl, status, sort, showGroups) {
-                    repository.dao.words(search.trim().lowercase(Locale.ROOT), bookUrl, status, sort, showGroups)
+                    repository.dao.words(normalizeVocabularySearch(search.trim()), bookUrl, status, sort, showGroups)
                 }.collectAsStateWithLifecycle(initialValue = null)
                 val books by remember(repository) { repository.dao.books() }.collectAsStateWithLifecycle(emptyList())
                 LazyColumn(content, state = list, contentPadding = PaddingValues(bottom = 24.dp)) {
@@ -365,7 +365,7 @@ private fun VocabularyDetail(
     occurrences.firstOrNull { it.id == editPassage }?.let { source ->
         var sentence by rememberSaveable(source.id) { mutableStateOf(source.sentence.orEmpty()) }
         VocabularyEditDialog(stringResource(R.string.vocabulary_edit_context), { editPassage = null }, {
-            scope.launch { repository.dao.editSentence(source.id, sentence); editPassage = null }
+            scope.launch { repository.editSentence(source.id, sentence); editPassage = null }
         }) {
             OutlinedTextField(sentence, { sentence = it.take(4000) }, maxLines = 6, label = { Text(stringResource(R.string.vocabulary_sentence)) })
         }

@@ -89,7 +89,7 @@ private fun readVocabularyJson(root: JSONObject, now: Long): List<VocabularyReco
                 intervalMinutes = entry.interval(),
                 repetitions = entry.getInt("repetitions").also { require(it in 0 until Int.MAX_VALUE) },
                 definitionEdited = entry.getBoolean("definitionEdited"),
-            ),
+            ).withSearchText(),
             occurrences = entry.getJSONArray("occurrences").objects { src ->
                 val locator = src.optionalText("locator", 32000)
                 require(locator == null || Locator.fromJSON(JSONObject(locator)) != null)

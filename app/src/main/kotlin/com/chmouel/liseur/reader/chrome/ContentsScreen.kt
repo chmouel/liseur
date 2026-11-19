@@ -89,6 +89,7 @@ import com.chmouel.liseur.data.settings.ReaderTheme
 import com.chmouel.liseur.reader.annotations.locator
 import com.chmouel.liseur.reader.annotations.HighlightTint
 import com.chmouel.liseur.reader.annotations.noteAnnotated
+import com.chmouel.liseur.reader.progress.ResourceAnchor
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.windowWidth
 import com.chmouel.liseur.ui.withoutBottom
@@ -682,6 +683,7 @@ internal fun ReaderContents(
 ) {
     val context = LocalContext.current
     var showVocabulary by rememberSaveable { mutableStateOf(false) }
+    val readingOrder = remember(publication) { publication.readingOrder.map { ResourceAnchor.path(it.url().toString()) } }
     val saved = rememberSaveableStateHolder()
     val back = { if (showVocabulary) showVocabulary = false else onClose() }
     BackHandler(onBack = back)
@@ -691,7 +693,8 @@ internal fun ReaderContents(
             currentBook = book,
             onBack = back,
             onOpenPassage = { source ->
-                val place = source.locator?.let { runCatching { Locator.fromJSON(JSONObject(it)) }.getOrNull() }
+                val locator = source.locator?.let { runCatching { Locator.fromJSON(JSONObject(it)) }.getOrNull() }
+                val place = ResourceAnchor.passageIn(locator, readingOrder)
                 if (place == null) {
                     Toast.makeText(context, R.string.vocabulary_book_unavailable, Toast.LENGTH_SHORT).show()
                 } else {

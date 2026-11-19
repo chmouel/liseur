@@ -2086,4 +2086,5 @@
     <string name="vocabulary_selection_too_long">请选择单词或短语。</string>
     <string name="vocabulary_reminders">每日复习提醒</string>
     <string name="vocabulary_reminder_message">有生词待复习。</string>
+    <string name="vocabulary_reminder_permission">请在 Android 设置中允许 Liseur 通知，然后在这里开启复习提醒。</string>
 </resources>

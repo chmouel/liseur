@@ -2360,4 +2360,5 @@
     <string name="vocabulary_selection_too_long">Vyberte slovo nebo krátké slovní spojení.</string>
     <string name="vocabulary_reminders">Denní připomenutí opakování</string>
     <string name="vocabulary_reminder_message">Máte slovíčka k opakování.</string>
+    <string name="vocabulary_reminder_permission">Povolte oznámení Liseuru v nastavení Androidu a pak zde zapněte připomenutí.</string>
 </resources>

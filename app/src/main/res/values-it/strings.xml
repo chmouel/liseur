@@ -2166,4 +2166,5 @@
     <string name="vocabulary_selection_too_long">Seleziona una parola o una breve espressione.</string>
     <string name="vocabulary_reminders">Promemoria giornaliero di ripasso</string>
     <string name="vocabulary_reminder_message">Hai delle parole da ripassare.</string>
+    <string name="vocabulary_reminder_permission">Consenti le notifiche di Liseur nelle impostazioni di Android, poi attiva il promemoria qui.</string>
 </resources>

@@ -131,6 +131,43 @@ class VocabularyTest {
         }
     }
 
+    @Test
+    fun `search folds Unicode in definitions notes and edited sentences`() = runTest {
+        withDatabase { db ->
+            val repo = VocabularyRepository(db)
+            val source = source("book").copy(sentence = "Остров сокровищ")
+            val id = checkNotNull(repo.collect(VocabularyLookup("sail", "en", source), "Парус", null))
+            repo.edit(id, "Парус", "Запись о Пирате")
+            for (text in listOf("ПАРУС", "пирате", "оСтРоВ")) {
+                val matches = repo.dao.words(normalizeVocabularySearch(text), null, 0, 0).first()
+                assertEquals(listOf(id), matches.map { it.wordId })
+            }
+            val occurrence = repo.dao.occurrences(id).first().single()
+            repo.editSentence(occurrence.id, "Новый контекст")
+            assertEquals(listOf(id), repo.dao.words("новый", null, 0, 0).first().map { it.wordId })
+            assertTrue(repo.dao.words("остров", null, 0, 0).first().isEmpty())
+        }
+    }
+
+    @Test
+    fun `JSON restores manual definitions including a cleared one and keeps local edits`() = runTest {
+        withDatabase { db ->
+            val repo = VocabularyRepository(db)
+            val id = checkNotNull(repo.collect(VocabularyLookup("boat", "en", null), "A vessel", null))
+            val word = checkNotNull(repo.dao.word(id))
+            val cleared = VocabularyRecord(word.copy(id = 0, definition = null, definitionEdited = true), emptyList())
+            val json = StringWriter().also { writeVocabularyJson(listOf(cleared), it) }.toString()
+            repo.import(readVocabulary(json.reader()))
+            assertNull(repo.dao.word(id)?.definition)
+            assertEquals(true, repo.dao.word(id)?.definitionEdited)
+            repo.enrich(id, "A small craft", null)
+            assertNull(repo.dao.word(id)?.definition)
+            repo.edit(id, "My local edit", "")
+            repo.import(readVocabulary(json.reader()))
+            assertEquals("My local edit", repo.dao.word(id)?.definition)
+        }
+    }
+
     private suspend fun withDatabase(test: suspend (LiseurDatabase) -> Unit) {
         val database = Room.inMemoryDatabaseBuilder(
             ApplicationProvider.getApplicationContext(), LiseurDatabase::class.java,
