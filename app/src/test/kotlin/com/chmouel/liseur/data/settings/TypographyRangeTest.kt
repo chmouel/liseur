@@ -67,6 +67,9 @@ class TypographyRangeTest {
         assertNull(TypographyRange.LINE_HEIGHT.sanitize(0.9))
         assertNull(TypographyRange.LINE_HEIGHT.sanitize(2.1))
         assertNull(TypographyRange.PAGE_MARGINS.sanitize(4.1))
+        assertNull(TypographyRange.VERTICAL_MARGINS.sanitize(-4.0))
+        assertEquals(64.0, TypographyRange.VERTICAL_MARGINS.sanitize(80.0)!!, 1e-9)
+        assertEquals(12.0, TypographyRange.VERTICAL_MARGINS.sanitize(13.0)!!, 1e-9)
     }
 
     @Test
@@ -80,6 +83,36 @@ class TypographyRangeTest {
         // Zero margins is inside Readium's own range: an unusual page,
         // not an impossible one.
         assertEquals(0.0, TypographyRange.PAGE_MARGINS.sanitize(0.0)!!, 1e-9)
+    }
+
+    @Test
+    fun `a page margin off the slider notches is kept as stored`() {
+        assertEquals(1.2, TypographyRange.PAGE_MARGINS.sanitize(1.2)!!, 0.0)
+        assertEquals(0.3, TypographyRange.PAGE_MARGINS.sanitize(0.3)!!, 0.0)
+        assertNull(TypographyRange.PAGE_MARGINS.sanitize(-0.1))
+        assertNull(TypographyRange.PAGE_MARGINS.sanitize(Double.NaN))
+        // The thumb still rests on the nearest notch.
+        assertEquals(1.25f, spacingThumb(1.2, TypographyRange.PAGE_MARGINS), 0f)
+    }
+
+    @Test
+    fun `tying vertical margins together keeps equal values and averages the rest`() {
+        assertEquals(24.0 to 24.0, syncedVerticalMargins(24.0, 24.0))
+        assertEquals(32.0 to 32.0, syncedVerticalMargins(20.0, 44.0))
+        // An unset side counts as the 12 dp default: (12 + 36) / 2.
+        assertEquals(24.0 to 24.0, syncedVerticalMargins(null, 36.0))
+        assertEquals(24.0 to 24.0, syncedVerticalMargins(36.0, null))
+        assertEquals(null to null, syncedVerticalMargins(null, null))
+    }
+
+    @Test
+    fun `vertical page margins are the padding in a paged book and none in a scrolled one`() {
+        val css = ReadingCss.Default
+        assertEquals(20.0 to 36.0, verticalPageMargins(false, css, 20.0, 36.0))
+        assertEquals(12.0 to 36.0, verticalPageMargins(false, css, null, 36.0))
+        assertNull(verticalPageMargins(true, css, 20.0, 36.0))
+        // A book that cannot be reshaped holds the default whatever is stored.
+        assertEquals(12.0 to 12.0, verticalPageMargins(false, ReadingCss.Unsupported, 20.0, 36.0))
     }
 
     @Test

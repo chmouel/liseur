@@ -101,6 +101,10 @@ fun AdvancedSheet(
     fineTypography: FineTypographyActions,
     onLineHeightChanged: (Double?) -> Unit,
     onPageMarginsChanged: (Double?) -> Unit,
+    onTopMarginChanged: (Double?) -> Unit,
+    onBottomMarginChanged: (Double?) -> Unit,
+    onVerticalMarginsChanged: (Double?) -> Unit,
+    onSyncVerticalMarginsChanged: (Boolean) -> Unit,
     onColumnModeChanged: (ColumnMode) -> Unit,
     onFooterModeChanged: (FooterMode) -> Unit,
     onFooterFieldChanged: (FooterSlot, FooterField) -> Unit,
@@ -139,14 +143,24 @@ fun AdvancedSheet(
             ReadingLayoutControls(
                 lineHeight = prefs.lineHeight,
                 pageMargins = prefs.pageMargins,
+                topMargin = prefs.topMargin,
+                bottomMargin = prefs.bottomMargin,
+                syncVerticalMargins = prefs.syncVerticalMargins,
                 columnMode = prefs.columnMode,
                 // A scrolled chapter is one running column, so the count
                 // has nothing to divide and the control would take a tap
                 // and change nothing.
                 showColumns = !scrolling,
+                // Top and bottom margins pad the page, and a scrolled
+                // chapter has none.
+                showVerticalMargins = !scrolling,
                 enabled = reshapeable,
                 onLineHeightChanged = onLineHeightChanged,
                 onPageMarginsChanged = onPageMarginsChanged,
+                onTopMarginChanged = onTopMarginChanged,
+                onBottomMarginChanged = onBottomMarginChanged,
+                onVerticalMarginsChanged = onVerticalMarginsChanged,
+                onSyncVerticalMarginsChanged = onSyncVerticalMarginsChanged,
                 onColumnModeChanged = onColumnModeChanged,
             )
             ReadingFineTypographyControls(

@@ -32,6 +32,9 @@ data class BookTypography(
     @ColumnInfo(name = "font_size") val fontSize: Double,
     @ColumnInfo(name = "line_height") val lineHeight: Double?,
     @ColumnInfo(name = "page_margins") val pageMargins: Double?,
+    @ColumnInfo(name = "top_margin") val topMargin: Double? = null,
+    @ColumnInfo(name = "bottom_margin") val bottomMargin: Double? = null,
+    @ColumnInfo(name = "sync_vertical_margins") val syncVerticalMargins: Boolean = true,
 ) {
     companion object {
         /**
@@ -57,6 +60,9 @@ data class BookTypography(
                 fontSize = safe.fontSize,
                 lineHeight = safe.lineHeight,
                 pageMargins = safe.pageMargins,
+                topMargin = safe.topMargin,
+                bottomMargin = safe.bottomMargin,
+                syncVerticalMargins = safe.syncVerticalMargins,
             )
         }
     }
@@ -86,6 +92,9 @@ fun ReaderPrefs.withTypographyOf(own: BookTypography?): ReaderPrefs =
             fontSize = own.fontSize,
             lineHeight = own.lineHeight,
             pageMargins = own.pageMargins,
+            topMargin = own.topMargin,
+            bottomMargin = own.bottomMargin,
+            syncVerticalMargins = own.syncVerticalMargins,
         ).sanitized()
     }
 

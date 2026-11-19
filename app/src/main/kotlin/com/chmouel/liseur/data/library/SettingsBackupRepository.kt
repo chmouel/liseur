@@ -1607,6 +1607,8 @@ class SettingsBackupRepository internal constructor(
         validateRange(reader, "font_size", TypographyRange.FONT_SIZE)
         validateRange(reader, "line_height", TypographyRange.LINE_HEIGHT)
         validateRange(reader, "page_margins", TypographyRange.PAGE_MARGINS)
+        validateRange(reader, "top_margin", TypographyRange.VERTICAL_MARGINS)
+        validateRange(reader, "bottom_margin", TypographyRange.VERTICAL_MARGINS)
         validateRange(reader, "letter_spacing", TypographyRange.LETTER_SPACING)
         validateRange(reader, "word_spacing", TypographyRange.WORD_SPACING)
         validateRange(reader, "paragraph_spacing", TypographyRange.PARAGRAPH_SPACING)

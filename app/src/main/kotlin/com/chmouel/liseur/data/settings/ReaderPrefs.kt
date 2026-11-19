@@ -659,8 +659,20 @@ sealed class TypographyRange(
     val max: Double,
 ) {
 
-    /** A dragged spacing: clamps into range, keeps an explicit zero. */
-    class Slider(min: Double, max: Double, val increment: Double) : TypographyRange(min, max) {
+    /**
+     * A dragged spacing: clamps into range, keeps an explicit zero.
+     *
+     * With [snapsStoredValues] false the slider still has notches to drag
+     * between, but a stored value off them is a real preference from an
+     * older build: [sanitize] keeps it when in range and discards it
+     * otherwise, like [Segmented].
+     */
+    class Slider(
+        min: Double,
+        max: Double,
+        val increment: Double,
+        val snapsStoredValues: Boolean = true,
+    ) : TypographyRange(min, max) {
 
         /** How many notches the slider has between [min] and [max]. */
         val tickCount: Int = ((max - min) / increment).roundToInt()
@@ -708,7 +720,8 @@ sealed class TypographyRange(
         val fallback = (this as? Required)?.fallback
         if (value == null || !value.isFinite() || value < 0.0) return fallback
         return when (this) {
-            is Slider -> snap(value.coerceIn(min, max))
+            is Slider ->
+                if (snapsStoredValues) snap(value.coerceIn(min, max)) else value.takeIf { it in min..max }
             is Segmented -> value.takeIf { it in min..max }
             is Required -> value.coerceIn(min, max)
         }
@@ -732,8 +745,15 @@ sealed class TypographyRange(
         /** Readium's `lineHeight` range. Zero is below it, and discarded. */
         val LINE_HEIGHT = Segmented(min = 1.0, max = 2.0)
 
-        /** Readium's `pageMargins` range, whose minimum really is zero. */
-        val PAGE_MARGINS = Segmented(min = 0.0, max = 4.0)
+        /**
+         * Readium's `pageMargins` range, whose minimum really is zero.
+         * The slider has 0.25 notches, but older builds stored finer
+         * values (such as 1.2) that stay valid.
+         */
+        val PAGE_MARGINS = Slider(min = 0.0, max = 4.0, increment = 0.25, snapsStoredValues = false)
+
+        /** Top and bottom Compose margins in dp, where null keeps the 12 dp default. */
+        val VERTICAL_MARGINS = Slider(min = 0.0, max = 64.0, increment = 4.0)
 
         val LETTER_SPACING = Slider(min = 0.0, max = 0.25, increment = 0.01)
         val WORD_SPACING = Slider(min = 0.0, max = 0.5, increment = 0.02)
@@ -866,7 +886,10 @@ private fun isRtlLanguage(language: String?): Boolean {
  * @param fontSize Text zoom multiplier where 1.0 is the publisher's own
  *   size. A reader who has not chosen one gets [DEFAULT_FONT_SIZE].
  * @param lineHeight Line height multiplier (1.0–2.0), null keeps publisher styles.
- * @param pageMargins Page margin multiplier (0.5–2.0), null keeps publisher styles.
+ * @param pageMargins Page margin multiplier (0.0–4.0), null keeps publisher styles.
+ * @param topMargin Top page margin in dp (0–64), null keeps the 12 dp default.
+ * @param bottomMargin Bottom page margin in dp (0–64), null keeps the 12 dp default.
+ * @param syncVerticalMargins Whether top and bottom margins move together.
  * @param brightness Screen brightness override 0.0–1.0, null follows the system.
  * @param pageTurnStyle How a tapped page gets out of the way.
  * @param footerMode What the reading footer's middle slot shows.
@@ -893,6 +916,9 @@ data class ReaderPrefs(
     val themeChoice: ReaderThemeChoice = ReaderThemeChoice.Default,
     val lineHeight: Double? = null,
     val pageMargins: Double? = null,
+    val topMargin: Double? = null,
+    val bottomMargin: Double? = null,
+    val syncVerticalMargins: Boolean = true,
     val brightness: Float? = null,
     val pageTurnStyle: PageTurnStyle = PageTurnStyle.Default,
     val footerMode: FooterMode = FooterMode.Default,
@@ -936,6 +962,8 @@ data class ReaderPrefs(
         const val DEFAULT_FONT_SIZE_POSITION = 7
         const val DEFAULT_FONT_SIZE = MIN_FONT_SIZE +
             DEFAULT_FONT_SIZE_POSITION * ((MAX_FONT_SIZE - MIN_FONT_SIZE) / (FONT_SIZE_POSITIONS - 1))
+
+        const val DEFAULT_VERTICAL_MARGIN_DP = 12.0
     }
 }
 
@@ -953,6 +981,8 @@ fun ReaderPrefs.sanitized(): ReaderPrefs = copy(
     fontSize = TypographyRange.FONT_SIZE.require(fontSize),
     lineHeight = TypographyRange.LINE_HEIGHT.sanitize(lineHeight),
     pageMargins = TypographyRange.PAGE_MARGINS.sanitize(pageMargins),
+    topMargin = TypographyRange.VERTICAL_MARGINS.sanitize(topMargin),
+    bottomMargin = TypographyRange.VERTICAL_MARGINS.sanitize(bottomMargin),
     letterSpacing = TypographyRange.LETTER_SPACING.sanitize(letterSpacing),
     wordSpacing = TypographyRange.WORD_SPACING.sanitize(wordSpacing),
     paragraphSpacing = TypographyRange.PARAGRAPH_SPACING.sanitize(paragraphSpacing),
@@ -1020,7 +1050,44 @@ fun justificationHyphenates(align: ReaderTextAlign, hyphens: Boolean?): Boolean 
  * is not guaranteed to report itself.
  */
 fun spacingThumb(value: Double?, range: TypographyRange.Slider): Float =
-    (value ?: range.min).toFloat()
+    range.snap(value ?: range.min).toFloat()
+
+/**
+ * The top and bottom margins once they are tied together: unchanged when
+ * they already agree, otherwise both the average of the two, with an
+ * unset side counted as the [ReaderPrefs.DEFAULT_VERTICAL_MARGIN_DP]
+ * default. Two unset margins stay unset.
+ */
+fun syncedVerticalMargins(top: Double?, bottom: Double?): Pair<Double?, Double?> {
+    val safeTop = TypographyRange.VERTICAL_MARGINS.sanitize(top)
+    val safeBottom = TypographyRange.VERTICAL_MARGINS.sanitize(bottom)
+    if (safeTop == safeBottom) return safeTop to safeBottom
+    val synced = TypographyRange.VERTICAL_MARGINS.sanitize(
+        ((safeTop ?: ReaderPrefs.DEFAULT_VERTICAL_MARGIN_DP) +
+            (safeBottom ?: ReaderPrefs.DEFAULT_VERTICAL_MARGIN_DP)) / 2.0,
+    )
+    return synced to synced
+}
+
+/**
+ * The top and bottom padding in dp the reader puts around the page, or
+ * null when it adds none because the page scrolls. A book whose CSS
+ * cannot be reshaped keeps the default on both sides. The padding and
+ * the reflow that follows a change both read this, so they cannot
+ * disagree about what changed.
+ */
+fun verticalPageMargins(
+    scrolls: Boolean,
+    css: ReadingCss,
+    top: Double?,
+    bottom: Double?,
+): Pair<Double, Double>? = when {
+    scrolls -> null
+    !css.honoursAnything ->
+        ReaderPrefs.DEFAULT_VERTICAL_MARGIN_DP to ReaderPrefs.DEFAULT_VERTICAL_MARGIN_DP
+    else -> (top ?: ReaderPrefs.DEFAULT_VERTICAL_MARGIN_DP) to
+        (bottom ?: ReaderPrefs.DEFAULT_VERTICAL_MARGIN_DP)
+}
 
 /**
  * What a slider commits, which is never null: dragging a spacing is how

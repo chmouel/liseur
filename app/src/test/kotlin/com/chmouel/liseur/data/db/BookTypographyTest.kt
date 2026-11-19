@@ -38,6 +38,9 @@ class BookTypographyTest {
         fontSize = 1.6,
         lineHeight = 2.0,
         pageMargins = 1.8,
+        topMargin = 32.0,
+        bottomMargin = 48.0,
+        syncVerticalMargins = false,
     )
 
     @Test
@@ -52,6 +55,9 @@ class BookTypographyTest {
         assertEquals(1.6, effective.fontSize, 0.0)
         assertEquals(2.0, effective.lineHeight!!, 0.0)
         assertEquals(1.8, effective.pageMargins!!, 0.0)
+        assertEquals(32.0, effective.topMargin!!, 0.0)
+        assertEquals(48.0, effective.bottomMargin!!, 0.0)
+        assertEquals(false, effective.syncVerticalMargins)
     }
 
     @Test

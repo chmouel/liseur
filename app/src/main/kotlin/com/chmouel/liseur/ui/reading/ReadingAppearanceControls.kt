@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
@@ -41,6 +42,7 @@ import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -62,11 +64,15 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.intl.Locale
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.settings.EdgeBrightness
 import com.chmouel.liseur.data.settings.ReaderOrientation
+import com.chmouel.liseur.data.settings.TypographyRange
+import java.text.NumberFormat
+import kotlin.math.roundToInt
 import com.chmouel.liseur.data.settings.ColumnMode
 import com.chmouel.liseur.data.settings.PageTurnStyle
 import com.chmouel.liseur.data.settings.FooterMode
@@ -742,7 +748,8 @@ fun ReadingBrightnessSlider(value: Float?, onChanged: (Float?) -> Unit) {
  *
  * [showColumns] hides the column count where it cannot apply — a
  * scrolled chapter is one running column, and a phone has no room for
- * two. [enabled] is a different question: all three rules are gated on a
+ * two. [showVerticalMargins] hides the top and bottom margins in a
+ * scrolled chapter, which has no page edges for them to act on. [enabled] is a different question: all three rules are gated on a
  * reflowable publication, so in a fixed-layout book every row here is
  * greyed and goes on showing what the reader chose.
  */
@@ -750,11 +757,19 @@ fun ReadingBrightnessSlider(value: Float?, onChanged: (Float?) -> Unit) {
 fun ReadingLayoutControls(
     lineHeight: Double?,
     pageMargins: Double?,
+    topMargin: Double?,
+    bottomMargin: Double?,
+    syncVerticalMargins: Boolean,
     columnMode: ColumnMode,
     showColumns: Boolean,
+    showVerticalMargins: Boolean,
     enabled: Boolean,
     onLineHeightChanged: (Double?) -> Unit,
     onPageMarginsChanged: (Double?) -> Unit,
+    onTopMarginChanged: (Double?) -> Unit,
+    onBottomMarginChanged: (Double?) -> Unit,
+    onVerticalMarginsChanged: (Double?) -> Unit,
+    onSyncVerticalMarginsChanged: (Boolean) -> Unit,
     onColumnModeChanged: (ColumnMode) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -779,20 +794,60 @@ fun ReadingLayoutControls(
                 ) { Text(stringResource(label)) }
             }
         }
-        ReadingSectionLabel(stringResource(R.string.reader_margins))
-        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-            val options = listOf(
-                R.string.reader_margins_narrow to 0.5,
-                R.string.reader_margins_default to null,
-                R.string.reader_margins_wide to 2.0,
-            )
-            options.forEachIndexed { index, (label, v) ->
-                SegmentedButton(
-                    selected = pageMargins == v,
+        DefaultableSpacingSlider(
+            label = stringResource(R.string.reader_side_margins),
+            value = pageMargins,
+            range = TypographyRange.PAGE_MARGINS,
+            enabled = enabled,
+            note = null,
+            onChanged = onPageMarginsChanged,
+            formatValue = { marginMultiplierLabel(it) },
+        )
+        if (showVerticalMargins) {
+            if (syncVerticalMargins) {
+                DefaultableSpacingSlider(
+                    label = stringResource(R.string.reader_vertical_margins),
+                    value = topMargin,
+                    range = TypographyRange.VERTICAL_MARGINS,
                     enabled = enabled,
-                    onClick = { onPageMarginsChanged(v) },
-                    shape = SegmentedButtonDefaults.itemShape(index, options.size),
-                ) { Text(stringResource(label)) }
+                    note = null,
+                    onChanged = onVerticalMarginsChanged,
+                    formatValue = { marginDpLabel(it) },
+                )
+            } else {
+                DefaultableSpacingSlider(
+                    label = stringResource(R.string.reader_top_margin),
+                    value = topMargin,
+                    range = TypographyRange.VERTICAL_MARGINS,
+                    enabled = enabled,
+                    note = null,
+                    onChanged = onTopMarginChanged,
+                    formatValue = { marginDpLabel(it) },
+                )
+                DefaultableSpacingSlider(
+                    label = stringResource(R.string.reader_bottom_margin),
+                    value = bottomMargin,
+                    range = TypographyRange.VERTICAL_MARGINS,
+                    enabled = enabled,
+                    note = null,
+                    onChanged = onBottomMarginChanged,
+                    formatValue = { marginDpLabel(it) },
+                )
+            }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .toggleable(
+                        value = syncVerticalMargins,
+                        enabled = enabled,
+                        role = Role.Switch,
+                        onValueChange = onSyncVerticalMarginsChanged,
+                    ),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                ReadingSectionLabel(stringResource(R.string.reader_sync_vertical_margins))
+                Switch(checked = syncVerticalMargins, onCheckedChange = null, enabled = enabled)
             }
         }
         // Only offered where it can be honoured. Two columns need room
@@ -1006,3 +1061,27 @@ val FooterField.label: Int
         FooterField.BATTERY -> R.string.footer_field_battery
         FooterField.EMPTY -> R.string.footer_field_empty
     }
+
+@Composable
+private fun marginMultiplierLabel(value: Double?): String {
+    val locale = Locale.current
+    val format = remember(locale) {
+        NumberFormat.getNumberInstance(java.util.Locale.forLanguageTag(locale.toLanguageTag()))
+            .apply {
+                minimumFractionDigits = 0
+                maximumFractionDigits = 2
+            }
+    }
+    return when {
+        value == null -> stringResource(R.string.reader_spacing_value_default)
+        value == 0.0 -> stringResource(R.string.reader_spacing_value_none)
+        else -> stringResource(R.string.reader_margin_multiplier_value, format.format(value))
+    }
+}
+
+@Composable
+private fun marginDpLabel(value: Double?): String = when {
+    value == null -> stringResource(R.string.reader_spacing_value_default)
+    value == 0.0 -> stringResource(R.string.reader_spacing_value_none)
+    else -> stringResource(R.string.reader_margin_dp_value, value.roundToInt())
+}

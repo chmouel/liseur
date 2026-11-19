@@ -84,6 +84,7 @@ import com.chmouel.liseur.data.settings.ReaderOrientation
 import com.chmouel.liseur.data.settings.ScreenHandling
 import com.chmouel.liseur.data.settings.TapLayout
 import com.chmouel.liseur.data.settings.TypographyRange
+import com.chmouel.liseur.data.settings.syncedVerticalMargins
 import com.chmouel.liseur.domain.EPSILON
 import com.chmouel.liseur.domain.SeriesExtras
 import com.chmouel.liseur.domain.seriesIdForExtras
@@ -3059,6 +3060,36 @@ class ReaderViewModel(
     fun setPageMargins(value: Double?) = typography(
         shared = { prefsRepo.setPageMargins(value) },
         own = { it.copy(pageMargins = TypographyRange.PAGE_MARGINS.sanitize(value)) },
+    )
+
+    fun setTopMargin(value: Double?) = typography(
+        shared = { prefsRepo.setTopMargin(value) },
+        own = { it.copy(topMargin = TypographyRange.VERTICAL_MARGINS.sanitize(value)) },
+    )
+
+    fun setBottomMargin(value: Double?) = typography(
+        shared = { prefsRepo.setBottomMargin(value) },
+        own = { it.copy(bottomMargin = TypographyRange.VERTICAL_MARGINS.sanitize(value)) },
+    )
+
+    fun setVerticalMargins(value: Double?) = typography(
+        shared = { prefsRepo.setVerticalMargins(value) },
+        own = {
+            val safe = TypographyRange.VERTICAL_MARGINS.sanitize(value)
+            it.copy(topMargin = safe, bottomMargin = safe)
+        },
+    )
+
+    fun setSyncVerticalMargins(sync: Boolean) = typography(
+        shared = { prefsRepo.setSyncVerticalMargins(sync) },
+        own = {
+            if (!sync) {
+                it.copy(syncVerticalMargins = false)
+            } else {
+                val (top, bottom) = syncedVerticalMargins(it.topMargin, it.bottomMargin)
+                it.copy(syncVerticalMargins = true, topMargin = top, bottomMargin = bottom)
+            }
+        },
     )
 
     /**

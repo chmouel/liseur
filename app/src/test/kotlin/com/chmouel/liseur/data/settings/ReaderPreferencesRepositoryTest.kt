@@ -215,6 +215,13 @@ class ReaderPreferencesRepositoryTest {
     }
 
     @Test
+    fun `a page margin between slider notches survives a round trip`() = runTest {
+        val repo = ReaderPreferencesRepository(store())
+        repo.setPageMargins(1.2)
+        assertEquals(1.2, repo.prefs.first().pageMargins!!, 0.0)
+    }
+
+    @Test
     fun `a store written by something else still reads back usable`() = runTest {
         // The store is a file on a device: `adb shell run-as`, a restored
         // backup, an older or newer build. EpubPreferences throws from
@@ -325,5 +332,19 @@ class ReaderPreferencesRepositoryTest {
 
         repeat(AutoScrollPreference.MAX_STEP + 2) { repo.nudgeAutoScrollSpeed(1) }
         assertEquals(AutoScrollPreference.MAX_STEP.toFloat(), repo.prefs.first().autoScrollSpeed, 0f)
+    }
+
+    @Test
+    fun `syncing vertical margins averages unequal top and bottom`() = runTest {
+        val repo = ReaderPreferencesRepository(store())
+        repo.setSyncVerticalMargins(false)
+        repo.setTopMargin(20.0)
+        repo.setBottomMargin(44.0)
+
+        repo.setSyncVerticalMargins(true)
+        val prefs = repo.prefs.first()
+        assertTrue(prefs.syncVerticalMargins)
+        assertEquals(32.0, prefs.topMargin!!, 0.0)
+        assertEquals(32.0, prefs.bottomMargin!!, 0.0)
     }
 }

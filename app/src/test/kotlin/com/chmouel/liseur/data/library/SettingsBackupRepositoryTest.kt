@@ -943,6 +943,21 @@ class SettingsBackupRepositoryTest {
     }
 
     @Test
+    fun `restore accepts a page margin between the slider notches`() = runTest {
+        val fonts = UserFontRepository(context, this, loadCheck = { true })
+        fonts.awaitReady()
+        val app = AppSettingsRepository(store("legacy-margin-app.preferences_pb"))
+        val reader = ReaderPreferencesRepository(store("legacy-margin-reader.preferences_pb"))
+        val payload = JSONObject()
+            .put("app", JSONObject().put("theme_mode", "dark"))
+            .put("reader", JSONObject().put("page_margins", 1.2))
+        val backup = archive("legacy-margin.zip", payload)
+
+        assertTrue(restore(repository(app, reader, fonts), Uri.fromFile(backup)) is SettingsBackupRestoreResult.Restored)
+        assertEquals(1.2, reader.prefs.first().pageMargins!!, 0.0)
+    }
+
+    @Test
     fun `restore rejects a backup for another application`() = runTest {
         val fonts = UserFontRepository(context, this, loadCheck = { true })
         fonts.awaitReady()

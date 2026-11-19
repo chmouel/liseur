@@ -718,9 +718,13 @@
     <string name="reader_spacing_default">默认</string>
     <string name="reader_spacing_relaxed">宽松</string>
     <string name="reader_margins">边距</string>
-    <string name="reader_margins_narrow">窄</string>
-    <string name="reader_margins_default">默认</string>
-    <string name="reader_margins_wide">宽</string>
+    <string name="reader_side_margins">左右边距</string>
+    <string name="reader_vertical_margins">上下边距</string>
+    <string name="reader_top_margin">上边距</string>
+    <string name="reader_bottom_margin">下边距</string>
+    <string name="reader_sync_vertical_margins">同步上下边距</string>
+    <string name="reader_margin_multiplier_value">%1$s×</string>
+    <string name="reader_margin_dp_value">%1$d dp</string>
     <string name="reader_columns">分栏</string>
     <string name="reader_columns_auto">自动</string>
     <string name="reader_columns_one">1</string>

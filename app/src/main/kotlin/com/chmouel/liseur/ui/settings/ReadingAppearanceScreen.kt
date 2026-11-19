@@ -30,6 +30,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.chmouel.liseur.R
@@ -91,6 +92,10 @@ fun ReadingAppearanceScreen(
     onFontSize: (Double) -> Unit,
     onLineHeight: (Double?) -> Unit,
     onPageMargins: (Double?) -> Unit,
+    onTopMargin: (Double?) -> Unit,
+    onBottomMargin: (Double?) -> Unit,
+    onVerticalMargins: (Double?) -> Unit,
+    onSyncVerticalMargins: (Boolean) -> Unit,
     onBrightness: (Float?) -> Unit,
     onColumnMode: (ColumnMode) -> Unit,
     onFooterMode: (FooterMode) -> Unit,
@@ -186,19 +191,33 @@ fun ReadingAppearanceScreen(
                         Modifier.padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(20.dp),
                     ) {
-                        Column(Modifier.settingsAnchor(SettingsEntries.LineSpacing, SettingsEntries.Margins, SettingsEntries.Columns)) {
+                        Column(Modifier.settingsAnchor(
+                            SettingsEntries.LineSpacing,
+                            SettingsEntries.Margins,
+                            SettingsEntries.VerticalMargins,
+                            SettingsEntries.SyncVerticalMargins,
+                            SettingsEntries.Columns,
+                        )) {
                             ReadingLayoutControls(
                                 lineHeight = prefs.lineHeight,
                                 pageMargins = prefs.pageMargins,
+                                topMargin = prefs.topMargin,
+                                bottomMargin = prefs.bottomMargin,
+                                syncVerticalMargins = prefs.syncVerticalMargins,
                                 columnMode = prefs.columnMode,
                                 // The sheet hides this in a scrolled book, where
                                 // columns don't apply. There is no book here to
                                 // check, so the preference is always offered; the
                                 // reader surface decides whether to honor it.
                                 showColumns = true,
+                                showVerticalMargins = true,
                                 enabled = true,
                                 onLineHeightChanged = onLineHeight,
                                 onPageMarginsChanged = onPageMargins,
+                                onTopMarginChanged = onTopMargin,
+                                onBottomMarginChanged = onBottomMargin,
+                                onVerticalMarginsChanged = onVerticalMargins,
+                                onSyncVerticalMarginsChanged = onSyncVerticalMargins,
                                 onColumnModeChanged = onColumnMode,
                             )
                         }
@@ -252,14 +271,20 @@ private fun ReadingPreview(
     }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         ReadingSectionLabel(stringResource(R.string.reader_preview_title))
+        // Half scale plus a small base, so every notch of the 0-64 dp
+        // slider draws a different gap in this little box.
+        val topPreviewPadding = previewVerticalPadding(prefs.topMargin)
+        val bottomPreviewPadding = previewVerticalPadding(prefs.bottomMargin)
         Box(
             Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(12.dp))
                 .background(theme.background)
                 .padding(
-                    horizontal = (24 * (prefs.pageMargins ?: 1.0)).dp,
-                    vertical = 20.dp,
+                    start = (24 * (prefs.pageMargins ?: 1.0)).dp,
+                    end = (24 * (prefs.pageMargins ?: 1.0)).dp,
+                    top = topPreviewPadding,
+                    bottom = bottomPreviewPadding,
                 ),
         ) {
             // Two paragraphs rather than one, so paragraph spacing has a
@@ -287,3 +312,6 @@ private fun ReadingPreview(
         }
     }
 }
+
+private fun previewVerticalPadding(marginDp: Double?): Dp =
+    (4.0 + (marginDp ?: ReaderPrefs.DEFAULT_VERTICAL_MARGIN_DP) * 0.5).dp

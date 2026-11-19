@@ -213,6 +213,7 @@ import com.chmouel.liseur.data.settings.EdgeBrightness
 import com.chmouel.liseur.data.settings.ReaderOrientation
 import com.chmouel.liseur.data.settings.ScreenHandling
 import com.chmouel.liseur.data.settings.TapLayout
+import com.chmouel.liseur.data.settings.verticalPageMargins
 import com.chmouel.liseur.reader.chrome.CatchUpPill
 import com.chmouel.liseur.reader.chrome.SelectionToolbarSheet
 import com.chmouel.liseur.reader.chrome.AdvancedSheet
@@ -1517,6 +1518,34 @@ internal fun ReaderScreen(
         layoutGeneration++
     }
 
+    // Top and bottom padding repaginates the book without changing what
+    // is handed to Readium, so the reflow collector below takes it as
+    // part of what it compares.
+    val verticalMargins = verticalPageMargins(
+        pageContainerScrolls,
+        readingCss,
+        prefs.topMargin,
+        prefs.bottomMargin,
+    )
+
+    // What the padding actually uses. The live value moves as soon as the
+    // reader drags the slider, and resizing the navigator before the
+    // reflow collector has taken its anchor would repaginate the book
+    // away from the place it means to keep. The collector sets this once
+    // the anchor and the layout signature are taken. A rebuilt fragment
+    // starts from the live value, having no place to anchor against yet.
+    var appliedVerticalMargins by remember(columnMode, scrollMode, fontKey) {
+        mutableStateOf(verticalMargins)
+    }
+    // A scrolled page adds no padding, so there is nothing to lag.
+    val paddingMargins = if (verticalMargins == null) null else appliedVerticalMargins
+
+    // With no navigator nothing is anchored and the collector below is
+    // not running, so the padding follows the live value.
+    LaunchedEffect(navigator, verticalMargins) {
+        if (navigator == null) appliedVerticalMargins = verticalMargins
+    }
+
     // The samples move to the new shape as soon as it is known, so a
     // reading still in the air from the old one is refused rather than
     // wiping the estimate a moment after it started again.
@@ -1955,7 +1984,13 @@ internal fun ReaderScreen(
             // book paginated whatever this says.
             snapshotFlow { Triple(readingThemeNow, columnMode, scrollMode) },
         ) { p, (theme, columns, scrolling) ->
-            p.toEpubPreferences(theme, columns, scrolling, readingCss)
+            p.toEpubPreferences(theme, columns, scrolling, readingCss) to
+                verticalPageMargins(
+                    containerScrolls(reflowableText, scrolling),
+                    readingCss,
+                    p.topMargin,
+                    p.bottomMargin,
+                )
         }
             // Scrolling and columns are keys of the fragment: changing
             // either builds a new navigator with them as its initial
@@ -1966,9 +2001,9 @@ internal fun ReaderScreen(
             // cancellation, so the reflow scope would stay open for the
             // rest of the session and every scrolled-place question
             // (narrate from here among them) would get no answer.
-            .filter {
-                it.scroll == initialPreferences.scroll &&
-                    it.columnCount == initialPreferences.columnCount
+            .filter { (preferences, _) ->
+                preferences.scroll == initialPreferences.scroll &&
+                    preferences.columnCount == initialPreferences.columnCount
             }
             // What the book is rendered with, not what the reader
             // happens to be holding. Reading preferences carry answers
@@ -1977,9 +2012,15 @@ internal fun ReaderScreen(
             // the whole book at every notch, each time capturing an
             // anchor and restoring it, for a setting that changes not one
             // line of the text.
+            //
+            // The page's top and bottom padding rides along: it is
+            // applied by Compose rather than by Readium, but it resizes
+            // the navigator and breaks the book into other screens just
+            // as a margin preference does, so it takes the same capture
+            // and restore.
             .distinctUntilChanged()
-            .dropWhile { it == initialPreferences }
-            .collect {
+            .dropWhile { it == initialPreferences to paddingMargins }
+            .collect { (preferences, margins) ->
                 reflow.within {
                     // Taken before the anchor rather than with the
                     // restore. The capture below reads the document,
@@ -2004,7 +2045,11 @@ internal fun ReaderScreen(
                         }
                     }
                     val before = ExactLocatorAnchor.layoutSignature(nav)
-                    nav.submitPreferences(it)
+                    // After the anchor and the signature, so the resize
+                    // the padding causes is part of what the settle
+                    // below watches for rather than something it races.
+                    if (margins != appliedVerticalMargins) appliedVerticalMargins = margins
+                    nav.submitPreferences(preferences)
                     // Type size, margins, columns: the book is about to
                     // be broken into different screens, so the ones
                     // counted so far stop being about this book.
@@ -4138,16 +4183,22 @@ internal fun ReaderScreen(
                     .fillMaxSize()
                     .then(behindViewer)
                     .then(
-                        if (pageContainerScrolls) {
+                        if (paddingMargins == null) {
                             Modifier.windowInsetsPadding(
                                 WindowInsets.displayCutout.only(WindowInsetsSides.Horizontal),
                             )
                         } else {
+                            val topMarginDp = paddingMargins.first.dp
+                            val bottomMarginDp = paddingMargins.second.dp
                             Modifier
                                 .windowInsetsPadding(WindowInsets.displayCutout)
                                 .padding(
-                                    top = 12.dp,
-                                    bottom = if (footerShowing) footerReserve else 12.dp,
+                                    top = topMarginDp,
+                                    bottom = if (footerShowing) {
+                                        maxOf(footerReserve, bottomMarginDp)
+                                    } else {
+                                        bottomMarginDp
+                                    },
                                 )
                         },
                     ),
@@ -5752,6 +5803,10 @@ internal fun ReaderScreen(
             fineTypography = onPrefsAction.fineTypography,
             onLineHeightChanged = onPrefsAction.setLineHeight,
             onPageMarginsChanged = onPrefsAction.setPageMargins,
+            onTopMarginChanged = onPrefsAction.setTopMargin,
+            onBottomMarginChanged = onPrefsAction.setBottomMargin,
+            onVerticalMarginsChanged = onPrefsAction.setVerticalMargins,
+            onSyncVerticalMarginsChanged = onPrefsAction.setSyncVerticalMargins,
             onColumnModeChanged = onPrefsAction.setColumnMode,
             onFooterModeChanged = onProgressAction.setFooterMode,
             onFooterFieldChanged = onProgressAction.setFooterField,
@@ -6160,6 +6215,10 @@ class ReaderPrefsActions(
     val setTheme: (ReaderThemeChoice) -> Unit,
     val setLineHeight: (Double?) -> Unit,
     val setPageMargins: (Double?) -> Unit,
+    val setTopMargin: (Double?) -> Unit,
+    val setBottomMargin: (Double?) -> Unit,
+    val setVerticalMargins: (Double?) -> Unit,
+    val setSyncVerticalMargins: (Boolean) -> Unit,
     val setBrightness: (Float?) -> Unit,
     // Saves the value an edge swipe reached, and returns once the store
     // has it, so the preview can stay up until then (ADR 64).

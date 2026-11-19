@@ -49,7 +49,7 @@ import androidx.sqlite.execSQL
         BookMetadata::class,
         SessionImportSource::class,
     ],
-    version = 79,
+    version = 80,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
@@ -94,6 +94,24 @@ abstract class LiseurDatabase : RoomDatabase() {
     abstract fun sessionImportSourceDao(): SessionImportSourceDao
 
     companion object {
+        val MIGRATION_79_80 = object : Migration(79, 80) {
+            override fun migrate(connection: SQLiteConnection) {
+                val cols = connection.columnsOf("book_typography")
+                if ("top_margin" !in cols) {
+                    connection.execSQL("ALTER TABLE book_typography ADD COLUMN top_margin REAL")
+                }
+                if ("bottom_margin" !in cols) {
+                    connection.execSQL("ALTER TABLE book_typography ADD COLUMN bottom_margin REAL")
+                }
+                if ("sync_vertical_margins" !in cols) {
+                    connection.execSQL(
+                        "ALTER TABLE book_typography ADD COLUMN sync_vertical_margins " +
+                            "INTEGER NOT NULL DEFAULT 1",
+                    )
+                }
+            }
+        }
+
         val MIGRATION_78_79 = object : Migration(78, 79) {
             override fun migrate(connection: SQLiteConnection) {
                 connection.execSQL("""
@@ -2166,6 +2184,7 @@ abstract class LiseurDatabase : RoomDatabase() {
             MIGRATION_76_77,
             MIGRATION_77_78,
             MIGRATION_78_79,
+            MIGRATION_79_80,
         )
     }
 }

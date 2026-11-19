@@ -120,6 +120,12 @@ object SettingsEntries {
     val Font = entry("font", Route.ReadingAppearance, R.string.reader_font)
     val LineSpacing = advanced("line_spacing", Route.ReadingAppearance, R.string.reader_line_spacing)
     val Margins = advanced("margins", Route.ReadingAppearance, R.string.reader_margins)
+    val VerticalMargins = advanced(
+        "vertical_margins", Route.ReadingAppearance, R.string.reader_vertical_margins,
+    )
+    val SyncVerticalMargins = advanced(
+        "sync_vertical_margins", Route.ReadingAppearance, R.string.reader_sync_vertical_margins,
+    )
     val Columns = advanced("columns", Route.ReadingAppearance, R.string.reader_columns, shown = { it.columnsAvailable })
     val TextAlign = advanced("text_align", Route.ReadingAppearance, R.string.reader_text_align)
     val Hyphens = advanced("hyphens", Route.ReadingAppearance, R.string.reader_hyphens)
