@@ -42,9 +42,14 @@ internal class PlayUsageReporting(
     private var previousHandler: Thread.UncaughtExceptionHandler? = null
     private var crashHandler: Thread.UncaughtExceptionHandler? = null
     private val crashing = AtomicBoolean(false)
+    @Volatile private var currentScreen: String? = null
 
     init {
         if (choice.enabled && token.isNotBlank()) startSafely() else directory.deleteRecursively()
+    }
+
+    override fun setScreen(screen: String) {
+        currentScreen = screen
     }
 
     // Lock-free: opt-out holds the monitor while it drains queues, and
@@ -125,7 +130,8 @@ internal class PlayUsageReporting(
                 if (!sending.get()) null else {
                     @Suppress("UNCHECKED_CAST")
                     val exception = event.properties?.get("\$exception_list") as? List<Map<String, Any>>
-                    ReportingPayload.properties(event.event, BuildConfig.VERSION_NAME, exception)?.let {
+                    val crashContext = ReportingPayload.crashContext(event.properties)
+                    ReportingPayload.properties(event.event, BuildConfig.VERSION_NAME, exception, crashContext)?.let {
                         PostHogEvent(event.event, choice.installation, it.toMutableMap(), event.timestamp, event.uuid)
                     }
                 }
@@ -139,10 +145,26 @@ internal class PlayUsageReporting(
                     // Uploads share the executor that saves the crash; the
                     // interrupted batch stays on disk for the next launch.
                     transport?.dispatcher?.cancelAll()
+                    val runtime = Runtime.getRuntime()
+                    val usedMb = (runtime.totalMemory() - runtime.freeMemory()) / (1024L * 1024L)
+                    val maxMb = runtime.maxMemory() / (1024L * 1024L)
+                    val crashContext = CrashContext(
+                        screen = currentScreen,
+                        heapUsedMb = usedMb,
+                        heapMaxMb = maxMb,
+                    )
                     val worker = Thread({
                         try {
-                            client?.capture("\$exception", distinctId = choice.installation,
-                                properties = ReportingPayload.properties("\$exception", BuildConfig.VERSION_NAME, ReportingPayload.exception(error)))
+                            client?.capture(
+                                "\$exception",
+                                distinctId = choice.installation,
+                                properties = ReportingPayload.properties(
+                                    "\$exception",
+                                    BuildConfig.VERSION_NAME,
+                                    ReportingPayload.exception(error),
+                                    crashContext,
+                                ),
+                            )
                         } catch (_: Throwable) {
                         }
                     }, "usage-crash-persistence").apply { isDaemon = true }

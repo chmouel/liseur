@@ -46,7 +46,7 @@ sealed interface Route {
 enum class LaunchStack { LIBRARY, STATS }
 
 /** The tag a route is saved under; arguments follow it. */
-private val Route.tag: String
+internal val Route.tag: String
     get() = when (this) {
         Route.Library -> "Library"
         Route.Settings -> "Settings"
