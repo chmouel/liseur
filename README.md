@@ -36,6 +36,7 @@ An open-source ebook reader for Android, and a client for [calibre-web](https://
 - Local shelves and a library that follows you: calibre-web, Komga, BookOrbit, liseur-sync or any OPDS catalog, with reading position synced to the sentence.
 - A reading companion that indexes characters, places and groups on your phone, with no server needed.
 - Highlights, notes, bookmarks, dictionary, translation and read aloud with device voices or your own speech server.
+- A vocabulary builder: keep words from the dictionary with the passage they came from, review them with spaced repetition, and export them to Anki.
 - Light, Sepia, Dark, OLED Black and low-light themes, open typefaces and per-book layout.
 - Free software: no ads, no account, no trackers in the F-Droid and GitHub builds.
 
@@ -91,7 +92,9 @@ words and return to their passages. Tap a review card to see the answer,
 then swipe it left for Again or right for Good, either in the review or on
 Home's **Words to review** card. The vocabulary menu can export a JSON
 backup or an Anki-compatible CSV. Dictionary settings control automatic
-saving, and Vocabulary settings offer daily limits and reminders.
+saving, and Vocabulary settings offer daily limits and reminders. Home
+shows the next word due, so you can check its meaning and start a review
+from there.
 
 The reading companion answers questions about characters and events using
 the passages before the selected text. Character profiles show their source
