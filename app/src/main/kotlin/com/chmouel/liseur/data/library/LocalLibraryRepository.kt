@@ -5,6 +5,11 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
+import com.chmouel.liseur.data.remote.BOOK_HEADER_BYTES
+import com.chmouel.liseur.data.remote.isHtmlBookResponse
+import java.io.IOException
+import okio.buffer
+import okio.source
 import android.os.Build
 import android.util.Log
 import android.provider.DocumentsContract
@@ -58,6 +63,7 @@ sealed interface ImportResult {
 
     /** The file could not be read as a book at all. */
     data object Failed : ImportResult
+    data object WebPage : ImportResult
 }
 
 /**
@@ -222,6 +228,7 @@ class LocalLibraryRepository(
      */
     suspend fun importBook(uri: Uri): ImportResult = importLock.withLock {
         val url = uri.toAbsoluteUrl() ?: return@withLock ImportResult.Failed
+        if (isPickedWebPage(uri)) return@withLock ImportResult.WebPage
         alreadyShelved(url)?.let { book ->
             if (book.openableUrl == null) {
                 // The launcher already tried to persist the grant, but a
@@ -265,6 +272,19 @@ class LocalLibraryRepository(
         indexBook(url, source = null)
             ?.let { ImportResult.Added(it) }
             ?: ImportResult.Failed
+    }
+
+    private suspend fun isPickedWebPage(uri: Uri): Boolean = withContext(Dispatchers.IO) {
+        try {
+            context.contentResolver.openInputStream(uri)?.source()?.buffer()?.use { source ->
+                source.request(BOOK_HEADER_BYTES.toLong())
+                isHtmlBookResponse(source.readByteArray(minOf(source.buffer.size, BOOK_HEADER_BYTES.toLong())))
+            } ?: false
+        } catch (_: IOException) {
+            false
+        } catch (_: SecurityException) {
+            false
+        }
     }
 
     /**

@@ -15,6 +15,7 @@ import okhttp3.Request
  * URL is derivable from the integer book id, which those rows do have.
  */
 class CalibreFileSource(private val http: RemoteHttp = RemoteHttp()) : FileSource {
+    override val validateOpdsEpub = true
 
     override fun downloadRequest(
         server: com.chmouel.liseur.data.db.RemoteServer,

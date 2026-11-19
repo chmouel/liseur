@@ -1356,7 +1356,11 @@
     <string name="browse_free_no_account">Без учётной записи.</string>
     <string name="browse_textos_detail">Книги на испанском, бесплатные для чтения.</string>
     <string name="browse_manybooks_detail">Бесплатные книги многих жанров от независимых авторов.</string>
-    <string name="browse_gallica_detail">Французские книги из Национальной библиотеки Франции.</string>
+    <string name="browse_gallica_detail">Книги в формате EPUB на французском языке из Национальной библиотеки Франции.</string>
+    <string name="browse_download_on_website">Скачайте эту книгу с сайта.</string>
+    <string name="browse_open_browser">Открыть в браузере</string>
+    <string name="browse_catalog_unavailable">Каталог сейчас недоступен.</string>
+    <string name="import_web_page">Этот файл — веб-страница, а не EPUB.</string>
     <string name="browse_free_catalog_saved">Сохранено</string>
     <string name="browse_free_catalog_connecting">Подключение…</string>
     <string name="browse_free_catalog_failed">Не удалось связаться с %1$s. Проверьте соединение и повторите попытку.</string>

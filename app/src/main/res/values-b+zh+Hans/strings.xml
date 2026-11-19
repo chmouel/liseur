@@ -1200,7 +1200,11 @@
     <string name="browse_free_no_account">无需账户。</string>
     <string name="browse_textos_detail">西班牙语图书，免费阅读。</string>
     <string name="browse_manybooks_detail">多种类型的免费电子书，来自独立作者。</string>
-    <string name="browse_gallica_detail">来自法国国家图书馆的法语图书。</string>
+    <string name="browse_gallica_detail">法国国家图书馆的法语 EPUB 电子书。</string>
+    <string name="browse_download_on_website">请从网站下载这本书。</string>
+    <string name="browse_open_browser">在浏览器中打开</string>
+    <string name="browse_catalog_unavailable">目录暂时无法访问。</string>
+    <string name="import_web_page">此文件是网页，不是 EPUB。</string>
     <string name="browse_free_catalog_saved">已保存</string>
     <string name="browse_free_catalog_connecting">正在连接…</string>
     <string name="browse_free_catalog_failed">无法连接到 %1$s。请检查网络连接后重试。</string>

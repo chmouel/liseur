@@ -377,10 +377,13 @@ class BrowseCatalogRepository(
         servers.setPreferredFormat(serverId, key)
     }
 
-    suspend fun add(serverId: Long, selected: List<RemoteBook>): Int = changing.withLock {
+    internal suspend fun browserFallback(id: java.util.UUID): String? =
+        downloads.awaitDownload(id)?.outputData?.getString(BookDownloadRepository.KEY_BROWSER_URL)
+
+    suspend fun add(serverId: Long, selected: List<RemoteBook>) = changing.withLock {
         val server = servers.get(serverId)?.takeIf { it.id != RemoteServer.SINGLE_ID && it.canDownload }
-            ?: return@withLock 0
-        val address = server.catalogUrl ?: return@withLock 0
+            ?: return@withLock (0 to null)
+        val address = server.catalogUrl ?: return@withLock (0 to null)
         val candidates = selected.filter { it.downloadHref != null }.distinctBy(RemoteBook::remoteId)
         val added = mutableListOf<com.chmouel.liseur.data.db.Book>()
         inTransaction {
@@ -406,8 +409,9 @@ class BrowseCatalogRepository(
             }
             metadata?.storeCatalog(described)
         }
-        added.forEach { downloads.enqueue(it, guardSpace = added.size > 1) }
-        added.size
+        val single = selected.size == 1
+        val requests = added.map { downloads.enqueue(it, guardSpace = !single) }
+        added.size to requests.singleOrNull().takeIf { single }
     }
 
     suspend fun remove(serverId: Long) = changing.withLock {

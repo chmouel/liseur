@@ -155,6 +155,8 @@ class BrowseLibrariesViewModel(private val catalogs: BrowseCatalogRepository) : 
     private var connectJob: Job? = null
     private var connectionGeneration = 0L
     private var presetJob: Job? = null
+    private val browserFallbackJobs = mutableSetOf<Job>()
+    private var browserFallbackGeneration = 0
     private var presetGeneration = 0L
     /** Completed by the first emission of the saved list, so a preset is matched against it. */
     private val savedReady = CompletableDeferred<Unit>()
@@ -333,6 +335,7 @@ class BrowseLibrariesViewModel(private val catalogs: BrowseCatalogRepository) : 
     }
 
     fun openServer(id: Long) {
+        clearBrowserFallback()
         abandonCategory()
         _state.update {
             it.copy(
@@ -375,8 +378,23 @@ class BrowseLibrariesViewModel(private val catalogs: BrowseCatalogRepository) : 
         load(keep = false)
     }
 
+    private val _browserFallbacks = MutableStateFlow<List<String>>(emptyList())
+    val browserFallbacks = _browserFallbacks.asStateFlow()
+
+    fun dismissBrowserFallback() {
+        _browserFallbacks.update { it.drop(1) }
+    }
+
+    private fun clearBrowserFallback() {
+        browserFallbackGeneration++
+        browserFallbackJobs.forEach { it.cancel() }
+        browserFallbackJobs.clear()
+        _browserFallbacks.value = emptyList()
+    }
+
     /** Leaving the browser: a catalog still being connected to is dropped. */
     fun leave() {
+        clearBrowserFallback()
         abandonConnection()
         abandonPreset()
         _state.update { it.copy(chooserOpen = false, chooserFromLibrary = false, leaveForLibrary = false) }
@@ -401,6 +419,7 @@ class BrowseLibrariesViewModel(private val catalogs: BrowseCatalogRepository) : 
     }
 
     private fun closeServer() {
+        clearBrowserFallback()
         abandonCategory()
         listingGeneration++
         loadJob?.cancel()
@@ -599,11 +618,12 @@ class BrowseLibrariesViewModel(private val catalogs: BrowseCatalogRepository) : 
 
     private fun add(books: List<RemoteBook>) {
         val serverId = _state.value.serverId ?: return
+        val generation = browserFallbackGeneration
         val path = _state.value.path
         _state.update { it.copy(working = true) }
         viewModelScope.launch {
             try {
-                val count = catalogs.add(serverId, books)
+                val (count, singleDownload) = catalogs.add(serverId, books)
                 // The reader may have moved on while the add ran; a
                 // selection made somewhere else is not this add's to clear.
                 _state.update {
@@ -614,6 +634,14 @@ class BrowseLibrariesViewModel(private val catalogs: BrowseCatalogRepository) : 
                     }
                 }
                 _events.send(if (count > 0) BrowseEvent.Added(count) else BrowseEvent.NothingToAdd)
+                if (singleDownload != null && generation == browserFallbackGeneration) {
+                    browserFallbackJobs.removeAll { it.isCompleted }
+                    browserFallbackJobs += viewModelScope.launch {
+                        catalogs.browserFallback(singleDownload)?.let { url ->
+                            _browserFallbacks.update { it + url }
+                        }
+                    }
+                }
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Exception) {

@@ -424,7 +424,7 @@ class RemoteCatalogRepositoryTest {
             metadata = db.bookMetadataDao(),
         )
 
-        assertEquals(1, browse.add(2, listOf(described("b1", "Blurb"))))
+        assertEquals(1, browse.add(2, listOf(described("b1", "Blurb"))).first)
 
         val row = catalogRow(BrowseCatalogRepository.bookUrl(2, ServerKind.KOMGA, "b1"))
         assertEquals("Blurb", row?.description)

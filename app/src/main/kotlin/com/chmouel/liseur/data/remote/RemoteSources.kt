@@ -80,6 +80,8 @@ data class SyncSnapshot(val accountKey: String, val catalog: CatalogSnapshot)
  * between servers.
  */
 interface FileSource {
+    val validateOpdsEpub: Boolean get() = false
+
     /**
      * The signed request that fetches [book]'s file, or null when there
      * is no way to ask for it.

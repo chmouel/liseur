@@ -251,7 +251,7 @@ fun LibraryScreen(
     onSetSort: (LibrarySort) -> Unit,
     onToggleSortDirection: () -> Unit,
     onDownloadAndOpen: (Book, resumeListening: Boolean) -> Unit,
-    failedOpens: Flow<Book>,
+    snackbarHost: SnackbarHostState,
     sentUp: Flow<Book>,
     uploadRefusals: Flow<UploadRefusal>,
     onRefusalShown: (UploadRefusal) -> Unit,
@@ -312,7 +312,6 @@ fun LibraryScreen(
     // and closing search finds the shelf scrolled where it was left.
     val searchGridState = rememberLazyGridState()
     LaunchedEffect(state.searchQuery) { searchGridState.scrollToItem(0) }
-    val snackbarHost = remember { SnackbarHostState() }
     val context = LocalContext.current
     val downloading = stringResource(R.string.download_in_progress)
     val downloadsNotAllowed = stringResource(R.string.downloads_not_allowed)
@@ -427,7 +426,6 @@ fun LibraryScreen(
         if (onWidgetBookHandled()) openShelfBook(book)
     }
 
-    val downloadFailed = stringResource(R.string.download_failed_open)
     val serverDeleteFailed = stringResource(R.string.delete_from_server_failed)
     val localDeleteFailed = stringResource(R.string.delete_local_failed)
     val accountClearBeforeRemovalFailed = stringResource(R.string.account_translation_clear_before_removal_failed)
@@ -458,13 +456,6 @@ fun LibraryScreen(
             }
         }
     }
-    LaunchedEffect(failedOpens) {
-        failedOpens.collect { book ->
-            onPendingOpenHandled()
-            snackbarHost.showSnackbar(downloadFailed.format(book.title))
-        }
-    }
-
     val sending = stringResource(R.string.upload_sending)
     LaunchedEffect(sentUp) {
         sentUp.collect { book -> snackbarHost.showSnackbar(sending.format(book.title)) }

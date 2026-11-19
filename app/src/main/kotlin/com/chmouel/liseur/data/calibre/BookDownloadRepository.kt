@@ -237,19 +237,24 @@ class BookDownloadRepository(
      * and wait for storage, as bulk work does, for when it is one of many
      * the reader added at once.
      */
-    suspend fun enqueue(book: Book, guardSpace: Boolean = false) {
+    suspend fun enqueue(book: Book, guardSpace: Boolean = false): UUID? {
         val key = if (book.browseServerId != null) {
-            browseServer(book.browseServerId)?.accountKey ?: return
+            browseServer(book.browseServerId)?.accountKey ?: return null
         } else {
             accountKey()
         }
+        val name = workName(book.url)
+        val workInfos = workManager.getWorkInfosForUniqueWorkFlow(name)
+        val previous = workInfos.first()
+        previous.firstOrNull { !it.state.isFinished }?.let { return it.id }
         bookDao.setDownloadState(book.url, DownloadState.QUEUED, null)
-        workManager.enqueueUniqueWork(
-            workName(book.url),
-            ExistingWorkPolicy.KEEP,
-            request(book.url, accountKey = key, batchId = null, guardSpace = guardSpace),
-        )
+        val work = request(book.url, accountKey = key, batchId = null, guardSpace = guardSpace)
+        workManager.enqueueUniqueWork(name, ExistingWorkPolicy.KEEP, work).await()
+        return resolveWorkId(work.id, previous.mapTo(mutableSetOf()) { it.id }, workInfos.first().map { it.id })
     }
+
+    suspend fun awaitDownload(id: UUID): WorkInfo? =
+        workManager.getWorkInfoByIdFlow(id).first { it == null || it.state.isFinished }
 
     /**
      * Reads what a "download everything" run would cost, without
@@ -723,6 +728,7 @@ class BookDownloadRepository(
         const val KEY_BATCH_ID = "batch_id"
         const val KEY_GUARD_SPACE = "guard_space"
         const val KEY_STOOD_DOWN = "stood_down"
+        internal const val KEY_BROWSER_URL = "browser_url"
         const val BOOK_TAG_PREFIX = "book:"
         private const val BATCH_TAG_PREFIX = "batch:"
 
@@ -767,3 +773,6 @@ class BookDownloadRepository(
             infos.count { it.state == WorkInfo.State.FAILED }
     }
 }
+
+internal fun resolveWorkId(requested: UUID, previous: Set<UUID>, current: List<UUID>): UUID? =
+    requested.takeIf { it in current } ?: current.singleOrNull { it !in previous }
