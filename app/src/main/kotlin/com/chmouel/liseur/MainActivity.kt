@@ -150,6 +150,7 @@ import com.chmouel.liseur.ui.navigation.launchStack
 import com.chmouel.liseur.ui.navigation.openDetail
 import com.chmouel.liseur.ui.navigation.pop
 import com.chmouel.liseur.ui.navigation.push
+import com.chmouel.liseur.ui.navigation.tag
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -179,6 +180,7 @@ class MainActivity : ComponentActivity() {
      */
     private var deciding = true
     private var resumeJob: Job? = null
+    private var lastRouteTag: String = Route.Library.tag
     private val launchModel: LaunchViewModel by viewModels { LaunchViewModel.Factory(container) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -220,6 +222,10 @@ class MainActivity : ComponentActivity() {
                         settingsState,
                         launch = resolution,
                         onLaunchHandled = launchModel::handled,
+                        onScreenChanged = { tag ->
+                            lastRouteTag = tag
+                            container.usageReporting.setScreen(tag)
+                        },
                     )
                 }
             }
@@ -251,6 +257,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
+        container.usageReporting.setScreen(lastRouteTag)
         lifecycleScope.launch {
             val leftFromReader = container.sessionState.enterLibrary()
             if (deciding && resumeJob == null) {
@@ -304,6 +311,7 @@ private fun LiseurApp(
     settingsState: State<AppSettings>,
     launch: LaunchResolution? = null,
     onLaunchHandled: (LaunchRequest) -> Unit = {},
+    onScreenChanged: (String) -> Unit = {},
 ) {
     // Read through the State, not passed in as a value: NavDisplay keeps
     // each entry's content, so a plain value would leave every screen
@@ -314,6 +322,10 @@ private fun LiseurApp(
     // statistics to the shelf, the series or the overall statistics.
     val backStack = rememberSaveable(saver = RouteBackStackSaver) {
         mutableStateListOf<Route>(Route.Library)
+    }
+    val topRouteTag = backStack.lastOrNull()?.tag ?: Route.Library.tag
+    LaunchedEffect(topRouteTag) {
+        onScreenChanged(topRouteTag)
     }
     var libraryLaunchId by rememberSaveable { mutableStateOf(0L) }
     var openFreeCatalogs by rememberSaveable { mutableStateOf(false) }

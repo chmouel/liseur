@@ -926,6 +926,7 @@ class ReaderActivity : FragmentActivity() {
 
     override fun onResume() {
         super.onResume()
+        container.usageReporting.setScreen("Reader")
         // Nothing was ever opened, or the book is still being shelved, so
         // there is no view model to ask — touching it here would build one
         // around a URL that is not settled yet. See onCreate, which has

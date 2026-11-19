@@ -11,15 +11,16 @@ so no Android automatic capture integrations are installed. The license is
 shipped in Play assets and listed in About. Re-audit SDK queue and transport
 behavior when upgrading: SDK opt-out does not erase the queue, and close flushes.
 
-Only the fixed `UsageEvent` values and sanitized JVM exceptions may enter the
-queue. Events omit `$geoip_disable` so ingestion can add a location. The
-before-send allowlist removes SDK context enrichment. A transport gate rejects
-all paths except batch ingestion. Disable closes that gate,
-cancels calls, persists the preference, drains queue deletion and discards the
-installation ID. An HTTP request already delivered cannot be recalled.
-The uncaught handler waits at most two seconds for crash persistence before
-calling Android's prior handler. Delivery is best effort, including disk-full
-and abrupt process termination. Native crashes and ANRs are out of scope.
+Only the fixed `UsageEvent` values and sanitized JVM exceptions (with the
+active screen tag and JVM heap used/max in megabytes) may enter the queue.
+Events omit `$geoip_disable` so ingestion can add a location. The before-send
+allowlist removes SDK context enrichment. A transport gate rejects all paths
+except batch ingestion. Disable closes that gate, cancels calls, persists the
+preference, drains queue deletion and discards the installation ID. An HTTP
+request already delivered cannot be recalled. The uncaught handler waits at
+most two seconds for crash persistence before calling Android's prior handler.
+Delivery is best effort, including disk-full and abrupt process termination.
+Native crashes and ANRs are out of scope.
 
 ## Configuration
 

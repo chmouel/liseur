@@ -31,11 +31,13 @@ cancelled or failed in a broad category (network, service or invalid response).
 No request or response text or detailed error is included. Reports contain the
 feature name, app version, event time, approximate location (city and country)
 and a random installation identifier.
-Uncaught JVM crash reports include exception types and stack frames, without
-exception messages. They do not contain book text, titles, book identifiers,
-annotations, server addresses, credentials or account identities. There is no
-screen or deep-link capture, replay, person profile, native crash reporting,
-ANR collection or detailed performance monitoring.
+Uncaught JVM crash reports include exception types, stack frames, the active
+screen category (such as Library, Reader or Settings) and JVM heap usage in
+megabytes, without exception messages. They do not contain book text, titles,
+book identifiers, annotations, server addresses, credentials or account
+identities. There is no navigation history or deep-link capture, replay, person
+profile, native crash reporting, ANR collection or detailed performance
+monitoring.
 
 The developer uses these reports to understand feature use and fix crashes.
 They are sent over HTTPS to PostHog Cloud EU in Frankfurt. PostHog receives

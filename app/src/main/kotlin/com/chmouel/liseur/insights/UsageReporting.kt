@@ -26,4 +26,5 @@ interface UsageReporting {
     val enabled: StateFlow<Boolean>
     suspend fun setEnabled(enabled: Boolean)
     fun capture(event: UsageEvent)
+    fun setScreen(screen: String) = Unit
 }

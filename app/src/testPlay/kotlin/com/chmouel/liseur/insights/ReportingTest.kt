@@ -84,6 +84,7 @@ class ReportingTest {
         }
         val reports = PlayUsageReporting(context, token = "phc_test", host = server.url("/").toString())
         try {
+            reports.setScreen("Library")
             server.enqueue(MockResponse.Builder().headersDelay(10, TimeUnit.SECONDS).body("{}").build())
             reports.capture(UsageEvent.BOOK_OPENED)
             reports.flush()
@@ -92,6 +93,9 @@ class ReportingTest {
             Thread.getDefaultUncaughtExceptionHandler()!!.uncaughtException(Thread.currentThread(), crash)
             assertEquals(listOf<Throwable>(crash), handed)
             assertTrue(savedWhenHanded.contains("IllegalStateException"))
+            assertTrue(savedWhenHanded.contains("\"screen\":\"Library\""))
+            assertTrue(savedWhenHanded.contains("heap_used_mb"))
+            assertTrue(savedWhenHanded.contains("heap_max_mb"))
             assertFalse(savedWhenHanded.contains("private book title"))
         } finally {
             reports.stop()
@@ -174,10 +178,25 @@ class ReportingTest {
         val failure = IllegalStateException("private book title", IllegalArgumentException("https://secret/token"))
         failure.stackTrace = arrayOf(StackTraceElement("com.chmouel.Reader", "open", "/private/book.epub", 42))
         val raw = ReportingPayload.exception(failure).map { it + mapOf("value" to "secret", "context" to "private") }
-        val payload = ReportingPayload.properties("\$exception", "1", raw)!!.toString()
+        val payload = ReportingPayload.properties(
+            "\$exception",
+            "1",
+            raw,
+            CrashContext(screen = "Library", heapUsedMb = 64, heapMaxMb = 256),
+        )!!.toString()
         assertTrue(payload.contains("IllegalStateException"))
         assertTrue(payload.contains("com.chmouel.Reader"))
         assertTrue(payload.contains("lineno=42"))
+        assertTrue(payload.contains("screen=Library"))
+        assertTrue(payload.contains("heap_used_mb=64"))
+        assertTrue(payload.contains("heap_max_mb=256"))
         listOf("secret", "private", "book.epub", "context=").forEach { assertFalse(payload.contains(it)) }
+        val unsafeScreen = ReportingPayload.properties(
+            "\$exception",
+            "1",
+            raw,
+            CrashContext(screen = "BookStats:https://secret/book.epub"),
+        )!!
+        assertFalse(unsafeScreen.containsKey("screen"))
     }
 }
