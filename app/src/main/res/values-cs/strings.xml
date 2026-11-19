@@ -2328,7 +2328,7 @@
     <string name="vocabulary_no_definition">Bez uložené definice</string>
     <string name="vocabulary_definition">Definice</string>
     <string name="vocabulary_sentence">Věta</string>
-    <string name="vocabulary_open_passage">Otevřít úryvek</string>
+    <string name="vocabulary_open_passage">Zobrazit v knize</string>
     <string name="vocabulary_edit_context">Upravit kontext</string>
     <string name="vocabulary_confirm_delete">Smazat „%1$s“?</string>
     <string name="vocabulary_book_unavailable">Tento úryvek není dostupný.</string>
@@ -2368,4 +2368,16 @@
     <string name="vocabulary_reminders">Denní připomenutí opakování</string>
     <string name="vocabulary_reminder_message">Máte slovíčka k opakování.</string>
     <string name="vocabulary_reminder_permission">Povolte oznámení Liseuru v nastavení Androidu a pak zde zapněte připomenutí.</string>
+    <string name="vocabulary_tab_review">Opakování</string>
+    <string name="vocabulary_tab_words">Slova</string>
+    <string name="vocabulary_tab_stats">Statistiky</string>
+    <string name="vocabulary_pronounce">Vyslovit %1$s</string>
+    <string name="vocabulary_total">Celkem slov</string>
+    <string name="vocabulary_reviews_per_day">Opakování za den · posledních 14 dní</string>
+    <string name="vocabulary_recall_rate">Úspěšnost vybavení · posledních 30 dní</string>
+    <string name="vocabulary_day_streak">Dny v řadě</string>
+    <string name="vocabulary_stats_empty">Zopakujte si několik slov a zde uvidíte svou aktivitu.</string>
+    <string name="vocabulary_no_recent_reviews">Žádná nedávná opakování</string>
+    <string name="vocabulary_session_progress">V této relaci dokončeno %1$d z %2$d opakování</string>
+    <string name="vocabulary_daily_reviews">%1$s: počet opakování: %2$d</string>
 </resources>

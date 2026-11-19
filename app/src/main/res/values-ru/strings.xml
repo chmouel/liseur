@@ -2296,7 +2296,7 @@
     <string name="vocabulary_no_definition">Толкование не сохранено</string>
     <string name="vocabulary_definition">Толкование</string>
     <string name="vocabulary_sentence">Предложение</string>
-    <string name="vocabulary_open_passage">Открыть отрывок</string>
+    <string name="vocabulary_open_passage">Открыть в книге</string>
     <string name="vocabulary_edit_context">Изменить контекст</string>
     <string name="vocabulary_confirm_delete">Удалить «%1$s»?</string>
     <string name="vocabulary_book_unavailable">Этот отрывок недоступен.</string>
@@ -2336,4 +2336,16 @@
     <string name="vocabulary_reminders">Ежедневное напоминание о повторении</string>
     <string name="vocabulary_reminder_message">Есть слова для повторения.</string>
     <string name="vocabulary_reminder_permission">Разрешите уведомления Liseur в настройках Android, затем включите напоминание здесь.</string>
+    <string name="vocabulary_tab_review">Повторение</string>
+    <string name="vocabulary_tab_words">Слова</string>
+    <string name="vocabulary_tab_stats">Статистика</string>
+    <string name="vocabulary_pronounce">Произнести %1$s</string>
+    <string name="vocabulary_total">Всего слов</string>
+    <string name="vocabulary_reviews_per_day">Повторения по дням · последние 14 дней</string>
+    <string name="vocabulary_recall_rate">Доля верных ответов · последние 30 дней</string>
+    <string name="vocabulary_day_streak">Дней подряд</string>
+    <string name="vocabulary_stats_empty">Повторите несколько слов, чтобы увидеть свою активность.</string>
+    <string name="vocabulary_no_recent_reviews">Нет недавних повторений</string>
+    <string name="vocabulary_session_progress">В этом сеансе завершено повторений: %1$d из %2$d</string>
+    <string name="vocabulary_daily_reviews">%1$s: повторений — %2$d</string>
 </resources>

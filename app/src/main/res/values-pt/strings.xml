@@ -2201,7 +2201,7 @@
     <string name="vocabulary_no_definition">Sem definição salva</string>
     <string name="vocabulary_definition">Definição</string>
     <string name="vocabulary_sentence">Frase</string>
-    <string name="vocabulary_open_passage">Abrir trecho</string>
+    <string name="vocabulary_open_passage">Ver no livro</string>
     <string name="vocabulary_edit_context">Editar contexto</string>
     <string name="vocabulary_confirm_delete">Excluir “%1$s”?</string>
     <string name="vocabulary_book_unavailable">Este trecho está indisponível.</string>
@@ -2241,4 +2241,16 @@
     <string name="vocabulary_reminders">Lembrete diário de revisão</string>
     <string name="vocabulary_reminder_message">Você tem palavras prontas para revisar.</string>
     <string name="vocabulary_reminder_permission">Permita notificações do Liseur nas configurações do Android e depois ative o lembrete aqui.</string>
+    <string name="vocabulary_tab_review">Revisar</string>
+    <string name="vocabulary_tab_words">Palavras</string>
+    <string name="vocabulary_tab_stats">Estatísticas</string>
+    <string name="vocabulary_pronounce">Pronunciar %1$s</string>
+    <string name="vocabulary_total">Total de palavras</string>
+    <string name="vocabulary_reviews_per_day">Revisões por dia · últimos 14 dias</string>
+    <string name="vocabulary_recall_rate">Taxa de acerto · últimos 30 dias</string>
+    <string name="vocabulary_day_streak">Dias seguidos</string>
+    <string name="vocabulary_stats_empty">Revise algumas palavras para ver sua atividade aqui.</string>
+    <string name="vocabulary_no_recent_reviews">Nenhuma revisão recente</string>
+    <string name="vocabulary_session_progress">%1$d de %2$d revisões concluídas nesta sessão</string>
+    <string name="vocabulary_daily_reviews">%1$s · Revisões: %2$d</string>
 </resources>

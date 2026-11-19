@@ -2210,7 +2210,7 @@
     <string name="vocabulary_no_definition">No definition saved</string>
     <string name="vocabulary_definition">Definition</string>
     <string name="vocabulary_sentence">Sentence</string>
-    <string name="vocabulary_open_passage">Open passage</string>
+    <string name="vocabulary_open_passage">See in book</string>
     <string name="vocabulary_edit_context">Edit context</string>
     <string name="vocabulary_confirm_delete">Delete “%1$s”?</string>
     <string name="vocabulary_book_unavailable">This passage is unavailable.</string>
@@ -2250,4 +2250,16 @@
     <string name="vocabulary_reminders">Daily review reminder</string>
     <string name="vocabulary_reminder_message">You have words ready to review.</string>
     <string name="vocabulary_reminder_permission">Allow Liseur notifications in Android settings, then turn on the reminder here.</string>
+    <string name="vocabulary_tab_review">Review</string>
+    <string name="vocabulary_tab_words">Words</string>
+    <string name="vocabulary_tab_stats">Stats</string>
+    <string name="vocabulary_pronounce">Pronounce %1$s</string>
+    <string name="vocabulary_total">Total words</string>
+    <string name="vocabulary_reviews_per_day">Reviews per day · last 14 days</string>
+    <string name="vocabulary_recall_rate">Recall rate · last 30 days</string>
+    <string name="vocabulary_day_streak">Day streak</string>
+    <string name="vocabulary_stats_empty">Review some words to see your activity here.</string>
+    <string name="vocabulary_no_recent_reviews">No recent reviews</string>
+    <string name="vocabulary_session_progress">%1$d of %2$d reviews completed this session</string>
+    <string name="vocabulary_daily_reviews">%1$s · Reviews: %2$d</string>
 </resources>

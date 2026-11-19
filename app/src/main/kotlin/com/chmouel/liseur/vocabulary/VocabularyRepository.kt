@@ -204,15 +204,16 @@ internal class VocabularyRepository(private val database: LiseurDatabase) {
         return review(card, rating, newLimit, reviewLimit)
     }
 
-    suspend fun undoReview(undo: VocabularyReviewUndo) = database.withTransaction {
+    suspend fun undoReview(undo: VocabularyReviewUndo): Boolean = database.withTransaction {
         val previous = undo.previous
-        val word = dao.word(previous.id) ?: return@withTransaction
-        if (dao.latestReviewId(word.id) != undo.reviewId || word.repetitions != previous.repetitions + 1) return@withTransaction
+        val word = dao.word(previous.id) ?: return@withTransaction false
+        if (dao.latestReviewId(word.id) != undo.reviewId || word.repetitions != previous.repetitions + 1) return@withTransaction false
         dao.updateWord(word.copy(
             dueAt = previous.dueAt, reviewedAt = previous.reviewedAt, streak = previous.streak,
             intervalMinutes = previous.intervalMinutes, repetitions = previous.repetitions,
         ))
         dao.deleteReview(undo.reviewId)
+        true
     }
 
     suspend fun editSentence(id: Long, sentence: String) =
