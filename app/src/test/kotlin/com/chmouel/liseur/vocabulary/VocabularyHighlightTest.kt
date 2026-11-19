@@ -29,6 +29,35 @@ class VocabularyHighlightTest {
     }
 
     @Test
+    fun `highlight skips embedded words before a complete match`() {
+        assertEquals(20..22, highlightWord("The department buys art.", "art"))
+        assertNull(highlightWord("The department.", "art"))
+        assertEquals(15..18, highlightWord("decafeteria, a CAFÉ.", "cafe"))
+        assertNull(highlightWord("кумир", "мир"))
+    }
+
+    @Test
+    fun `highlight requires the complete phrase at both ends`() {
+        val sentence = "start format; art form."
+        assertEquals("art form", sentence.substring(highlightWord(sentence, "art form")!!))
+        assertNull(highlightWord("start format", "art form"))
+        assertNull(highlightWord("can't", "can"))
+    }
+
+    @Test
+    fun `highlight preserves matches in scripts written without spaces`() {
+        assertEquals(2..3, highlightWord("喜欢读书。", "读书"))
+        assertEquals(2..3, highlightWord("カタカナ", "カナ"))
+        assertEquals(3..6, highlightWord("ฉันอ่าน", "อ่าน"))
+    }
+
+    @Test
+    fun `highlight cannot select only part of an expanded character`() {
+        assertNull(highlightWord("ß", "s"))
+        assertEquals(0..0, highlightWord("ß", "ss"))
+    }
+
+    @Test
     fun `missing and empty targets have no highlight`() {
         assertNull(highlightWord("sanguine", ""))
         assertNull(highlightWord("sanguine", "  "))

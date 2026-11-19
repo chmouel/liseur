@@ -136,13 +136,13 @@ internal fun VocabularyReviewScreen(
                         TextButton(onClick = onDone) { Text(stringResource(R.string.back)) }
                     }
                 } else {
-                    val occurrences by remember(word.id) { repository.dao.occurrences(word.id) }
-                        .collectAsStateWithLifecycle(emptyList())
-                    val sources = occurrences.filter { bookUrl == null || it.bookUrl == bookUrl }
-                    val passage = sources.firstOrNull { !it.sentence.isNullOrBlank() }
-                        ?: sources.firstOrNull { it.locator != null }
-                    val shape = RoundedCornerShape(24.dp)
                     key(word.id, word.repetitions) {
+                        val occurrences by remember(word.id) { repository.dao.occurrences(word.id) }
+                            .collectAsStateWithLifecycle(emptyList())
+                        val sources = occurrences.filter { bookUrl == null || it.bookUrl == bookUrl }
+                        val passage = sources.firstOrNull { !it.sentence.isNullOrBlank() }
+                            ?: sources.firstOrNull { it.locator != null }
+                        val shape = RoundedCornerShape(24.dp)
                         SwipeDeck(
                             depth = (queue.dueCount - 1).coerceIn(0, 2),
                             layers = MaterialTheme.colorScheme.surfaceContainerHighest to MaterialTheme.colorScheme.surfaceContainerHigh,
