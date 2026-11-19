@@ -21,6 +21,13 @@ internal fun nextSleepTimerMinutes(current: SleepTimer?): Int? = when (current) 
     is SleepTimer.Timed -> SLEEP_CYCLE_MINUTES.firstOrNull { it > current.minutes }
 }
 
+/** Milliseconds until [SleepTimer.Timed.minutesLeft] next changes, or null once it has run out. */
+internal fun sleepLabelRefreshDelay(timer: SleepTimer.Timed, now: Long): Long? {
+    val remaining = timer.endsAt - now
+    if (remaining <= 0) return null
+    return (remaining - 1) % SleepTimer.MINUTE_MS + 1
+}
+
 internal fun formatSpeedCommandLabel(speed: Float, locale: Locale = Locale.getDefault()): String =
     ReadAloudSpeed.number(speed, locale) + "×"
 

@@ -273,11 +273,11 @@ import com.chmouel.liseur.reader.chrome.ReaderGestureHudOverlay
 import com.chmouel.liseur.reader.chrome.UltraDimOverlay
 import com.chmouel.liseur.reader.chrome.desiredHdrHeadroom
 import com.chmouel.liseur.reader.chrome.findActivity
+import com.chmouel.liseur.reader.chrome.readerBrightnessForWindow
 import com.chmouel.liseur.reader.chrome.resolveScreenBrightness
 import com.chmouel.liseur.reader.chrome.FootnoteCard
 import com.chmouel.liseur.reader.chrome.ReaderFoldPosture
-import com.chmouel.liseur.reader.chrome.ReaderSupportingSidePane
-import com.chmouel.liseur.reader.chrome.bookPostureCssOverrides
+import com.chmouel.liseur.reader.chrome.ReaderAdaptivePane
 import com.chmouel.liseur.reader.chrome.effectiveFor
 import com.chmouel.liseur.reader.chrome.resolveReaderSidePane
 import com.chmouel.liseur.reader.chrome.GestureClaim
@@ -676,7 +676,6 @@ internal fun ReaderScreen(
     var autoScrollControlsPoke by remember { mutableIntStateOf(0) }
     var autoScrollControlsLinger by remember { mutableStateOf(false) }
     val columnMode = prefs.columnMode.effectiveFor(widthClass(), foldPosture)
-    val cssOverrides = bookPostureCssOverrides(foldPosture, LocalDensity.current.density)
 
     // This book being read aloud, if it is. The session outlives the
     // screen, so everything here is read back from it rather than kept.
@@ -1574,7 +1573,7 @@ internal fun ReaderScreen(
     // away from the place it means to keep. The collector sets this once
     // the anchor and the layout signature are taken. A rebuilt fragment
     // starts from the live value, having no place to anchor against yet.
-    var appliedVerticalMargins by remember(columnMode, scrollMode, fontKey, cssOverrides) {
+    var appliedVerticalMargins by remember(columnMode, scrollMode, fontKey) {
         mutableStateOf(verticalMargins)
     }
     // A scrolled page adds no padding, so there is nothing to lag.
@@ -4020,7 +4019,8 @@ internal fun ReaderScreen(
                                     longPressMs = longPressMs,
                                 )
                             ) {
-                                val start = brightnessPreview ?: brightnessNow ?: systemBrightness(view.context)
+                                val start = brightnessPreview ?: brightnessNow
+                                    ?: readerBrightnessForWindow(systemBrightness(view.context), eInkNow)
                                 touch.edgeSwipe = EdgeSwipe(finger.id, finger.position.y, start)
                                 brightnessPreview = start
                                 brightnessSwiping = true
@@ -4219,7 +4219,7 @@ internal fun ReaderScreen(
                 }
             },
         ).dp
-        key(columnMode, scrollMode, fontKey, cssOverrides) {
+        key(columnMode, scrollMode, fontKey) {
             // Derived, not measured: the reservation must exist before
             // the page lays out, or the last line is cut in half. The
             // line height is the very style the footer draws with, and
@@ -5085,8 +5085,6 @@ internal fun ReaderScreen(
         viewedImage?.let {
             ImageViewer(image = it, theme = readingTheme, onDismiss = { viewedImage = null })
         }
-
-        UltraDimOverlay(dimAlpha = resolvedBrightness.dimAlpha)
     }
 
     // Letting a selection go from our own bar rather than from the page.
@@ -5301,12 +5299,14 @@ internal fun ReaderScreen(
     // The settled selection trails a handle drag by the settle delay and a
     // slow read, so a tap in that gap would act on the word the long press
     // landed on (#388). The page is asked again before the bar acts. A
-    // tapped mark has no page selection to ask.
-    suspend fun liveSelection(active: ActiveSelection): ActiveSelection? {
+    // tapped mark has no page selection to ask. A strict read gives up
+    // when the page cannot answer instead of trusting the settled one.
+    suspend fun liveSelection(active: ActiveSelection, strict: Boolean = false): ActiveSelection? {
         if (active === tappedSelection) return active
-        val nav = navigatorNow ?: return active
+        val nav = navigatorNow ?: return active.takeUnless { strict }
         val read = nav.currentSelection()
         if (navigatorNow !== nav || selection == null) return null
+        if (read == null && strict) return null
         if (read != null) {
             // An equal value keeps the instance the bar already holds.
             selection = ActiveSelection(read.locator, read.rect)
@@ -5501,7 +5501,18 @@ internal fun ReaderScreen(
                     }
                 },
             annotate = !pageTranslated,
-            smartActions = smartActions,
+            // The actions were classified from the selection as it was;
+            // a handle dragged since then makes them about other words.
+            smartActions = smartActions.map { action ->
+                action.copy(
+                    onInvoke = {
+                        effectScope.launch(start = CoroutineStart.UNDISPATCHED) {
+                            val live = liveSelection(active, strict = true) ?: return@launch
+                            if (live.text.trim() == action.text) action.onInvoke()
+                        }
+                    },
+                )
+            },
         )
     }
 
@@ -5654,8 +5665,10 @@ internal fun ReaderScreen(
                 } else {
                     null
                 }
+                // A translated page shows other words than the locator
+                // holds, so it gets no smart actions.
                 val smartActions = rememberSmartSelectionActions(
-                    text = active.text,
+                    text = active.text.takeUnless { pageTranslated },
                     languageTags = publication.metadata.languages.firstOrNull(),
                     onActionInvoked = ::dismissSelection,
                 )
@@ -6006,9 +6019,9 @@ internal fun ReaderScreen(
                     initialQuery = initial,
                     onSearch = onSearchAction.search,
                     onHitSelected = { hit ->
-                        if (!sidePane.bookLeaveOpenOnNavigate) {
-                            searchFor = null
-                        }
+                        // Closed even as a side pane: it sits over the page,
+                        // and the hit could land underneath it.
+                        searchFor = null
                         searchHit = hit
                         chromeVisible = false
                         onProgressAction.onJump()
@@ -6042,16 +6055,12 @@ internal fun ReaderScreen(
                     } else null,
                 )
             }
-            if (sidePane.enabled) {
-                ReaderSupportingSidePane(
-                    theme = readingTheme,
-                    paneWidthDp = sidePane.paneWidthDp,
-                    onDismiss = closeSearch,
-                    content = searchContent,
-                )
-            } else {
-                searchContent()
-            }
+            ReaderAdaptivePane(
+                sidePane = sidePane,
+                theme = readingTheme,
+                onDismiss = closeSearch,
+                content = searchContent,
+            )
         }
 
         // Taking the other device's position moves the reader there, which is
@@ -6131,19 +6140,19 @@ internal fun ReaderScreen(
                     },
                 )
             }
-            if (sidePane.enabled) {
-                ReaderSupportingSidePane(
-                    theme = readingTheme,
-                    paneWidthDp = sidePane.paneWidthDp,
-                    onDismiss = { showToc = false },
-                    content = tocContent,
-                )
-            } else {
-                tocContent()
-            }
+            ReaderAdaptivePane(
+                sidePane = sidePane,
+                theme = readingTheme,
+                onDismiss = { showToc = false },
+                content = tocContent,
+            )
         }
     }
     overlaysContent()
+    // Above everything the reader window draws, side panes included, so
+    // opening one at the lowest brightness does not light the screen back
+    // up. It takes no touches.
+    UltraDimOverlay(dimAlpha = resolvedBrightness.dimAlpha)
 }
 
 @Composable

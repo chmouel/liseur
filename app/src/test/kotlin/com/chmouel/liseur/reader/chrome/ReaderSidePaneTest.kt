@@ -13,7 +13,6 @@ class ReaderSidePaneTest {
         val metrics = resolveReaderSidePane(windowWidthDp = 411f)
         assertFalse(metrics.enabled)
         assertEquals(411f, metrics.paneWidthDp, 0.01f)
-        assertFalse(metrics.bookLeaveOpenOnNavigate)
     }
 
     @Test
@@ -21,7 +20,6 @@ class ReaderSidePaneTest {
         val metrics = resolveReaderSidePane(windowWidthDp = 578f)
         assertFalse(metrics.enabled)
         assertEquals(578f, metrics.paneWidthDp, 0.01f)
-        assertFalse(metrics.bookLeaveOpenOnNavigate)
     }
 
     @Test
@@ -29,7 +27,6 @@ class ReaderSidePaneTest {
         val metrics = resolveReaderSidePane(windowWidthDp = 760f)
         assertTrue(metrics.enabled)
         assertEquals(334.4f, metrics.paneWidthDp, 0.01f)
-        assertTrue(metrics.bookLeaveOpenOnNavigate)
     }
 
     @Test
@@ -37,7 +34,6 @@ class ReaderSidePaneTest {
         val metrics = resolveReaderSidePane(windowWidthDp = 960f)
         assertTrue(metrics.enabled)
         assertEquals(SIDE_PANE_WIDTH_DP, metrics.paneWidthDp, 0.01f)
-        assertTrue(metrics.bookLeaveOpenOnNavigate)
     }
 
     @Test
@@ -45,7 +41,6 @@ class ReaderSidePaneTest {
         val book = ReaderFoldPosture.Book(
             hingeBoundsPx = IntRect(880, 0, 920, 2200),
             isHalfOpened = true,
-            hingeGapPx = 72,
         )
         val metrics = resolveReaderSidePane(
             windowWidthDp = 900f,
@@ -54,24 +49,21 @@ class ReaderSidePaneTest {
         )
         assertTrue(metrics.enabled)
         assertEquals(440f, metrics.paneWidthDp, 0.01f)
-        assertTrue(metrics.bookLeaveOpenOnNavigate)
     }
 
     @Test
-    fun `Book posture clamps narrow right leaf to 280dp minimum`() {
+    fun `Book posture falls back to full screen when the right leaf is too narrow`() {
         val book = ReaderFoldPosture.Book(
             hingeBoundsPx = IntRect(1400, 0, 1440, 2200),
             isHalfOpened = true,
-            hingeGapPx = 72,
         )
         val metrics = resolveReaderSidePane(
             windowWidthDp = 800f,
             foldPosture = book,
             density = 2f,
         )
-        assertTrue(metrics.enabled)
-        assertEquals(280f, metrics.paneWidthDp, 0.01f)
-        assertTrue(metrics.bookLeaveOpenOnNavigate)
+        assertFalse(metrics.enabled)
+        assertEquals(800f, metrics.paneWidthDp, 0.01f)
     }
 
     @Test
@@ -79,7 +71,6 @@ class ReaderSidePaneTest {
         val book = ReaderFoldPosture.Book(
             hingeBoundsPx = IntRect(880, 0, 920, 2200),
             isHalfOpened = true,
-            hingeGapPx = 72,
         )
         val wideFallback = resolveReaderSidePane(
             windowWidthDp = 760f,
@@ -88,7 +79,6 @@ class ReaderSidePaneTest {
         )
         assertTrue(wideFallback.enabled)
         assertEquals(334.4f, wideFallback.paneWidthDp, 0.01f)
-        assertTrue(wideFallback.bookLeaveOpenOnNavigate)
 
         val compactFallback = resolveReaderSidePane(
             windowWidthDp = 500f,
@@ -97,6 +87,5 @@ class ReaderSidePaneTest {
         )
         assertFalse(compactFallback.enabled)
         assertEquals(500f, compactFallback.paneWidthDp, 0.01f)
-        assertFalse(compactFallback.bookLeaveOpenOnNavigate)
     }
 }

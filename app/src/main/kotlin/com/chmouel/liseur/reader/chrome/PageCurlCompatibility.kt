@@ -1,6 +1,5 @@
 package com.chmouel.liseur.reader.chrome
 
-import android.os.Build
 import java.util.Locale
 
 private val DEVICE_NAME_SEPARATORS = Regex("[^a-z0-9]+")
@@ -13,10 +12,7 @@ internal fun isPageCurlSupportedOnDevice(
     brand: String,
     model: String,
     device: String,
-    sdkInt: Int = Build.VERSION.SDK_INT,
 ): Boolean {
-    if (shouldUseAgslPageCurl(sdkInt)) return true
-
     val names = listOf(manufacturer, brand, model, device)
         .map { it.lowercase(Locale.ROOT).replace(DEVICE_NAME_SEPARATORS, " ").trim() }
 

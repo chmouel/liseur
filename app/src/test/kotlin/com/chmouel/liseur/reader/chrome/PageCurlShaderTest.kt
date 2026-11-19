@@ -101,7 +101,6 @@ class PageCurlShaderTest {
             "uniform float2 foldPoint;",
             "uniform float2 foldNormal;",
             "uniform float radius;",
-            "uniform float edgeDistance;",
             "uniform float lift;",
             "uniform float3 paperColor;",
             "half4 main(float2 fragCoord)",
@@ -120,36 +119,5 @@ class PageCurlShaderTest {
         assertFalse(shouldUseAgslPageCurl(32))
         assertTrue(shouldUseAgslPageCurl(33))
         assertTrue(shouldUseAgslPageCurl(35))
-    }
-
-    @Test
-    fun `isPageCurlSupportedOnDevice allows blocklisted models on API 33 and above`() {
-        assertFalse(
-            isPageCurlSupportedOnDevice(
-                manufacturer = "TECNO",
-                brand = "TECNO",
-                model = "TECNO-KJ5",
-                device = "KJ5",
-                sdkInt = 32,
-            ),
-        )
-        assertTrue(
-            isPageCurlSupportedOnDevice(
-                manufacturer = "TECNO",
-                brand = "TECNO",
-                model = "TECNO-KJ5",
-                device = "KJ5",
-                sdkInt = 33,
-            ),
-        )
-        assertTrue(
-            isPageCurlSupportedOnDevice(
-                manufacturer = "Unknown",
-                brand = "Unknown",
-                model = "Air1_Ultra",
-                device = "Air1_Ultra",
-                sdkInt = 35,
-            ),
-        )
     }
 }

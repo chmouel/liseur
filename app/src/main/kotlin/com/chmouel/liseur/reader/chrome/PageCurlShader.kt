@@ -87,7 +87,6 @@ uniform float2 resolution;
 uniform float2 foldPoint;
 uniform float2 foldNormal;
 uniform float radius;
-uniform float edgeDistance;
 uniform float lift;
 uniform float3 paperColor;
 
@@ -101,6 +100,20 @@ bool inPageBounds(float2 p, float2 res) {
     return p.x >= 0.0 && p.x <= res.x && p.y >= 0.0 && p.y <= res.y;
 }
 
+// How far the page reaches past the fold line along the normal, measured
+// from the fold point on this fragment's row of the curl. A tilted fold
+// meets the page edge at a different distance on every row, so the single
+// value measured at the finger cannot stand in for it.
+float edgeAlong(float2 foot, float2 n, float2 res) {
+    float tx = 1.0e9;
+    if (n.x > 0.0001) tx = (res.x - foot.x) / n.x;
+    else if (n.x < -0.0001) tx = -foot.x / n.x;
+    float ty = 1.0e9;
+    if (n.y > 0.0001) ty = (res.y - foot.y) / n.y;
+    else if (n.y < -0.0001) ty = -foot.y / n.y;
+    return max(min(tx, ty), 0.0);
+}
+
 half4 shadeBack(float2 coord, float theta) {
     half4 sampleColor = page.eval(coord);
     float over = clamp((theta - HALF_PI) / HALF_PI, 0.0, 1.0);
@@ -112,9 +125,10 @@ half4 shadeBack(float2 coord, float theta) {
 
 half4 main(float2 fragCoord) {
     float d = dot(fragCoord - foldPoint, foldNormal);
+    float edge = edgeAlong(fragCoord - d * foldNormal, foldNormal, resolution);
 
     if (d > radius) {
-        float edgeTheta = edgeDistance / max(radius, 0.0001);
+        float edgeTheta = edge / max(radius, 0.0001);
         float silhouette = radius * sin(min(edgeTheta, HALF_PI));
         float reach = silhouette + radius * SHADOW_REACH;
         float distPastFold = d - silhouette;
@@ -131,7 +145,7 @@ half4 main(float2 fragCoord) {
         float2 frontSourceCoord = fragCoord + (dFront - d) * foldNormal;
         half4 result = half4(0.0);
 
-        if (dFront <= edgeDistance && inPageBounds(frontSourceCoord, resolution)) {
+        if (dFront <= edge && inPageBounds(frontSourceCoord, resolution)) {
             half4 frontSample = page.eval(frontSourceCoord);
             float crease = 1.0 - 0.30 * (1.0 - cos(theta));
             float s = sin(theta);
@@ -143,7 +157,7 @@ half4 main(float2 fragCoord) {
         float thetaBack = PI - theta;
         float dBack = radius * thetaBack;
         float2 backSourceCoord = fragCoord + (dBack - d) * foldNormal;
-        if (dBack <= edgeDistance && inPageBounds(backSourceCoord, resolution)) {
+        if (dBack <= edge && inPageBounds(backSourceCoord, resolution)) {
             half4 backColor = shadeBack(backSourceCoord, thetaBack);
             float s = sin(thetaBack);
             float specular = 0.12 * s * s;
@@ -152,7 +166,7 @@ half4 main(float2 fragCoord) {
         }
 
         if (result.a == half(0.0)) {
-            float edgeTheta = edgeDistance / max(radius, 0.0001);
+            float edgeTheta = edge / max(radius, 0.0001);
             float silhouette = radius * sin(min(edgeTheta, HALF_PI));
             float reach = silhouette + radius * SHADOW_REACH;
             float distPastSilhouette = d - silhouette;
@@ -168,13 +182,13 @@ half4 main(float2 fragCoord) {
     half4 base = page.eval(fragCoord);
     float dTail = PI * radius - d;
     float2 tailSourceCoord = fragCoord + (dTail - d) * foldNormal;
-    if (dTail <= edgeDistance && inPageBounds(tailSourceCoord, resolution)) {
+    if (dTail <= edge && inPageBounds(tailSourceCoord, resolution)) {
         return shadeBack(tailSourceCoord, PI);
     }
 
-    float tailDist = dTail - edgeDistance;
+    float tailDist = dTail - edge;
     float tailReach = radius * 0.35;
-    if (dTail > edgeDistance && tailDist < tailReach && edgeDistance > HALF_PI * radius) {
+    if (dTail > edge && tailDist < tailReach && edge > HALF_PI * radius) {
         float tailShadow = 0.14 * lift * (1.0 - smoothstep(0.0, tailReach, tailDist));
         return half4(base.rgb * half(1.0 - tailShadow), base.a);
     }
@@ -226,7 +240,6 @@ class AgslPageCurlRenderer {
             shader.setFloatUniform("foldPoint", uniforms.foldX, uniforms.foldY)
             shader.setFloatUniform("foldNormal", uniforms.normalX, uniforms.normalY)
             shader.setFloatUniform("radius", uniforms.radius)
-            shader.setFloatUniform("edgeDistance", uniforms.edgeDistance)
             shader.setFloatUniform("lift", uniforms.lift)
             shader.setFloatUniform(
                 "paperColor",

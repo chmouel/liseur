@@ -127,4 +127,24 @@ class ReaderDisplayModeTest {
             resolveWindowColorMode(imageViewerOpen = false, isWideColorGamutDisplay = false),
         )
     }
+
+    @Test
+    fun `system brightness maps back to the reader value that reproduces it`() {
+        for (window in listOf(0.15f, 0.5f, 0.9f, 1f)) {
+            val reader = readerBrightnessForWindow(window)
+            val resolved = resolveScreenBrightness(reader)
+            assertEquals(window, resolved.windowBrightness, 0.0001f)
+            assertEquals(0f, resolved.dimAlpha, 0.0001f)
+        }
+        assertEquals(0.15f, readerBrightnessForWindow(0.15f, eInk = true), 0.0001f)
+    }
+
+    @Test
+    fun `a system level below the dimmest backlight starts a swipe without a scrim`() {
+        for (window in listOf(0f, 0.004f, 0.01f)) {
+            val resolved = resolveScreenBrightness(readerBrightnessForWindow(window))
+            assertEquals(0f, resolved.dimAlpha, 0.0001f)
+        }
+        assertTrue(resolveScreenBrightness(ULTRA_DIM_THRESHOLD - 0.01f).dimAlpha > 0f)
+    }
 }

@@ -396,16 +396,4 @@ class ReaderPreferencesMapperTest {
         assertEquals(ColCount.TWO, two.colCount)
         assertNotNull(two.colWidth)
     }
-
-    @Test
-    fun `extra overrides are merged into readingRsProperties`() {
-        val rs = readingRsProperties(
-            ColumnMode.TWO,
-            extraOverrides = mapOf("--RS__colGap" to "28px"),
-        )
-        assertEquals("28px", rs.overrides["--RS__colGap"])
-        assertEquals("none", rs.overrides["--RS__maxLineLength"])
-        assertEquals("rgba(74, 144, 226, 0.4)", rs.overrides["--RS__selectionBackgroundColor"])
-        assertEquals("currentColor", rs.overrides["--RS__selectionTextColor"])
-    }
 }

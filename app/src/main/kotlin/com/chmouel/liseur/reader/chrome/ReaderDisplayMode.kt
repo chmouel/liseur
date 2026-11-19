@@ -61,6 +61,21 @@ fun resolveScreenBrightness(
 }
 
 /**
+ * The reader brightness that [resolveScreenBrightness] turns into
+ * [windowBrightness], so a value read from the system starts a swipe where
+ * the screen already is. A system level below the reader's dimmest backlight
+ * starts at the edge of ultra-dim, so the swipe adds no scrim until the
+ * reader lowers it.
+ */
+fun readerBrightnessForWindow(windowBrightness: Float, eInk: Boolean = false): Float {
+    val clamped = windowBrightness.coerceIn(0f, 1f)
+    if (eInk) return clamped
+    if (clamped <= MIN_WINDOW_BRIGHTNESS) return ULTRA_DIM_THRESHOLD
+    val fraction = (clamped - MIN_WINDOW_BRIGHTNESS) / (1f - MIN_WINDOW_BRIGHTNESS)
+    return ULTRA_DIM_THRESHOLD + fraction * (1f - ULTRA_DIM_THRESHOLD)
+}
+
+/**
  * Returns 1.0f to cap HDR headroom to SDR when ultra-dim is active and no
  * full-screen image is open, preventing embedded HDR images or WebView
  * surfaces from punching through the software dim layer.

@@ -23,6 +23,8 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
@@ -100,10 +102,14 @@ class ReadAloudService : MediaSessionService() {
         preferencesJob?.cancel()
         if (feature != null) {
             preferencesJob = scope.launch {
-                combine(feature.speed, feature.sleepTimer) { speed, sleepTimer ->
-                    mediaButtons(speed, sleepTimer)
-                }.collect { buttons ->
-                    mediaSession?.setMediaButtonPreferences(buttons)
+                // A timed sleep's label counts down, so it is redrawn each
+                // time its whole minutes change, not only when the timer does.
+                combine(feature.speed, feature.sleepTimer, ::Pair).collectLatest { (speed, sleepTimer) ->
+                    while (true) {
+                        mediaSession?.setMediaButtonPreferences(mediaButtons(speed, sleepTimer))
+                        val timed = sleepTimer as? SleepTimer.Timed ?: break
+                        delay(sleepLabelRefreshDelay(timed, SystemClock.elapsedRealtime()) ?: break)
+                    }
                 }
             }
         }
@@ -124,7 +130,10 @@ class ReadAloudService : MediaSessionService() {
             .setDisplayName(formatSpeedCommandLabel(speed, resources.configuration.locales[0]))
             .setSessionCommand(CYCLE_SPEED)
             .build(),
+        // Media3 has no timer icon, and the legacy session bridge rejects a
+        // button without one.
         CommandButton.Builder(CommandButton.ICON_UNDEFINED)
+            .setCustomIconResId(R.drawable.ic_read_aloud_sleep_timer)
             .setDisplayName(sleepCommandLabel(sleepTimer))
             .setSessionCommand(CYCLE_SLEEP)
             .build(),

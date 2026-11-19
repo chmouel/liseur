@@ -6,8 +6,9 @@ import android.os.LocaleList
 import android.view.textclassifier.TextClassification
 import android.view.textclassifier.TextClassificationManager
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.produceState
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.platform.LocalContext
@@ -29,6 +30,8 @@ enum class SmartEntityKind {
 }
 
 data class SmartSelectionAction(
+    /** The selected text this action was classified from, trimmed. */
+    val text: String,
     val title: String,
     val contentDescription: String,
     val entityKind: SmartEntityKind,
@@ -109,6 +112,7 @@ suspend fun classifySelectionText(
                     val description = action.contentDescription.toString().trim().ifEmpty { title }
                     val pendingIntent = action.actionIntent
                     SmartSelectionAction(
+                        text = trimmed,
                         title = title,
                         contentDescription = description,
                         entityKind = entityKind,
@@ -128,14 +132,17 @@ fun rememberSmartSelectionActions(
 ): List<SmartSelectionAction> {
     val context = LocalContext.current
     val currentOnActionInvoked by rememberUpdatedState(onActionInvoked)
-    val rawActions by produceState(initialValue = emptyList(), text, languageTags) {
+    // A fresh holder per input, so the last selection's actions are gone
+    // the moment the selection changes rather than once the new one is
+    // classified.
+    val holder = remember(text, languageTags) { mutableStateOf(emptyList<SmartSelectionAction>()) }
+    LaunchedEffect(holder) {
         val candidate = text
-        value = if (candidate != null && isEligibleForSmartClassification(candidate)) {
-            classifySelectionText(context, candidate, languageTags)
-        } else {
-            emptyList()
+        if (candidate != null && isEligibleForSmartClassification(candidate)) {
+            holder.value = classifySelectionText(context, candidate, languageTags)
         }
     }
+    val rawActions by holder
     return remember(rawActions) {
         rawActions.map { action ->
             action.copy(
