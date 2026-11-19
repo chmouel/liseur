@@ -2127,6 +2127,10 @@
     <string name="home_quote_source">— %1$s</string>
     <string name="home_quote_setting">Quote from your reading</string>
     <string name="home_quote_setting_detail">Show a line from a book you have read, taken only from pages you got through</string>
+    <string name="home_vocabulary_title">Words to review</string>
+    <string name="home_vocabulary_setting_detail">Show a word from the Vocabulary Builder when one is due for review</string>
+    <string name="home_vocabulary_from">from %1$s</string>
+    <string name="home_vocabulary_open">open the Vocabulary Builder</string>
     <string name="home_time_left_minutes">~%d min left</string>
     <string name="home_time_left_hours">~%1$d h %2$d min left</string>
     <string name="home_page_of">Page %1$d of %2$d</string>

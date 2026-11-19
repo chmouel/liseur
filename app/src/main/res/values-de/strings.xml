@@ -2063,6 +2063,10 @@
     <string name="home_quote_source">— %1$s</string>
     <string name="home_quote_setting">Zitat aus deiner Lektüre</string>
     <string name="home_quote_setting_detail">Zeigt einen Satz aus einem gelesenen Buch, nur aus Seiten, die du schon gelesen hast</string>
+    <string name="home_vocabulary_title">Wörter zum Wiederholen</string>
+    <string name="home_vocabulary_setting_detail">Zeigt ein Wort aus dem Vokabeltrainer, wenn es fällig ist</string>
+    <string name="home_vocabulary_from">aus %1$s</string>
+    <string name="home_vocabulary_open">Vokabeltrainer öffnen</string>
     <string name="home_time_left_minutes">Noch ~%d Min.</string>
     <string name="home_time_left_hours">Noch ~%1$d Std. %2$d Min.</string>
     <string name="home_page_of">Seite %1$d von %2$d</string>

@@ -205,6 +205,12 @@ internal fun LibraryStyleSheet(
                         checked = layout.homeQuote,
                         onCheckedChange = { onChange(layout.copy(homeQuote = it)) },
                     )
+                    SwitchRow(
+                        title = stringResource(R.string.home_vocabulary_title),
+                        subtitle = stringResource(R.string.home_vocabulary_setting_detail),
+                        checked = layout.homeVocabulary,
+                        onCheckedChange = { onChange(layout.copy(homeVocabulary = it)) },
+                    )
                 }
             }
             when (shown) {

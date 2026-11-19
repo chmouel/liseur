@@ -4,6 +4,7 @@ import androidx.room.withTransaction
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
@@ -151,6 +152,24 @@ internal class VocabularyRepository(private val database: LiseurDatabase) {
                 }
             }
 
+    /** The next word the review would show, with where it was met; null when nothing is due. */
+    fun homeCard(newLimit: Int, reviewLimit: Int) =
+        reviewQueue(null, newLimit, reviewLimit)
+            .map { queue ->
+                val word = queue.card?.takeIf { queue.dueCount > 0 } ?: return@map null
+                val source = dao.latestOccurrence(word.id)
+                HomeVocabulary(
+                    id = word.id,
+                    word = word.word,
+                    language = word.language,
+                    definition = word.definition?.takeIf(String::isNotBlank),
+                    sentence = source?.sentence?.takeIf(String::isNotBlank),
+                    bookTitle = source?.bookTitle?.takeIf(String::isNotBlank),
+                    dueCount = queue.dueCount,
+                )
+            }
+            .distinctUntilChanged()
+
     suspend fun review(
         card: VocabularyWord,
         rating: Recall,
@@ -206,3 +225,14 @@ internal class VocabularyRepository(private val database: LiseurDatabase) {
 internal data class VocabularyQueue(val card: VocabularyWord?, val dueCount: Int, val completedToday: Int)
 
 internal data class VocabularyReviewUndo(val reviewId: Long, val previous: VocabularyWord)
+
+/** A word due for review, as Home shows it. */
+data class HomeVocabulary(
+    val id: Long,
+    val word: String,
+    val language: String,
+    val definition: String?,
+    val sentence: String?,
+    val bookTitle: String?,
+    val dueCount: Int,
+)

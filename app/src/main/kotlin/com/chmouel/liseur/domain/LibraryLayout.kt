@@ -121,6 +121,8 @@ data class LibraryLayout(
     val startOnHome: Boolean = true,
     /** Whether Home shows a quote from what has been read. */
     val homeQuote: Boolean = true,
+    /** Whether Home shows a vocabulary word due for review. */
+    val homeVocabulary: Boolean = true,
 ) {
     /** Whether the app draws its five-tab bar around the library, as opposed to the library alone. */
     val tabs: Boolean get() = scope == LibraryScope.DETAILED

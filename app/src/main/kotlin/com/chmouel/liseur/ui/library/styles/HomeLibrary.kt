@@ -34,6 +34,7 @@ import androidx.compose.material.icons.outlined.AutoStories
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.Layers
 import androidx.compose.material.icons.outlined.MoreHoriz
+import androidx.compose.material.icons.outlined.School
 import androidx.compose.material.icons.outlined.Shuffle
 import androidx.compose.material.icons.outlined.TaskAlt
 import androidx.compose.material3.Button
@@ -46,7 +47,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -93,6 +99,7 @@ import com.chmouel.liseur.ui.theme.HomePalette
 import com.chmouel.liseur.ui.theme.TileTint
 import com.chmouel.liseur.ui.theme.homePalette
 import com.chmouel.liseur.ui.widthClass
+import com.chmouel.liseur.vocabulary.HomeVocabulary
 import kotlin.math.ceil
 
 /**
@@ -120,6 +127,9 @@ internal fun HomeLibrary(
     quote: HomeQuote? = null,
     onOpenQuote: (HomeQuote) -> Unit = {},
     onAnotherQuote: () -> Unit = {},
+    vocabulary: HomeVocabulary? = null,
+    onOpenVocabulary: () -> Unit = {},
+    onReviewVocabulary: () -> Unit = {},
     /** The shelf's Continue listening row, drawn above everything else. */
     header: (@Composable () -> Unit)? = null,
 ) {
@@ -238,6 +248,23 @@ internal fun HomeLibrary(
                             )
                         }
                     }
+                }
+            }
+        }
+        if (vocabulary != null) {
+            item(key = "home:vocabulary") {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = gutter) {
+                    HomeSectionHeader(
+                        text = stringResource(R.string.home_vocabulary_title),
+                        actionText = stringResource(R.string.home_see_all),
+                        onAction = onOpenVocabulary,
+                    )
+                    VocabularyCard(
+                        word = vocabulary,
+                        onOpen = onOpenVocabulary,
+                        onReview = onReviewVocabulary,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
                 }
             }
         }
@@ -401,6 +428,126 @@ private fun QuoteCard(
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.size(18.dp),
                             )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * A word due for review, drawn as the top card of a small deck so it does
+ * not read as another quote. The meaning stays hidden until asked for: the
+ * review opens on this same word.
+ */
+@Composable
+private fun VocabularyCard(
+    word: HomeVocabulary,
+    onOpen: () -> Unit,
+    onReview: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val eInk = LocalEInk.current
+    val palette = homePalette()
+    val tint = palette?.series
+    val shape = RoundedCornerShape(18.dp)
+    val ink = tint?.content ?: MaterialTheme.colorScheme.onSurface
+    Box(modifier) {
+        if (tint != null) {
+            Box(
+                Modifier
+                    .matchParentSize()
+                    .padding(horizontal = 28.dp)
+                    .background(tint.glow.copy(alpha = 0.55f), shape),
+            )
+            Box(
+                Modifier
+                    .matchParentSize()
+                    .padding(top = 5.dp, start = 14.dp, end = 14.dp)
+                    .background(tint.glow, shape),
+            )
+        }
+        DeskCard(
+            onClick = onOpen,
+            onClickLabel = stringResource(R.string.home_vocabulary_open),
+            shape = shape,
+            color = tint?.container,
+            borderColor = tint?.glow,
+            modifier = Modifier
+                .padding(top = if (tint != null) 10.dp else 0.dp)
+                .fillMaxWidth(),
+        ) {
+            Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Pill(text = word.language.substringBefore('-').uppercase())
+                    word.bookTitle?.let { title ->
+                        Text(
+                            text = stringResource(R.string.home_vocabulary_from, title),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(start = 8.dp).weight(1f),
+                        )
+                    }
+                }
+                Text(
+                    text = word.word,
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = if (eInk) MaterialTheme.colorScheme.onSurface else ink,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 12.dp),
+                )
+                word.sentence?.let { sentence ->
+                    Text(
+                        text = sentence,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(top = 6.dp),
+                    )
+                }
+                var revealed by rememberSaveable(word.id) { mutableStateOf(false) }
+                if (revealed) {
+                    Text(
+                        text = word.definition ?: stringResource(R.string.vocabulary_no_definition),
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(top = 10.dp),
+                    )
+                }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(top = 14.dp).fillMaxWidth(),
+                ) {
+                    Button(
+                        onClick = onReview,
+                        colors = if (tint != null) {
+                            ButtonDefaults.buttonColors(containerColor = tint.content, contentColor = tint.container)
+                        } else {
+                            ButtonDefaults.buttonColors()
+                        },
+                    ) {
+                        Icon(Icons.Outlined.School, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Text(
+                            text = stringResource(R.string.vocabulary_review_due, word.dueCount),
+                            modifier = Modifier.padding(start = 8.dp),
+                        )
+                    }
+                    if (!revealed) {
+                        TextButton(
+                            onClick = { revealed = true },
+                            colors = ButtonDefaults.textButtonColors(
+                                contentColor = if (eInk) MaterialTheme.colorScheme.onSurface else ink,
+                            ),
+                        ) {
+                            Text(stringResource(R.string.vocabulary_reveal))
                         }
                     }
                 }

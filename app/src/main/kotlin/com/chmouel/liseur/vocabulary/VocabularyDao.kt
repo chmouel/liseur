@@ -139,6 +139,12 @@ interface VocabularyDao {
     @Query("SELECT * FROM vocabulary_occurrences WHERE wordId = :id ORDER BY lastSeenAt DESC, id DESC")
     fun occurrences(id: Long): Flow<List<VocabularyOccurrence>>
 
+    @Query("""
+        SELECT * FROM vocabulary_occurrences WHERE wordId = :id
+        ORDER BY (sentence IS NULL OR trim(sentence) = ''), lastSeenAt DESC, id DESC LIMIT 1
+    """)
+    suspend fun latestOccurrence(id: Long): VocabularyOccurrence?
+
     @Query("SELECT * FROM vocabulary_occurrences WHERE wordId = :id AND bookUrl = :bookUrl AND locationKey = :key")
     suspend fun occurrence(id: Long, bookUrl: String, key: String): VocabularyOccurrence?
 

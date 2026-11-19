@@ -104,6 +104,23 @@ class VocabularyTest {
     }
 
     @Test
+    fun `home card shows the next due word with where it was met and leaves once reviewed`() = runBlocking {
+        withTimeout(15_000) {
+            withDatabase { db ->
+                val repo = VocabularyRepository(db)
+                assertNull(repo.homeCard(20, 0).first())
+                val time = System.currentTimeMillis() - 1000
+                val id = checkNotNull(repo.collect(VocabularyLookup("basis", "en", source("one")), "Foundation", null, time))
+                repo.collect(VocabularyLookup("basis", "en", source("two").copy(locationKey = "later", sentence = null, lastSeenAt = 5)), null, null, time + 1)
+                val card = checkNotNull(repo.homeCard(20, 0).first())
+                assertEquals(HomeVocabulary(id, "basis", "en", "Foundation", "That is the word.", "Title of one", 1), card)
+                repo.review(checkNotNull(repo.dao.word(id)), Recall.GOOD, 20, 0, time + 2)
+                assertNull(repo.homeCard(20, 0).first())
+            }
+        }
+    }
+
+    @Test
     fun `JSON preserves locators and progress while Anki CSV preserves escaped fields`() = runTest {
         withDatabase { db ->
             val repo = VocabularyRepository(db)

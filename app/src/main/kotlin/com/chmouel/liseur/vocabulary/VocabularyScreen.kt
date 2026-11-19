@@ -77,6 +77,8 @@ internal fun VocabularyScreen(
     onOpenPassage: (VocabularyOccurrence) -> Unit,
     currentBook: VocabularyBook? = null,
     onOpenSettings: (() -> Unit)? = null,
+    /** Opens on the review, and leaves the screen when the review closes. */
+    reviewOnly: Boolean = false,
 ) {
     val preferences = LocalContext.current.container.appSettings
     val settings by preferences.settings.collectAsStateWithLifecycle(initialValue = AppSettings())
@@ -91,7 +93,7 @@ internal fun VocabularyScreen(
     var status by rememberSaveable { mutableIntStateOf(0) }
     var sort by rememberSaveable { mutableIntStateOf(0) }
     var grouped by rememberSaveable { mutableStateOf(false) }
-    var reviewing by rememberSaveable { mutableStateOf(false) }
+    var reviewing by rememberSaveable { mutableStateOf(reviewOnly) }
     val reviewBook = currentBook?.bookUrl ?: bookUrl
     val queue by remember(repository, reviewBook, newLimit, reviewLimit) {
         repository.reviewQueue(reviewBook, newLimit, reviewLimit)
@@ -105,7 +107,7 @@ internal fun VocabularyScreen(
     val back = {
         when {
             selected != null -> selected = null
-            reviewing -> reviewing = false
+            reviewing -> if (reviewOnly) onBack() else reviewing = false
             searching -> {
                 searching = false
                 search = ""
@@ -150,7 +152,7 @@ internal fun VocabularyScreen(
             val content = Modifier.widthIn(max = 680.dp).fillMaxSize()
             if (reviewing) {
                 queue?.let {
-                    VocabularyReviewScreen(repository, it, reviewBook, newLimit, reviewLimit, { reviewing = false }, content)
+                    VocabularyReviewScreen(repository, it, reviewBook, newLimit, reviewLimit, back, content)
                 }
             } else if (selectedId != null) {
                 VocabularyDetail(repository, selectedId, currentBook?.bookUrl, onOpenPassage, { selected = null }, content)
