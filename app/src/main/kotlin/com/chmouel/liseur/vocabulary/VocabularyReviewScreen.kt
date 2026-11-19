@@ -35,6 +35,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -112,7 +113,18 @@ internal fun VocabularyReviewScreen(
     }
     BoxWithConstraints(modifier) {
         val compact = maxHeight < 360.dp
-        Column(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(if (compact) 6.dp else 12.dp)) {
+        val twoRows = maxWidth < 360.dp || LocalDensity.current.fontScale > 1.3f
+        val scrollReview = maxHeight < if (twoRows) 252.dp else 176.dp
+        val scroll = rememberScrollState()
+        LaunchedEffect(word?.id, word?.repetitions, scrollReview) {
+            if (scrollReview) scroll.scrollTo(0)
+        }
+        Column(
+            Modifier.fillMaxSize()
+                .then(if (scrollReview) Modifier.verticalScroll(scroll) else Modifier)
+                .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(if (compact) 6.dp else 12.dp),
+        ) {
             ReviewProgress(sessionCount, queue, compact, undo != null && !submitting && !flying) {
                 val previous = undo ?: return@ReviewProgress
                 submitting = true
@@ -129,7 +141,7 @@ internal fun VocabularyReviewScreen(
                     }
                 }
             }
-            Box(Modifier.weight(1f).fillMaxWidth()) {
+            Box(Modifier.fillMaxWidth().then(if (scrollReview) Modifier else Modifier.weight(1f))) {
                 if (word == null) {
                     Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(stringResource(R.string.vocabulary_review_done), style = MaterialTheme.typography.headlineSmall)
@@ -154,14 +166,14 @@ internal fun VocabularyReviewScreen(
                             onFlight = { flying = it },
                             modifier = Modifier.fillMaxWidth(),
                         ) { swipes, actions ->
-                            ReviewCard(word, passage, revealed, swipes, speaker, { revealed = true }, onOpenPassage, actions)
+                            ReviewCard(word, passage, revealed, swipes, !scrollReview, speaker, { revealed = true }, onOpenPassage, actions)
                         }
                     }
                 }
             }
             if (word != null) {
                 if (revealed) {
-                    RecallTiles(word, !submitting && !flying, compact, Modifier.padding(bottom = if (compact) 6.dp else 12.dp)) { rating ->
+                    RecallTiles(word, !submitting && !flying, compact, if (twoRows) 2 else 4, Modifier.padding(bottom = if (compact) 6.dp else 12.dp)) { rating ->
                         scope.launch { rate(rating) }
                     }
                 } else {
@@ -203,6 +215,7 @@ private fun ReviewCard(
     passage: VocabularyOccurrence?,
     revealed: Boolean,
     swipes: Boolean,
+    scrollCard: Boolean,
     speaker: WordSpeaker,
     onReveal: () -> Unit,
     onOpenPassage: (VocabularyOccurrence) -> Unit,
@@ -212,6 +225,7 @@ private fun ReviewCard(
     val eInk = LocalEInk.current
     var expanded by rememberSaveable { mutableStateOf(false) }
     var overflowing by remember { mutableStateOf(false) }
+    val scroll = rememberScrollState()
     Surface(
         onClick = onReveal,
         shape = RoundedCornerShape(24.dp),
@@ -225,7 +239,7 @@ private fun ReviewCard(
                     if (eInk) scheme.surface else lerp(scheme.surface, scheme.primaryContainer, 0.35f),
                     if (eInk) scheme.surface else scheme.surfaceContainerHigh,
                 )))
-                .verticalScroll(rememberScrollState())
+                .then(if (scrollCard) Modifier.verticalScroll(scroll) else Modifier)
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
@@ -303,21 +317,24 @@ private val recallButtons = listOf(
 )
 
 @Composable
-private fun RecallTiles(word: VocabularyWord, enabled: Boolean, compact: Boolean, modifier: Modifier, onRate: (Recall) -> Unit) {
+private fun RecallTiles(
+    word: VocabularyWord,
+    enabled: Boolean,
+    compact: Boolean,
+    columns: Int,
+    modifier: Modifier,
+    onRate: (Recall) -> Unit,
+) {
     val format = rememberIntervalFormat()
-    val fontScale = LocalDensity.current.fontScale
-    BoxWithConstraints(modifier.fillMaxWidth()) {
-        val columns = if (maxWidth < 328.dp || fontScale > 1.3f) 2 else 4
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            recallButtons.chunked(columns).forEach { row ->
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                    row.forEach { (rating, label, icon) ->
-                        RecallTile(
-                            rating, stringResource(label), icon,
-                            format.formatInterval(scheduleVocabulary(word.streak, rating, 0).intervalMinutes),
-                            enabled, compact, Modifier.weight(1f),
-                        ) { onRate(rating) }
-                    }
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        recallButtons.chunked(columns).forEach { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                row.forEach { (rating, label, icon) ->
+                    RecallTile(
+                        rating, stringResource(label), icon,
+                        format.formatInterval(scheduleVocabulary(word.streak, rating, 0).intervalMinutes),
+                        enabled, compact, Modifier.weight(1f),
+                    ) { onRate(rating) }
                 }
             }
         }
