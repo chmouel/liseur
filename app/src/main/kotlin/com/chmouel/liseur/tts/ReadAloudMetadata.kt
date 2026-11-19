@@ -12,6 +12,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.readium.navigator.media.common.MediaMetadataFactory
 import org.readium.navigator.media.common.MediaMetadataProvider
+import org.readium.r2.shared.publication.Link
 import org.readium.r2.shared.publication.Publication
 import org.readium.r2.shared.publication.services.coverFitting
 import java.io.File
@@ -33,8 +34,38 @@ internal class ReadAloudMetadata(private val cover: Uri?) : MediaMetadataProvide
             override suspend fun publicationMetadata(): MediaMetadata =
                 base().setTotalTrackCount(publication.readingOrder.size).build()
 
-            override suspend fun resourceMetadata(index: Int): MediaMetadata =
-                base().setTrackNumber(index).build()
+            override suspend fun resourceMetadata(index: Int): MediaMetadata {
+                val link = publication.readingOrder.getOrNull(index)
+                val chapterTitle = resolveChapterTitleForResource(
+                    readingOrderTitle = link?.title,
+                    tocTitle = link?.let(::tocTitleFor),
+                    index = index,
+                )
+                return MediaMetadata.Builder()
+                    .setAlbumTitle(title)
+                    .setTitle(chapterTitle ?: title)
+                    .setArtist(author)
+                    .setArtworkUri(cover)
+                    .setTrackNumber(index + 1)
+                    .setTotalTrackCount(publication.readingOrder.size)
+                    .build()
+            }
+
+            private fun tocTitleFor(resource: Link): String? {
+                val path = resourcePath(resource)
+                fun find(links: List<Link>): String? {
+                    for (link in links) {
+                        val linkTitle = link.title?.trim()?.takeIf(String::isNotEmpty)
+                        if (linkTitle != null && resourcePath(link) == path) return linkTitle
+                        find(link.children)?.let { return it }
+                    }
+                    return null
+                }
+                return find(publication.tableOfContents)
+            }
+
+            private fun resourcePath(link: Link): String =
+                link.url().toString().substringBefore('#').substringBefore('?')
 
             private fun base() = MediaMetadata.Builder()
                 .setTitle(title)

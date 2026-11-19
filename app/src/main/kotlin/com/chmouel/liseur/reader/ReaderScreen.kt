@@ -42,6 +42,7 @@ import androidx.compose.foundation.layout.systemGestures
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
@@ -192,6 +193,8 @@ import com.chmouel.liseur.reader.annotations.selectionSearchLanguage
 import com.chmouel.liseur.reader.annotations.SelectionActions
 import com.chmouel.liseur.reader.annotations.SelectionPopup
 import com.chmouel.liseur.reader.annotations.SheetSelectionActionBar
+import com.chmouel.liseur.reader.annotations.SmartSelectionAction
+import com.chmouel.liseur.reader.annotations.rememberSmartSelectionActions
 import com.chmouel.liseur.reader.annotations.locator
 import com.chmouel.liseur.reader.annotations.lookUpExternally
 import com.chmouel.liseur.reader.annotations.openDictionaryEntry
@@ -266,12 +269,25 @@ import com.chmouel.liseur.reader.chrome.FixedLayoutPinchHud
 import com.chmouel.liseur.reader.chrome.FontSizeHud
 import com.chmouel.liseur.reader.chrome.BrightnessHud
 import com.chmouel.liseur.reader.chrome.BrightnessSwipe
+import com.chmouel.liseur.reader.chrome.ReaderGestureHudOverlay
+import com.chmouel.liseur.reader.chrome.UltraDimOverlay
+import com.chmouel.liseur.reader.chrome.desiredHdrHeadroom
+import com.chmouel.liseur.reader.chrome.findActivity
+import com.chmouel.liseur.reader.chrome.resolveScreenBrightness
 import com.chmouel.liseur.reader.chrome.FootnoteCard
+import com.chmouel.liseur.reader.chrome.ReaderFoldPosture
+import com.chmouel.liseur.reader.chrome.ReaderSupportingSidePane
+import com.chmouel.liseur.reader.chrome.bookPostureCssOverrides
+import com.chmouel.liseur.reader.chrome.effectiveFor
+import com.chmouel.liseur.reader.chrome.resolveReaderSidePane
 import com.chmouel.liseur.reader.chrome.GestureClaim
 import com.chmouel.liseur.reader.chrome.ImageViewer
 import com.chmouel.liseur.reader.chrome.ViewedImage
 import com.chmouel.liseur.reader.chrome.PinchResize
 import com.chmouel.liseur.reader.chrome.PinchStart
+import com.chmouel.liseur.reader.chrome.ReaderHaptic
+import com.chmouel.liseur.reader.chrome.performReaderHaptic
+import com.chmouel.liseur.reader.chrome.pinchResizeStepHaptic
 import com.chmouel.liseur.reader.chrome.GoToPageDialog
 import com.chmouel.liseur.reader.chrome.GoToPercentDialog
 import com.chmouel.liseur.reader.chrome.TypographySheet
@@ -572,6 +588,7 @@ internal fun ReaderScreen(
     wholeBook: ReaderWholeBook? = null,
     // Who a selected name is, from the chapters before; null leaves the action out.
     companion: ReaderCompanion? = null,
+    foldPosture: ReaderFoldPosture = ReaderFoldPosture.Flat,
 ) {
     val builtNavigator = remember { mutableStateOf<EpubNavigatorFragment?>(null) }
     val navigator by rememberViewedFragment(builtNavigator, ::consumeInsetsForReadium)
@@ -658,7 +675,8 @@ internal fun ReaderScreen(
     // them up for a moment before they fade.
     var autoScrollControlsPoke by remember { mutableIntStateOf(0) }
     var autoScrollControlsLinger by remember { mutableStateOf(false) }
-    val columnMode = prefs.columnMode.effectiveFor(widthClass())
+    val columnMode = prefs.columnMode.effectiveFor(widthClass(), foldPosture)
+    val cssOverrides = bookPostureCssOverrides(foldPosture, LocalDensity.current.density)
 
     // This book being read aloud, if it is. The session outlives the
     // screen, so everything here is read back from it rather than kept.
@@ -757,6 +775,7 @@ internal fun ReaderScreen(
      * initial pass and without consuming anything, which leaves the web view
      * and the tap zones seeing exactly what they saw before.
      */
+    var lastTouchX by remember { mutableStateOf<Float?>(null) }
     var lastTouchY by remember { mutableStateOf<Float?>(null) }
     var fingerDown by remember { mutableStateOf(false) }
     /*
@@ -1458,6 +1477,7 @@ internal fun ReaderScreen(
             density = { view.resources.displayMetrics.density },
             width = { navigatorNow?.publicationViewOrNull?.width?.toFloat() ?: view.width.toFloat() },
             onTurnPage = pageTurner::turn,
+            onHaptic = view::performReaderHaptic,
             curl = object : PageTurnDrag.Curl {
                 // The turn in hand. Set when the navigator has jumped and
                 // the snapshot is up, cleared when the page has left or
@@ -1554,7 +1574,7 @@ internal fun ReaderScreen(
     // away from the place it means to keep. The collector sets this once
     // the anchor and the layout signature are taken. A rebuilt fragment
     // starts from the live value, having no place to anchor against yet.
-    var appliedVerticalMargins by remember(columnMode, scrollMode, fontKey) {
+    var appliedVerticalMargins by remember(columnMode, scrollMode, fontKey, cssOverrides) {
         mutableStateOf(verticalMargins)
     }
     // A scrolled page adds no padding, so there is nothing to lag.
@@ -3563,7 +3583,15 @@ internal fun ReaderScreen(
     }
     // Back, while a source is shown, goes back to where the reader asked.
     BackHandler(enabled = companionPeek != null) { returnToAsking() }
-    ScreenBrightness(brightness = brightnessPreview ?: prefs.brightness)
+    val resolvedBrightness = resolveScreenBrightness(
+        brightness = brightnessPreview ?: prefs.brightness,
+        eInk = eInk,
+    )
+    ScreenBrightness(
+        windowBrightness = resolvedBrightness.windowBrightness,
+        dimAlpha = resolvedBrightness.dimAlpha,
+        imageViewerOpen = viewedImage != null,
+    )
     // Auto-scroll implies it: a page that carries itself past a screen
     // timeout is a page nobody is reading. The reader's own switch still
     // decides everything else, and this adds nothing once the page stops.
@@ -3661,7 +3689,7 @@ internal fun ReaderScreen(
             Toast.makeText(context, R.string.translation_page_bookmarks_off, Toast.LENGTH_SHORT).show()
             return
         }
-        view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+        view.performReaderHaptic(ReaderHaptic.CONFIRM)
         effectScope.launch {
             if (effectiveScrollingNow) {
                 navigatorNow?.let { nav ->
@@ -4077,8 +4105,13 @@ internal fun ReaderScreen(
                                         pinchRefused = false
                                     }
                                 if (reflowableText) {
-                                    pinchTarget =
+                                    val nextTarget =
                                         PinchResize.targetFor(start.size, start.span, span)
+                                    pinchResizeStepHaptic(
+                                        previousSize = pinchTarget ?: start.size,
+                                        currentSize = nextTarget,
+                                    )?.let(view::performReaderHaptic)
+                                    pinchTarget = nextTarget
                                 } else {
                                     // A fixed-layout book places every page
                                     // itself and Readium honours no font
@@ -4115,7 +4148,10 @@ internal fun ReaderScreen(
                             }
 
                             else -> event.changes.firstOrNull { it.pressed }
-                                ?.let { lastTouchY = it.position.y }
+                                ?.let {
+                                    lastTouchX = it.position.x
+                                    lastTouchY = it.position.y
+                                }
                         }
                     }
                 }
@@ -4183,7 +4219,7 @@ internal fun ReaderScreen(
                 }
             },
         ).dp
-        key(columnMode, scrollMode, fontKey) {
+        key(columnMode, scrollMode, fontKey, cssOverrides) {
             // Derived, not measured: the reservation must exist before
             // the page lays out, or the last line is cut in half. The
             // line height is the very style the footer draws with, and
@@ -4351,10 +4387,21 @@ internal fun ReaderScreen(
         // paper instead, so the panel reaches the edge while its
         // controls stay where they are.
         val scrubberShown = !showingEnd && chromeVisible && progress != null
+        val tabletopBottomModifier = if (
+            foldPosture is ReaderFoldPosture.Tabletop &&
+            foldPosture.bottomPaneHeightPx > 0
+        ) {
+            Modifier.heightIn(
+                max = with(LocalDensity.current) { foldPosture.bottomPaneHeightPx.toDp() },
+            )
+        } else {
+            Modifier
+        }
         Column(
             Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
+                .then(tabletopBottomModifier)
                 .then(behindViewer),
         ) {
             if (!showingEnd) {
@@ -4951,6 +4998,8 @@ internal fun ReaderScreen(
                     html = note.html,
                     theme = readingTheme,
                     anchorY = lastTouchY,
+                    anchorX = lastTouchX,
+                    foldPosture = foldPosture,
                     onGoToNote = {
                         onDismissFootnote()
                         navigator?.let { nav ->
@@ -5021,15 +5070,14 @@ internal fun ReaderScreen(
         // Above the note guard rather than below it, because a pinch is
         // refused outright while a note is open, so the two can never be
         // on screen together.
-        Box(Modifier.fillMaxSize().then(behindViewer)) {
-            when {
-                pinchRefused -> FixedLayoutPinchHud(theme = readingTheme)
-                else -> pinchTarget?.let { FontSizeHud(size = it, theme = readingTheme) }
-            }
-            brightnessPreview?.takeIf { brightnessSwiping }?.let {
-                BrightnessHud(brightness = it, theme = readingTheme)
-            }
-        }
+        ReaderGestureHudOverlay(
+            pinchRefused = { pinchRefused },
+            pinchTarget = { pinchTarget },
+            brightnessSwiping = { brightnessSwiping },
+            brightnessPreview = { brightnessPreview },
+            theme = readingTheme,
+            modifier = Modifier.fillMaxSize().then(behindViewer),
+        )
 
         // Last of all: a picture asked for full screen is the thing the
         // reader is looking at, and everything else in the box is what
@@ -5037,6 +5085,8 @@ internal fun ReaderScreen(
         viewedImage?.let {
             ImageViewer(image = it, theme = readingTheme, onDismiss = { viewedImage = null })
         }
+
+        UltraDimOverlay(dimAlpha = resolvedBrightness.dimAlpha)
     }
 
     // Letting a selection go from our own bar rather than from the page.
@@ -5278,7 +5328,11 @@ internal fun ReaderScreen(
     val processAvailable = remember(intentAvailability) { context.canHandleSelectionIntent(processTextIntent()) }
     val webSearchAvailable = remember(intentAvailability) { context.canHandleSelectionIntent(webSearchIntent()) }
 
-    fun selectionActionsFor(active: ActiveSelection, inSheet: Boolean): SelectionActions {
+    fun selectionActionsFor(
+        active: ActiveSelection,
+        inSheet: Boolean,
+        smartActions: List<SmartSelectionAction> = emptyList(),
+    ): SelectionActions {
         // The language is that of the text as shown, which on a translated
         // page can still be the book's own. The sheet keeps the one its
         // lookup resolved.
@@ -5447,6 +5501,7 @@ internal fun ReaderScreen(
                     }
                 },
             annotate = !pageTranslated,
+            smartActions = smartActions,
         )
     }
 
@@ -5553,331 +5608,579 @@ internal fun ReaderScreen(
     // is not placed by the selection's rectangle. A passage the reader
     // selected by hand over such a mark still gets the bar: they were
     // reaching for the words, not the note.
-    val notedTap = tappedSelection?.takeIf { !it.existing?.note.isNullOrBlank() }
-    notedTap
-        ?.takeIf { viewedImage == null }
-        ?.let { active ->
-            val existing = active.existing ?: return@let
-            val passage = existing.text?.takeIf { it.isNotBlank() } ?: active.text
-            NoteSheet(
-                annotation = existing,
-                passage = passage,
-                theme = readingTheme,
-                palette = highlightPalette,
-                actions = remember(active) {
-                    NoteSheetActions(
-                        onEdit = {
-                            noteFor = active
-                            dismissSelection()
-                        },
-                        onRecolour = { tint ->
-                            onAnnotationAction.highlight(active.locator, tint, existing.id)
-                        },
-                        onShare = {
-                            context.shareText(
-                                NoteText.share(passage, existing.note),
-                                publication.metadata.title,
-                            )
-                            dismissSelection()
-                        },
-                        onDelete = {
-                            onAnnotationAction.remove(existing)
-                            dismissSelection()
-                        },
-                    )
-                },
-                onDismiss = ::dismissSelection,
-            )
-        }
-
-    (tappedSelection ?: selection)
-        ?.takeIf { viewedImage == null && notedTap == null && automaticSelection == null && pendingLookup == null }
-        ?.let { active ->
-            val translationRun = if (pageTranslated) {
-                pageTranslation ?: restoringPageTranslation
-            } else {
-                null
-            }
-            SelectionPopup(
-                offset = active.popupOffset(density),
-                activeTint = active.existing?.tint?.let(HighlightTint::fromName),
-                palette = highlightPalette,
-                actions = remember(active, dictionary, translateReady, translateLabel, pageTranslated, translationRun, companion, selectionActionLayout, processAvailable, webSearchAvailable) {
-                    selectionActionsFor(active, inSheet = false)
-                },
-                onDismiss = {
-                    // The bar and the selection go together: leaving the page
-                    // selected keeps the platform's handles alive and drawing
-                    // over words the reader has finished with.
-                    dismissSelection()
-                },
-                // A tapped mark has no platform selection, so only a touch
-                // elsewhere can close its bar. A live selection is closed
-                // by the web view, and its handles sit outside the bar.
-                dismissOnOutsideTouch = tappedSelection != null,
-            )
-        }
-
-    val definitionOverlay: @Composable () -> Unit = {
-        val query = defineWord
-        if (query != null) key(query) {
-            val appLanguage = LocalConfiguration.current.locales[0].toLanguageTag()
-            val definitionLanguage = query.language ?: publication.metadata.languages.firstOrNull()
-            val vocabularyLookup = remember(query, definitionLanguage, vocabularySource) {
-                VocabularyLookup(
-                    word = query.word,
-                    language = vocabularyLanguage(definitionLanguage),
-                    occurrence = vocabularySource?.takeIf { it.first === query }?.second,
+    val overlaysContent: @Composable () -> Unit = {
+        val notedTap = tappedSelection?.takeIf { !it.existing?.note.isNullOrBlank() }
+        notedTap
+            ?.takeIf { viewedImage == null }
+            ?.let { active ->
+                val existing = active.existing ?: return@let
+                val passage = existing.text?.takeIf { it.isNotBlank() } ?: active.text
+                NoteSheet(
+                    annotation = existing,
+                    passage = passage,
+                    theme = readingTheme,
+                    palette = highlightPalette,
+                    actions = remember(active) {
+                        NoteSheetActions(
+                            onEdit = {
+                                noteFor = active
+                                dismissSelection()
+                            },
+                            onRecolour = { tint ->
+                                onAnnotationAction.highlight(active.locator, tint, existing.id)
+                            },
+                            onShare = {
+                                context.shareText(
+                                    NoteText.share(passage, existing.note),
+                                    publication.metadata.title,
+                                )
+                                dismissSelection()
+                            },
+                            onDelete = {
+                                onAnnotationAction.remove(existing)
+                                dismissSelection()
+                            },
+                        )
+                    },
+                    onDismiss = ::dismissSelection,
                 )
             }
-            DefinitionSheet(
-                word = query.word,
-                vocabularyAction = { definition, translationLanguage ->
-                    VocabularyLookupAction(vocabulary, vocabularyLookup, autoSaveVocabularyNow, definition, translationLanguage)
-                },
-                fallbackWords = query.fallbackWords(),
-                languages = remember(definitionLanguage) {
-                    WiktionaryClient.languagesFor(definitionLanguage)
-                },
-                bookLanguage = definitionLanguage,
-                enabled = dictionary.enabled,
-                baseUrl = dictionary.baseUrl,
-                altLanguage = remember(definitionLanguage, dictionary.altLanguage, appLanguage) {
-                    altLanguageFor(dictionary.altLanguage, definitionLanguage, appLanguage)
-                },
-                onEnable = onEnableDictionary,
-                onOpenInDictionaryApp = {
-                    context.lookUpExternally(it, dictionary.baseUrl)
-                    defineWord = null
-                    if (automaticSelection != null) dismissSelection()
-                },
-                onOpenInBrowser = { term, site ->
-                    context.openDictionaryEntry(term, site)
-                    defineWord = null
-                    if (automaticSelection != null) dismissSelection()
-                },
-                onLookupSuggestion = { word, language ->
-                    if (automaticSelection != null) dismissSelection()
-                    defineWord = DefinitionQuery(word, language ?: query.language)
-                },
-                selectedDefinitionActions = { text, language ->
-                    val focus = LocalFocusManager.current
-                    val nextQuery = definitionQuery(text, null, language, useDisplayedText = false)
-                    fun closeCard() {
+
+        (tappedSelection ?: selection)
+            ?.takeIf { viewedImage == null && notedTap == null && automaticSelection == null && pendingLookup == null }
+            ?.let { active ->
+                val translationRun = if (pageTranslated) {
+                    pageTranslation ?: restoringPageTranslation
+                } else {
+                    null
+                }
+                val smartActions = rememberSmartSelectionActions(
+                    text = active.text,
+                    languageTags = publication.metadata.languages.firstOrNull(),
+                    onActionInvoked = ::dismissSelection,
+                )
+                SelectionPopup(
+                    offset = active.popupOffset(density),
+                    activeTint = active.existing?.tint?.let(HighlightTint::fromName),
+                    palette = highlightPalette,
+                    actions = remember(
+                        active,
+                        dictionary,
+                        translateReady,
+                        translateLabel,
+                        pageTranslated,
+                        translationRun,
+                        companion,
+                        selectionActionLayout,
+                        processAvailable,
+                        webSearchAvailable,
+                        smartActions,
+                    ) {
+                        selectionActionsFor(active, inSheet = false, smartActions = smartActions)
+                    },
+                    onDismiss = {
+                        // The bar and the selection go together: leaving the page
+                        // selected keeps the platform's handles alive and drawing
+                        // over words the reader has finished with.
+                        dismissSelection()
+                    },
+                    // A tapped mark has no platform selection, so only a touch
+                    // elsewhere can close its bar. A live selection is closed
+                    // by the web view, and its handles sit outside the bar.
+                    dismissOnOutsideTouch = tappedSelection != null,
+                )
+            }
+
+        val definitionOverlay: @Composable () -> Unit = {
+            val query = defineWord
+            if (query != null) key(query) {
+                val appLanguage = LocalConfiguration.current.locales[0].toLanguageTag()
+                val definitionLanguage = query.language ?: publication.metadata.languages.firstOrNull()
+                val vocabularyLookup = remember(query, definitionLanguage, vocabularySource) {
+                    VocabularyLookup(
+                        word = query.word,
+                        language = vocabularyLanguage(definitionLanguage),
+                        occurrence = vocabularySource?.takeIf { it.first === query }?.second,
+                    )
+                }
+                DefinitionSheet(
+                    word = query.word,
+                    vocabularyAction = { definition, translationLanguage ->
+                        VocabularyLookupAction(vocabulary, vocabularyLookup, autoSaveVocabularyNow, definition, translationLanguage)
+                    },
+                    fallbackWords = query.fallbackWords(),
+                    languages = remember(definitionLanguage) {
+                        WiktionaryClient.languagesFor(definitionLanguage)
+                    },
+                    bookLanguage = definitionLanguage,
+                    enabled = dictionary.enabled,
+                    baseUrl = dictionary.baseUrl,
+                    altLanguage = remember(definitionLanguage, dictionary.altLanguage, appLanguage) {
+                        altLanguageFor(dictionary.altLanguage, definitionLanguage, appLanguage)
+                    },
+                    onEnable = onEnableDictionary,
+                    onOpenInDictionaryApp = {
+                        context.lookUpExternally(it, dictionary.baseUrl)
                         defineWord = null
                         if (automaticSelection != null) dismissSelection()
-                    }
-                    val title = publication.metadata.title
-                    val authors = publication.metadata.authors.map { it.name }
-                    SheetSelectionActionBar(
-                        actions = SelectionActions(
-                            layout = selectionActionLayout,
-                            annotate = false,
-                            onHighlight = {},
-                            onNote = {
-                                closeCard()
-                                bookNoteEditor = BookNoteEditor(existing = null, initialNote = text)
-                            },
-                            noteLabel = R.string.annotation_book_note_title,
-                            onLookUp = {
-                                if (nextQuery == query) focus.clearFocus()
-                                if (automaticSelection != null) dismissSelection()
-                                defineWord = nextQuery
-                            },
-                            onSearch = { closeCard(); searchFor = text },
-                            onShare = { closeCard(); context.shareText(text, title) },
-                            onCopy = { closeCard(); context.copySelection(text) },
-                            onOpenWith = if (processAvailable) ({
-                                closeCard()
-                                context.launchSelectionIntent(processTextIntent(text), chooser = true)
-                            }) else null,
-                            onWebSearch = if (webSearchAvailable) ({
-                                closeCard()
-                                context.launchSelectionIntent(webSearchIntent(text))
-                            }) else null,
-                            onWebsite = { entry ->
-                                val book = SelectionBookContext(title = title, authors = authors, isbn = isbnOf(publication.metadata.identifier))
-                                val request = if (entry.action.asksAi) context.askAiPrompt(text, language, book) else text
-                                selectionWebsiteIntent(entry, request, language, book)?.let { context.launchSelectionIntent(it) }
-                                closeCard()
-                            },
-                            onTranslate = if (translate.isAvailable && translateReady) ({
-                                closeCard()
-                                dictionaryTranslation = DefinitionQuery(text, language)
-                            }) else null,
-                            translateLabel = translateLabel,
-                        ),
-                        activeTint = null,
-                        palette = highlightPalette,
-                        lookUp = nextQuery != null,
-                    )
-                },
-                selectionActions = automaticSelection?.let { active ->
-                    {
-                        val actions = remember(active, dictionary, translateReady, translateLabel, pageTranslated, companion, selectionActionLayout, processAvailable, webSearchAvailable) {
-                            selectionActionsFor(active, inSheet = true)
+                    },
+                    onOpenInBrowser = { term, site ->
+                        context.openDictionaryEntry(term, site)
+                        defineWord = null
+                        if (automaticSelection != null) dismissSelection()
+                    },
+                    onLookupSuggestion = { word, language ->
+                        if (automaticSelection != null) dismissSelection()
+                        defineWord = DefinitionQuery(word, language ?: query.language)
+                    },
+                    selectedDefinitionActions = { text, language ->
+                        val focus = LocalFocusManager.current
+                        val nextQuery = definitionQuery(text, null, language, useDisplayedText = false)
+                        fun closeCard() {
+                            defineWord = null
+                            if (automaticSelection != null) dismissSelection()
                         }
+                        val title = publication.metadata.title
+                        val authors = publication.metadata.authors.map { it.name }
                         SheetSelectionActionBar(
-                            actions = actions,
+                            actions = SelectionActions(
+                                layout = selectionActionLayout,
+                                annotate = false,
+                                onHighlight = {},
+                                onNote = {
+                                    closeCard()
+                                    bookNoteEditor = BookNoteEditor(existing = null, initialNote = text)
+                                },
+                                noteLabel = R.string.annotation_book_note_title,
+                                onLookUp = {
+                                    if (nextQuery == query) focus.clearFocus()
+                                    if (automaticSelection != null) dismissSelection()
+                                    defineWord = nextQuery
+                                },
+                                onSearch = { closeCard(); searchFor = text },
+                                onShare = { closeCard(); context.shareText(text, title) },
+                                onCopy = { closeCard(); context.copySelection(text) },
+                                onOpenWith = if (processAvailable) ({
+                                    closeCard()
+                                    context.launchSelectionIntent(processTextIntent(text), chooser = true)
+                                }) else null,
+                                onWebSearch = if (webSearchAvailable) ({
+                                    closeCard()
+                                    context.launchSelectionIntent(webSearchIntent(text))
+                                }) else null,
+                                onWebsite = { entry ->
+                                    val book = SelectionBookContext(title = title, authors = authors, isbn = isbnOf(publication.metadata.identifier))
+                                    val request = if (entry.action.asksAi) context.askAiPrompt(text, language, book) else text
+                                    selectionWebsiteIntent(entry, request, language, book)?.let { context.launchSelectionIntent(it) }
+                                    closeCard()
+                                },
+                                onTranslate = if (translate.isAvailable && translateReady) ({
+                                    closeCard()
+                                    dictionaryTranslation = DefinitionQuery(text, language)
+                                }) else null,
+                                translateLabel = translateLabel,
+                            ),
                             activeTint = null,
                             palette = highlightPalette,
+                            lookUp = nextQuery != null,
                         )
-                    }
-                },
-                onSelectText = automaticSelection?.let { active ->
-                    {
-                        val nav = navigatorNow
-                        val retained = retainedDictionarySelection
-                        val translatedAt = pageTranslatedTurns
-                        val touchSerial = touch.serial
-                        lookupGesture.selectText()
-                        defineWord = null
-                        effectScope.launch {
-                            fun stillWanted(): Boolean = automaticSelection === active && navigatorNow === nav &&
-                                translatedAt == pageTranslatedTurns && touch.serial == touchSerial
-                            fun abandonRestore() {
-                                if (touch.serial != touchSerial) lookupGesture.clear()
-                                if (automaticSelection === active) {
-                                    retained?.discard()
-                                    retainedDictionarySelection = null
-                                    automaticSelection = null
+                    },
+                    selectionActions = automaticSelection?.let { active ->
+                        {
+                            val actions = remember(active, dictionary, translateReady, translateLabel, pageTranslated, companion, selectionActionLayout, processAvailable, webSearchAvailable) {
+                                selectionActionsFor(active, inSheet = true)
+                            }
+                            SheetSelectionActionBar(
+                                actions = actions,
+                                activeTint = null,
+                                palette = highlightPalette,
+                            )
+                        }
+                    },
+                    onSelectText = automaticSelection?.let { active ->
+                        {
+                            val nav = navigatorNow
+                            val retained = retainedDictionarySelection
+                            val translatedAt = pageTranslatedTurns
+                            val touchSerial = touch.serial
+                            lookupGesture.selectText()
+                            defineWord = null
+                            effectScope.launch {
+                                fun stillWanted(): Boolean = automaticSelection === active && navigatorNow === nav &&
+                                    translatedAt == pageTranslatedTurns && touch.serial == touchSerial
+                                fun abandonRestore() {
+                                    if (touch.serial != touchSerial) lookupGesture.clear()
+                                    if (automaticSelection === active) {
+                                        retained?.discard()
+                                        retainedDictionarySelection = null
+                                        automaticSelection = null
+                                    }
+                                }
+                                withFrameNanos { }
+                                withFrameNanos { }
+                                if (!stillWanted()) {
+                                    abandonRestore()
+                                    return@launch
+                                }
+                                val restored = nav != null && retained?.restore(nav, ::stillWanted) == true
+                                if (!stillWanted()) {
+                                    abandonRestore()
+                                    return@launch
+                                }
+                                val current = if (restored) nav?.currentSelection() else null
+                                if (!stillWanted()) {
+                                    abandonRestore()
+                                    return@launch
+                                }
+                                retained?.discard()
+                                retainedDictionarySelection = null
+                                automaticSelection = null
+                                if (current != null) {
+                                    selection = ActiveSelection(
+                                        current.locator,
+                                        current.rect,
+                                    )
+                                } else {
+                                    dismissSelection()
                                 }
                             }
-                            withFrameNanos { }
-                            withFrameNanos { }
-                            if (!stillWanted()) {
-                                abandonRestore()
-                                return@launch
-                            }
-                            val restored = nav != null && retained?.restore(nav, ::stillWanted) == true
-                            if (!stillWanted()) {
-                                abandonRestore()
-                                return@launch
-                            }
-                            val current = if (restored) nav?.currentSelection() else null
-                            if (!stillWanted()) {
-                                abandonRestore()
-                                return@launch
-                            }
-                            retained?.discard()
-                            retainedDictionarySelection = null
-                            automaticSelection = null
-                            if (current != null) {
-                                selection = ActiveSelection(
-                                    current.locator,
-                                    current.rect,
-                                )
-                            } else {
-                                dismissSelection()
-                            }
                         }
+                    },
+                    onDismiss = {
+                        defineWord = null
+                        if (automaticSelection != null) dismissSelection()
+                    },
+                )
+            }
+
+        }
+        definitionOverlay()
+
+        companion?.let { CompanionPanelHost(it, navigatorNow, ::go, effectScope, onProgressAction) }
+
+        dictionaryTranslation?.let { passage ->
+            translate.Sheet(
+                passage = passage.word,
+                declared = listOfNotNull(passage.language),
+                bookUrl = wholeBook?.bookUrl ?: readAloud?.bookId,
+                onDismiss = { dictionaryTranslation = null },
+            )
+        }
+
+        translatePassage?.let { passage ->
+            translate.Sheet(
+                passage = passage.text,
+                bookUrl = wholeBook?.bookUrl ?: readAloud?.bookId,
+                declared = publication.metadata.languages,
+                onDismiss = { translatePassage = null },
+                // A fixed-layout page's text sits where its picture put it.
+                onTranslatePage = if (reflowableText) {
+                    { source, target -> translatePage(passage.locator, source, target) }
+                } else {
+                    null
+                },
+                book = {
+                    val href = passage.locator.href.toString()
+                    bookFacts(ResourceAddress.canonicalPath(href) ?: href)
+                },
+            )
+        }
+
+        noteFor?.let { active ->
+            NoteEditor(
+                passage = active.text,
+                initialNote = active.existing?.note.orEmpty(),
+                initialTint = active.existing?.tint?.let(HighlightTint::fromName)
+                    ?: highlightPalette.passageNoteTint,
+                theme = readingTheme,
+                palette = highlightPalette,
+                titleRes = R.string.annotation_note_title,
+                hintRes = R.string.annotation_note_hint,
+                clearRes = R.string.annotation_note_remove,
+                onSave = { note, tint ->
+                    onAnnotationAction.addNote(active.locator, note, active.existing?.id, tint)
+                    noteFor = null
+                },
+                onDismiss = { noteFor = null },
+            )
+        }
+
+        bookNoteEditor?.let { editor ->
+            NoteEditor(
+                passage = null,
+                initialNote = editor.initialNote,
+                canClear = editor.existing != null,
+                initialTint = null,
+                theme = readingTheme,
+                palette = highlightPalette,
+                titleRes = R.string.annotation_book_note_title,
+                hintRes = R.string.annotation_book_note_hint,
+                clearRes = R.string.annotation_note_delete,
+                onSave = { note, _ ->
+                    onAnnotationAction.saveBookNote(note, editor.existing?.id)
+                    bookNoteEditor = null
+                },
+                onDismiss = { bookNoteEditor = null },
+            )
+        }
+
+        if (translationSettingsOpen) {
+            ReaderTranslationSettings(translate, onClose = { translationSettingsOpen = false })
+        }
+
+        if (readAloudSetup) {
+            readAloud?.let { reading ->
+                readAloudFeature.VoiceSheet(
+                    bookId = reading.bookId,
+                    start = reading.start,
+                    onDismiss = { readAloudSetup = false },
+                )
+            }
+        }
+
+        wholeBook?.takeIf { wholeBookOpen }?.let { book ->
+            WholeBookTranslationScreen(
+                bookUrl = book.bookUrl,
+                previewPosition = {
+                    navigatorNow?.let { nav ->
+                        if (effectiveScrollingNow) scrolledPlace(nav) else capture(nav, nav.currentLocator.value)
                     }
                 },
-                onDismiss = {
-                    defineWord = null
-                    if (automaticSelection != null) dismissSelection()
-                },
+                onDismiss = { wholeBookOpen = false },
+                onOpenSettings = { wholeBookOpen = false; translationSettingsOpen = true },
             )
         }
 
-    }
-    definitionOverlay()
-
-    companion?.let { CompanionPanelHost(it, navigatorNow, ::go, effectScope, onProgressAction) }
-
-    dictionaryTranslation?.let { passage ->
-        translate.Sheet(
-            passage = passage.word,
-            declared = listOfNotNull(passage.language),
-            bookUrl = wholeBook?.bookUrl ?: readAloud?.bookId,
-            onDismiss = { dictionaryTranslation = null },
+        ReaderSheetHost(
+            sheet = sheet,
+            onSheetChanged = { sheet = it },
+            advancedScrollState = advancedScrollState,
+            prefs = prefs,
+            readingTheme = readingTheme,
+            readingCss = readingCss,
+            effectiveScrolling = effectiveScrolling,
+            typographyIsOwn = typographyIsOwn,
+            keepScreenOn = keepScreenOn,
+            onKeepScreenOnChanged = onKeepScreenOnChanged,
+            screenHandling = screenHandling,
+            onEdgeBrightnessChanged = onEdgeBrightnessChanged,
+            selectionActionLayout = selectionActionLayout,
+            onSelectionActionLayoutChanged = onSelectionActionLayoutChanged,
+            highlightPalette = highlightPalette,
+            onHighlightTintToggled = onHighlightTintToggled,
+            onHighlightDefaultTintChanged = onHighlightDefaultTintChanged,
+            onPrefsAction = onPrefsAction,
+            onProgressAction = onProgressAction,
+            onClearTranslations = onClearTranslations?.let { { clearingTranslations = true } },
+            companion = companion,
+            footerPick = footerPick,
+            onFooterPickChanged = { footerPick = it },
+            lockFooterOn = lockFooterOn,
+            goToPage = goToPage,
+            onGoToPageChanged = { goToPage = it },
+            goToPercent = goToPercent,
+            onGoToPercentChanged = { goToPercent = it },
+            clearingTranslations = clearingTranslations,
+            onClearingTranslationsChanged = { clearingTranslations = it },
+            onConfirmClearTranslations = onClearTranslations,
+            onNavigateTo = { navigateLater(it, NavigatorPositionEvent.LOCAL_JUMP) },
         )
-    }
 
-    translatePassage?.let { passage ->
-        translate.Sheet(
-            passage = passage.text,
-            bookUrl = wholeBook?.bookUrl ?: readAloud?.bookId,
-            declared = publication.metadata.languages,
-            onDismiss = { translatePassage = null },
-            // A fixed-layout page's text sits where its picture put it.
-            onTranslatePage = if (reflowableText) {
-                { source, target -> translatePage(passage.locator, source, target) }
+        BackHandler(enabled = showingEnd) {
+            showingEnd = false
+            onLeftEndpaper()
+        }
+
+        val sidePane = resolveReaderSidePane(windowWidth().value, foldPosture, LocalDensity.current.density)
+
+        searchFor?.let { initial ->
+            val closeSearch = {
+                searchFor = null
+                searchHit = null
+                onSearchAction.clear()
+            }
+            val searchContent: @Composable () -> Unit = {
+                SearchScreen(
+                    state = searchState,
+                    theme = readingTheme,
+                    initialQuery = initial,
+                    onSearch = onSearchAction.search,
+                    onHitSelected = { hit ->
+                        if (!sidePane.bookLeaveOpenOnNavigate) {
+                            searchFor = null
+                        }
+                        searchHit = hit
+                        chromeVisible = false
+                        onProgressAction.onJump()
+                        navigateLater(hit, NavigatorPositionEvent.LOCAL_JUMP)
+                    },
+                    onClose = closeSearch,
+                    sidePane = sidePane.enabled,
+                    onCodex = if ((codexEnabled || storyAvailable) && companion != null) {
+                        { query ->
+                            searchFor = null
+                            searchHit = null
+                            onSearchAction.clear()
+                            val lookups = companion
+                            val nav = navigatorNow
+                            if (nav != null) effectScope.launch {
+                                val peekOrigin = lookups.peek.value?.origin
+                                val origin = peekOrigin
+                                    ?: if (effectiveScrollingNow) scrolledPlace(nav) else capture(nav, nav.currentLocator.value)
+                                if (origin != null && navigatorNow === nav) {
+                                    lookups.close()
+                                    val translated = peekOrigin != null || pageTranslated
+                                    // Without the scan there is nothing to search; the name gets its profile page instead.
+                                    if (!codexEnabled && query.isNotBlank()) {
+                                        lookups.codex.openCharacter(origin, translated, query, CharacterPane.PROFILE)
+                                    } else {
+                                        lookups.codex.open(origin, translated, query.takeIf { it.isNotBlank() })
+                                    }
+                                }
+                            }
+                        }
+                    } else null,
+                )
+            }
+            if (sidePane.enabled) {
+                ReaderSupportingSidePane(
+                    theme = readingTheme,
+                    paneWidthDp = sidePane.paneWidthDp,
+                    onDismiss = closeSearch,
+                    content = searchContent,
+                )
             } else {
-                null
-            },
-            book = {
-                val href = passage.locator.href.toString()
-                bookFacts(ResourceAddress.canonicalPath(href) ?: href)
-            },
-        )
-    }
+                searchContent()
+            }
+        }
 
-    noteFor?.let { active ->
-        NoteEditor(
-            passage = active.text,
-            initialNote = active.existing?.note.orEmpty(),
-            initialTint = active.existing?.tint?.let(HighlightTint::fromName)
-                ?: highlightPalette.passageNoteTint,
-            theme = readingTheme,
-            palette = highlightPalette,
-            titleRes = R.string.annotation_note_title,
-            hintRes = R.string.annotation_note_hint,
-            clearRes = R.string.annotation_note_remove,
-            onSave = { note, tint ->
-                onAnnotationAction.addNote(active.locator, note, active.existing?.id, tint)
-                noteFor = null
-            },
-            onDismiss = { noteFor = null },
-        )
-    }
+        // Taking the other device's position moves the reader there, which is
+        // a jump like any other: the way back stays one tap away. The way back
+        // is recorded before the move, so it is not done again here.
+        LaunchedEffect(goTo) {
+            goTo.collect { locator ->
+                showingEnd = false
+                onLeftEndpaper()
+                showToc = false
+                chromeVisible = false
+                navigatorNow?.let { nav ->
+                    navigate(
+                        nav = nav,
+                        locator = locator,
+                        event = NavigatorPositionEvent.REMOTE_ADOPTION,
+                        verify = true,
+                    )
+                }
+            }
+        }
 
-    bookNoteEditor?.let { editor ->
-        NoteEditor(
-            passage = null,
-            initialNote = editor.initialNote,
-            canClear = editor.existing != null,
-            initialTint = null,
-            theme = readingTheme,
-            palette = highlightPalette,
-            titleRes = R.string.annotation_book_note_title,
-            hintRes = R.string.annotation_book_note_hint,
-            clearRes = R.string.annotation_note_delete,
-            onSave = { note, _ ->
-                onAnnotationAction.saveBookNote(note, editor.existing?.id)
-                bookNoteEditor = null
-            },
-            onDismiss = { bookNoteEditor = null },
-        )
-    }
+        // Following BookOrbit while the book is open: the view model adopts
+        // the server's place only if its passage is seen here.
+        LaunchedEffect(bookOrbitGoTo) {
+            bookOrbitGoTo.collect { locator ->
+                showingEnd = false
+                onLeftEndpaper()
+                showToc = false
+                chromeVisible = false
+                val nav = navigatorNow
+                if (nav == null) {
+                    onBookOrbitCatchUpArrived(locator, false)
+                    return@collect
+                }
+                navigate(nav = nav, locator = locator, event = NavigatorPositionEvent.REMOTE_ADOPTION)
+                var shown = false
+                repeat(VERIFY_ATTEMPTS) {
+                    if (shown) return@repeat
+                    settleLayout()
+                    shown = showsBookOrbitPlace(nav, locator)
+                }
+                onBookOrbitCatchUpArrived(locator, shown)
+            }
+        }
 
-    if (translationSettingsOpen) {
-        ReaderTranslationSettings(translate, onClose = { translationSettingsOpen = false })
-    }
-
-    if (readAloudSetup) {
-        readAloud?.let { reading ->
-            readAloudFeature.VoiceSheet(
-                bookId = reading.bookId,
-                start = reading.start,
-                onDismiss = { readAloudSetup = false },
-            )
+        if (showToc) {
+            val tocContent: @Composable () -> Unit = {
+                ReaderContents(
+                    publication = publication,
+                    theme = readingTheme,
+                    currentLocator = navigator?.currentLocator,
+                    annotations = annotations,
+                    vocabulary = vocabulary,
+                    book = VocabularyBook(vocabularyBookId, publication.metadata.title.orEmpty()),
+                    onOpenNote = { bookNoteEditor = BookNoteEditor(it) },
+                    onDeleteNote = onAnnotationAction.remove,
+                    onExport = { context.shareText(onAnnotationAction.notebookMarkdown(), publication.metadata.title) },
+                    onClose = { showToc = false },
+                    onSyncBook = if (syncable) onBookSyncAction.start else null,
+                    sidePane = sidePane.enabled,
+                    onOpenPlace = { place, refreshOrigin ->
+                        showToc = false
+                        chromeVisible = false
+                        if (refreshOrigin) {
+                            effectScope.launch {
+                                val nav = navigatorNow ?: return@launch
+                                val from = if (effectiveScrollingNow) scrolledPlace(nav) else capture(nav, nav.currentLocator.value)
+                                if (navigatorNow !== nav) return@launch
+                                onProgressAction.jumpFrom(from, !effectiveScrollingNow)
+                                navigate(nav, place, NavigatorPositionEvent.LOCAL_JUMP)
+                            }
+                        } else {
+                            onProgressAction.onJump()
+                            navigateLater(place, NavigatorPositionEvent.LOCAL_JUMP)
+                        }
+                    },
+                )
+            }
+            if (sidePane.enabled) {
+                ReaderSupportingSidePane(
+                    theme = readingTheme,
+                    paneWidthDp = sidePane.paneWidthDp,
+                    onDismiss = { showToc = false },
+                    content = tocContent,
+                )
+            } else {
+                tocContent()
+            }
         }
     }
+    overlaysContent()
+}
 
-    wholeBook?.takeIf { wholeBookOpen }?.let { book ->
-        WholeBookTranslationScreen(
-            bookUrl = book.bookUrl,
-            previewPosition = {
-                navigatorNow?.let { nav ->
-                    if (effectiveScrollingNow) scrolledPlace(nav) else capture(nav, nav.currentLocator.value)
-                }
-            },
-            onDismiss = { wholeBookOpen = false },
-            onOpenSettings = { wholeBookOpen = false; translationSettingsOpen = true },
-        )
-    }
-
+@Composable
+private fun ReaderSheetHost(
+    sheet: ReaderSheet,
+    onSheetChanged: (ReaderSheet) -> Unit,
+    advancedScrollState: androidx.compose.foundation.ScrollState,
+    prefs: ReaderPrefs,
+    readingTheme: ReaderTheme,
+    readingCss: com.chmouel.liseur.data.settings.ReadingCss,
+    effectiveScrolling: Boolean,
+    typographyIsOwn: Boolean,
+    keepScreenOn: Boolean,
+    onKeepScreenOnChanged: (Boolean) -> Unit,
+    screenHandling: ScreenHandling,
+    onEdgeBrightnessChanged: (EdgeBrightness) -> Unit,
+    selectionActionLayout: SelectionActionLayout,
+    onSelectionActionLayoutChanged: ((SelectionActionLayout) -> SelectionActionLayout) -> Unit,
+    highlightPalette: HighlightPalette,
+    onHighlightTintToggled: (HighlightTint) -> Unit,
+    onHighlightDefaultTintChanged: (HighlightTint) -> Unit,
+    onPrefsAction: ReaderPrefsActions,
+    onProgressAction: ReaderProgressActions,
+    onClearTranslations: (() -> Unit)?,
+    companion: ReaderCompanion?,
+    footerPick: FooterPickTarget?,
+    onFooterPickChanged: (FooterPickTarget?) -> Unit,
+    lockFooterOn: Boolean,
+    goToPage: Boolean,
+    onGoToPageChanged: (Boolean) -> Unit,
+    goToPercent: Boolean,
+    onGoToPercentChanged: (Boolean) -> Unit,
+    clearingTranslations: Boolean,
+    onClearingTranslationsChanged: (Boolean) -> Unit,
+    onConfirmClearTranslations: (() -> Unit)?,
+    onNavigateTo: (Locator) -> Unit,
+) {
     if (sheet == ReaderSheet.TYPOGRAPHY) {
         TypographySheet(
             prefs = prefs,
@@ -5887,8 +6190,8 @@ internal fun ReaderScreen(
             onFontSizeChanged = onPrefsAction.setFontSize,
             onThemeSelected = onPrefsAction.setTheme,
             onBrightnessChanged = onPrefsAction.setBrightness,
-            onOpenAdvanced = { sheet = ReaderSheet.ADVANCED },
-            onDismiss = { sheet = ReaderSheet.NONE },
+            onOpenAdvanced = { onSheetChanged(ReaderSheet.ADVANCED) },
+            onDismiss = { onSheetChanged(ReaderSheet.NONE) },
         )
     }
 
@@ -5899,7 +6202,7 @@ internal fun ReaderScreen(
             highlightPalette = highlightPalette,
             onHighlightTintToggled = onHighlightTintToggled,
             onHighlightDefaultTintChanged = onHighlightDefaultTintChanged,
-            onDismiss = { sheet = ReaderSheet.ADVANCED },
+            onDismiss = { onSheetChanged(ReaderSheet.ADVANCED) },
         )
     }
 
@@ -5907,9 +6210,6 @@ internal fun ReaderScreen(
         AdvancedSheet(
             scrollState = advancedScrollState,
             prefs = prefs,
-            // Not the reader's own answer but the page's: vertical text
-            // runs rather than turns whatever the setting says, and a
-            // fixed-layout book turns rather than runs whatever it says.
             scrolling = effectiveScrolling,
             autoScrollSpeed = prefs.autoScrollSpeed,
             typographyIsOwn = typographyIsOwn,
@@ -5925,7 +6225,7 @@ internal fun ReaderScreen(
             onFooterModeChanged = onProgressAction.setFooterMode,
             onFooterFieldChanged = onProgressAction.setFooterField,
             onPageTurnStyleChanged = onPrefsAction.setPageTurnStyle,
-            onOpenSelectionToolbar = { sheet = ReaderSheet.SELECTION_TOOLBAR },
+            onOpenSelectionToolbar = { onSheetChanged(ReaderSheet.SELECTION_TOOLBAR) },
             onAutoScrollSpeedChanged = onPrefsAction.setAutoScrollSpeed,
             keepScreenOn = keepScreenOn,
             onKeepScreenOnChanged = onKeepScreenOnChanged,
@@ -5934,12 +6234,10 @@ internal fun ReaderScreen(
             onEdgeBrightnessChanged = onEdgeBrightnessChanged,
             orientation = screenHandling.orientation,
             onOrientationChanged = onPrefsAction.setReaderOrientation,
-            onClearTranslations = onClearTranslations?.let { { clearingTranslations = true } },
+            onClearTranslations = onClearTranslations,
             recapsHere = companion?.recapsHere?.collectAsStateWithLifecycle()?.value,
             onRecapsHereChanged = { companion?.setRecapsHere?.invoke(it) },
-            // Back to typography, not back to the book: this sheet was
-            // reached from there, and that is where the reader left off.
-            onDismiss = { sheet = ReaderSheet.TYPOGRAPHY },
+            onDismiss = { onSheetChanged(ReaderSheet.TYPOGRAPHY) },
         )
     }
 
@@ -5960,62 +6258,7 @@ internal fun ReaderScreen(
                 onProgressAction.setFooterField(slot, field)
             },
             onModeSelected = onProgressAction.setFooterMode,
-            onDismiss = { footerPick = null },
-        )
-    }
-
-    BackHandler(enabled = showingEnd) {
-        showingEnd = false
-        onLeftEndpaper()
-    }
-
-    searchFor?.let { initial ->
-        BackHandler {
-            searchFor = null
-            searchHit = null
-            onSearchAction.clear()
-        }
-        SearchScreen(
-            state = searchState,
-            theme = readingTheme,
-            initialQuery = initial,
-            onSearch = onSearchAction.search,
-            onHitSelected = { hit ->
-                searchFor = null
-                searchHit = hit
-                chromeVisible = false
-                onProgressAction.onJump()
-                navigateLater(hit, NavigatorPositionEvent.LOCAL_JUMP)
-            },
-            onClose = {
-                searchFor = null
-                searchHit = null
-                onSearchAction.clear()
-            },
-            onCodex = if ((codexEnabled || storyAvailable) && companion != null) {
-                { query ->
-                    searchFor = null
-                    searchHit = null
-                    onSearchAction.clear()
-                    val lookups = companion
-                    val nav = navigatorNow
-                    if (nav != null) effectScope.launch {
-                        val peekOrigin = lookups.peek.value?.origin
-                        val origin = peekOrigin
-                            ?: if (effectiveScrollingNow) scrolledPlace(nav) else capture(nav, nav.currentLocator.value)
-                        if (origin != null && navigatorNow === nav) {
-                            lookups.close()
-                            val translated = peekOrigin != null || pageTranslated
-                            // Without the scan there is nothing to search; the name gets its profile page instead.
-                            if (!codexEnabled && query.isNotBlank()) {
-                                lookups.codex.openCharacter(origin, translated, query, CharacterPane.PROFILE)
-                            } else {
-                                lookups.codex.open(origin, translated, query.takeIf { it.isNotBlank() })
-                            }
-                        }
-                    }
-                }
-            } else null,
+            onDismiss = { onFooterPickChanged(null) },
         )
     }
 
@@ -6025,23 +6268,23 @@ internal fun ReaderScreen(
                 prompt = prompt,
                 resolve = onProgressAction.resolvePage,
                 onConfirm = { destination ->
-                    goToPage = false
+                    onGoToPageChanged(false)
                     onProgressAction.onJump()
-                    navigateLater(destination.locator, NavigatorPositionEvent.LOCAL_JUMP)
+                    onNavigateTo(destination.locator)
                 },
-                onDismiss = { goToPage = false },
+                onDismiss = { onGoToPageChanged(false) },
             )
         }
     }
 
     if (clearingTranslations) {
-        onClearTranslations?.let { clear ->
+        onConfirmClearTranslations?.let { clear ->
             ClearTranslationsDialog(
                 onConfirm = {
-                    clearingTranslations = false
+                    onClearingTranslationsChanged(false)
                     clear()
                 },
-                onDismiss = { clearingTranslations = false },
+                onDismiss = { onClearingTranslationsChanged(false) },
             )
         }
     }
@@ -6051,87 +6294,11 @@ internal fun ReaderScreen(
             currentPercent = onProgressAction.currentPercent(),
             resolve = onProgressAction.resolvePercent,
             onConfirm = { destination ->
-                goToPercent = false
+                onGoToPercentChanged(false)
                 onProgressAction.onJump()
-                navigateLater(destination.locator, NavigatorPositionEvent.LOCAL_JUMP)
+                onNavigateTo(destination.locator)
             },
-            onDismiss = { goToPercent = false },
-        )
-    }
-
-    // Taking the other device's position moves the reader there, which is
-    // a jump like any other: the way back stays one tap away. The way back
-    // is recorded before the move, so it is not done again here.
-    LaunchedEffect(goTo) {
-        goTo.collect { locator ->
-            showingEnd = false
-            onLeftEndpaper()
-            showToc = false
-            chromeVisible = false
-            navigatorNow?.let { nav ->
-                navigate(
-                    nav = nav,
-                    locator = locator,
-                    event = NavigatorPositionEvent.REMOTE_ADOPTION,
-                    verify = true,
-                )
-            }
-        }
-    }
-
-    // Following BookOrbit while the book is open: the view model adopts
-    // the server's place only if its passage is seen here.
-    LaunchedEffect(bookOrbitGoTo) {
-        bookOrbitGoTo.collect { locator ->
-            showingEnd = false
-            onLeftEndpaper()
-            showToc = false
-            chromeVisible = false
-            val nav = navigatorNow
-            if (nav == null) {
-                onBookOrbitCatchUpArrived(locator, false)
-                return@collect
-            }
-            navigate(nav = nav, locator = locator, event = NavigatorPositionEvent.REMOTE_ADOPTION)
-            var shown = false
-            repeat(VERIFY_ATTEMPTS) {
-                if (shown) return@repeat
-                settleLayout()
-                shown = showsBookOrbitPlace(nav, locator)
-            }
-            onBookOrbitCatchUpArrived(locator, shown)
-        }
-    }
-
-    if (showToc) {
-        ReaderContents(
-            publication = publication,
-            theme = readingTheme,
-            currentLocator = navigator?.currentLocator,
-            annotations = annotations,
-            vocabulary = vocabulary,
-            book = VocabularyBook(vocabularyBookId, publication.metadata.title.orEmpty()),
-            onOpenNote = { bookNoteEditor = BookNoteEditor(it) },
-            onDeleteNote = onAnnotationAction.remove,
-            onExport = { context.shareText(onAnnotationAction.notebookMarkdown(), publication.metadata.title) },
-            onClose = { showToc = false },
-            onSyncBook = if (syncable) onBookSyncAction.start else null,
-            onOpenPlace = { place, refreshOrigin ->
-                showToc = false
-                chromeVisible = false
-                if (refreshOrigin) {
-                    effectScope.launch {
-                        val nav = navigatorNow ?: return@launch
-                        val from = if (effectiveScrollingNow) scrolledPlace(nav) else capture(nav, nav.currentLocator.value)
-                        if (navigatorNow !== nav) return@launch
-                        onProgressAction.jumpFrom(from, !effectiveScrollingNow)
-                        navigate(nav, place, NavigatorPositionEvent.LOCAL_JUMP)
-                    }
-                } else {
-                    onProgressAction.onJump()
-                    navigateLater(place, NavigatorPositionEvent.LOCAL_JUMP)
-                }
-            },
+            onDismiss = { onGoToPercentChanged(false) },
         )
     }
 }
@@ -6406,19 +6573,40 @@ private fun ImmersiveMode(hideSystemBars: Boolean) {
  * going through the system's own value in between would flicker.
  */
 @Composable
-private fun ScreenBrightness(brightness: Float?) {
+private fun ScreenBrightness(
+    windowBrightness: Float,
+    dimAlpha: Float,
+    imageViewerOpen: Boolean,
+) {
     val view = LocalView.current
-    val window = (view.context as? Activity)?.window
+    val window = view.context.findActivity()?.window
+    val targetHdrHeadroom = desiredHdrHeadroom(dimAlpha = dimAlpha, imageViewerOpen = imageViewerOpen)
     SideEffect {
-        val target = brightness ?: -1f
-        if (window != null && window.attributes.screenBrightness != target) {
-            window.attributes = window.attributes.apply { screenBrightness = target }
+        if (window != null) {
+            if (window.attributes.screenBrightness != windowBrightness) {
+                window.attributes = window.attributes.apply { screenBrightness = windowBrightness }
+            }
+            if (Build.VERSION.SDK_INT >= 35 && window.desiredHdrHeadroom != targetHdrHeadroom) {
+                window.desiredHdrHeadroom = targetHdrHeadroom
+            }
         }
     }
     DisposableEffect(window) {
+        val originalBrightness = window?.attributes?.screenBrightness
+            ?: WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+        val originalHdrHeadroom = if (Build.VERSION.SDK_INT >= 35 && window != null) {
+            window.desiredHdrHeadroom
+        } else {
+            0f
+        }
         onDispose {
             if (window != null) {
-                window.attributes = window.attributes.apply { screenBrightness = -1f }
+                if (window.attributes.screenBrightness != originalBrightness) {
+                    window.attributes = window.attributes.apply { screenBrightness = originalBrightness }
+                }
+                if (Build.VERSION.SDK_INT >= 35 && window.desiredHdrHeadroom != originalHdrHeadroom) {
+                    window.desiredHdrHeadroom = originalHdrHeadroom
+                }
             }
         }
     }

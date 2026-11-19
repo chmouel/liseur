@@ -64,6 +64,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -796,6 +797,7 @@ fun ReadingScrubber(
 ) {
     if (progress == null) return
     val drag = remember { ScrubberDrag() }
+    val view = LocalView.current
     // Once the reader reports any new place the hold is spent, so a later
     // return to the old place (the way-back chip) is shown as it is.
     LaunchedEffect(progress.totalProgression) { drag.progressed(progress.totalProgression) }
@@ -832,7 +834,11 @@ fun ReadingScrubber(
         )
         Slider(
             value = value,
-            onValueChange = drag::drag,
+            onValueChange = { next ->
+                val previous = drag.value(progress.totalProgression)
+                drag.drag(next)
+                scrubberMoveHaptic(previous, next, chapterTicks)?.let(view::performReaderHaptic)
+            },
             onValueChangeFinished = {
                 drag.release()?.let { to ->
                     val target = positionAtProgression(to)

@@ -1,0 +1,13 @@
+# Baseline Profile rules for Liseur startup and reader page-turn paths.
+HSPLcom/chmouel/liseur/LiseurApplication;->**(**)**
+HSPLcom/chmouel/liseur/MainActivity;->**(**)**
+HSPLcom/chmouel/liseur/reader/ReaderActivity;->**(**)**
+HSPLcom/chmouel/liseur/reader/ReaderViewModel;->**(**)**
+HSPLcom/chmouel/liseur/reader/ReaderScreenKt;->**(**)**
+HSPLcom/chmouel/liseur/reader/chrome/PageCurl;->**(**)**
+HSPLcom/chmouel/liseur/reader/chrome/PageCurlOverlayKt;->**(**)**
+HSPLcom/chmouel/liseur/reader/chrome/PageCurlShaderKt;->**(**)**
+HSPLcom/chmouel/liseur/reader/chrome/PageTurnEffectKt;->**(**)**
+HSPLcom/chmouel/liseur/reader/chrome/PageTurner;->**(**)**
+HSPLcom/chmouel/liseur/reader/chrome/PageTurnDrag;->**(**)**
+HSPLcom/chmouel/liseur/reader/chrome/ReaderOverlaysKt;->**(**)**

@@ -1,5 +1,7 @@
 package com.chmouel.liseur.reader.search
 
+import androidx.activity.BackEventCompat
+import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -8,9 +10,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -40,6 +44,8 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -63,10 +69,12 @@ import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.settings.ReaderTheme
 import com.chmouel.liseur.reader.ReaderViewModel.SearchState
+import com.chmouel.liseur.reader.chrome.predictiveBackLayer
 import com.chmouel.liseur.ui.LocalEInk
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.windowWidth
 import com.chmouel.liseur.ui.withoutBottom
+import kotlinx.coroutines.CancellationException
 import org.readium.r2.shared.publication.Locator
 
 /**
@@ -87,24 +95,50 @@ fun SearchScreen(
     onHitSelected: (Locator) -> Unit,
     onClose: () -> Unit,
     onCodex: ((String) -> Unit)? = null,
+    sidePane: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     var query by remember { mutableStateOf(initialQuery) }
     val currentState = state.forQuery(query)
     val focus = remember { FocusRequester() }
+    val eInk = LocalEInk.current
+    var backProgress by remember { mutableFloatStateOf(0f) }
+    var backEdge by remember { mutableIntStateOf(BackEventCompat.EDGE_LEFT) }
+
+    PredictiveBackHandler { progress ->
+        try {
+            progress.collect { event ->
+                backProgress = event.progress
+                backEdge = event.swipeEdge
+            }
+            onClose()
+        } catch (_: CancellationException) {
+            backProgress = 0f
+        }
+    }
 
     LaunchedEffect(Unit) {
         if (initialQuery.isBlank()) focus.requestFocus() else onSearch(initialQuery)
     }
 
     Scaffold(
-        modifier = modifier.fillMaxSize(),
+        modifier = modifier
+            .fillMaxSize()
+            .predictiveBackLayer(
+                progress = { backProgress },
+                swipeEdge = { backEdge },
+                eInk = eInk,
+            ),
         containerColor = theme.background,
         // safeDrawing, not systemBars: the field takes focus the moment the
         // screen opens, so the keyboard is up before the first hit lands and
         // the last results would sit under it. It also keeps the query and
         // the hit text clear of a display cutout in landscape.
-        contentWindowInsets = WindowInsets.safeDrawing,
+        contentWindowInsets = if (sidePane) {
+            WindowInsets.safeDrawing.only(WindowInsetsSides.Vertical + WindowInsetsSides.End)
+        } else {
+            WindowInsets.safeDrawing
+        },
         topBar = {
             Column {
                 TopAppBar(

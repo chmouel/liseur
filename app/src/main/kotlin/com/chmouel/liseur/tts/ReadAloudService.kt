@@ -4,6 +4,7 @@ import android.app.PendingIntent
 import android.content.Intent
 import android.os.Bundle
 import android.os.Process
+import android.os.SystemClock
 import androidx.annotation.OptIn
 import androidx.media3.common.ForwardingPlayer
 import androidx.media3.common.Player
@@ -19,8 +20,10 @@ import com.chmouel.liseur.container
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -42,6 +45,7 @@ class ReadAloudService : MediaSessionService() {
     private val scope = MainScope()
     private var mediaSession: MediaSession? = null
     private var feature: SpeechReadAloud? = null
+    private var preferencesJob: Job? = null
 
     /** The session this service shows; a replacement starting meanwhile is not this one's to pause. */
     private var shown: ReadAloudSession? = null
@@ -81,25 +85,58 @@ class ReadAloudService : MediaSessionService() {
             existing.setSessionActivity(activityFor(session))
             return
         }
+        val feature = feature
         mediaSession = MediaSession.Builder(this, player)
             .setCallback(Callback())
             .setSessionActivity(activityFor(session))
             .setMediaButtonPreferences(
-                listOf(
-                    CommandButton.Builder(CommandButton.ICON_PREVIOUS)
-                        .setDisplayName(getString(R.string.read_aloud_previous_sentence))
-                        .setSessionCommand(PREVIOUS)
-                        .setSlots(CommandButton.SLOT_BACK)
-                        .build(),
-                    CommandButton.Builder(CommandButton.ICON_NEXT)
-                        .setDisplayName(getString(R.string.read_aloud_next_sentence))
-                        .setSessionCommand(NEXT)
-                        .setSlots(CommandButton.SLOT_FORWARD)
-                        .build(),
+                mediaButtons(
+                    speed = feature?.speed?.value ?: 1f,
+                    sleepTimer = feature?.sleepTimer?.value,
                 ),
             )
             .build()
             .also(::addSession)
+        preferencesJob?.cancel()
+        if (feature != null) {
+            preferencesJob = scope.launch {
+                combine(feature.speed, feature.sleepTimer) { speed, sleepTimer ->
+                    mediaButtons(speed, sleepTimer)
+                }.collect { buttons ->
+                    mediaSession?.setMediaButtonPreferences(buttons)
+                }
+            }
+        }
+    }
+
+    private fun mediaButtons(speed: Float, sleepTimer: SleepTimer?): List<CommandButton> = listOf(
+        CommandButton.Builder(CommandButton.ICON_PREVIOUS)
+            .setDisplayName(getString(R.string.read_aloud_previous_sentence))
+            .setSessionCommand(PREVIOUS)
+            .setSlots(CommandButton.SLOT_BACK)
+            .build(),
+        CommandButton.Builder(CommandButton.ICON_NEXT)
+            .setDisplayName(getString(R.string.read_aloud_next_sentence))
+            .setSessionCommand(NEXT)
+            .setSlots(CommandButton.SLOT_FORWARD)
+            .build(),
+        CommandButton.Builder(CommandButton.ICON_PLAYBACK_SPEED)
+            .setDisplayName(formatSpeedCommandLabel(speed, resources.configuration.locales[0]))
+            .setSessionCommand(CYCLE_SPEED)
+            .build(),
+        CommandButton.Builder(CommandButton.ICON_UNDEFINED)
+            .setDisplayName(sleepCommandLabel(sleepTimer))
+            .setSessionCommand(CYCLE_SLEEP)
+            .build(),
+    )
+
+    private fun sleepCommandLabel(sleepTimer: SleepTimer?): String = when (sleepTimer) {
+        null -> getString(R.string.read_aloud_sleep_timer)
+        SleepTimer.EndOfChapter -> getString(R.string.read_aloud_sleep_chapter_end)
+        is SleepTimer.Timed -> getString(
+            R.string.read_aloud_sleep_left,
+            sleepTimer.minutesLeft(SystemClock.elapsedRealtime()),
+        )
     }
 
     private fun activityFor(session: ReadAloudSession): PendingIntent = PendingIntent.getActivity(
@@ -132,6 +169,8 @@ class ReadAloudService : MediaSessionService() {
     }
 
     private fun release() {
+        preferencesJob?.cancel()
+        preferencesJob = null
         mediaSession?.let {
             removeSession(it)
             it.release()
@@ -147,6 +186,8 @@ class ReadAloudService : MediaSessionService() {
                     MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS.buildUpon()
                         .add(PREVIOUS)
                         .add(NEXT)
+                        .add(CYCLE_SPEED)
+                        .add(CYCLE_SLEEP)
                         .build(),
                 )
                 .build()
@@ -162,6 +203,12 @@ class ReadAloudService : MediaSessionService() {
             when (customCommand.customAction) {
                 PREVIOUS.customAction -> current?.skipBackward()
                 NEXT.customAction -> current?.skipForward()
+                CYCLE_SPEED.customAction -> scope.launch {
+                    feature?.let { it.setSpeed(nextReadAloudSpeed(it.speed.value)) }
+                }
+                CYCLE_SLEEP.customAction -> feature?.let {
+                    it.setSleepTimer(nextSleepTimerMinutes(it.sleepTimer.value))
+                }
                 else -> return Futures.immediateFuture(SessionResult(SessionError.ERROR_NOT_SUPPORTED))
             }
             return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
@@ -196,7 +243,9 @@ class ReadAloudService : MediaSessionService() {
     private companion object {
         // Sentences, not chapters: the notification names them, and headphones
         // and car systems get the finer step.
-        val PREVIOUS = SessionCommand("com.chmouel.liseur.tts.PREVIOUS_SENTENCE", Bundle.EMPTY)
-        val NEXT = SessionCommand("com.chmouel.liseur.tts.NEXT_SENTENCE", Bundle.EMPTY)
+        val PREVIOUS = SessionCommand(ACTION_PREVIOUS_SENTENCE, Bundle.EMPTY)
+        val NEXT = SessionCommand(ACTION_NEXT_SENTENCE, Bundle.EMPTY)
+        val CYCLE_SPEED = SessionCommand(ACTION_CYCLE_SPEED, Bundle.EMPTY)
+        val CYCLE_SLEEP = SessionCommand(ACTION_CYCLE_SLEEP_TIMER, Bundle.EMPTY)
     }
 }

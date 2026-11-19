@@ -26,6 +26,7 @@ import androidx.compose.material.icons.automirrored.outlined.VolumeUp
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.FormatQuote
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
+import androidx.compose.material.icons.outlined.Place
 import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.EditNote
@@ -92,6 +93,7 @@ class SelectionActions(
     /** False while the page shows a translation, whose words a highlight or note could not keep. */
     val annotate: Boolean = true,
     @param:StringRes val noteLabel: Int = R.string.annotation_note,
+    val smartActions: List<SmartSelectionAction> = emptyList(),
 )
 
 /**
@@ -315,6 +317,41 @@ private fun ActionButtons(
 ) {
     if (actions.annotate && palette.isEmpty) {
         PopupAction(label = stringResource(R.string.annotation_highlight), buttonSize = buttonSize, onClick = { actions.onHighlight(palette.default) })
+    }
+    actions.smartActions.forEach { smartAction ->
+        val icon = when (smartAction.entityKind) {
+            SmartEntityKind.URL -> Icons.Outlined.Public
+            SmartEntityKind.ADDRESS -> Icons.Outlined.Place
+            SmartEntityKind.EMAIL,
+            SmartEntityKind.PHONE,
+            SmartEntityKind.DATETIME,
+            SmartEntityKind.FLIGHT,
+            SmartEntityKind.OTHER -> Icons.AutoMirrored.Outlined.OpenInNew
+        }
+        val description = smartAction.contentDescription.ifBlank { smartAction.title }
+        Row(
+            Modifier
+                .heightIn(min = 48.dp)
+                .widthIn(min = 48.dp)
+                .clip(RoundedCornerShape(50))
+                .clickable(role = Role.Button, onClick = smartAction.onInvoke)
+                .semantics {
+                    if (description.isNotEmpty()) contentDescription = description
+                }
+                .padding(horizontal = if (smartAction.title.isBlank()) 6.dp else 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(icon, contentDescription = null)
+            if (smartAction.title.isNotBlank()) {
+                Text(
+                    text = smartAction.title,
+                    modifier = Modifier.padding(start = 6.dp),
+                    style = selectionLabelStyle(buttonSize),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
     }
     actions.layout.entries.forEach { entry ->
         val action = entry.action

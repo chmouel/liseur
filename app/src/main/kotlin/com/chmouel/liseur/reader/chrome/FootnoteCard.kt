@@ -1,6 +1,7 @@
 package com.chmouel.liseur.reader.chrome
 
-import androidx.activity.compose.BackHandler
+import androidx.activity.BackEventCompat
+import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -24,6 +25,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -43,6 +45,7 @@ import com.chmouel.liseur.reader.footnotes.FootnoteText
 import com.chmouel.liseur.ui.LocalEInk
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.windowWidth
+import kotlinx.coroutines.CancellationException
 
 /**
  * The note, shown where it was referenced.
@@ -73,6 +76,8 @@ fun FootnoteCard(
     anchorY: Float?,
     onGoToNote: () -> Unit,
     onDismiss: () -> Unit,
+    anchorX: Float? = null,
+    foldPosture: ReaderFoldPosture = ReaderFoldPosture.Flat,
 ) {
     val text = remember(html) {
         FootnoteText.forCard(html)
@@ -81,19 +86,35 @@ fun FootnoteCard(
     }
     val eInk = LocalEInk.current
     var cardHeight by remember { mutableIntStateOf(0) }
+    var boxWidth by remember { mutableIntStateOf(0) }
     var boxHeight by remember { mutableIntStateOf(0) }
+    var backProgress by remember { mutableFloatStateOf(0f) }
+    var backEdge by remember { mutableIntStateOf(BackEventCompat.EDGE_LEFT) }
 
-    BackHandler(onBack = onDismiss)
+    PredictiveBackHandler { progress ->
+        try {
+            progress.collect { event ->
+                backProgress = event.progress
+                backEdge = event.swipeEdge
+            }
+            onDismiss()
+        } catch (_: CancellationException) {
+            backProgress = 0f
+        }
+    }
 
     Box(
         Modifier
             .fillMaxSize()
-            .onSizeChanged { boxHeight = it.height }
+            .onSizeChanged {
+                boxWidth = it.width
+                boxHeight = it.height
+            }
             // Always darkens, never tints: a scrim built from the reading
             // theme's own ink would lighten a night page instead of pushing it
             // back. Electronic paper redraws a translucent wash as a grey
             // smear, so there the border is what separates note from page.
-            .background(Color.Black.copy(alpha = if (eInk) 0f else 0.35f))
+            .background(Color.Black.copy(alpha = if (eInk) 0f else 0.35f * (1f - 0.5f * backProgress)))
             // Named, so a screen reader announces what dismisses the note
             // rather than a full-screen tap target with nothing to say.
             .noRipple(
@@ -107,6 +128,14 @@ fun FootnoteCard(
         } else {
             null
         }
+        val bookLeaf = resolveBookLeafBounds(boxWidth, foldPosture, anchorX)
+        val maxCardWidth = if (bookLeaf != null) {
+            val leafDp = with(density) { bookLeaf.widthPx.toDp() }
+            val cap = contentWidthCap(windowWidth())
+            if (cap != androidx.compose.ui.unit.Dp.Unspecified) minOf(cap, leafDp) else leafDp
+        } else {
+            contentWidthCap(windowWidth())
+        }
 
         Surface(
             shape = RoundedCornerShape(16.dp),
@@ -115,18 +144,33 @@ fun FootnoteCard(
             border = BorderStroke(1.dp, theme.foreground.copy(alpha = 0.25f)),
             shadowElevation = if (eInk) 0.dp else 12.dp,
             modifier = Modifier
-                .align(if (top == null) Alignment.Center else Alignment.TopCenter)
-                .then(
-                    if (top == null) {
-                        Modifier
-                    } else {
-                        Modifier.offset(y = with(density) { top.toDp() })
+                .align(
+                    when {
+                        bookLeaf != null && top == null -> Alignment.CenterStart
+                        bookLeaf != null -> Alignment.TopStart
+                        top == null -> Alignment.Center
+                        else -> Alignment.TopCenter
                     },
                 )
+                .then(
+                    if (bookLeaf == null && top == null) {
+                        Modifier
+                    } else {
+                        Modifier.offset(
+                            x = with(density) { (bookLeaf?.leftPx ?: 0).toDp() },
+                            y = with(density) { (top ?: 0f).toDp() },
+                        )
+                    },
+                )
+                .widthIn(max = maxCardWidth)
                 .padding(horizontal = 16.dp)
-                .widthIn(max = contentWidthCap(windowWidth()))
                 .fillMaxWidth()
                 .onSizeChanged { cardHeight = it.height }
+                .predictiveBackLayer(
+                    progress = { backProgress },
+                    swipeEdge = { backEdge },
+                    eInk = eInk,
+                )
                 // Swallow taps on the card, so reading a note is not also
                 // dismissing it.
                 .noRipple {},
