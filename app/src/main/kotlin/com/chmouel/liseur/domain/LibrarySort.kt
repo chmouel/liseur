@@ -66,7 +66,8 @@ fun sortKey(text: String?): String {
     return rest.ifEmpty { trimmed }.foldForSort()
 }
 
-private val LATIN_COMBINING_MARKS = Regex("(\\p{IsLatin})\\p{Mn}+")
+// Older Android ICU builds reject the Java-only `\p{IsLatin}` alias with PatternSyntaxException.
+internal val LATIN_COMBINING_MARKS = Regex("(\\p{Script=Latin})\\p{Mn}+")
 
 internal fun String.foldForSort(): String {
     val nfd = java.text.Normalizer.normalize(this, java.text.Normalizer.Form.NFD)
