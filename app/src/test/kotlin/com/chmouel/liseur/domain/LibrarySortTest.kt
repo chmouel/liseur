@@ -3,6 +3,7 @@ package com.chmouel.liseur.domain
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.DownloadState
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Test
 
 class LibrarySortTest {
@@ -80,6 +81,7 @@ class LibrarySortTest {
         assertEquals("a la recherche du temps perdu", sortKey("À la recherche du temps perdu"))
         assertEquals("ирис", sortKey("Ирис"))
         assertEquals("йогурт", sortKey("Йогурт"))
+        assertFalse(LATIN_COMBINING_MARKS.pattern.contains("IsLatin"))
     }
 
     @Test
