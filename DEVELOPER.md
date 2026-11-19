@@ -801,7 +801,9 @@ make feature-graphic        # fastlane featureGraphic.png per locale, from promo
 - `hack/screenshots` drives a device over adb and writes raw captures to
   `docs/screenshots` and Play-acceptable copies (via `hack/store-images`,
   see *Play screenshots*) to fastlane. It finds controls by text and
-  fails when one is missing.
+  fails when one is missing. `01-library` is captured in the default Classic
+  grid style, then the script switches to Shelves for `13-series` and the
+  remaining library shots.
 - Two sets: `phoneScreenshots` (full tour, shown on `docs/SCREENSHOTS.md`;
   the README embeds three by name) and `tenInchScreenshots` (three
   tablet-only views, in `docs/screenshots/tablet`). The set is picked by
@@ -832,11 +834,7 @@ make feature-graphic        # fastlane featureGraphic.png per locale, from promo
 - `hack/screenshots-stale` (`make screenshots-stale`) lists the pictures
   committed before the last commit that touched `app/src/main`, marking the
   hand-captured ones. Informational; `--strict` fails instead.
-- The tour runs in the dark theme. The store set is six dark pictures (library, reading, read aloud, series, stats, highlights) plus
-  `31-library-light` and `32-reading-light`, retaken in a final light step.
-  `17-empty-library-dark` is captured but not filed with fastlane or the
-  README; `11-reading-dark` is no longer retaken (`02-reading` is dark).
-  `30-home-dark` and `10-library-dark` can be retaken alone with `--hero`.
+- The tour runs in the dark theme. The store set is seven dark pictures (`30-home-dark` first, then library, reading, read aloud, series, stats, highlights) plus `32-reading-light`, retaken in a final light step. `31-library-light` is also retaken for the docs, and `17-empty-library-dark` is captured but not filed with fastlane or the README; `11-reading-dark` is no longer retaken (`02-reading` is dark). `30-home-dark` and `10-library-dark` can be retaken alone with `--hero`.
 - Sign out of calibre-web first unless the server holds only publishable
   books. The script never writes to it.
 

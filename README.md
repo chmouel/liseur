@@ -42,12 +42,12 @@ An open-source ebook reader for Android, and a client for [calibre-web](https://
 <table>
   <tr>
     <td width="33%"><img src="docs/screenshots/30-home-dark.png" alt="Home: the book you are reading, your shelves and a quote from your reading"></td>
-    <td width="33%"><img src="docs/screenshots/10-library-dark.png" alt="Library: covers standing on shelves, one shelf per series"></td>
+    <td width="33%"><img src="docs/screenshots/01-library.png" alt="Library: books in the default cover grid"></td>
     <td width="33%"><img src="docs/screenshots/32-reading-light.png" alt="Reading, light theme"></td>
   </tr>
   <tr>
     <td align="center"><sub>Home: pick up where you left off.</sub></td>
-    <td align="center"><sub>Library: your shelf, by what you are reading.</sub></td>
+    <td align="center"><sub>Library: your books, in the default grid.</sub></td>
     <td align="center"><sub>Distraction-free page, in light or dark.</sub></td>
   </tr>
   <tr>

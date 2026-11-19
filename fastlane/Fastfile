@@ -71,7 +71,8 @@ def liseur_listing_languages
   require "supply"
   Supply.config = FastlaneCore::Configuration.create(
     Supply::Options.available_options,
-    package_name: CredentialsManager::AppfileConfig.try_fetch_value(:package_name)
+    package_name: CredentialsManager::AppfileConfig.try_fetch_value(:package_name),
+    json_key: ENV["SUPPLY_JSON_KEY"]
   )
   client = Supply::Client.make_from_config
   client.begin_edit(package_name: Supply.config[:package_name])

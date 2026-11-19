@@ -1037,11 +1037,11 @@ step "Setup"
 # what the app looks like.
 open_library
 open_settings
-# The shelves view is the one the tour is written for. A wiped app starts on
-# Classic, so pick Shelves in the Library style sheet before anything is shot.
+# Capture 01-library in Classic (the app default), then switch to Shelves
+# for the rest of the tour so Series and Shelves shots still show Shelves.
 scroll_to "Library style" exact || die "no Library style row in Settings"
 tap_on "Library style" exact
-tap_on "Shelves"
+tap_on "Classic"
 sleep 1
 back
 sleep 1
@@ -1146,6 +1146,18 @@ fi
 open_library
 shelf_to_top
 shot 01-library
+
+# Switch to Shelves for the rest of the tour (13-series, 10-library-dark,
+# 31-library-light).
+open_settings
+scroll_to "Library style" exact || die "no Library style row in Settings"
+tap_on "Library style" exact
+tap_on "Shelves"
+sleep 1
+back
+sleep 1
+back
+sleep 1
 
 open_first_book "Moby Dick"
 choose_reading_theme "Dark"
@@ -1549,15 +1561,15 @@ fi
 
 step "The F-Droid set"
 i=1
-# Mostly dark, with the library and the reading view again in light: the
-# dark theme is the one the app looks best in, and two light pictures show
-# it has both.
+# Mostly dark, with the reading view again in light: the dark theme is the
+# one the app looks best in, and a light picture shows it has both.
+# Start on the Home tab (the default landing screen), then the library.
 #
 # All eight come from this one run, and eight is as many as Play
 # takes. An empty shelf used to be among them, which meant the set could only be completed by a second command
 # with a different flag -- and it was the weakest of the lot anyway:
 # nothing sells a reader like the hours somebody has already put into it.
-for name in 01-library 02-reading 24-read-aloud 14-series-detail 18-stats 06-highlights 31-library-light 32-reading-light; do
+for name in 30-home-dark 01-library 02-reading 24-read-aloud 14-series-detail 18-stats 06-highlights 32-reading-light; do
     [[ -f "$OUT_DIR/$name.png" ]] ||
         die "no $OUT_DIR/$name.png: the step that takes it did not run"
     cp "$OUT_DIR/$name.png" "$FASTLANE_DIR/$i.png"
