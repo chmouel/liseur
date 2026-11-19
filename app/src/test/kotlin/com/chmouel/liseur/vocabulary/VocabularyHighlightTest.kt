@@ -58,6 +58,13 @@ class VocabularyHighlightTest {
     }
 
     @Test
+    fun `highlight preserves marks that distinguish words outside Latin and Greek`() {
+        assertEquals(5..6, highlightWord("काला कल", "कल"))
+        assertNull(highlightWord("काला", "कल"))
+        assertEquals(4..6, highlightWord("мой мои", "мои"))
+    }
+
+    @Test
     fun `missing and empty targets have no highlight`() {
         assertNull(highlightWord("sanguine", ""))
         assertNull(highlightWord("sanguine", "  "))

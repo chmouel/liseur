@@ -54,10 +54,10 @@ internal fun normalizeVocabularySearch(text: String): String =
     Normalizer.normalize(text.lowercase(Locale.ROOT), Normalizer.Form.NFC)
 
 internal fun highlightWord(sentence: String, word: String): IntRange? {
-    val marks = Regex("\\p{M}+")
+    val accents = Regex("([\\p{Script=Latin}\\p{Script=Greek}])\\p{M}+")
     fun fold(text: String) = Normalizer.normalize(normalizeVocabularySearch(text), Normalizer.Form.NFD)
-        .replace(marks, "").uppercase(Locale.ROOT)
-    val target = fold(word.trim()).takeIf { it.isNotEmpty() } ?: return null
+        .replace(accents, "$1").uppercase(Locale.ROOT)
+    val target = fold(word.trim()).takeIf { it.codePoints().anyMatch(Character::isLetterOrDigit) } ?: return null
     val characters = BreakIterator.getCharacterInstance(Locale.ROOT).apply { setText(sentence) }
     val folded = StringBuilder()
     val starts = mutableListOf<Int>()

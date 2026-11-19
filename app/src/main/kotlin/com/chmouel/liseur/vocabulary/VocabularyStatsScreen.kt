@@ -1,5 +1,9 @@
 package com.chmouel.liseur.vocabulary
 
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -15,16 +19,21 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.chmouel.liseur.R
 import com.chmouel.liseur.ui.LocalEInk
@@ -39,8 +48,7 @@ internal fun VocabularyStatsScreen(repository: VocabularyRepository, book: Strin
     // The streak spans all history, even when it exceeds the chart and recall windows
     val reviews by remember(repository, book) { repository.dao.reviewsSince(0, book) }
         .collectAsStateWithLifecycle(initialValue = null)
-    val zone = ZoneId.systemDefault()
-    val today = LocalDate.now(zone)
+    val (today, zone) = rememberVocabularyDay()
     val activity = remember(reviews, today, zone) { vocabularyActivity(reviews.orEmpty(), today, zone) }
     val locale = LocalConfiguration.current.locales[0]
     Column(modifier.verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -72,6 +80,33 @@ internal fun VocabularyStatsScreen(repository: VocabularyRepository, book: Strin
             }
         }
     }
+}
+
+@Composable
+private fun rememberVocabularyDay(): Pair<LocalDate, ZoneId> {
+    fun currentDay(): Pair<LocalDate, ZoneId> {
+        val zone = ZoneId.systemDefault()
+        return LocalDate.now(zone) to zone
+    }
+
+    val context = LocalContext.current
+    var day by remember { mutableStateOf(currentDay()) }
+    LifecycleResumeEffect(context) {
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                day = currentDay()
+            }
+        }
+        val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_DATE_CHANGED)
+            addAction(Intent.ACTION_TIME_CHANGED)
+            addAction(Intent.ACTION_TIMEZONE_CHANGED)
+        }
+        ContextCompat.registerReceiver(context, receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
+        day = currentDay()
+        onPauseOrDispose { context.unregisterReceiver(receiver) }
+    }
+    return day
 }
 
 @Composable
