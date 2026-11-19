@@ -100,10 +100,10 @@ share, edit or remove the word, or return to its book. **Edit card** opens a
 full-screen editor for the meaning and an optional personal note, with a
 confirmation before discarding changes. Hold revealed text to select and copy it.
 The vocabulary menu on **Words** can export a JSON
-backup or an Anki-compatible CSV. Dictionary settings control automatic
-saving, and Vocabulary settings offer daily limits and reminders. Home
-shows the next word due, so you can check its meaning and start a review
-from there.
+backup or an Anki-compatible CSV. Lookups are saved automatically by default;
+turn this off in Vocabulary settings, which also offer daily limits and
+reminders. Home shows the next word due, so you can check its meaning and
+start a review from there.
 
 The reading companion answers questions about characters and events using
 the passages before the selected text. Character profiles show their source
