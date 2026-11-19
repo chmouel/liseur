@@ -2340,7 +2340,7 @@
     <string name="vocabulary_hard">Těžké</string>
     <string name="vocabulary_good">Dobré</string>
     <string name="vocabulary_easy">Snadné</string>
-    <string name="vocabulary_settings">Nastavení slovíček</string>
+    <string name="vocabulary_help">Ukládejte neznámá slova i s větou, ve které jste je našli. Při opakování si nejdřív zkuste vybavit význam a pak zobrazte odpověď. Těžká slova se objeví dřív a ta, která si pamatujete, méně často.\n\nDenní připomenutí vás upozorní, když jsou slovíčka k opakování. Klepnutím na oznámení otevřete slovíčka.\n\nChcete-li se učit v Anki, vyberte ve slovíčkách „%1$s“. Soubor importujte do AnkiDroidu na Androidu nebo do Anki v počítači.</string>
     <string name="vocabulary_auto_save">Automaticky ukládat vyhledaná slova</string>
     <string name="vocabulary_save_context">Ukládat větu</string>
     <string name="vocabulary_unlimited">Zadejte 0 pro neomezený počet.</string>

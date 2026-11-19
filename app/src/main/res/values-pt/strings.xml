@@ -2213,7 +2213,7 @@
     <string name="vocabulary_hard">Difícil</string>
     <string name="vocabulary_good">Bom</string>
     <string name="vocabulary_easy">Fácil</string>
-    <string name="vocabulary_settings">Configurações do vocabulário</string>
+    <string name="vocabulary_help">Salve palavras desconhecidas com a frase em que você as encontrou. Ao revisar, tente lembrar o significado antes de mostrar a resposta. Palavras difíceis voltam mais cedo e as que você lembra aparecem com menos frequência.\n\nO lembrete diário envia uma notificação quando há palavras para revisar. Toque nela para abrir o vocabulário.\n\nPara estudar no Anki, escolha “%1$s” no vocabulário. Importe o arquivo no AnkiDroid para Android ou no Anki no computador.</string>
     <string name="vocabulary_auto_save">Salvar consultas automaticamente</string>
     <string name="vocabulary_save_context">Salvar a frase</string>
     <string name="vocabulary_unlimited">Digite 0 para remover o limite.</string>

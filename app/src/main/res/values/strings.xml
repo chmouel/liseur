@@ -2222,7 +2222,7 @@
     <string name="vocabulary_hard">Hard</string>
     <string name="vocabulary_good">Good</string>
     <string name="vocabulary_easy">Easy</string>
-    <string name="vocabulary_settings">Vocabulary settings</string>
+    <string name="vocabulary_help">Save unfamiliar words with the sentence where you found them. In review, try to remember the meaning before revealing the answer. Difficult words come back sooner, and words you remember come back less often.\n\nThe daily reminder sends a notification when words are ready to review. Tap it to open Vocabulary Builder.\n\nTo study in Anki, choose “%1$s” in Vocabulary Builder. Import the file into AnkiDroid on Android or Anki on your computer.</string>
     <string name="vocabulary_auto_save">Automatically save lookups</string>
     <string name="vocabulary_save_context">Save the sentence</string>
     <string name="vocabulary_unlimited">Enter 0 for no limit.</string>

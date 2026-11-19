@@ -87,6 +87,7 @@ import com.chmouel.liseur.ui.settings.SettingsPagePlaceholder
 import com.chmouel.liseur.ui.settings.SettingsScreen
 import com.chmouel.liseur.ui.settings.SettingsBackupScreen
 import com.chmouel.liseur.ui.settings.SelectionToolbarScreen
+import com.chmouel.liseur.ui.settings.VocabularySettingsScreen
 import com.chmouel.liseur.ui.settings.NestedPage
 import com.chmouel.liseur.ui.settings.PageTapsScreen
 import com.chmouel.liseur.ui.settings.ReadingAppearanceScreen
@@ -469,6 +470,7 @@ private fun LiseurApp(
                 ) + paneMotion
                 // The server and translation screens are also opened from
                 // the library, and there they are screens of their own.
+                route == Route.VocabularySettings && below == Route.Vocabulary -> emptyMap()
                 route.isSettingsPage &&
                     ((route != Route.ServerAccount && route != Route.Translation) || below == Route.Settings) ->
                     ListDetailSceneStrategy.detailPane() + paneMotion
@@ -510,6 +512,7 @@ private fun LiseurApp(
                     Route.Vocabulary -> VocabularyScreen(
                         repository = context.container.vocabulary,
                         onBack = back,
+                        onOpenSettings = { backStack.push(Route.VocabularySettings) },
                         onOpenPassage = { source ->
                             scope.launch {
                                 val file = context.container.database.bookDao().getByUrl(source.bookUrl)?.openableUri()
@@ -783,9 +786,7 @@ private fun LiseurApp(
                             onDefinitionTarget = {
                                 scope.launch { repository.setDefinitionTarget(it) }
                             },
-                            appSettings = repository,
-                            onVocabularyAutoSave = { scope.launch { repository.setVocabularyAutoSave(it) } },
-                            onVocabularyContext = { scope.launch { repository.setVocabularySaveContext(it) } },
+                            onOpenVocabulary = { backStack.push(Route.VocabularySettings) },
                             onDictionaryOnLongPress = {
                                 scope.launch { repository.setDictionaryOnLongPress(it) }
                             },
@@ -850,6 +851,12 @@ private fun LiseurApp(
                                 onTapSideWidth = { scope.launch { repository.setTapSideWidth(it) } },
                                 onBack = back,
                             )
+                        }
+                    }
+
+                    Route.VocabularySettings -> {
+                        NestedPage {
+                            VocabularySettingsScreen(settings, repository, onBack = back)
                         }
                     }
 

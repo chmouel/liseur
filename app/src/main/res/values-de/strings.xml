@@ -2158,7 +2158,7 @@
     <string name="vocabulary_hard">Schwer</string>
     <string name="vocabulary_good">Gut</string>
     <string name="vocabulary_easy">Einfach</string>
-    <string name="vocabulary_settings">Vokabeleinstellungen</string>
+    <string name="vocabulary_help">Speichere unbekannte Wörter mit dem Satz, in dem du sie gefunden hast. Versuche beim Wiederholen, dich an die Bedeutung zu erinnern, bevor du die Antwort anzeigst. Schwierige Wörter kommen früher dran, vertraute Wörter seltener.\n\nDie tägliche Erinnerung schickt dir eine Benachrichtigung, wenn Wörter zur Wiederholung anstehen. Tippe darauf, um den Vokabeltrainer zu öffnen.\n\nWenn du mit Anki lernen möchtest, wähle „%1$s“ im Vokabeltrainer. Importiere die Datei in AnkiDroid auf Android oder in Anki auf deinem Computer.</string>
     <string name="vocabulary_auto_save">Nachgeschlagene Wörter automatisch speichern</string>
     <string name="vocabulary_save_context">Satz speichern</string>
     <string name="vocabulary_unlimited">0 bedeutet unbegrenzt.</string>

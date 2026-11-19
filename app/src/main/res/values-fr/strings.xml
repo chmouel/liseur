@@ -2146,7 +2146,7 @@
     <string name="vocabulary_hard">Difficile</string>
     <string name="vocabulary_good">Bien</string>
     <string name="vocabulary_easy">Facile</string>
-    <string name="vocabulary_settings">Réglages du vocabulaire</string>
+    <string name="vocabulary_help">Enregistrez les mots inconnus avec la phrase où vous les avez trouvés. En révision, essayez de retrouver leur sens avant d’afficher la réponse. Les mots difficiles reviennent plus vite et ceux que vous retenez reviennent moins souvent.\n\nLe rappel quotidien vous envoie une notification si des mots sont à réviser. Touchez-la pour ouvrir le vocabulaire.\n\nPour réviser dans Anki, choisissez « %1$s » dans le vocabulaire. Importez le fichier dans AnkiDroid sur Android ou dans Anki sur votre ordinateur.</string>
     <string name="vocabulary_auto_save">Ajouter automatiquement les mots consultés</string>
     <string name="vocabulary_save_context">Enregistrer la phrase</string>
     <string name="vocabulary_unlimited">Saisissez 0 pour ne pas limiter.</string>

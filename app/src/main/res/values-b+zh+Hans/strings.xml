@@ -2066,7 +2066,7 @@
     <string name="vocabulary_hard">困难</string>
     <string name="vocabulary_good">良好</string>
     <string name="vocabulary_easy">简单</string>
-    <string name="vocabulary_settings">生词本设置</string>
+    <string name="vocabulary_help">保存生词时，可以一并保留原句。复习时，先试着想起词义，再显示答案。较难的词会更早出现，记住的词则会隔更久再复习。\n\n开启每日复习提醒后，有生词待复习时会收到通知。点按通知即可打开生词本。\n\n如果想用 Anki 学习，请在生词本中选择“%1$s”。将文件导入 Android 上的 AnkiDroid，或电脑上的 Anki。</string>
     <string name="vocabulary_auto_save">自动保存查过的词</string>
     <string name="vocabulary_save_context">保存例句</string>
     <string name="vocabulary_unlimited">输入 0 表示不限数量。</string>

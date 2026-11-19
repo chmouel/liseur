@@ -2146,7 +2146,7 @@
     <string name="vocabulary_hard">Difícil</string>
     <string name="vocabulary_good">Bien</string>
     <string name="vocabulary_easy">Fácil</string>
-    <string name="vocabulary_settings">Ajustes del vocabulario</string>
+    <string name="vocabulary_help">Guarda las palabras desconocidas con la oración en la que las encontraste. Al repasar, intenta recordar el significado antes de mostrar la respuesta. Las palabras difíciles reaparecen antes y las que recuerdas, con menos frecuencia.\n\nEl recordatorio diario te avisa si hay palabras pendientes de repaso. Toca la notificación para abrir el vocabulario.\n\nPara estudiar en Anki, elige «%1$s» en el vocabulario. Importa el archivo en AnkiDroid para Android o en Anki en tu ordenador.</string>
     <string name="vocabulary_auto_save">Guardar las consultas automáticamente</string>
     <string name="vocabulary_save_context">Guardar la oración</string>
     <string name="vocabulary_unlimited">Escribe 0 para quitar el límite.</string>
