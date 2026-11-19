@@ -2054,7 +2054,7 @@
     <string name="home_vocabulary_title">Parole da ripassare</string>
     <string name="home_vocabulary_setting_detail">Mostra una parola del vocabolario quando è il momento di ripassarla</string>
     <string name="home_vocabulary_from">da %1$s</string>
-    <string name="home_vocabulary_open">apri il vocabolario</string>
+    <string name="home_vocabulary_review">inizia il ripasso</string>
     <string name="home_time_left_minutes">~%d min rimasti</string>
     <string name="home_time_left_hours">~%1$d h %2$d min rimasti</string>
     <string name="home_page_of">Pagina %1$d di %2$d</string>
@@ -2146,6 +2146,9 @@
     <string name="vocabulary_review_progress">%1$d ripassate oggi · %2$d rimanenti</string>
     <string name="vocabulary_review_done">Per ora hai finito.</string>
     <string name="vocabulary_reveal">Mostra la risposta</string>
+    <string name="vocabulary_tap_to_reveal">Tocca la scheda per vedere la risposta</string>
+    <string name="vocabulary_swipe_hint">Scorri a sinistra per Di nuovo, a destra per Bene</string>
+    <string name="vocabulary_next_review">%1$s torna tra %2$s</string>
     <string name="vocabulary_again">Di nuovo</string>
     <string name="vocabulary_hard">Difficile</string>
     <string name="vocabulary_good">Bene</string>

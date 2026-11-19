@@ -1391,6 +1391,7 @@ private fun LibraryRoute(
         onAnotherQuote = viewModel::anotherQuote,
         homeVocabulary = homeVocabulary,
         onReviewVocabulary = onReviewVocabulary,
+        onRateVocabulary = viewModel::rateHomeVocabulary,
         onOpenTranslationSettings = onOpenTranslation,
         onSetUpTranslation = { settingUpTranslation = true }.takeIf {
             com.chmouel.liseur.translate.shouldOfferTranslationSetup(

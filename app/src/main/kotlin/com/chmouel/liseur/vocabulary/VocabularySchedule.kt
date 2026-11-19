@@ -3,7 +3,7 @@ package com.chmouel.liseur.vocabulary
 import java.time.Instant
 import java.time.ZoneId
 
-internal enum class Recall { AGAIN, HARD, GOOD, EASY }
+enum class Recall { AGAIN, HARD, GOOD, EASY }
 
 internal data class VocabularySchedule(val streak: Int, val intervalMinutes: Int, val dueAt: Long)
 

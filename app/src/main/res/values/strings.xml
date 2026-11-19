@@ -2130,7 +2130,7 @@
     <string name="home_vocabulary_title">Words to review</string>
     <string name="home_vocabulary_setting_detail">Show a word from the Vocabulary Builder when one is due for review</string>
     <string name="home_vocabulary_from">from %1$s</string>
-    <string name="home_vocabulary_open">open the Vocabulary Builder</string>
+    <string name="home_vocabulary_review">start the review</string>
     <string name="home_time_left_minutes">~%d min left</string>
     <string name="home_time_left_hours">~%1$d h %2$d min left</string>
     <string name="home_page_of">Page %1$d of %2$d</string>
@@ -2222,6 +2222,9 @@
     <string name="vocabulary_review_progress">%1$d reviewed today · %2$d left</string>
     <string name="vocabulary_review_done">You’re done for now.</string>
     <string name="vocabulary_reveal">Show answer</string>
+    <string name="vocabulary_tap_to_reveal">Tap the card to see the answer</string>
+    <string name="vocabulary_swipe_hint">Swipe left for Again, right for Good</string>
+    <string name="vocabulary_next_review">%1$s comes back in %2$s</string>
     <string name="vocabulary_again">Again</string>
     <string name="vocabulary_hard">Hard</string>
     <string name="vocabulary_good">Good</string>
