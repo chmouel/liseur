@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -23,9 +25,14 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Style
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -64,6 +71,8 @@ import com.chmouel.liseur.data.settings.AppSettings
 import java.util.Locale
 import kotlinx.coroutines.launch
 
+private enum class VocabularyTab { REVIEW, WORDS, STATS }
+
 private val statuses = listOf(
     R.string.vocabulary_all_words, R.string.vocabulary_new, R.string.vocabulary_learning, R.string.vocabulary_learned,
 )
@@ -93,7 +102,8 @@ internal fun VocabularyScreen(
     var status by rememberSaveable { mutableIntStateOf(0) }
     var sort by rememberSaveable { mutableIntStateOf(0) }
     var grouped by rememberSaveable { mutableStateOf(false) }
-    var reviewing by rememberSaveable { mutableStateOf(reviewOnly) }
+    var tab by rememberSaveable { mutableStateOf(if (reviewOnly) VocabularyTab.REVIEW else VocabularyTab.WORDS) }
+    var sessionCount by rememberSaveable { mutableIntStateOf(0) }
     val reviewBook = currentBook?.bookUrl ?: bookUrl
     val queue by remember(repository, reviewBook, newLimit, reviewLimit) {
         repository.reviewQueue(reviewBook, newLimit, reviewLimit)
@@ -107,7 +117,8 @@ internal fun VocabularyScreen(
     val back = {
         when {
             selected != null -> selected = null
-            reviewing -> if (reviewOnly) onBack() else reviewing = false
+            tab == VocabularyTab.REVIEW -> if (reviewOnly) onBack() else tab = VocabularyTab.WORDS
+            tab == VocabularyTab.STATS -> tab = VocabularyTab.WORDS
             searching -> {
                 searching = false
                 search = ""
@@ -115,19 +126,19 @@ internal fun VocabularyScreen(
             else -> onBack()
         }
     }
-    BackHandler(selected != null || reviewing || searching, onBack = back)
+    BackHandler(selected != null || tab != VocabularyTab.WORDS || searching, onBack = back)
     Scaffold(
         contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
             TopAppBar(
                 title = {
                     Text(
-                        stringResource(if (reviewing) R.string.vocabulary_review else R.string.vocabulary_title),
+                        stringResource(R.string.vocabulary_title),
                         maxLines = 1, overflow = TextOverflow.Ellipsis,
                     )
                 },
                 actions = {
-                    if (!reviewing && selected == null) {
+                    if (tab == VocabularyTab.WORDS && selected == null) {
                         IconButton(onClick = {
                             searching = !searching
                             if (!searching) search = ""
@@ -148,101 +159,129 @@ internal fun VocabularyScreen(
             )
         },
     ) { padding ->
-        Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.TopCenter) {
-            val content = Modifier.widthIn(max = 680.dp).fillMaxSize()
-            if (reviewing) {
-                queue?.let {
-                    VocabularyReviewScreen(repository, it, reviewBook, newLimit, reviewLimit, back, content)
-                }
-            } else if (selectedId != null) {
-                VocabularyDetail(repository, selectedId, currentBook?.bookUrl, onOpenPassage, { selected = null }, content)
-            } else {
-                val showGroups = grouped && bookUrl == null
-                val words by remember(search, bookUrl, status, sort, showGroups) {
-                    repository.dao.words(normalizeVocabularySearch(search.trim()), bookUrl, status, sort, showGroups)
-                }.collectAsStateWithLifecycle(initialValue = null)
-                val books by remember(repository) { repository.dao.books() }.collectAsStateWithLifecycle(emptyList())
-                LazyColumn(content, state = list, contentPadding = PaddingValues(bottom = 24.dp)) {
-                    item {
-                        Column(
-                            Modifier.padding(horizontal = 16.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            currentBook?.let { Text(it.bookTitle, style = MaterialTheme.typography.titleMedium) }
-                            stats?.takeIf { it.total > 0 }?.let {
-                                Text(
-                                    stringResource(R.string.vocabulary_counts, it.total, it.newWords, it.total - it.newWords - it.learned, it.learned),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                )
-                                val due = queue?.dueCount ?: 0
-                                Button(onClick = { reviewing = true }, enabled = due > 0) {
-                                    Text(stringResource(R.string.vocabulary_review_due, due))
-                                }
-                            }
-                            if (searching) {
-                                OutlinedTextField(
-                                    value = search,
-                                    onValueChange = { search = it },
-                                    modifier = Modifier.fillMaxWidth().focusRequester(searchFocus),
-                                    label = { Text(stringResource(R.string.vocabulary_search)) },
-                                    singleLine = true,
-                                )
-                                LaunchedEffect(Unit) { searchFocus.requestFocus() }
-                            }
-                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                if (currentBook == null) {
-                                    VocabularyBookFilter(books, bookUrl) { bookUrl = it }
-                                    if (bookUrl == null && books.isNotEmpty()) {
-                                        FilterChip(grouped, { grouped = !grouped }, label = { Text(stringResource(R.string.vocabulary_group_books)) })
-                                    }
-                                }
-                                VocabularyFilter(
-                                    stringResource(statuses[status]), status != 0,
-                                    statuses.map { stringResource(it) },
-                                ) { status = it }
-                                VocabularyFilter(
-                                    stringResource(sorts[sort]), sort != 0,
-                                    sorts.map { stringResource(it) },
-                                ) { sort = it }
+        Column(Modifier.fillMaxSize().padding(padding), horizontalAlignment = Alignment.CenterHorizontally) {
+            SingleChoiceSegmentedButtonRow(Modifier.widthIn(max = 680.dp).fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+                VocabularyTab.entries.forEachIndexed { index, choice ->
+                    SegmentedButton(
+                        selected = tab == choice,
+                        onClick = { tab = choice; selected = null },
+                        shape = SegmentedButtonDefaults.itemShape(index, VocabularyTab.entries.size),
+                        icon = {},
+                    ) {
+                        BadgedBox(badge = {
+                            val due = queue?.dueCount ?: 0
+                            if (choice == VocabularyTab.REVIEW && due > 0) Badge { Text(due.toString()) }
+                        }) {
+                            Row(Modifier.padding(end = if (choice == VocabularyTab.REVIEW) 8.dp else 0.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                if (choice == VocabularyTab.REVIEW) Icon(Icons.Outlined.Style, null, Modifier.size(18.dp))
+                                Text(stringResource(when (choice) {
+                                    VocabularyTab.REVIEW -> R.string.vocabulary_tab_review
+                                    VocabularyTab.WORDS -> R.string.vocabulary_tab_words
+                                    VocabularyTab.STATS -> R.string.vocabulary_tab_stats
+                                }))
                             }
                         }
                     }
-                    val rows = words.orEmpty()
-                    if (words != null && rows.isEmpty()) item {
-                        Text(
-                            stringResource(
-                                if (search.isBlank() && status == 0 && stats?.total == 0) R.string.vocabulary_empty
-                                else R.string.vocabulary_no_matches,
-                            ),
-                            Modifier.padding(24.dp),
+                }
+            }
+            Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
+                val content = Modifier.widthIn(max = 680.dp).fillMaxSize()
+                if (tab == VocabularyTab.REVIEW) {
+                    queue?.let {
+                        VocabularyReviewScreen(
+                            repository, it, reviewBook, newLimit, reviewLimit, sessionCount,
+                            { sessionCount++ }, { sessionCount = (sessionCount - 1).coerceAtLeast(0) },
+                            onOpenPassage, back, content,
                         )
                     }
-                    items(rows.size, key = { index -> "${rows[index].wordId}:${rows[index].groupUrl.orEmpty()}" }) { index ->
-                        val item = rows[index]
-                        if (showGroups && (index == 0 || item.groupUrl != rows[index - 1].groupUrl)) {
+                } else if (tab == VocabularyTab.STATS) {
+                    VocabularyStatsScreen(repository, reviewBook, stats, content)
+                } else if (selectedId != null) {
+                    VocabularyDetail(repository, selectedId, currentBook?.bookUrl, onOpenPassage, { selected = null }, content)
+                } else {
+                    val showGroups = grouped && bookUrl == null
+                    val words by remember(search, bookUrl, status, sort, showGroups) {
+                        repository.dao.words(normalizeVocabularySearch(search.trim()), bookUrl, status, sort, showGroups)
+                    }.collectAsStateWithLifecycle(initialValue = null)
+                    val books by remember(repository) { repository.dao.books() }.collectAsStateWithLifecycle(emptyList())
+                    LazyColumn(content, state = list, contentPadding = PaddingValues(bottom = 24.dp)) {
+                        item {
+                            Column(
+                                Modifier.padding(horizontal = 16.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                currentBook?.let { Text(it.bookTitle, style = MaterialTheme.typography.titleMedium) }
+                                stats?.takeIf { it.total > 0 }?.let {
+                                    Text(
+                                        stringResource(R.string.vocabulary_counts, it.total, it.newWords, it.total - it.newWords - it.learned, it.learned),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                    )
+                                }
+                                if (searching) {
+                                    OutlinedTextField(
+                                        value = search,
+                                        onValueChange = { search = it },
+                                        modifier = Modifier.fillMaxWidth().focusRequester(searchFocus),
+                                        label = { Text(stringResource(R.string.vocabulary_search)) },
+                                        singleLine = true,
+                                    )
+                                    LaunchedEffect(Unit) { searchFocus.requestFocus() }
+                                }
+                                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    if (currentBook == null) {
+                                        VocabularyBookFilter(books, bookUrl) { bookUrl = it }
+                                        if (bookUrl == null && books.isNotEmpty()) {
+                                            FilterChip(grouped, { grouped = !grouped }, label = { Text(stringResource(R.string.vocabulary_group_books)) })
+                                        }
+                                    }
+                                    VocabularyFilter(
+                                        stringResource(statuses[status]), status != 0,
+                                        statuses.map { stringResource(it) },
+                                    ) { status = it }
+                                    VocabularyFilter(
+                                        stringResource(sorts[sort]), sort != 0,
+                                        sorts.map { stringResource(it) },
+                                    ) { sort = it }
+                                }
+                            }
+                        }
+                        val rows = words.orEmpty()
+                        if (words != null && rows.isEmpty()) item {
                             Text(
-                                item.groupTitle?.ifBlank { null } ?: stringResource(R.string.vocabulary_no_book),
-                                style = MaterialTheme.typography.titleMedium,
-                                modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp),
+                                stringResource(
+                                    if (search.isBlank() && status == 0 && stats?.total == 0) R.string.vocabulary_empty
+                                    else R.string.vocabulary_no_matches,
+                                ),
+                                Modifier.padding(24.dp),
                             )
                         }
-                        ListItem(
-                            headlineContent = { Text(item.word) },
-                            supportingContent = {
-                                Column {
-                                    item.definition?.let {
-                                        Text(it, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        items(rows.size, key = { index -> "${rows[index].wordId}:${rows[index].groupUrl.orEmpty()}" }) { index ->
+                            val item = rows[index]
+                            if (showGroups && (index == 0 || item.groupUrl != rows[index - 1].groupUrl)) {
+                                Text(
+                                    item.groupTitle?.ifBlank { null } ?: stringResource(R.string.vocabulary_no_book),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp),
+                                )
+                            }
+                            ListItem(
+                                headlineContent = { Text(item.word) },
+                                supportingContent = {
+                                    Column {
+                                        item.definition?.let {
+                                            Text(it, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        }
+                                        Text(stringResource(statuses[when {
+                                            item.repetitions == 0 -> 1
+                                            item.streak < 6 -> 2
+                                            else -> 3
+                                        }]), style = MaterialTheme.typography.labelMedium)
                                     }
-                                    Text(stringResource(statuses[when {
-                                        item.repetitions == 0 -> 1
-                                        item.streak < 6 -> 2
-                                        else -> 3
-                                    }]), style = MaterialTheme.typography.labelMedium)
-                                }
-                            },
-                            modifier = Modifier.clickable { selected = item.wordId },
-                        )
-                        HorizontalDivider()
+                                },
+                                modifier = Modifier.clickable { selected = item.wordId },
+                            )
+                            HorizontalDivider()
+                        }
                     }
                 }
             }

@@ -96,7 +96,8 @@ class VocabularyTest {
                 assertEquals(0, reopened.reviewQueue(null, 1, 1).first().dueCount)
                 assertEquals(1, reopened.reviewQueue(null, 1, 1).first().completedToday)
                 assertEquals(time + 2 + 30 * 60_000, reopened.dao.word(firstId)?.dueAt)
-                reopened.undoReview(undo)
+                assertTrue(reopened.undoReview(undo))
+                assertTrue(!reopened.undoReview(undo))
                 assertEquals(card, reopened.reviewQueue(null, 1, 1).first().card)
                 assertTrue(reopened.dao.reviews(firstId).isEmpty())
             }
@@ -199,6 +200,27 @@ class VocabularyTest {
             repo.edit(id, "My local edit", "")
             repo.import(readVocabulary(json.reader()))
             assertEquals("My local edit", repo.dao.word(id)?.definition)
+        }
+    }
+
+    @Test
+    fun `activity query filters time and book without duplicating multiple passages`() = runTest {
+        withDatabase { db ->
+            val repo = VocabularyRepository(db)
+            val id = checkNotNull(repo.collect(VocabularyLookup("word", "en", source("one")), "Meaning", null, 1))
+            repo.dao.insertOccurrence(source("one").copy(wordId = id, locationKey = "second"))
+            repo.dao.insertOccurrence(source("two").copy(wordId = id))
+            val other = checkNotNull(repo.collect(VocabularyLookup("other", "en", source("three")), null, null, 1))
+            for ((word, time) in listOf(id to 10L, id to 20L, other to 30L)) {
+                repo.dao.addReview(VocabularyReview(
+                    wordId = word, rating = "GOOD", reviewedAt = time,
+                    intervalMinutes = 30, dueAt = time + 1_800_000, firstReview = false,
+                ))
+            }
+            assertEquals(listOf(20L, 30L), repo.dao.reviewsSince(20, null).first().map { it.reviewedAt })
+            assertEquals(listOf(VocabularyReviewActivity(20, "GOOD")), repo.dao.reviewsSince(20, "one").first())
+            assertEquals(listOf(10L, 20L), repo.dao.reviewsSince(0, "two").first().map { it.reviewedAt })
+            assertTrue(repo.dao.reviewsSince(0, "missing").first().isEmpty())
         }
     }
 

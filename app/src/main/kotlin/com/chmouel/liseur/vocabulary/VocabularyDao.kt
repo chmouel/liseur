@@ -80,6 +80,8 @@ data class VocabularyReview(
     val firstReview: Boolean,
 )
 
+data class VocabularyReviewActivity(val reviewedAt: Long, val rating: String)
+
 data class VocabularyStats(val total: Int, val newWords: Int, val learned: Int)
 data class VocabularyDailyReviews(val total: Int, val newWords: Int)
 data class VocabularyDueCard(@Embedded val word: VocabularyWord, val dueCount: Int)
@@ -184,6 +186,15 @@ interface VocabularyDao {
         FROM vocabulary_reviews WHERE reviewedAt >= :start AND reviewedAt <= :end
     """)
     suspend fun reviewsBetween(start: Long, end: Long): VocabularyDailyReviews
+
+    @Query("""
+        SELECT reviewedAt, rating FROM vocabulary_reviews r
+        WHERE reviewedAt >= :start AND (:book IS NULL OR EXISTS (
+            SELECT 1 FROM vocabulary_occurrences o WHERE o.wordId = r.wordId AND o.bookUrl = :book
+        ))
+        ORDER BY reviewedAt
+    """)
+    fun reviewsSince(start: Long, book: String?): Flow<List<VocabularyReviewActivity>>
 
     @Insert
     suspend fun addReview(review: VocabularyReview): Long

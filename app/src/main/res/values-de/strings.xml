@@ -2146,7 +2146,7 @@
     <string name="vocabulary_no_definition">Keine Definition gespeichert</string>
     <string name="vocabulary_definition">Definition</string>
     <string name="vocabulary_sentence">Satz</string>
-    <string name="vocabulary_open_passage">Textstelle öffnen</string>
+    <string name="vocabulary_open_passage">Im Buch ansehen</string>
     <string name="vocabulary_edit_context">Kontext bearbeiten</string>
     <string name="vocabulary_confirm_delete">„%1$s“ löschen?</string>
     <string name="vocabulary_book_unavailable">Diese Textstelle ist nicht verfügbar.</string>
@@ -2186,4 +2186,16 @@
     <string name="vocabulary_reminders">Tägliche Lernerinnerung</string>
     <string name="vocabulary_reminder_message">Wörter warten auf deine Wiederholung.</string>
     <string name="vocabulary_reminder_permission">Erlaube Liseur-Benachrichtigungen in den Android-Einstellungen und aktiviere dann hier die Erinnerung.</string>
+    <string name="vocabulary_tab_review">Wiederholen</string>
+    <string name="vocabulary_tab_words">Wörter</string>
+    <string name="vocabulary_tab_stats">Statistik</string>
+    <string name="vocabulary_pronounce">%1$s aussprechen</string>
+    <string name="vocabulary_total">Wörter insgesamt</string>
+    <string name="vocabulary_reviews_per_day">Wiederholungen pro Tag · letzte 14 Tage</string>
+    <string name="vocabulary_recall_rate">Erinnerungsquote · letzte 30 Tage</string>
+    <string name="vocabulary_day_streak">Tage in Folge</string>
+    <string name="vocabulary_stats_empty">Wiederhole einige Wörter, um hier deine Aktivität zu sehen.</string>
+    <string name="vocabulary_no_recent_reviews">Keine aktuellen Wiederholungen</string>
+    <string name="vocabulary_session_progress">%1$d von %2$d Wiederholungen in dieser Sitzung abgeschlossen</string>
+    <string name="vocabulary_daily_reviews">%1$s · Wiederholungen: %2$d</string>
 </resources>

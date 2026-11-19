@@ -52,3 +52,25 @@ internal fun vocabularyLocationKey(locator: String): String =
 
 internal fun normalizeVocabularySearch(text: String): String =
     Normalizer.normalize(text.lowercase(Locale.ROOT), Normalizer.Form.NFC)
+
+internal fun highlightWord(sentence: String, word: String): IntRange? {
+    val marks = Regex("\\p{M}+")
+    fun fold(text: String) = Normalizer.normalize(normalizeVocabularySearch(text), Normalizer.Form.NFD)
+        .replace(marks, "").uppercase(Locale.ROOT)
+    val target = fold(word.trim()).takeIf { it.isNotEmpty() } ?: return null
+    val characters = BreakIterator.getCharacterInstance(Locale.ROOT).apply { setText(sentence) }
+    val folded = StringBuilder()
+    val starts = mutableListOf<Int>()
+    val ends = mutableListOf<Int>()
+    var start = characters.first()
+    var end = characters.next()
+    while (end != BreakIterator.DONE) {
+        val part = fold(sentence.substring(start, end))
+        folded.append(part)
+        repeat(part.length) { starts += start; ends += end }
+        start = end
+        end = characters.next()
+    }
+    val match = folded.indexOf(target)
+    return if (match < 0) null else starts[match] until ends[match + target.length - 1]
+}

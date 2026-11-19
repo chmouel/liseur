@@ -2134,7 +2134,7 @@
     <string name="vocabulary_no_definition">Nessuna definizione salvata</string>
     <string name="vocabulary_definition">Definizione</string>
     <string name="vocabulary_sentence">Frase</string>
-    <string name="vocabulary_open_passage">Apri il passo</string>
+    <string name="vocabulary_open_passage">Vedi nel libro</string>
     <string name="vocabulary_edit_context">Modifica il contesto</string>
     <string name="vocabulary_confirm_delete">Eliminare «%1$s»?</string>
     <string name="vocabulary_book_unavailable">Questo passo non è disponibile.</string>
@@ -2174,4 +2174,16 @@
     <string name="vocabulary_reminders">Promemoria giornaliero di ripasso</string>
     <string name="vocabulary_reminder_message">Hai delle parole da ripassare.</string>
     <string name="vocabulary_reminder_permission">Consenti le notifiche di Liseur nelle impostazioni di Android, poi attiva il promemoria qui.</string>
+    <string name="vocabulary_tab_review">Ripasso</string>
+    <string name="vocabulary_tab_words">Parole</string>
+    <string name="vocabulary_tab_stats">Statistiche</string>
+    <string name="vocabulary_pronounce">Pronuncia %1$s</string>
+    <string name="vocabulary_total">Totale parole</string>
+    <string name="vocabulary_reviews_per_day">Ripassi al giorno · ultimi 14 giorni</string>
+    <string name="vocabulary_recall_rate">Tasso di richiamo · ultimi 30 giorni</string>
+    <string name="vocabulary_day_streak">Giorni consecutivi</string>
+    <string name="vocabulary_stats_empty">Ripassa alcune parole per vedere qui la tua attività.</string>
+    <string name="vocabulary_no_recent_reviews">Nessun ripasso recente</string>
+    <string name="vocabulary_session_progress">%1$d ripassi su %2$d completati in questa sessione</string>
+    <string name="vocabulary_daily_reviews">%1$s · Ripassi: %2$d</string>
 </resources>

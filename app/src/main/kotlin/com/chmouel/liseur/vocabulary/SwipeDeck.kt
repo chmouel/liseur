@@ -340,8 +340,9 @@ private fun SwipeHint(rating: Recall, label: String, streak: Int, modifier: Modi
     val format = rememberIntervalFormat()
     val interval = format.formatInterval(scheduleVocabulary(streak, rating, 0).intervalMinutes)
     val again = rating == Recall.AGAIN
-    val container = if (again) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.primaryContainer
-    val content = if (again) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onPrimaryContainer
+    val colors = recallColors(rating)
+    val container = colors.container
+    val content = colors.accent
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier

@@ -1336,6 +1336,17 @@ changing reader behavior.
   theme and sends a configuration change to on-screen WebViews, no reload
   (#256). API 29+; below, pages follow the system.
 
+- Vocabulary Builder has Review / Words / Stats tabs in both the library
+  and the book-scoped contents screen. Review scrolls inside the card and
+  keeps rating tiles fixed below it; the ring counts successful ratings
+  since opening, minus undo, over that count plus the remaining queue.
+  Pronunciation uses installed offline system TTS voices and hides for
+  unsupported languages.
+  Stats use book-scoped review timestamps and ratings: 14 local calendar
+  days for the chart, 30 for recall (all ratings except Again), and the
+  full history for the streak. Yesterday can continue a streak until
+  today is reviewed. Keep date aggregation and passage highlighting pure.
+
 ### Read-aloud
 
 - Engine, player, settings, device voices and the speech server provider

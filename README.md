@@ -88,9 +88,14 @@ translated sentence by sentence as you read.
 Tap **Save to vocabulary** in the dictionary to keep the word, its definition,
 and the passage where you found it. Open **Vocabulary Builder** from the
 library menu to review words offline, or from a book’s **Notes** to see its
-words and return to their passages. Tap a review card to see the answer,
-then swipe it left for Again or right for Good, either in the review or on
-Home's **Words to review** card. The vocabulary menu can export a JSON
+words and return to their passages. Switch between **Review**, **Words** and
+**Stats** to study, manage saved words and track reviews, recall rate and
+your day streak. Review cards include notes and the original passage, with
+**See in book** to return to it and a speaker for device pronunciation when
+available. Reveal the answer, then choose Again, Hard, Good or Easy from the
+bottom tiles, or swipe left for Again and right for Good. The progress ring
+tracks this session; Undo restores the last rating. Home's **Words to review**
+card also supports swiping. The vocabulary menu on **Words** can export a JSON
 backup or an Anki-compatible CSV. Dictionary settings control automatic
 saving, and Vocabulary settings offer daily limits and reminders. Home
 shows the next word due, so you can check its meaning and start a review
