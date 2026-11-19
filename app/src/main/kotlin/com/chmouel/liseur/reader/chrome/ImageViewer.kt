@@ -1,6 +1,7 @@
 package com.chmouel.liseur.reader.chrome
 
-import androidx.activity.compose.BackHandler
+import androidx.activity.BackEventCompat
+import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -18,8 +19,10 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -35,6 +38,7 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
@@ -51,6 +55,7 @@ import coil3.size.Size as CoilSize
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.settings.ReaderTheme
 import com.chmouel.liseur.ui.LocalEInk
+import kotlinx.coroutines.CancellationException
 
 /** Enough of the scrim to keep a caption legible over a pale picture. */
 private val CAPTION_BACKING = Color.Black.copy(alpha = 0.66f)
@@ -147,6 +152,7 @@ fun ImageViewer(image: ViewedImage, theme: ReaderTheme, onDismiss: () -> Unit) {
     var dragDown by remember(image) { mutableFloatStateOf(0f) }
     val dismissTravel = with(LocalDensity.current) { ImageZoom.DISMISS_TRAVEL_DP.dp.toPx() }
     val context = LocalContext.current
+    val configuration = LocalConfiguration.current
     val viewerTitle = image.alt ?: stringResource(R.string.reader_image_viewer)
     val onPaper = LocalEInk.current
     // The scrim, and the one colour everything drawn over it is in.
@@ -155,6 +161,26 @@ fun ImageViewer(image: ViewedImage, theme: ReaderTheme, onDismiss: () -> Unit) {
     // Deliberately not a state object: the whole point of accumulating a
     // gesture is that no frame of it recomposes anything.
     val pending = remember(image) { PendingGesture() }
+
+    val isWideColorGamutDisplay = configuration.isScreenWideColorGamut
+    DisposableEffect(context, isWideColorGamutDisplay) {
+        val window = context.findActivity()?.window
+        val previousColorMode = window?.colorMode
+        if (window != null) {
+            val targetColorMode = resolveWindowColorMode(
+                imageViewerOpen = true,
+                isWideColorGamutDisplay = isWideColorGamutDisplay,
+            )
+            if (window.colorMode != targetColorMode) {
+                window.colorMode = targetColorMode
+            }
+        }
+        onDispose {
+            if (window != null && previousColorMode != null && window.colorMode != previousColorMode) {
+                window.colorMode = previousColorMode
+            }
+        }
+    }
 
     fun hold() {
         val (w, h) = ImageZoom.fitted(
@@ -167,12 +193,25 @@ fun ImageViewer(image: ViewedImage, theme: ReaderTheme, onDismiss: () -> Unit) {
         offsetY = ImageZoom.clampPan(offsetY, viewport.height.toFloat(), h * scale)
     }
 
-    BackHandler(onBack = onDismiss)
+    var backProgress by remember(image) { mutableFloatStateOf(0f) }
+    var backEdge by remember(image) { mutableIntStateOf(BackEventCompat.EDGE_LEFT) }
+
+    PredictiveBackHandler { progress ->
+        try {
+            progress.collect { event ->
+                backProgress = event.progress
+                backEdge = event.swipeEdge
+            }
+            onDismiss()
+        } catch (_: CancellationException) {
+            backProgress = 0f
+        }
+    }
 
     Box(
         Modifier
             .fillMaxSize()
-            .background(backdrop)
+            .background(backdrop.copy(alpha = if (onPaper) 1f else 1f - 0.5f * backProgress))
             // Modal in the way that matters to somebody who cannot see
             // it: without this the reader's own chrome stays reachable
             // behind the picture, so a swipe lands on a control that is
@@ -267,103 +306,113 @@ fun ImageViewer(image: ViewedImage, theme: ReaderTheme, onDismiss: () -> Unit) {
                 }
             },
     ) {
-        // Decoded at the picture's own size rather than at the size of the
-        // screen, so that zooming in reveals the plate instead of
-        // magnifying a screen-sized copy of it. A book can name any size
-        // it likes, though, and a bitmap costs four bytes a pixel however
-        // little the file weighs, so past a budget it goes back to
-        // decoding for the screen: blurred at six times is a worse
-        // picture, and a dead process is no picture at all.
-        val model = remember(image) {
-            ImageRequest.Builder(context)
-                .data(image.bytes)
-                .apply {
-                    val pixels = image.width.toLong() * image.height.toLong()
-                    if (pixels in 1..MAX_DECODE_PIXELS) size(CoilSize.ORIGINAL)
-                }
-                .build()
-        }
-        AsyncImage(
-            model = model,
-            contentDescription = image.alt,
-            contentScale = ContentScale.Fit,
-            onSuccess = { natural = it.painter.intrinsicSize },
-            modifier = Modifier
+        Box(
+            Modifier
                 .fillMaxSize()
-                .graphicsLayer {
-                    scaleX = scale
-                    scaleY = scale
-                    translationX = offsetX
-                    translationY = offsetY
-                }
-                // Paper under the ink. A great many book illustrations are
-                // black line art on a transparent background — Standard
-                // Ebooks marks them `se:image.color-depth.black-on-transparent`
-                // — and on the scrim those are simply invisible. Drawn to
-                // the picture's own fitted rectangle rather than to the
-                // whole screen, so a photograph covers it completely and
-                // never shows a white border. Not needed on an e-paper
-                // panel, where the viewer is already on the reading
-                // theme's paper and the line art lands on it as it does
-                // on the page.
-                .drawBehind {
-                    if (onPaper || !natural.isSpecified) return@drawBehind
-                    val (w, h) = ImageZoom.fitted(
-                        contentW = natural.width,
-                        contentH = natural.height,
-                        viewW = size.width,
-                        viewH = size.height,
-                    )
-                    if (w <= 0f || h <= 0f) return@drawBehind
-                    drawRect(
-                        color = Color.White,
-                        topLeft = Offset((size.width - w) / 2f, (size.height - h) / 2f),
-                        size = Size(w, h),
-                    )
-                },
-        )
-
-        image.subtitle?.let { caption ->
-            Text(
-                text = caption,
-                color = ink,
-                style = MaterialTheme.typography.bodySmall,
-                textAlign = TextAlign.Center,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .safeDrawingPadding()
-                    .padding(horizontal = 24.dp, vertical = 16.dp)
-                    // The caption sits over whatever the picture leaves
-                    // there, and a photograph tall enough to reach the
-                    // bottom leaves the photograph, so it needs something
-                    // opaque behind it on any backdrop. On paper that is
-                    // the theme's own paper, square and shadowless: a
-                    // translucent pill would have to be composited against
-                    // the picture, and a rounded edge is one more thing
-                    // for the panel to ghost.
-                    .then(
-                        if (onPaper) {
-                            Modifier.background(backdrop)
-                        } else {
-                            Modifier.background(CAPTION_BACKING, RoundedCornerShape(8.dp))
-                        },
-                    )
-                    .padding(horizontal = 12.dp, vertical = 6.dp),
-            )
-        }
-
-        IconButton(
-            onClick = onDismiss,
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .safeDrawingPadding()
-                .padding(8.dp),
+                .predictiveBackLayer(
+                    progress = { backProgress },
+                    swipeEdge = { backEdge },
+                    eInk = onPaper,
+                ),
         ) {
-            Icon(
-                Icons.Filled.Close,
-                contentDescription = stringResource(R.string.close),
-                tint = ink,
+            // Decoded at the picture's own size rather than at the size of the
+            // screen, so that zooming in reveals the plate instead of
+            // magnifying a screen-sized copy of it. A book can name any size
+            // it likes, though, and a bitmap costs four bytes a pixel however
+            // little the file weighs, so past a budget it goes back to
+            // decoding for the screen: blurred at six times is a worse
+            // picture, and a dead process is no picture at all.
+            val model = remember(image) {
+                ImageRequest.Builder(context)
+                    .data(image.bytes)
+                    .apply {
+                        val pixels = image.width.toLong() * image.height.toLong()
+                        if (pixels in 1..MAX_DECODE_PIXELS) size(CoilSize.ORIGINAL)
+                    }
+                    .build()
+            }
+            AsyncImage(
+                model = model,
+                contentDescription = image.alt,
+                contentScale = ContentScale.Fit,
+                onSuccess = { natural = it.painter.intrinsicSize },
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        scaleX = scale
+                        scaleY = scale
+                        translationX = offsetX
+                        translationY = offsetY
+                    }
+                    // Paper under the ink. A great many book illustrations are
+                    // black line art on a transparent background — Standard
+                    // Ebooks marks them `se:image.color-depth.black-on-transparent`
+                    // — and on the scrim those are simply invisible. Drawn to
+                    // the picture's own fitted rectangle rather than to the
+                    // whole screen, so a photograph covers it completely and
+                    // never shows a white border. Not needed on an e-paper
+                    // panel, where the viewer is already on the reading
+                    // theme's paper and the line art lands on it as it does
+                    // on the page.
+                    .drawBehind {
+                        if (onPaper || !natural.isSpecified) return@drawBehind
+                        val (w, h) = ImageZoom.fitted(
+                            contentW = natural.width,
+                            contentH = natural.height,
+                            viewW = size.width,
+                            viewH = size.height,
+                        )
+                        if (w <= 0f || h <= 0f) return@drawBehind
+                        drawRect(
+                            color = Color.White,
+                            topLeft = Offset((size.width - w) / 2f, (size.height - h) / 2f),
+                            size = Size(w, h),
+                        )
+                    },
             )
+
+            image.subtitle?.let { caption ->
+                Text(
+                    text = caption,
+                    color = ink,
+                    style = MaterialTheme.typography.bodySmall,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .safeDrawingPadding()
+                        .padding(horizontal = 24.dp, vertical = 16.dp)
+                        // The caption sits over whatever the picture leaves
+                        // there, and a photograph tall enough to reach the
+                        // bottom leaves the photograph, so it needs something
+                        // opaque behind it on any backdrop. On paper that is
+                        // the theme's own paper, square and shadowless: a
+                        // translucent pill would have to be composited against
+                        // the picture, and a rounded edge is one more thing
+                        // for the panel to ghost.
+                        .then(
+                            if (onPaper) {
+                                Modifier.background(backdrop)
+                            } else {
+                                Modifier.background(CAPTION_BACKING, RoundedCornerShape(8.dp))
+                            },
+                        )
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                )
+            }
+
+            IconButton(
+                onClick = onDismiss,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .safeDrawingPadding()
+                    .padding(8.dp),
+            ) {
+                Icon(
+                    Icons.Filled.Close,
+                    contentDescription = stringResource(R.string.close),
+                    tint = ink,
+                )
+            }
         }
     }
 }

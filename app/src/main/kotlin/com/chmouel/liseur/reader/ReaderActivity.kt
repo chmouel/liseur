@@ -35,6 +35,10 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.chmouel.liseur.reader.chrome.BookSyncDialog
 import com.chmouel.liseur.reader.chrome.ExternalLinkDialog
 import com.chmouel.liseur.reader.chrome.PageTurner
+import com.chmouel.liseur.reader.chrome.bookPostureCssOverrides
+import com.chmouel.liseur.reader.chrome.effectiveFor
+import com.chmouel.liseur.reader.chrome.rememberReaderFoldPosture
+import androidx.compose.ui.platform.LocalDensity
 import androidx.lifecycle.lifecycleScope
 import com.chmouel.liseur.R
 import com.chmouel.liseur.container
@@ -328,7 +332,9 @@ class ReaderActivity : FragmentActivity() {
                                 // it sits on have to be the same theme.
                                 val readingTheme = readingPage
                                 val scrollMode by viewModel.scrollMode.collectAsStateWithLifecycle()
-                                val columnMode = prefs.columnMode.effectiveFor(widthClass())
+                                val foldPosture = rememberReaderFoldPosture()
+                                val columnMode = prefs.columnMode.effectiveFor(widthClass(), foldPosture)
+                                val cssOverrides = bookPostureCssOverrides(foldPosture, LocalDensity.current.density)
                                 // A third key, for the same reason as the
                                 // other two: a font family is declared when
                                 // the navigator is configured, so a font
@@ -351,6 +357,7 @@ class ReaderActivity : FragmentActivity() {
                                     columnMode,
                                     scrollMode,
                                     fontKey,
+                                    cssOverrides,
                                 ) {
                                     if (s.bookOrbitChoicePending) s.initialLocator
                                     else viewModel.lastLocator ?: s.initialLocator
@@ -440,6 +447,7 @@ class ReaderActivity : FragmentActivity() {
                                     scrollMode,
                                     fontKey,
                                     readingCss,
+                                    cssOverrides,
                                 ) {
                                     prefs.toEpubPreferences(
                                         theme = readingTheme,
@@ -454,6 +462,7 @@ class ReaderActivity : FragmentActivity() {
                                     scrollMode,
                                     reflowable,
                                     fontKey,
+                                    cssOverrides,
                                 ) {
                                     s.navigatorFactory.createFragmentFactory(
                                         initialLocator = restoreTarget,
@@ -473,6 +482,7 @@ class ReaderActivity : FragmentActivity() {
                                             onTextSelected = viewModel::onTextSelected,
                                             onSelectionCleared = viewModel::onSelectionCleared,
                                             clicks = linkClicks,
+                                            extraCssOverrides = cssOverrides,
                                             onSameDocumentLink = { resource, fragment ->
                                                 val nav = navigator
                                                 val href = resource.url()
@@ -739,6 +749,7 @@ class ReaderActivity : FragmentActivity() {
                                         )
                                     },
                                     companion = companion,
+                                    foldPosture = foldPosture,
                                 )
                             }
                         }

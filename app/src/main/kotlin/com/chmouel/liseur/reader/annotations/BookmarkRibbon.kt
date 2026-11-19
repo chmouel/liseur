@@ -4,14 +4,20 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import com.chmouel.liseur.ui.LocalEInk
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -19,15 +25,22 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.settings.ReaderTheme
+import com.chmouel.liseur.reader.chrome.performReaderHaptic
+import com.chmouel.liseur.reader.chrome.thresholdTransitionHaptic
+import com.chmouel.liseur.ui.LocalEInk
 
 private val RIBBON_WIDTH = 14.dp
 private val RIBBON_HEIGHT = 30.dp
+private val RIBBON_PULL_THRESHOLD = 28.dp
 
 /**
  * The bookmark ribbon in the top corner of the page.
@@ -48,10 +61,17 @@ fun BookmarkRibbon(
     onToggle: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val toggle by rememberUpdatedState(onToggle)
+    val view = LocalView.current
+    val pullThresholdPx = with(LocalDensity.current) { RIBBON_PULL_THRESHOLD.toPx() }
+    var dragDistance by remember { mutableFloatStateOf(0f) }
+    var ribbonArmed by remember { mutableStateOf(false) }
+
     // The spring is a flourish on a screen that can draw it. On
     // electronic paper it is a dozen full refreshes of the corner of the
     // page, so the ribbon simply appears.
-    val target = if (bookmarked) 1f else 0f
+    val pullProgress = (dragDistance / pullThresholdPx).coerceIn(0f, 1f)
+    val target = if (bookmarked) 1f else pullProgress
     val extended = if (LocalEInk.current) {
         target
     } else {
@@ -69,6 +89,35 @@ fun BookmarkRibbon(
         contentAlignment = Alignment.TopCenter,
         modifier = modifier
             .size(width = 44.dp, height = 44.dp)
+            .pointerInput(pullThresholdPx) {
+                detectVerticalDragGestures(
+                    onDragStart = {
+                        dragDistance = 0f
+                        ribbonArmed = false
+                    },
+                    onVerticalDrag = { change, dragAmount ->
+                        change.consume()
+                        dragDistance = (dragDistance + dragAmount).coerceAtLeast(0f)
+                        val armed = dragDistance >= pullThresholdPx
+                        thresholdTransitionHaptic(
+                            wasArmed = ribbonArmed,
+                            armed = armed,
+                            stillHeld = true,
+                        )?.let(view::performReaderHaptic)
+                        ribbonArmed = armed
+                    },
+                    onDragEnd = {
+                        val shouldToggle = ribbonArmed
+                        dragDistance = 0f
+                        ribbonArmed = false
+                        if (shouldToggle) toggle()
+                    },
+                    onDragCancel = {
+                        dragDistance = 0f
+                        ribbonArmed = false
+                    },
+                )
+            }
             .clickable(onClick = onToggle)
             .semantics { contentDescription = label },
     ) {

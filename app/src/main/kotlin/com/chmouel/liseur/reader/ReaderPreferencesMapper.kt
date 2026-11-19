@@ -181,7 +181,10 @@ private val selectionOverrides = mapOf(
  * Android's, so building one at all needs a device.
  */
 @OptIn(ExperimentalReadiumApi::class)
-internal fun readingRsProperties(columnMode: ColumnMode): RsProperties = RsProperties(
+internal fun readingRsProperties(
+    columnMode: ColumnMode,
+    extraOverrides: Map<String, String> = emptyMap(),
+): RsProperties = RsProperties(
     colCount = when (columnMode) {
         ColumnMode.AUTO -> null
         ColumnMode.ONE -> ColCount.ONE
@@ -194,7 +197,7 @@ internal fun readingRsProperties(columnMode: ColumnMode): RsProperties = RsPrope
     // Readium centres a 40rem body even when pageMargins asks for narrow
     // padding. Let the paginated column fill its width so the chosen
     // gutters also determine the visible margins in landscape.
-    overrides = selectionOverrides + ("--RS__maxLineLength" to "none"),
+    overrides = selectionOverrides + ("--RS__maxLineLength" to "none") + extraOverrides,
 )
 
 /**
@@ -283,6 +286,7 @@ internal fun epubNavigatorConfiguration(
     // Shared with the reader screen's decoration listeners, which mark
     // the current click's token when they consume one.
     clicks: SameDocumentClicks = SameDocumentClicks(),
+    extraCssOverrides: Map<String, String> = emptyMap(),
 ): EpubNavigatorFragment.Configuration =
     epubNavigatorConfigurationBase(reflowable).apply {
         servedAssets = listOf("fonts/.*")
@@ -294,7 +298,7 @@ internal fun epubNavigatorConfiguration(
             SameDocumentLinkBridge(resource, clicks, onSameDocumentLink)
         }
         disablePageTurnsWhileScrolling = scroll
-        readiumCssRsProperties = readingRsProperties(columnMode)
+        readiumCssRsProperties = readingRsProperties(columnMode, extraCssOverrides)
         selectionActionModeCallback = object : ActionMode.Callback {
             override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
                 onTextSelected()

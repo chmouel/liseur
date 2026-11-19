@@ -153,16 +153,20 @@ class WholeBookTranslationService : Service() {
             this, 0, Intent(this, WholeBookTranslationService::class.java).setAction(PAUSE),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        return NotificationCompat.Builder(this, CHANNEL)
+        val builder = NotificationCompat.Builder(this, CHANNEL)
             .setSmallIcon(android.R.drawable.stat_sys_download)
-            .setContentTitle(title.ifBlank { getString(R.string.whole_book_notification_channel) })
-            .setContentText(getString(R.string.whole_book_notification_progress, done, total))
             .setContentIntent(open)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
-            .setProgress(total, done, total == 0)
             .addAction(0, getString(R.string.whole_book_notification_pause), pause)
-            .build()
+        return configureWholeBookNotification(
+            builder = builder,
+            title = title,
+            fallbackTitle = getString(R.string.whole_book_notification_channel),
+            progressText = getString(R.string.whole_book_notification_progress, done, total),
+            done = done,
+            total = total,
+        ).build()
     }
 
     private companion object {
@@ -171,3 +175,20 @@ class WholeBookTranslationService : Service() {
         const val PAUSE = "com.chmouel.liseur.translate.PAUSE_WHOLE_BOOK"
     }
 }
+
+internal fun wholeBookProgressSubText(done: Int, total: Int): String? =
+    if (total > 0 && done in 0..total) "${(done * 100) / total}%" else null
+
+internal fun configureWholeBookNotification(
+    builder: NotificationCompat.Builder,
+    title: String,
+    fallbackTitle: String,
+    progressText: String,
+    done: Int,
+    total: Int,
+): NotificationCompat.Builder = builder
+    .setContentTitle(title.ifBlank { fallbackTitle })
+    .setContentText(progressText)
+    .setSubText(wholeBookProgressSubText(done, total))
+    .setProgress(total, done, total == 0)
+    .setCategory(NotificationCompat.CATEGORY_PROGRESS)

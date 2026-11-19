@@ -26,6 +26,7 @@ class ScrollEdgeTurner(
     private val isScrolling: () -> Boolean,
     private val isVerticalText: () -> Boolean = { false },
     private val isPinching: () -> Boolean = { false },
+    private val onHaptic: (ReaderHaptic) -> Unit = { navigator.publicationView.performReaderHaptic(it) },
     private val onStepChapter: (forward: Boolean) -> Unit,
 ) : InputListener {
 
@@ -52,6 +53,7 @@ class ScrollEdgeTurner(
                 // in by dragging right, as later text below is brought in
                 // by dragging up.
                 val vertical = isVerticalText()
+                val wasArmed = pull.isArmed
                 val step = pull.onMove(
                     forwardTravel = if (vertical) event.offset.x else -event.offset.y,
                     atForwardEdge = if (vertical) {
@@ -66,6 +68,12 @@ class ScrollEdgeTurner(
                     },
                     threshold = PULL_DP * view.resources.displayMetrics.density,
                 )
+                val stepFired = step != EdgePull.Step.NONE
+                thresholdTransitionHaptic(
+                    wasArmed = wasArmed,
+                    armed = pull.isArmed || stepFired,
+                    stillHeld = !stepFired,
+                )?.let(onHaptic)
                 when (step) {
                     EdgePull.Step.FORWARD -> onStepChapter(true)
                     EdgePull.Step.BACKWARD -> onStepChapter(false)
@@ -107,6 +115,9 @@ class EdgePull {
     private var atEndSince: Float? = null
     private var atStartSince: Float? = null
     private var stepped = false
+
+    val isArmed: Boolean
+        get() = !stepped && (atEndSince != null || atStartSince != null)
 
     fun reset() {
         atEndSince = null

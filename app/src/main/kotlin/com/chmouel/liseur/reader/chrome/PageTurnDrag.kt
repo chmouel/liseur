@@ -53,6 +53,7 @@ class PageTurnDrag(
     private val density: () -> Float,
     private val width: () -> Float,
     private val onTurnPage: (forward: Boolean) -> Unit,
+    private val onHaptic: (ReaderHaptic) -> Unit = {},
     private val curl: Curl,
 ) {
 
@@ -91,6 +92,7 @@ class PageTurnDrag(
         var mode = Mode.SWIPE
         var dx = 0f
         var dy = 0f
+        var maxTravel = 0f
         var released = false
         var velocity = 0f
 
@@ -165,6 +167,7 @@ class PageTurnDrag(
         val current = gesture ?: return false
         current.dx = dx
         current.dy = dy
+        if (current.travel > current.maxTravel) current.maxTravel = current.travel
         if (current.mode == Mode.CURL) curl.follow(current.travel, dy)
         return true
     }
@@ -219,7 +222,13 @@ class PageTurnDrag(
 
     private fun letGo(g: Gesture) {
         val along = if (g.movesLeft) -g.velocity else g.velocity
-        if (PageCurl.commits(g.travel, along, width(), density())) {
+        val committed = PageCurl.commits(g.travel, along, width(), density())
+        pageCurlReleaseHaptic(
+            committed = committed,
+            maxTravel = g.maxTravel,
+            meaningfulTravel = SWIPE_DP * density(),
+        )?.let(onHaptic)
+        if (committed) {
             curl.finish(along)
         } else {
             curl.restore(along)

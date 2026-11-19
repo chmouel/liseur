@@ -1302,7 +1302,11 @@ changing reader behavior.
   `pageGesturesFree` gate. A claimed touch is consumed to the last lift;
   `touch.edgeCandidate`/`edgeSwipe` keep it from counting as a user turn.
   Brightness commits once on lift; `ScreenBrightness` writes only on
-  change and resets to the system only on dispose.
+  change and resets to the system only on dispose. Below 15% on non-e-ink
+  panels, `resolveScreenBrightness` ramps a non-interactive software dim
+  scrim (`UltraDimOverlay`) while capping API 35+ `desiredHdrHeadroom` to
+  SDR; `ImageViewer` lifts the HDR cap and requests wide color gamut on
+  capable panels while open.
 - Chrome reaches the screen edge: navigation-bar insets stay inside
   `ReadingScrubber` (its spacer when the panel is absent); no edge fades on
   e-ink.

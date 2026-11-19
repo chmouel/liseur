@@ -40,6 +40,6 @@ class ReadAloudMetadataTest {
         assertNull(chapter.artworkData)
         assertEquals("Dune", chapter.title)
         assertEquals("Frank Herbert", chapter.artist)
-        assertEquals(2, chapter.trackNumber)
+        assertEquals(3, chapter.trackNumber)
     }
 }

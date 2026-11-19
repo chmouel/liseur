@@ -182,15 +182,42 @@ fun PageCurlOverlay(state: PageCurlState, modifier: Modifier = Modifier) {
         Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
             .apply { eraseColor(android.graphics.Color.WHITE) }
     }
+    val agslRenderer = remember {
+        if (shouldUseAgslPageCurl()) AgslPageCurlRenderer() else null
+    }
     Canvas(modifier.fillMaxSize()) {
         val width = size.width
         val height = size.height
         if (width <= 0f || height <= 0f) return@Canvas
         val radius = PageCurl.RADIUS_DP.dp.toPx()
+        val travel = state.drawnTravel()
+        if (shouldUseAgslPageCurl() && agslRenderer != null) {
+            val uniforms = computePageCurlUniforms(
+                width = width,
+                height = height,
+                travel = travel,
+                grabY = state.grabY,
+                tilt = state.tilt,
+                movesLeft = state.movesLeft,
+                radius = radius,
+                paper = state.paper,
+            )
+            var handled = false
+            drawIntoCanvas { canvas ->
+                val native = canvas.nativeCanvas
+                handled = if (!uniforms.curled) {
+                    native.drawBitmap(bitmap, 0f, 0f, paint)
+                    true
+                } else {
+                    agslRenderer.draw(native, bitmap, uniforms)
+                }
+            }
+            if (handled) return@Canvas
+        }
         PageCurl.mesh(
             width = width,
             height = height,
-            travel = state.drawnTravel(),
+            travel = travel,
             grabY = state.grabY,
             tilt = state.tilt,
             movesLeft = state.movesLeft,

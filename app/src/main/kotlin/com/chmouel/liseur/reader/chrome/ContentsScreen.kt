@@ -1,7 +1,9 @@
 package com.chmouel.liseur.reader.chrome
 
 import android.widget.Toast
+import androidx.activity.BackEventCompat
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
@@ -20,11 +22,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.size
@@ -59,6 +63,8 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -90,9 +96,11 @@ import com.chmouel.liseur.reader.annotations.locator
 import com.chmouel.liseur.reader.annotations.HighlightTint
 import com.chmouel.liseur.reader.annotations.noteAnnotated
 import com.chmouel.liseur.reader.progress.ResourceAnchor
+import com.chmouel.liseur.ui.LocalEInk
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.windowWidth
 import com.chmouel.liseur.ui.withoutBottom
+import kotlinx.coroutines.CancellationException
 import org.readium.r2.shared.publication.Link
 import org.readium.r2.shared.publication.Publication
 
@@ -133,9 +141,13 @@ fun ContentsScreen(
     onClose: () -> Unit,
     /** Null when this book has nowhere to sync to. */
     onSyncBook: (() -> Unit)? = null,
+    sidePane: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     var tab by rememberSaveable { mutableStateOf(ContentsTab.CONTENTS) }
+    val eInk = LocalEInk.current
+    var backProgress by remember { mutableFloatStateOf(0f) }
+    var backEdge by remember { mutableIntStateOf(BackEventCompat.EDGE_LEFT) }
     // Which marks the reader has opened out to read in full. It lives here
     // rather than in AnnotationList because each tab is a separate branch of
     // the `when` below: switching tabs disposes the branch, and state saved
@@ -145,13 +157,35 @@ fun ContentsScreen(
         if (!expandedIds.remove(annotation.id)) expandedIds.add(annotation.id)
     }
 
+    PredictiveBackHandler { progress ->
+        try {
+            progress.collect { event ->
+                backProgress = event.progress
+                backEdge = event.swipeEdge
+            }
+            onClose()
+        } catch (_: CancellationException) {
+            backProgress = 0f
+        }
+    }
+
     Scaffold(
-        modifier = modifier.fillMaxSize(),
+        modifier = modifier
+            .fillMaxSize()
+            .predictiveBackLayer(
+                progress = { backProgress },
+                swipeEdge = { backEdge },
+                eInk = eInk,
+            ),
         containerColor = theme.background,
         // safeDrawing, not systemBars: a landscape display cutout falls on
         // the side edges, where there is no status bar to stand in for it,
         // and would otherwise cut into the chapter and annotation rows.
-        contentWindowInsets = WindowInsets.safeDrawing,
+        contentWindowInsets = if (sidePane) {
+            WindowInsets.safeDrawing.only(WindowInsetsSides.Vertical + WindowInsetsSides.End)
+        } else {
+            WindowInsets.safeDrawing
+        },
         topBar = {
             Column {
                 TopAppBar(
@@ -679,6 +713,7 @@ internal fun ReaderContents(
     onExport: () -> Unit,
     onClose: () -> Unit,
     onSyncBook: (() -> Unit)?,
+    sidePane: Boolean = false,
     onOpenPlace: (Locator, Boolean) -> Unit,
 ) {
     val context = LocalContext.current
@@ -723,6 +758,7 @@ internal fun ReaderContents(
                 onExport = onExport,
                 onClose = onClose,
                 onSyncBook = onSyncBook,
+                sidePane = sidePane,
                 onEntrySelected = { link ->
                     val place = publication.locatorFromLink(link)
                     if (place != null) onOpenPlace(place, false) else onClose()
