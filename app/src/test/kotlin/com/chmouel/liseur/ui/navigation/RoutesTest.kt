@@ -30,6 +30,7 @@ class RoutesTest {
         listOf(
             Route.ReadingNavigation to Route.SelectionToolbar,
             Route.ReadingNavigation to Route.PageTaps,
+            Route.ReadingNavigation to Route.VocabularySettings,
         ).forEach { (parent, page) ->
             assertTrue(page.isSettingsPage)
             val stack = mutableListOf(Route.Library, Route.Settings, parent)
@@ -147,6 +148,17 @@ class RoutesTest {
         assertEquals(listOf(Route.Library, Route.Settings, Route.ReadingNavigation, Route.PageTaps), stack)
         stack.openSettingsResult(Route.SelectionToolbar)
         assertEquals(listOf(Route.Library, Route.Settings, Route.ReadingNavigation, Route.SelectionToolbar), stack)
+        stack.openSettingsResult(Route.VocabularySettings)
+        assertEquals(listOf(Route.Library, Route.Settings, Route.ReadingNavigation, Route.VocabularySettings), stack)
+    }
+
+    @Test
+    fun vocabularySettingsOpenedFromTheBuilderReturnsToIt() {
+        val stack = mutableListOf(Route.Library, Route.Vocabulary)
+        stack.push(Route.VocabularySettings)
+        assertEquals(stack, decodeRoutes(encodeRoutes(stack)))
+        stack.pop()
+        assertEquals(listOf(Route.Library, Route.Vocabulary), stack)
     }
 
     @Test

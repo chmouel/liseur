@@ -76,6 +76,7 @@ internal fun VocabularyScreen(
     onBack: () -> Unit,
     onOpenPassage: (VocabularyOccurrence) -> Unit,
     currentBook: VocabularyBook? = null,
+    onOpenSettings: (() -> Unit)? = null,
 ) {
     val preferences = LocalContext.current.container.appSettings
     val settings by preferences.settings.collectAsStateWithLifecycle(initialValue = AppSettings())
@@ -134,7 +135,7 @@ internal fun VocabularyScreen(
                                 stringResource(if (searching) R.string.clear_search else R.string.vocabulary_search),
                             )
                         }
-                        if (currentBook == null) VocabularyMenu(repository, settings, preferences)
+                        if (onOpenSettings != null) VocabularyMenu(repository, onOpenSettings)
                     }
                 },
                 navigationIcon = {

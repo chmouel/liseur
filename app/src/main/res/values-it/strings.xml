@@ -2146,7 +2146,7 @@
     <string name="vocabulary_hard">Difficile</string>
     <string name="vocabulary_good">Bene</string>
     <string name="vocabulary_easy">Facile</string>
-    <string name="vocabulary_settings">Impostazioni del vocabolario</string>
+    <string name="vocabulary_help">Salva le parole sconosciute insieme alla frase in cui le hai trovate. Durante il ripasso, prova a ricordare il significato prima di mostrare la risposta. Le parole difficili tornano prima e quelle che ricordi tornano meno spesso.\n\nIl promemoria quotidiano invia una notifica quando ci sono parole da ripassare. Tocca la notifica per aprire il vocabolario.\n\nPer studiare in Anki, scegli «%1$s» nel vocabolario. Importa il file in AnkiDroid su Android o in Anki sul computer.</string>
     <string name="vocabulary_auto_save">Salva automaticamente le parole cercate</string>
     <string name="vocabulary_save_context">Salva la frase</string>
     <string name="vocabulary_unlimited">Inserisci 0 per togliere il limite.</string>

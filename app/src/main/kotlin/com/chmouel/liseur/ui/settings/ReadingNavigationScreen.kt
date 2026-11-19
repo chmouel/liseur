@@ -2,9 +2,6 @@ package com.chmouel.liseur.ui.settings
 
 import androidx.compose.material3.ListItem
 import androidx.compose.foundation.clickable
-import androidx.compose.runtime.saveable.rememberSaveable
-import com.chmouel.liseur.data.settings.AppSettingsRepository
-import com.chmouel.liseur.vocabulary.VocabularySettingsDialog
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -125,18 +122,11 @@ fun ReadingNavigationScreen(
     onDictionaryOnLongPress: (Boolean) -> Unit,
     onDictionaryBaseUrl: (String) -> Unit,
     onDictionaryAltLanguage: (String?) -> Unit,
-    appSettings: AppSettingsRepository,
-    onVocabularyAutoSave: (Boolean) -> Unit,
-    onVocabularyContext: (Boolean) -> Unit,
+    onOpenVocabulary: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
-
-    var vocabularySettings by rememberSaveable { mutableStateOf(false) }
-    if (vocabularySettings) {
-        VocabularySettingsDialog(settings, appSettings, { vocabularySettings = false })
-    }
 
     Scaffold(
         modifier = modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -292,26 +282,15 @@ fun ReadingNavigationScreen(
                         )
                     }
                     RowDivider()
-                    SwitchRow(
-                        title = stringResource(R.string.vocabulary_auto_save),
-                        subtitle = stringResource(R.string.vocabulary_auto_save_detail),
-                        checked = settings.vocabularyAutoSave,
-                        onCheckedChange = onVocabularyAutoSave,
-                        modifier = Modifier.settingsAnchor(SettingsEntries.VocabularyAutoSave),
-                    )
-                    RowDivider()
-                    SwitchRow(
-                        title = stringResource(R.string.vocabulary_save_context),
-                        subtitle = null,
-                        checked = settings.vocabularySaveContext,
-                        onCheckedChange = onVocabularyContext,
-                        modifier = Modifier.settingsAnchor(SettingsEntries.VocabularyContext),
-                    )
-                    RowDivider()
                     ListItem(
-                        headlineContent = { Text(stringResource(R.string.vocabulary_settings)) },
-                        modifier = Modifier.settingsAnchor(SettingsEntries.VocabularySettings)
-                            .clickable { vocabularySettings = true },
+                        headlineContent = { Text(stringResource(R.string.vocabulary_title)) },
+                        trailingContent = {
+                            Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, contentDescription = null)
+                        },
+                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                        modifier = Modifier
+                            .settingsAnchor(SettingsEntries.VocabularySettings)
+                            .clickable(role = Role.Button, onClick = onOpenVocabulary),
                     )
                 }
 

@@ -184,15 +184,24 @@ object SettingsEntries {
         R.string.settings_dictionary_on_long_press_detail, R.string.settings_dictionary,
         shown = { it.builtInDictionary },
     )
+    val VocabularySettings = entry(
+        "vocabulary_settings", Route.ReadingNavigation, R.string.vocabulary_title, section = R.string.settings_dictionary,
+    )
     val VocabularyAutoSave = entry(
-        "vocabulary_auto_save", Route.ReadingNavigation, R.string.vocabulary_auto_save,
+        "vocabulary_auto_save", Route.VocabularySettings, R.string.vocabulary_auto_save,
         R.string.vocabulary_auto_save_detail, R.string.settings_dictionary,
     )
     val VocabularyContext = entry(
-        "vocabulary_context", Route.ReadingNavigation, R.string.vocabulary_save_context, section = R.string.settings_dictionary,
+        "vocabulary_context", Route.VocabularySettings, R.string.vocabulary_save_context, section = R.string.settings_dictionary,
     )
-    val VocabularySettings = entry(
-        "vocabulary_settings", Route.ReadingNavigation, R.string.vocabulary_settings, section = R.string.settings_dictionary,
+    val VocabularyReminders = entry(
+        "vocabulary_reminders", Route.VocabularySettings, R.string.vocabulary_reminders, section = R.string.vocabulary_review,
+    )
+    val VocabularyNewLimit = entry(
+        "vocabulary_new_limit", Route.VocabularySettings, R.string.vocabulary_new_limit, section = R.string.vocabulary_review,
+    )
+    val VocabularyReviewLimit = entry(
+        "vocabulary_review_limit", Route.VocabularySettings, R.string.vocabulary_review_limit, section = R.string.vocabulary_review,
     )
     val PageTurnStyle = advanced("page_turn_style", Route.ReadingNavigation, R.string.reader_page_turn_style)
     val VolumeKeys = advanced(
@@ -294,6 +303,7 @@ val Route.settingsTitle: Int
         Route.ReadingNavigation -> R.string.settings_reading_navigation
         Route.PageTaps -> R.string.settings_page_taps
         Route.SelectionToolbar -> R.string.selection_arrange
+        Route.VocabularySettings -> R.string.vocabulary_title
         Route.ReadAloud -> R.string.read_aloud_settings_title
         Route.Translation -> R.string.translation_settings_title
         Route.ReadingCompanion -> R.string.companion_settings_title

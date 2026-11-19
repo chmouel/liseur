@@ -33,6 +33,7 @@ sealed interface Route {
     data object Licences : Route
     data object About : Route
     data object Vocabulary : Route
+    data object VocabularySettings : Route
     data object Stats : Route
     data class BookStats(val bookUrl: String, val title: String) : Route
     data class BookDetails(val bookUrl: String) : Route
@@ -63,6 +64,7 @@ private val Route.tag: String
         Route.Licences -> "Licences"
         Route.About -> "About"
         Route.Vocabulary -> "Vocabulary"
+        Route.VocabularySettings -> "VocabularySettings"
         Route.Stats -> "Stats"
         is Route.BookStats -> "BookStats"
         is Route.BookDetails -> "BookDetails"
@@ -72,7 +74,7 @@ private val objectRoutes: Map<String, Route> = listOf(
     Route.Library, Route.Settings, Route.SettingsSearch, Route.SettingsBackup, Route.ReadingAppearance, Route.SelectionToolbar,
     Route.ReadingNavigation, Route.PageTaps, Route.ReadAloud, Route.Translation, Route.ReadingCompanion, Route.Services,
     Route.WatchedFolders, Route.HiddenBooks, Route.ServerAccount, Route.BrowseLibraries, Route.Licences,
-    Route.About, Route.Stats, Route.Vocabulary,
+    Route.About, Route.Stats, Route.Vocabulary, Route.VocabularySettings,
 ).associateBy { it.tag }
 
 /**
@@ -139,7 +141,7 @@ val Route.isSettingsPage: Boolean
     get() = when (this) {
         Route.ReadingAppearance, Route.SelectionToolbar, Route.ReadingNavigation, Route.PageTaps, Route.ReadAloud,
         Route.Translation, Route.ReadingCompanion, Route.Services, Route.SettingsBackup,
-        Route.WatchedFolders, Route.HiddenBooks, Route.About, Route.ServerAccount,
+        Route.WatchedFolders, Route.HiddenBooks, Route.About, Route.ServerAccount, Route.VocabularySettings,
         -> true
         else -> false
     }
@@ -164,7 +166,7 @@ fun MutableList<Route>.openDetail(route: Route) {
 /** The Settings page a nested page is opened from, so Back walks out through it. */
 val Route.settingsParent: Route?
     get() = when (this) {
-        Route.PageTaps, Route.SelectionToolbar -> Route.ReadingNavigation
+        Route.PageTaps, Route.SelectionToolbar, Route.VocabularySettings -> Route.ReadingNavigation
         else -> null
     }
 

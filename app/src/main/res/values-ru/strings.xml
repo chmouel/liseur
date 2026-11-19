@@ -2308,7 +2308,7 @@
     <string name="vocabulary_hard">Трудно</string>
     <string name="vocabulary_good">Хорошо</string>
     <string name="vocabulary_easy">Легко</string>
-    <string name="vocabulary_settings">Настройки словаря</string>
+    <string name="vocabulary_help">Сохраняйте незнакомые слова вместе с предложениями, в которых они встретились. При повторении старайтесь вспомнить значение, прежде чем открыть ответ. Сложные слова появляются раньше, а знакомые — реже.\n\nЕжедневное напоминание присылает уведомление, если есть слова для повторения. Нажмите на него, чтобы открыть словарь.\n\nЧтобы учить слова в Anki, выберите в словаре «%1$s». Импортируйте файл в AnkiDroid на Android или в Anki на компьютере.</string>
     <string name="vocabulary_auto_save">Автоматически сохранять просмотренные слова</string>
     <string name="vocabulary_save_context">Сохранять предложение</string>
     <string name="vocabulary_unlimited">Введите 0, чтобы снять ограничение.</string>
