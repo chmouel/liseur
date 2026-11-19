@@ -89,6 +89,7 @@ class BookDownloadWorker(
         val downloads = container.bookDownloads
         val downloader = BookDownloader(
             http = files.downloadHttp(),
+            validateOpdsEpub = files.validateOpdsEpub,
             // Bulk work, and many books added from a saved catalog at
             // once, can fill a device on their own, so only they are
             // asked to leave room behind. A single download the reader
@@ -181,7 +182,8 @@ class BookDownloadWorker(
                     }
                     fail(bookUrl)
                 }
-                DownloadFailure.Gone -> fail(bookUrl)
+                DownloadFailure.Gone, DownloadFailure.InvalidEpub -> fail(bookUrl)
+                is DownloadFailure.BrowserRequired -> fail(bookUrl, reason.url.takeUnless { guardSpace })
                 // Retrying would only fill the device again, and every
                 // book queued behind this one would fill it in turn, so
                 // the whole batch stops. On its own, a single download
@@ -238,10 +240,10 @@ class BookDownloadWorker(
         return Result.failure()
     }
 
-    private suspend fun fail(bookUrl: String): Result {
+    private suspend fun fail(bookUrl: String, browserUrl: String? = null): Result {
         applicationContext.container.database.bookDao()
             .setDownloadState(bookUrl, DownloadState.FAILED, null)
-        return Result.failure()
+        return Result.failure(Data.Builder().putString(BookDownloadRepository.KEY_BROWSER_URL, browserUrl).build())
     }
 
     private fun progressData(bookUrl: String, fraction: Float?) = Data.Builder()

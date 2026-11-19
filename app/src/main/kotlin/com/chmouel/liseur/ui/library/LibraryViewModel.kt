@@ -91,6 +91,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -100,7 +101,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.emptyFlow
-import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
@@ -736,19 +736,19 @@ class LibraryViewModel(
             }
         }
 
-    /** Downloads that were meant to be read right away and could not be. */
-    val failedOpens: Flow<Book> =
-        awaitingOpen.flatMapLatest { pending ->
-            val url = pending?.url
-            if (url == null) {
-                emptyFlow()
-            } else {
-                library.books
-                    .mapNotNull { books -> books.firstOrNull { it.url == url } }
-                    .filter { it.downloadState == DownloadState.FAILED }
-                    .take(1)
-            }
-        }
+    private val _failedOpens = MutableSharedFlow<Book>(extraBufferCapacity = 1)
+    val failedOpens = _failedOpens.asSharedFlow()
+
+    private val _browserDownloads = MutableStateFlow<List<String>>(emptyList())
+    val browserDownloads = _browserDownloads.asStateFlow()
+
+    private val _pickedWebPage = MutableStateFlow(false)
+    val pickedWebPage = _pickedWebPage.asStateFlow()
+
+    fun dismissBrowserDownload() {
+        _browserDownloads.update { it.drop(1) }
+    }
+    fun dismissPickedWebPage() { _pickedWebPage.value = false }
 
     // Drops rather than waits. The one collector shows a snackbar, and
     // showSnackbar() does not return until that snackbar is dismissed,
@@ -1519,7 +1519,7 @@ class LibraryViewModel(
     }
 
     fun download(book: Book) {
-        viewModelScope.launch { downloads.enqueue(book) }
+        startForegroundDownload(book)
     }
 
     /** Fetch a book and open it as soon as it is here. */
@@ -1527,8 +1527,25 @@ class LibraryViewModel(
         book: Book,
         resumeListening: Boolean = false,
     ) {
-        awaitingOpen.value = PendingOpen(book.url, resumeListening)
-        viewModelScope.launch { downloads.enqueue(book) }
+        val pending = PendingOpen(book.url, resumeListening)
+        awaitingOpen.value = pending
+        startForegroundDownload(book, pending)
+    }
+
+    private fun startForegroundDownload(book: Book, pending: PendingOpen? = null) {
+        viewModelScope.launch {
+            val id = downloads.enqueue(book)
+            val result = id?.let { downloads.awaitDownload(it) }
+            if (result?.state == androidx.work.WorkInfo.State.FAILED) {
+                val url = result.outputData.getString(BookDownloadRepository.KEY_BROWSER_URL)
+                val wasWaiting = pending != null && awaitingOpen.compareAndSet(pending, null)
+                if (url != null && (pending == null || wasWaiting)) {
+                    _browserDownloads.update { it + url }
+                } else if (wasWaiting) {
+                    _failedOpens.emit(book)
+                }
+            }
+        }
     }
 
     /** The book arrived, or the reader's attention went elsewhere. */
@@ -2017,6 +2034,8 @@ class LibraryViewModel(
                 ImportResult.Failed -> {
                     _openImported.value = ImportedOpen(uri.toString(), null)
                 }
+
+                ImportResult.WebPage -> _pickedWebPage.value = true
             }
         }
     }

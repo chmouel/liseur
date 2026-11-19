@@ -1292,7 +1292,11 @@
     <string name="browse_manybooks_name" translatable="false">ManyBooks</string>
     <string name="browse_manybooks_detail">Free ebooks in many genres, from independent authors.</string>
     <string name="browse_gallica_name" translatable="false">Gallica</string>
-    <string name="browse_gallica_detail">French books from the Bibliothèque nationale de France.</string>
+    <string name="browse_gallica_detail">French EPUBs from the Bibliothèque nationale de France.</string>
+    <string name="browse_download_on_website">Download this book from the website.</string>
+    <string name="browse_open_browser">Open in browser</string>
+    <string name="browse_catalog_unavailable">Catalog unavailable right now.</string>
+    <string name="import_web_page">This file is a web page, not an EPUB.</string>
     <string name="browse_free_catalog_saved">Saved</string>
     <string name="browse_free_catalog_connecting">Connecting…</string>
     <string name="browse_free_catalog_failed">Could not reach %1$s. Check your connection and try again.</string>

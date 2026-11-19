@@ -112,6 +112,7 @@ import sh.calvin.reorderable.rememberReorderableLazyListState
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SeriesScreen(
+    snackbarHost: SnackbarHostState,
     shelf: SeriesShelf,
     downloads: Map<String, DownloadProgress>,
     extras: SeriesExtras?,
@@ -151,7 +152,6 @@ fun SeriesScreen(
     var confirmClear by remember { mutableStateOf(false) }
     var choosingStatus by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf(false) }
-    val snackbarHost = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val downloadsNotAllowed = stringResource(R.string.downloads_not_allowed)
     val serverDeleteFailed = stringResource(R.string.delete_from_server_failed)

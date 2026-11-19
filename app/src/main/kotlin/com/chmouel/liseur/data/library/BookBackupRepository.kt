@@ -238,7 +238,7 @@ class BookBackupRepository(
                     alreadyPresent += recordsForSha.size
                     recordsForSha.forEach { aliases[it.bookId] = result.book.url }
                 }
-                ImportResult.Failed -> {
+                ImportResult.Failed, ImportResult.WebPage -> {
                     failures += recordsForSha.size
                     // The plan already refused every other match for this book, so its data
                     // stays under the archived URL instead of being re-matched by title.

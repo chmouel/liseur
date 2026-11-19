@@ -22,6 +22,7 @@ import okhttp3.Response
  * with the reader's catalog password attached.
  */
 class OpdsFileSource(private val http: OpdsHttp = OpdsHttp()) : FileSource {
+    override val validateOpdsEpub = true
 
     override fun downloadRequest(
         server: com.chmouel.liseur.data.db.RemoteServer,

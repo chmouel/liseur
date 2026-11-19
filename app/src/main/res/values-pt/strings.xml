@@ -1290,7 +1290,11 @@
     <string name="browse_free_no_account">Não é preciso ter conta.</string>
     <string name="browse_textos_detail">Livros em espanhol para ler de graça.</string>
     <string name="browse_manybooks_detail">E-books gratuitos de vários gêneros, de autores independentes.</string>
-    <string name="browse_gallica_detail">Livros franceses da Bibliothèque nationale de France.</string>
+    <string name="browse_gallica_detail">EPUBs em francês da Biblioteca Nacional da França.</string>
+    <string name="browse_download_on_website">Baixe este livro pelo site.</string>
+    <string name="browse_open_browser">Abrir no navegador</string>
+    <string name="browse_catalog_unavailable">O catálogo está indisponível no momento.</string>
+    <string name="import_web_page">Este arquivo é uma página da web, não um EPUB.</string>
     <string name="browse_free_catalog_saved">Salvo</string>
     <string name="browse_free_catalog_connecting">Conectando…</string>
     <string name="browse_free_catalog_failed">Não foi possível acessar %1$s. Confira sua conexão e tente novamente.</string>

@@ -206,6 +206,8 @@ fun BrowseLibrariesRoute(
     DisposableEffect(model) {
         onDispose { if (activity?.isChangingConfigurations != true) model.leave() }
     }
+    val browserFallbacks by model.browserFallbacks.collectAsStateWithLifecycle()
+    browserFallbacks.firstOrNull()?.let { BrowserDownloadDialog(it, model::dismissBrowserFallback) }
     val snackbar = remember { SnackbarHostState() }
     val resources = LocalResources.current
     val openLibrary by rememberUpdatedState(onExit)
@@ -997,7 +999,7 @@ private fun CatalogGrid(
             item(key = "load-failed", span = { GridItemSpan(maxLineSpan) }) {
                 Box(Modifier.padding(bottom = 12.dp)) {
                     InlineNotice(
-                        text = stringResource(R.string.browse_load_failed),
+                        text = stringResource(R.string.browse_catalog_unavailable),
                         action = stringResource(R.string.catalog_retry),
                         onAction = model::reload,
                         problem = true,

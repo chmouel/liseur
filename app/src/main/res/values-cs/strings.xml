@@ -1388,7 +1388,11 @@
     <string name="browse_free_no_account">Není potřeba žádný účet.</string>
     <string name="browse_textos_detail">Knihy ve španělštině ke čtení zdarma.</string>
     <string name="browse_manybooks_detail">E-knihy zdarma v mnoha žánrech od nezávislých autorů.</string>
-    <string name="browse_gallica_detail">Francouzské knihy z Francouzské národní knihovny.</string>
+    <string name="browse_gallica_detail">Francouzské EPUB z Francouzské národní knihovny.</string>
+    <string name="browse_download_on_website">Stáhněte si tuto knihu z webu.</string>
+    <string name="browse_open_browser">Otevřít v prohlížeči</string>
+    <string name="browse_catalog_unavailable">Katalog je momentálně nedostupný.</string>
+    <string name="import_web_page">Tento soubor je webová stránka, ne EPUB.</string>
     <string name="browse_free_catalog_saved">Uloženo</string>
     <string name="browse_free_catalog_connecting">Připojování…</string>
     <string name="browse_free_catalog_failed">Katalog %1$s je nedostupný. Zkontroluj připojení a zkus to znovu.</string>

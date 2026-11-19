@@ -16,6 +16,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.SnackbarHostState
+import com.chmouel.liseur.ui.library.BrowserDownloadDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.adaptive.ExperimentalMaterial3AdaptiveApi
@@ -614,6 +616,8 @@ private fun LiseurApp(
                         }.collectAsStateWithLifecycle()
                         val library: LibraryViewModel = viewModel(factory = LibraryViewModel.Factory)
                         val libraryState by library.state.collectAsStateWithLifecycle()
+                        val browserDownloads by library.browserDownloads.collectAsStateWithLifecycle()
+                        browserDownloads.firstOrNull()?.let { BrowserDownloadDialog(it, library::dismissBrowserDownload) }
                         val detailsBook = (detailsState as? BookDetailsUiState.Ready)?.details?.book
                         val context = LocalContext.current
                         BookDetailsScreen(
@@ -1113,6 +1117,28 @@ private fun LibraryRoute(
         )
     }
 
+    val browserDownloads by viewModel.browserDownloads.collectAsStateWithLifecycle()
+    browserDownloads.firstOrNull()?.let { BrowserDownloadDialog(it, viewModel::dismissBrowserDownload) }
+
+    val snackbarHost = remember { SnackbarHostState() }
+    val downloadFailed by rememberUpdatedState(stringResource(R.string.download_failed_open))
+    LaunchedEffect(viewModel, snackbarHost) {
+        viewModel.failedOpens.collect { book ->
+            snackbarHost.showSnackbar(downloadFailed.format(book.title))
+        }
+    }
+
+    val pickedWebPage by viewModel.pickedWebPage.collectAsStateWithLifecycle()
+    if (pickedWebPage) {
+        AlertDialog(
+            onDismissRequest = viewModel::dismissPickedWebPage,
+            text = { Text(stringResource(R.string.import_web_page)) },
+            confirmButton = {
+                TextButton(onClick = viewModel::dismissPickedWebPage) { Text(stringResource(android.R.string.ok)) }
+            },
+        )
+    }
+
     val alreadyShelved by viewModel.alreadyShelved.collectAsStateWithLifecycle()
     alreadyShelved?.let { book ->
         AlertDialog(
@@ -1229,6 +1255,7 @@ private fun LibraryRoute(
         // before anything leaves the screen.
         BackHandler(enabled = reorder == null) { openSeriesKey = null }
         SeriesScreen(
+            snackbarHost = snackbarHost,
             shelf = openSeries,
             downloads = state.downloads,
             extras = seriesExtras,
@@ -1481,7 +1508,7 @@ private fun LibraryRoute(
         onSetSort = viewModel::setSort,
         onToggleSortDirection = viewModel::toggleSortDirection,
         onDownloadAndOpen = { book, resumeListening -> viewModel.downloadAndOpen(book, resumeListening) },
-        failedOpens = viewModel.failedOpens,
+        snackbarHost = snackbarHost,
         sentUp = viewModel.sentUp,
         uploadRefusals = viewModel.uploadRefusals,
         onRefusalShown = viewModel::refusalSeen,

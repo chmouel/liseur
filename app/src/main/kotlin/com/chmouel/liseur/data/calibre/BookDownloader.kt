@@ -1,6 +1,9 @@
 package com.chmouel.liseur.data.calibre
 
+import com.chmouel.liseur.data.remote.BOOK_HEADER_BYTES
 import com.chmouel.liseur.data.remote.RemoteHttp
+import com.chmouel.liseur.data.remote.isEpub
+import com.chmouel.liseur.data.remote.isHtmlBookResponse
 import com.chmouel.liseur.data.remote.RemoteHttpFailure
 import com.chmouel.liseur.data.remote.SyncFailure
 import java.io.File
@@ -8,7 +11,10 @@ import java.io.IOException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
+import okhttp3.HttpUrl
 import okhttp3.Request
+import okio.buffer
+import okio.source
 import kotlin.coroutines.coroutineContext
 
 /** Why a download did not finish, in terms the library can explain. */
@@ -24,6 +30,10 @@ sealed interface DownloadFailure {
 
     /** There is no room left on the device for the rest of the file. */
     data object OutOfSpace : DownloadFailure
+
+    data object InvalidEpub : DownloadFailure
+
+    data class BrowserRequired(val url: String) : DownloadFailure
 
     data class Network(val message: String) : DownloadFailure
 }
@@ -57,6 +67,7 @@ class BookDownloader(
      * of it by the time it is read.
      */
     private val freeSpace: (() -> Long)? = null,
+    private val validateOpdsEpub: Boolean = false,
 ) {
 
     suspend fun download(
@@ -67,6 +78,16 @@ class BookDownloader(
         val partial = File(target.parentFile, target.name + ".part")
         val etagFile = File(target.parentFile, target.name + ".etag")
         target.parentFile?.mkdirs()
+
+        fun rejectDownload(website: HttpUrl? = null): DownloadOutcome.Failed {
+            partial.delete()
+            etagFile.delete()
+            val browserUrl = website?.forBrowser()?.toString()
+            return DownloadOutcome.Failed(
+                if (browserUrl != null && browserUrl.length <= 2048) DownloadFailure.BrowserRequired(browserUrl)
+                else DownloadFailure.InvalidEpub,
+            )
+        }
 
         // The validator is kept with the address it came from: an ETag
         // only names a version of one resource, so a partial file from
@@ -119,6 +140,15 @@ class BookDownloader(
                     ?: return@withContext DownloadOutcome.Failed(
                         DownloadFailure.Network("The server sent no book"),
                     )
+                if (validateOpdsEpub && !appending) {
+                    val header = response.peekBody(BOOK_HEADER_BYTES.toLong()).bytes()
+                    if (isHtmlBookResponse(header) ||
+                        (body.contentType()?.subtype in listOf("html", "xhtml+xml") &&
+                            !header.hasZipHeader())
+                    ) {
+                        return@withContext rejectDownload(response.request.url)
+                    }
+                }
                 val alreadyHave = if (appending) resumeFrom else 0L
                 val total = body.contentLength().takeIf { it > 0 }?.plus(alreadyHave)
 
@@ -152,6 +182,13 @@ class BookDownloader(
                         output.flush()
                         onProgress(written, total)
                     }
+                }
+                if (validateOpdsEpub && !isEpub(partial)) {
+                    val resumedHtml = appending && partial.source().buffer().use { file ->
+                        file.request(BOOK_HEADER_BYTES.toLong())
+                        isHtmlBookResponse(file.readByteArray(minOf(file.buffer.size, BOOK_HEADER_BYTES.toLong())))
+                    }
+                    return@withContext rejectDownload(response.request.url.takeIf { resumedHtml })
                 }
             }
 
@@ -188,12 +225,27 @@ class BookDownloader(
         }
     }
 
+    private fun HttpUrl.forBrowser(): HttpUrl =
+        newBuilder().username("").password("").query(null).fragment(null).apply {
+            for (name in queryParameterNames) {
+                if (name.lowercase() !in BOOK_QUERY_PARAMETERS) continue
+                for (value in queryParameterValues(name)) {
+                    if (value != null && BOOK_QUERY_VALUE.matches(value)) addQueryParameter(name, value)
+                }
+            }
+        }.build()
+
+    private fun ByteArray.hasZipHeader(): Boolean =
+        size >= 4 && this[0] == 'P'.code.toByte() && this[1] == 'K'.code.toByte() && this[2] == 3.toByte() && this[3] == 4.toByte()
+
     private fun outOfSpace(): Boolean {
         val free = freeSpace?.invoke() ?: return false
         return free < BULK_DOWNLOAD_RESERVE_BYTES
     }
 
     private companion object {
+        val BOOK_QUERY_PARAMETERS = setOf("id", "book", "book_id", "bookid")
+        val BOOK_QUERY_VALUE = Regex("[0-9]{1,18}")
         const val BUFFER = 64 * 1024
         const val REPORT_EVERY = 256 * 1024
         const val CHECK_SPACE_EVERY = 4L * 1024 * 1024
