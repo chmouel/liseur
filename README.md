@@ -84,6 +84,13 @@ selected passage can be translated by Android's own translator on the
 phone, or by a server you add, and from there the page itself can be
 translated sentence by sentence as you read.
 
+Tap **Save to vocabulary** in the dictionary to keep the word, its definition,
+and the passage where you found it. Open **Vocabulary Builder** from the
+library menu to review words offline, or from a book’s **Notes** to see its
+words and return to their passages. The vocabulary menu can export a JSON
+backup or an Anki-compatible CSV. Dictionary settings control automatic
+saving, and Vocabulary settings offer daily limits and reminders.
+
 The reading companion answers questions about characters and events using
 the passages before the selected text. Character profiles show their source
 passages, and optional background recaps summarize finished chapters. Even

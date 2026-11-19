@@ -60,6 +60,7 @@ import com.chmouel.liseur.domain.localeWeekStart
 import com.chmouel.liseur.ui.reading.FineTypographyActions
 import com.chmouel.liseur.ui.reading.orientationLockHonoured
 import com.chmouel.liseur.ui.stats.BookReadingStatsScreen
+import com.chmouel.liseur.vocabulary.VocabularyScreen
 import com.chmouel.liseur.ui.stats.ReadingStatsScreen
 import com.chmouel.liseur.ui.stats.ReadingStatsViewModel
 import com.chmouel.liseur.ui.library.BookActionsSheet
@@ -327,6 +328,7 @@ private fun LiseurApp(
         Snapshot.withMutableSnapshot {
             backStack.clear()
             backStack.addAll(stack)
+            if (request.target == LaunchTarget.VOCABULARY) backStack.add(Route.Vocabulary)
         }
         libraryLaunchId++
         openFreeCatalogs = false
@@ -480,6 +482,7 @@ private fun LiseurApp(
                             onWidgetHandled = { launch?.request?.let(onLaunchHandled) },
                             onOpenSettings = { backStack.push(Route.Settings) },
                             onOpenStats = { backStack.push(Route.Stats) },
+                            onOpenVocabulary = { backStack.push(Route.Vocabulary) },
                             onOpenTranslation = { backStack.push(Route.Translation) },
                             onSyncNow = {
                                 context.container.positionSync.request(com.chmouel.liseur.sync.SyncScope.Full)
@@ -502,6 +505,23 @@ private fun LiseurApp(
                         onExit = back,
                         openFreeCatalogs = openFreeCatalogs,
                         onFreeCatalogsOpened = { openFreeCatalogs = false },
+                    )
+
+                    Route.Vocabulary -> VocabularyScreen(
+                        repository = context.container.vocabulary,
+                        onBack = back,
+                        onOpenPassage = { source ->
+                            scope.launch {
+                                val file = context.container.database.bookDao().getByUrl(source.bookUrl)?.openableUri()
+                                if (file == null || source.locator == null) {
+                                    android.widget.Toast.makeText(
+                                        context, R.string.vocabulary_book_unavailable, android.widget.Toast.LENGTH_SHORT,
+                                    ).show()
+                                } else {
+                                    context.startActivity(ReaderActivity.intent(context, file, source.bookUrl, at = source.locator))
+                                }
+                            }
+                        },
                     )
 
                     Route.Stats -> {
@@ -763,6 +783,9 @@ private fun LiseurApp(
                             onDefinitionTarget = {
                                 scope.launch { repository.setDefinitionTarget(it) }
                             },
+                            appSettings = repository,
+                            onVocabularyAutoSave = { scope.launch { repository.setVocabularyAutoSave(it) } },
+                            onVocabularyContext = { scope.launch { repository.setVocabularySaveContext(it) } },
                             onDictionaryOnLongPress = {
                                 scope.launch { repository.setDictionaryOnLongPress(it) }
                             },
@@ -980,6 +1003,7 @@ private fun ServerAccountRoute(
 
 @Composable
 private fun LibraryRoute(
+    onOpenVocabulary: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenStats: () -> Unit,
     onOpenTranslation: () -> Unit,
@@ -1384,6 +1408,7 @@ private fun LibraryRoute(
         },
         onOpenSettings = onOpenSettings,
         onOpenStats = onOpenStats,
+        onOpenVocabulary = onOpenVocabulary,
         onOpenBookStats = onOpenBookStats,
         onOpenBookDetails = onOpenBookDetails,
         onConnectServer = onConnectServer,

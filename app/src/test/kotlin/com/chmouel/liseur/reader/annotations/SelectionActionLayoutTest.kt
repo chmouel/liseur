@@ -128,7 +128,8 @@ class SelectionActionLayoutTest {
         assertEquals(listOf(SelectionAction.SHARE, SelectionAction.SEARCH, SelectionAction.NOTE),
             actions.filter { it in setOf(SelectionAction.SHARE, SelectionAction.SEARCH, SelectionAction.NOTE) })
         assertEquals(actions.indexOf(SelectionAction.SEARCH) - 1, actions.indexOf(SelectionAction.COMPANION))
-        assertEquals(actions.indexOf(SelectionAction.COMPANION) - 1, actions.indexOf(SelectionAction.LOOK_UP))
+        assertEquals(actions.indexOf(SelectionAction.COMPANION) - 1, actions.indexOf(SelectionAction.SAVE_VOCABULARY))
+        assertEquals(actions.indexOf(SelectionAction.SAVE_VOCABULARY) - 1, actions.indexOf(SelectionAction.LOOK_UP))
     }
 
     @Test fun `saved layouts keep toolbar order and put hidden actions after it`() {

@@ -63,6 +63,9 @@ class ShortcutResourcesTest {
             }
         }
         assertEquals(listOf("continue_reading", "library", "reading_statistics"), ids)
-        assertEquals(LaunchTarget.entries.map { it.action }, actions)
+        assertEquals(
+            listOf(LaunchTarget.CONTINUE, LaunchTarget.LIBRARY, LaunchTarget.STATS).map { it.action },
+            actions,
+        )
     }
 }

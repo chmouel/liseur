@@ -1,5 +1,17 @@
 package com.chmouel.liseur.reader.chrome
 
+import android.widget.Toast
+import androidx.activity.compose.BackHandler
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.chmouel.liseur.vocabulary.VocabularyBook
+import com.chmouel.liseur.vocabulary.VocabularyRepository
+import com.chmouel.liseur.vocabulary.VocabularyScreen
+import kotlinx.coroutines.flow.StateFlow
+import org.json.JSONObject
+import org.readium.r2.shared.publication.Locator
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -26,6 +38,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Notes
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.CloudSync
 import androidx.compose.material.icons.outlined.Close
@@ -59,6 +72,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.selected
@@ -72,6 +86,7 @@ import com.chmouel.liseur.R
 import com.chmouel.liseur.data.db.AnnotationKind
 import com.chmouel.liseur.data.db.BookAnnotation
 import com.chmouel.liseur.data.settings.ReaderTheme
+import com.chmouel.liseur.reader.annotations.locator
 import com.chmouel.liseur.reader.annotations.HighlightTint
 import com.chmouel.liseur.reader.annotations.noteAnnotated
 import com.chmouel.liseur.ui.contentWidthCap
@@ -110,6 +125,8 @@ fun ContentsScreen(
     onEntrySelected: (Link) -> Unit,
     onAnnotationSelected: (BookAnnotation) -> Unit,
     onBookNoteAdded: () -> Unit,
+    onOpenVocabulary: () -> Unit,
+    vocabularyCount: Int,
     onAnnotationDeleted: (BookAnnotation) -> Unit,
     onExport: () -> Unit,
     onClose: () -> Unit,
@@ -292,6 +309,21 @@ fun ContentsScreen(
                         theme = theme,
                         emptyRes = R.string.reader_no_notes,
                         expandedIds = expandedIds,
+                        header = {
+                            ListItem(
+                                headlineContent = { Text(stringResource(R.string.vocabulary_title)) },
+                                supportingContent = { Text(stringResource(R.string.vocabulary_book_count, vocabularyCount)) },
+                                trailingContent = { Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, null) },
+                                colors = ListItemDefaults.colors(
+                                    containerColor = Color.Transparent,
+                                    headlineColor = theme.foreground,
+                                    supportingColor = theme.faded(0.65f),
+                                    trailingIconColor = theme.faded(0.65f),
+                                ),
+                                modifier = Modifier.clickable(onClick = onOpenVocabulary),
+                            )
+                            HorizontalDivider(color = theme.foreground.copy(alpha = 0.08f))
+                        },
                         onSelected = onAnnotationSelected,
                         onToggleExpanded = toggleExpanded,
                         onDeleted = onAnnotationDeleted,
@@ -365,8 +397,9 @@ private fun AnnotationList(
     onToggleExpanded: (BookAnnotation) -> Unit,
     onDeleted: (BookAnnotation) -> Unit,
     bottomInset: Dp,
+    header: (@Composable () -> Unit)? = null,
 ) {
-    if (annotations.isEmpty()) {
+    if (annotations.isEmpty() && header == null) {
         EmptyMessage(theme, emptyRes, bottomInset)
         return
     }
@@ -374,6 +407,12 @@ private fun AnnotationList(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 24.dp + bottomInset),
     ) {
+        if (header != null) item(key = "vocabulary") { header() }
+        if (annotations.isEmpty()) item {
+            Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
+                Text(stringResource(emptyRes), color = theme.faded(0.7f))
+            }
+        }
         items(annotations, key = { it.id }) { annotation ->
             AnnotationRow(
                 annotation = annotation,
@@ -624,3 +663,68 @@ private val ExpandedIdsSaver = listSaver<SnapshotStateList<String>, String>(
     save = { it.toList() },
     restore = { it.toMutableStateList() },
 )
+
+
+@Composable
+internal fun ReaderContents(
+    publication: Publication,
+    theme: ReaderTheme,
+    currentLocator: StateFlow<Locator>?,
+    annotations: List<BookAnnotation>,
+    vocabulary: VocabularyRepository,
+    book: VocabularyBook,
+    onOpenNote: (BookAnnotation?) -> Unit,
+    onDeleteNote: (BookAnnotation) -> Unit,
+    onExport: () -> Unit,
+    onClose: () -> Unit,
+    onSyncBook: (() -> Unit)?,
+    onOpenPlace: (Locator, Boolean) -> Unit,
+) {
+    val context = LocalContext.current
+    var showVocabulary by rememberSaveable { mutableStateOf(false) }
+    val saved = rememberSaveableStateHolder()
+    val back = { if (showVocabulary) showVocabulary = false else onClose() }
+    BackHandler(onBack = back)
+    if (showVocabulary) {
+        VocabularyScreen(
+            repository = vocabulary,
+            currentBook = book,
+            onBack = back,
+            onOpenPassage = { source ->
+                val place = source.locator?.let { runCatching { Locator.fromJSON(JSONObject(it)) }.getOrNull() }
+                if (place == null) {
+                    Toast.makeText(context, R.string.vocabulary_book_unavailable, Toast.LENGTH_SHORT).show()
+                } else {
+                    onOpenPlace(place, true)
+                }
+            },
+        )
+    } else {
+        saved.SaveableStateProvider("contents") {
+            val here = currentLocator?.collectAsStateWithLifecycle()
+            val stats by remember(vocabulary, book.bookUrl) { vocabulary.dao.statistics(book.bookUrl) }
+                .collectAsStateWithLifecycle(initialValue = null)
+            ContentsScreen(
+                publication = publication,
+                theme = theme,
+                currentHref = here?.value?.href?.toString(),
+                annotations = annotations,
+                onAnnotationSelected = { annotation ->
+                    if (annotation.kind == AnnotationKind.BOOK_NOTE.name) onOpenNote(annotation)
+                    else annotation.locator()?.let { onOpenPlace(it, false) }
+                },
+                onBookNoteAdded = { onOpenNote(null) },
+                onOpenVocabulary = { showVocabulary = true },
+                vocabularyCount = stats?.total ?: 0,
+                onAnnotationDeleted = onDeleteNote,
+                onExport = onExport,
+                onClose = onClose,
+                onSyncBook = onSyncBook,
+                onEntrySelected = { link ->
+                    val place = publication.locatorFromLink(link)
+                    if (place != null) onOpenPlace(place, false) else onClose()
+                },
+            )
+        }
+    }
+}

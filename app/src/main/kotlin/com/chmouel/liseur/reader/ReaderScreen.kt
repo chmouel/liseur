@@ -1,5 +1,14 @@
 package com.chmouel.liseur.reader
 
+import com.chmouel.liseur.vocabulary.MAX_VOCABULARY_WORD_LENGTH
+import com.chmouel.liseur.vocabulary.VocabularyBook
+import com.chmouel.liseur.vocabulary.VocabularyLookup
+import androidx.compose.runtime.saveable.rememberSaveable
+import com.chmouel.liseur.vocabulary.VocabularyLookupAction
+import com.chmouel.liseur.vocabulary.VocabularyOccurrence
+import com.chmouel.liseur.vocabulary.vocabularyLanguage
+import com.chmouel.liseur.vocabulary.vocabularyLocationKey
+import com.chmouel.liseur.vocabulary.vocabularySentence
 import android.app.Activity
 import android.graphics.BitmapFactory
 import android.graphics.Rect
@@ -141,6 +150,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.IntOffset
 import com.chmouel.liseur.R
+import com.chmouel.liseur.container
 import com.chmouel.liseur.translate.PageSwap
 import com.chmouel.liseur.translate.PageTranslation
 import com.chmouel.liseur.translate.PageSentence
@@ -250,7 +260,7 @@ import com.chmouel.liseur.reader.chrome.CachedLookup
 import com.chmouel.liseur.reader.chrome.layoutPasses
 import com.chmouel.liseur.reader.chrome.ChromeEdgeFade
 import com.chmouel.liseur.reader.chrome.ReadingScrubber
-import com.chmouel.liseur.reader.chrome.ContentsScreen
+import com.chmouel.liseur.reader.chrome.ReaderContents
 import com.chmouel.liseur.reader.chrome.Endpaper
 import com.chmouel.liseur.reader.chrome.FixedLayoutPinchHud
 import com.chmouel.liseur.reader.chrome.FontSizeHud
@@ -572,7 +582,7 @@ internal fun ReaderScreen(
     var chromeVisible by remember { mutableStateOf(false) }
     val chromeTransition = remember { MutableTransitionState(false) }
     val chromeDrawn = { chromeTransition.currentState || chromeTransition.targetState || !chromeTransition.isIdle }
-    var showToc by remember { mutableStateOf(false) }
+    var showToc by rememberSaveable { mutableStateOf(false) }
     var searchFor by remember { mutableStateOf<String?>(null) }
     var goToPage by remember { mutableStateOf(false) }
     var goToPercent by remember { mutableStateOf(false) }
@@ -838,6 +848,7 @@ internal fun ReaderScreen(
     var noteFor by remember { mutableStateOf<ActiveSelection?>(null) }
     var bookNoteEditor by remember { mutableStateOf<BookNoteEditor?>(null) }
     var defineWord by remember { mutableStateOf<DefinitionQuery?>(null) }
+    var vocabularySource by remember { mutableStateOf<Pair<DefinitionQuery, VocabularyOccurrence>?>(null) }
     var dictionaryTranslation by remember { mutableStateOf<DefinitionQuery?>(null) }
     var translatePassage by remember { mutableStateOf<ActiveSelection?>(null) }
     // The page translated sentence by sentence, while it is; see [TranslatedPages].
@@ -854,6 +865,15 @@ internal fun ReaderScreen(
     val translatedViews = remember { Collections.newSetFromMap(WeakHashMap<WebView, Boolean>()) }
     val view = LocalView.current
     val context = LocalContext.current
+    val vocabulary = context.container.vocabulary
+    val vocabularyBookId = wholeBook?.bookUrl ?: readAloud?.bookId.orEmpty()
+    val vocabularyPrefs = context.container.appSettings
+    val autoSaveVocabularyNow by remember(vocabularyPrefs) {
+        vocabularyPrefs.settings.map { it.vocabularyAutoSave }.distinctUntilChanged()
+    }.collectAsStateWithLifecycle(initialValue = false)
+    val saveVocabularyContextNow by remember(vocabularyPrefs) {
+        vocabularyPrefs.settings.map { it.vocabularySaveContext }.distinctUntilChanged()
+    }.collectAsStateWithLifecycle(initialValue = true)
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     // The device's languages may have been downloaded while the reader was away.
     LaunchedEffect(translate, lifecycle) {
@@ -5055,7 +5075,7 @@ internal fun ReaderScreen(
         return TranslatedPages.selectionIntersectsAppliedSwap(nav, translatedSentence.sentence)
     }
 
-    fun lookUpSelection(active: ActiveSelection, automatically: Boolean = false) {
+    fun lookUpSelection(active: ActiveSelection, automatically: Boolean = false, saveVocabulary: Boolean = false) {
         val translationRun = if (pageTranslated) pageTranslation ?: restoringPageTranslation else null
         fun abandonAutomaticLookup() {
             if (automatically && automaticSelection === active) {
@@ -5064,11 +5084,66 @@ internal fun ReaderScreen(
                 automaticSelection = null
             }
         }
-        val openLookup: (DefinitionQuery) -> Unit = { query ->
-            when (dictionary.target) {
-                DefinitionTarget.BUILT_IN -> defineWord = query
+        fun openLookup(query: DefinitionQuery, block: SelectionBlock.Capture?) {
+            val locator = active.locator
+            val language = vocabularyLanguage(query.language ?: publication.metadata.languages.firstOrNull())
+            val sentence = if (saveVocabularyContextNow && query.word.length <= MAX_VOCABULARY_WORD_LENGTH) {
+                when {
+                    block?.before != null && block.after != null ->
+                        vocabularySentence(block.before, query.word, block.after, language)
+                    !pageTranslated -> vocabularySentence(locator.text.before, active.text, locator.text.after, language)
+                    else -> null
+                }
+            } else {
+                null
+            }
+            val place = SelectionBlock.place(locator, block?.selector)
+            val locationKey = vocabularyLocationKey(place.toJSON().toString())
+            val storedPlace = if (saveVocabularyContextNow) place else place.copy(
+                text = Locator.Text(highlight = place.text.highlight),
+            )
+            val occurrence = VocabularyOccurrence(
+                bookUrl = vocabularyBookId,
+                bookTitle = publication.metadata.title.orEmpty(),
+                locationKey = locationKey,
+                locator = storedPlace.toJSON().toString(),
+                sentence = sentence,
+                lastSeenAt = 0,
+            )
+            if (saveVocabulary) {
+                effectScope.launch {
+                    try {
+                        val saved = vocabulary.collect(VocabularyLookup(query.word, language, occurrence), null, null)
+                        Toast.makeText(
+                            context,
+                            if (saved != null) R.string.vocabulary_saved else R.string.vocabulary_selection_too_long,
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                    } catch (error: kotlinx.coroutines.CancellationException) {
+                        throw error
+                    } catch (_: Exception) {
+                        Toast.makeText(context, R.string.vocabulary_error, Toast.LENGTH_SHORT).show()
+                    }
+                }
+            } else when (dictionary.target) {
+                DefinitionTarget.BUILT_IN -> {
+                    vocabularySource = query to occurrence
+                    defineWord = query
+                }
                 DefinitionTarget.EXTERNAL_APP -> {
                     context.lookUpExternally(query.word, dictionary.baseUrl)
+                    effectScope.launch {
+                        try {
+                            vocabulary.collect(
+                                VocabularyLookup(query.word, language, occurrence), null, null,
+                                existingOnly = !autoSaveVocabularyNow,
+                            )
+                        } catch (error: kotlinx.coroutines.CancellationException) {
+                            throw error
+                        } catch (_: Exception) {
+                            Toast.makeText(context, R.string.vocabulary_error, Toast.LENGTH_SHORT).show()
+                        }
+                    }
                 }
             }
         }
@@ -5127,6 +5202,15 @@ internal fun ReaderScreen(
                         language = lookupLanguage,
                         useDisplayedText = true,
                     )
+                    val block = if (query == null || active === tappedSelection ||
+                        query.word.length > MAX_VOCABULARY_WORD_LENGTH
+                    ) null else SelectionBlock.read(nav, active.locator.href.toString(), query.word, saveVocabularyContextNow)
+                    if (navigatorNow !== nav || (tappedSelection ?: selection ?: automaticSelection) !== active ||
+                        !pageTranslated || (pageTranslation ?: restoringPageTranslation) !== run
+                    ) {
+                        abandonAutomaticLookup()
+                        return@launch
+                    }
                     if (!automatically) dismissSelection()
                     if (query == null) {
                         if (automatically) dismissSelection()
@@ -5136,18 +5220,31 @@ internal fun ReaderScreen(
                             Toast.LENGTH_SHORT,
                         ).show()
                     } else {
-                        openLookup(query)
+                        openLookup(query, block)
                     }
                 }
             }
         } else {
-            definitionQuery(
-                originalText = active.text,
-                displayedText = null,
-                language = publication.metadata.languages.firstOrNull(),
-                useDisplayedText = false,
-            )?.let(openLookup) ?: abandonAutomaticLookup()
-            if (!automatically) dismissSelection()
+            effectScope.launch(start = CoroutineStart.UNDISPATCHED) {
+                val nav = navigatorNow
+                val query = definitionQuery(
+                    originalText = active.text,
+                    displayedText = null,
+                    language = publication.metadata.languages.firstOrNull(),
+                    useDisplayedText = false,
+                )
+                val block = if (nav != null && query != null && active !== tappedSelection &&
+                    query.word.length <= MAX_VOCABULARY_WORD_LENGTH
+                ) {
+                    SelectionBlock.read(nav, active.locator.href.toString(), query.word, saveVocabularyContextNow)
+                } else null
+                if (navigatorNow !== nav || pageTranslated || (tappedSelection ?: selection ?: automaticSelection) !== active) {
+                    abandonAutomaticLookup()
+                    return@launch
+                }
+                if (query != null) openLookup(query, block) else abandonAutomaticLookup()
+                if (!automatically) dismissSelection()
+            }
         }
     }
 
@@ -5248,6 +5345,9 @@ internal fun ReaderScreen(
                 selectionWebsiteIntent(entry, query, language, book)?.let { context.launchSelectionIntent(it) }
                 dismissSelection()
             } },
+            onSaveVocabulary = if (!inSheet && dictionary.target == DefinitionTarget.EXTERNAL_APP) {
+                { act { live -> lookUpSelection(live, saveVocabulary = true) } }
+            } else null,
             onCopy = { actOnDisplayedText { text -> context.copySelection(text); dismissSelection() } },
             onCitation = { actOnDisplayedText { text ->
                 context.copySelection(citationText(text, publication.metadata.title, publication.metadata.authors.map { it.name }))
@@ -5518,156 +5618,170 @@ internal fun ReaderScreen(
             )
         }
 
-    val query = defineWord
-    if (query != null) key(query) {
-        val appLanguage = LocalConfiguration.current.locales[0].toLanguageTag()
-        val definitionLanguage = query.language ?: publication.metadata.languages.firstOrNull()
-        DefinitionSheet(
-            word = query.word,
-            fallbackWords = query.fallbackWords(),
-            languages = remember(definitionLanguage) {
-                WiktionaryClient.languagesFor(definitionLanguage)
-            },
-            bookLanguage = definitionLanguage,
-            enabled = dictionary.enabled,
-            baseUrl = dictionary.baseUrl,
-            altLanguage = remember(definitionLanguage, dictionary.altLanguage, appLanguage) {
-                altLanguageFor(dictionary.altLanguage, definitionLanguage, appLanguage)
-            },
-            onEnable = onEnableDictionary,
-            onOpenInDictionaryApp = {
-                context.lookUpExternally(it, dictionary.baseUrl)
-                defineWord = null
-                if (automaticSelection != null) dismissSelection()
-            },
-            onOpenInBrowser = { term, site ->
-                context.openDictionaryEntry(term, site)
-                defineWord = null
-                if (automaticSelection != null) dismissSelection()
-            },
-            onLookupSuggestion = { word, language ->
-                if (automaticSelection != null) dismissSelection()
-                defineWord = DefinitionQuery(word, language ?: query.language)
-            },
-            selectedDefinitionActions = { text, language ->
-                val focus = LocalFocusManager.current
-                val nextQuery = definitionQuery(text, null, language, useDisplayedText = false)
-                fun closeCard() {
+    val definitionOverlay: @Composable () -> Unit = {
+        val query = defineWord
+        if (query != null) key(query) {
+            val appLanguage = LocalConfiguration.current.locales[0].toLanguageTag()
+            val definitionLanguage = query.language ?: publication.metadata.languages.firstOrNull()
+            val vocabularyLookup = remember(query, definitionLanguage, vocabularySource) {
+                VocabularyLookup(
+                    word = query.word,
+                    language = vocabularyLanguage(definitionLanguage),
+                    occurrence = vocabularySource?.takeIf { it.first === query }?.second,
+                )
+            }
+            DefinitionSheet(
+                word = query.word,
+                vocabularyAction = { definition, translationLanguage ->
+                    VocabularyLookupAction(vocabulary, vocabularyLookup, autoSaveVocabularyNow, definition, translationLanguage)
+                },
+                fallbackWords = query.fallbackWords(),
+                languages = remember(definitionLanguage) {
+                    WiktionaryClient.languagesFor(definitionLanguage)
+                },
+                bookLanguage = definitionLanguage,
+                enabled = dictionary.enabled,
+                baseUrl = dictionary.baseUrl,
+                altLanguage = remember(definitionLanguage, dictionary.altLanguage, appLanguage) {
+                    altLanguageFor(dictionary.altLanguage, definitionLanguage, appLanguage)
+                },
+                onEnable = onEnableDictionary,
+                onOpenInDictionaryApp = {
+                    context.lookUpExternally(it, dictionary.baseUrl)
                     defineWord = null
                     if (automaticSelection != null) dismissSelection()
-                }
-                val title = publication.metadata.title
-                val authors = publication.metadata.authors.map { it.name }
-                SheetSelectionActionBar(
-                    actions = SelectionActions(
-                        layout = selectionActionLayout,
-                        annotate = false,
-                        onHighlight = {},
-                        onNote = {
-                            closeCard()
-                            bookNoteEditor = BookNoteEditor(existing = null, initialNote = text)
-                        },
-                        noteLabel = R.string.annotation_book_note_title,
-                        onLookUp = {
-                            if (nextQuery == query) focus.clearFocus()
-                            if (automaticSelection != null) dismissSelection()
-                            defineWord = nextQuery
-                        },
-                        onSearch = { closeCard(); searchFor = text },
-                        onShare = { closeCard(); context.shareText(text, title) },
-                        onCopy = { closeCard(); context.copySelection(text) },
-                        onOpenWith = if (processAvailable) ({
-                            closeCard()
-                            context.launchSelectionIntent(processTextIntent(text), chooser = true)
-                        }) else null,
-                        onWebSearch = if (webSearchAvailable) ({
-                            closeCard()
-                            context.launchSelectionIntent(webSearchIntent(text))
-                        }) else null,
-                        onWebsite = { entry ->
-                            val book = SelectionBookContext(title = title, authors = authors, isbn = isbnOf(publication.metadata.identifier))
-                            val request = if (entry.action.asksAi) context.askAiPrompt(text, language, book) else text
-                            selectionWebsiteIntent(entry, request, language, book)?.let { context.launchSelectionIntent(it) }
-                            closeCard()
-                        },
-                        onTranslate = if (translate.isAvailable && translateReady) ({
-                            closeCard()
-                            dictionaryTranslation = DefinitionQuery(text, language)
-                        }) else null,
-                        translateLabel = translateLabel,
-                    ),
-                    activeTint = null,
-                    palette = highlightPalette,
-                    lookUp = nextQuery != null,
-                )
-            },
-            selectionActions = automaticSelection?.let { active ->
-                {
-                    val actions = remember(active, dictionary, translateReady, translateLabel, pageTranslated, companion, selectionActionLayout, processAvailable, webSearchAvailable) {
-                        selectionActionsFor(active, inSheet = true)
+                },
+                onOpenInBrowser = { term, site ->
+                    context.openDictionaryEntry(term, site)
+                    defineWord = null
+                    if (automaticSelection != null) dismissSelection()
+                },
+                onLookupSuggestion = { word, language ->
+                    if (automaticSelection != null) dismissSelection()
+                    defineWord = DefinitionQuery(word, language ?: query.language)
+                },
+                selectedDefinitionActions = { text, language ->
+                    val focus = LocalFocusManager.current
+                    val nextQuery = definitionQuery(text, null, language, useDisplayedText = false)
+                    fun closeCard() {
+                        defineWord = null
+                        if (automaticSelection != null) dismissSelection()
                     }
+                    val title = publication.metadata.title
+                    val authors = publication.metadata.authors.map { it.name }
                     SheetSelectionActionBar(
-                        actions = actions,
+                        actions = SelectionActions(
+                            layout = selectionActionLayout,
+                            annotate = false,
+                            onHighlight = {},
+                            onNote = {
+                                closeCard()
+                                bookNoteEditor = BookNoteEditor(existing = null, initialNote = text)
+                            },
+                            noteLabel = R.string.annotation_book_note_title,
+                            onLookUp = {
+                                if (nextQuery == query) focus.clearFocus()
+                                if (automaticSelection != null) dismissSelection()
+                                defineWord = nextQuery
+                            },
+                            onSearch = { closeCard(); searchFor = text },
+                            onShare = { closeCard(); context.shareText(text, title) },
+                            onCopy = { closeCard(); context.copySelection(text) },
+                            onOpenWith = if (processAvailable) ({
+                                closeCard()
+                                context.launchSelectionIntent(processTextIntent(text), chooser = true)
+                            }) else null,
+                            onWebSearch = if (webSearchAvailable) ({
+                                closeCard()
+                                context.launchSelectionIntent(webSearchIntent(text))
+                            }) else null,
+                            onWebsite = { entry ->
+                                val book = SelectionBookContext(title = title, authors = authors, isbn = isbnOf(publication.metadata.identifier))
+                                val request = if (entry.action.asksAi) context.askAiPrompt(text, language, book) else text
+                                selectionWebsiteIntent(entry, request, language, book)?.let { context.launchSelectionIntent(it) }
+                                closeCard()
+                            },
+                            onTranslate = if (translate.isAvailable && translateReady) ({
+                                closeCard()
+                                dictionaryTranslation = DefinitionQuery(text, language)
+                            }) else null,
+                            translateLabel = translateLabel,
+                        ),
                         activeTint = null,
                         palette = highlightPalette,
+                        lookUp = nextQuery != null,
                     )
-                }
-            },
-            onSelectText = automaticSelection?.let { active ->
-                {
-                    val nav = navigatorNow
-                    val retained = retainedDictionarySelection
-                    val translatedAt = pageTranslatedTurns
-                    val touchSerial = touch.serial
-                    lookupGesture.selectText()
-                    defineWord = null
-                    effectScope.launch {
-                        fun stillWanted(): Boolean = automaticSelection === active && navigatorNow === nav &&
-                            translatedAt == pageTranslatedTurns && touch.serial == touchSerial
-                        fun abandonRestore() {
-                            if (touch.serial != touchSerial) lookupGesture.clear()
-                            if (automaticSelection === active) {
-                                retained?.discard()
-                                retainedDictionarySelection = null
-                                automaticSelection = null
+                },
+                selectionActions = automaticSelection?.let { active ->
+                    {
+                        val actions = remember(active, dictionary, translateReady, translateLabel, pageTranslated, companion, selectionActionLayout, processAvailable, webSearchAvailable) {
+                            selectionActionsFor(active, inSheet = true)
+                        }
+                        SheetSelectionActionBar(
+                            actions = actions,
+                            activeTint = null,
+                            palette = highlightPalette,
+                        )
+                    }
+                },
+                onSelectText = automaticSelection?.let { active ->
+                    {
+                        val nav = navigatorNow
+                        val retained = retainedDictionarySelection
+                        val translatedAt = pageTranslatedTurns
+                        val touchSerial = touch.serial
+                        lookupGesture.selectText()
+                        defineWord = null
+                        effectScope.launch {
+                            fun stillWanted(): Boolean = automaticSelection === active && navigatorNow === nav &&
+                                translatedAt == pageTranslatedTurns && touch.serial == touchSerial
+                            fun abandonRestore() {
+                                if (touch.serial != touchSerial) lookupGesture.clear()
+                                if (automaticSelection === active) {
+                                    retained?.discard()
+                                    retainedDictionarySelection = null
+                                    automaticSelection = null
+                                }
+                            }
+                            withFrameNanos { }
+                            withFrameNanos { }
+                            if (!stillWanted()) {
+                                abandonRestore()
+                                return@launch
+                            }
+                            val restored = nav != null && retained?.restore(nav, ::stillWanted) == true
+                            if (!stillWanted()) {
+                                abandonRestore()
+                                return@launch
+                            }
+                            val current = if (restored) nav?.currentSelection() else null
+                            if (!stillWanted()) {
+                                abandonRestore()
+                                return@launch
+                            }
+                            retained?.discard()
+                            retainedDictionarySelection = null
+                            automaticSelection = null
+                            if (current != null) {
+                                selection = ActiveSelection(
+                                    current.locator,
+                                    current.rect,
+                                )
+                            } else {
+                                dismissSelection()
                             }
                         }
-                        withFrameNanos { }
-                        withFrameNanos { }
-                        if (!stillWanted()) {
-                            abandonRestore()
-                            return@launch
-                        }
-                        val restored = nav != null && retained?.restore(nav, ::stillWanted) == true
-                        if (!stillWanted()) {
-                            abandonRestore()
-                            return@launch
-                        }
-                        val current = if (restored) nav?.currentSelection() else null
-                        if (!stillWanted()) {
-                            abandonRestore()
-                            return@launch
-                        }
-                        retained?.discard()
-                        retainedDictionarySelection = null
-                        automaticSelection = null
-                        if (current != null) {
-                            selection = ActiveSelection(
-                                current.locator,
-                                current.rect,
-                            )
-                        } else {
-                            dismissSelection()
-                        }
                     }
-                }
-            },
-            onDismiss = {
-                defineWord = null
-                if (automaticSelection != null) dismissSelection()
-            },
-        )
+                },
+                onDismiss = {
+                    defineWord = null
+                    if (automaticSelection != null) dismissSelection()
+                },
+            )
+        }
+
     }
+    definitionOverlay()
 
     companion?.let { CompanionPanelHost(it, navigatorNow, ::go, effectScope, onProgressAction) }
 
@@ -5990,43 +6104,32 @@ internal fun ReaderScreen(
     }
 
     if (showToc) {
-        BackHandler { showToc = false }
-        val here = navigator?.currentLocator?.collectAsStateWithLifecycle()
-        ContentsScreen(
+        ReaderContents(
             publication = publication,
             theme = readingTheme,
-            currentHref = here?.value?.href?.toString(),
+            currentLocator = navigator?.currentLocator,
             annotations = annotations,
-            onAnnotationSelected = { annotation ->
-                if (annotation.kind == AnnotationKind.BOOK_NOTE.name) {
-                    bookNoteEditor = BookNoteEditor(annotation)
-                } else {
-                    annotation.locator()?.let {
-                        showToc = false
-                        chromeVisible = false
-                        onProgressAction.onJump()
-                        navigateLater(it, NavigatorPositionEvent.LOCAL_JUMP)
-                    }
-                }
-            },
-            onBookNoteAdded = {
-                bookNoteEditor = BookNoteEditor(existing = null)
-            },
-            onAnnotationDeleted = onAnnotationAction.remove,
-            onExport = {
-                context.shareText(
-                    onAnnotationAction.notebookMarkdown(),
-                    publication.metadata.title,
-                )
-            },
+            vocabulary = vocabulary,
+            book = VocabularyBook(vocabularyBookId, publication.metadata.title.orEmpty()),
+            onOpenNote = { bookNoteEditor = BookNoteEditor(it) },
+            onDeleteNote = onAnnotationAction.remove,
+            onExport = { context.shareText(onAnnotationAction.notebookMarkdown(), publication.metadata.title) },
             onClose = { showToc = false },
             onSyncBook = if (syncable) onBookSyncAction.start else null,
-            onEntrySelected = { link ->
+            onOpenPlace = { place, refreshOrigin ->
                 showToc = false
                 chromeVisible = false
-                publication.locatorFromLink(link)?.let {
+                if (refreshOrigin) {
+                    effectScope.launch {
+                        val nav = navigatorNow ?: return@launch
+                        val from = if (effectiveScrollingNow) scrolledPlace(nav) else capture(nav, nav.currentLocator.value)
+                        if (navigatorNow !== nav) return@launch
+                        onProgressAction.jumpFrom(from, !effectiveScrollingNow)
+                        navigate(nav, place, NavigatorPositionEvent.LOCAL_JUMP)
+                    }
+                } else {
                     onProgressAction.onJump()
-                    navigateLater(it, NavigatorPositionEvent.LOCAL_JUMP)
+                    navigateLater(place, NavigatorPositionEvent.LOCAL_JUMP)
                 }
             },
         )

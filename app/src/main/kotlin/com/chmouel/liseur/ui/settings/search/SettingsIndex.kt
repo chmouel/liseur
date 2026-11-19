@@ -184,6 +184,16 @@ object SettingsEntries {
         R.string.settings_dictionary_on_long_press_detail, R.string.settings_dictionary,
         shown = { it.builtInDictionary },
     )
+    val VocabularyAutoSave = entry(
+        "vocabulary_auto_save", Route.ReadingNavigation, R.string.vocabulary_auto_save,
+        R.string.vocabulary_auto_save_detail, R.string.settings_dictionary,
+    )
+    val VocabularyContext = entry(
+        "vocabulary_context", Route.ReadingNavigation, R.string.vocabulary_save_context, section = R.string.settings_dictionary,
+    )
+    val VocabularySettings = entry(
+        "vocabulary_settings", Route.ReadingNavigation, R.string.vocabulary_settings, section = R.string.settings_dictionary,
+    )
     val PageTurnStyle = advanced("page_turn_style", Route.ReadingNavigation, R.string.reader_page_turn_style)
     val VolumeKeys = advanced(
         "volume_keys", Route.ReadingNavigation, R.string.settings_volume_keys, R.string.settings_volume_keys_detail,

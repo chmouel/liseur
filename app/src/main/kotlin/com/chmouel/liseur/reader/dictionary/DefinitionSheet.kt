@@ -150,6 +150,7 @@ fun DefinitionSheet(
     selectionActions: (@Composable () -> Unit)? = null,
     selectedDefinitionActions: (@Composable (String, String?) -> Unit)? = null,
     client: WiktionaryClient = remember { WiktionaryClient() },
+    vocabularyAction: (@Composable (String?, String?) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val offlineState by OfflineDictionary.state(context).collectAsState()
@@ -323,6 +324,20 @@ fun DefinitionSheet(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
+                }
+
+                if (vocabularyAction != null) {
+                    val definition = remember(offlineEntries, found, bookLanguage) {
+                        val lines = if (offlineResolved) {
+                            vocabularyOfflineDefinitionLines(offlineEntries.orEmpty())
+                        } else {
+                            vocabularyOnlineDefinitionLines(found?.senses.orEmpty(), bookLanguage)
+                        }
+                        lines.asSequence().filter { it.isNotBlank() }.distinct().take(50)
+                            .joinToString("\n").take(24000).ifBlank { null }
+                    }
+                    val translated = (translations as? TranslationsState.Found)?.first
+                    vocabularyAction(definition ?: translated, target.takeIf { definition == null && translated != null })
                 }
 
                 CompositionLocalProvider(

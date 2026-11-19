@@ -32,6 +32,7 @@ sealed interface Route {
     data object BrowseLibraries : Route
     data object Licences : Route
     data object About : Route
+    data object Vocabulary : Route
     data object Stats : Route
     data class BookStats(val bookUrl: String, val title: String) : Route
     data class BookDetails(val bookUrl: String) : Route
@@ -61,6 +62,7 @@ private val Route.tag: String
         Route.BrowseLibraries -> "BrowseLibraries"
         Route.Licences -> "Licences"
         Route.About -> "About"
+        Route.Vocabulary -> "Vocabulary"
         Route.Stats -> "Stats"
         is Route.BookStats -> "BookStats"
         is Route.BookDetails -> "BookDetails"
@@ -70,7 +72,7 @@ private val objectRoutes: Map<String, Route> = listOf(
     Route.Library, Route.Settings, Route.SettingsSearch, Route.SettingsBackup, Route.ReadingAppearance, Route.SelectionToolbar,
     Route.ReadingNavigation, Route.PageTaps, Route.ReadAloud, Route.Translation, Route.ReadingCompanion, Route.Services,
     Route.WatchedFolders, Route.HiddenBooks, Route.ServerAccount, Route.BrowseLibraries, Route.Licences,
-    Route.About, Route.Stats,
+    Route.About, Route.Stats, Route.Vocabulary,
 ).associateBy { it.tag }
 
 /**

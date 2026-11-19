@@ -19,20 +19,31 @@ internal object SelectionBlock {
     private const val ANSWER_MS = 500L
     private const val MAX_SELECTOR = 512
 
+    data class Capture(val selector: String, val before: String?, val after: String?)
+
+    suspend fun selector(nav: EpubNavigatorFragment, href: String): String? =
+        read(nav, href, text = null, includeContext = false)?.selector
+
     @OptIn(ExperimentalReadiumApi::class)
-    suspend fun selector(nav: EpubNavigatorFragment, href: String): String? {
+    suspend fun read(nav: EpubNavigatorFragment, href: String, text: String?, includeContext: Boolean): Capture? {
         val result = try {
-            withTimeoutOrNull(ANSWER_MS) { nav.evaluateJavascript(SCRIPT) }
+            withTimeoutOrNull(ANSWER_MS) {
+                nav.evaluateJavascript(SCRIPT
+                    .replace("INCLUDE_CONTEXT", includeContext.toString())
+                    .replace("INCLUDE_TEXT", (text != null).toString()))
+            }
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {
             null
         }
-        return parse(result, href)
+        return parseCapture(result, href, text)
     }
 
     /** The selector in [result], only when it was read from the file [href] names. */
-    internal fun parse(result: String?, href: String): String? {
+    internal fun parse(result: String?, href: String): String? = parseCapture(result, href, text = null)?.selector
+
+    internal fun parseCapture(result: String?, href: String, text: String?): Capture? {
         if (result.isNullOrBlank() || result == "null") return null
         val json = when (val decoded = runCatching { JSONTokener(result).nextValue() }.getOrNull()) {
             is JSONObject -> decoded
@@ -40,7 +51,9 @@ internal object SelectionBlock {
             else -> null
         } ?: return null
         if (!ResourceAddress.shows(json.optString("href"), href)) return null
-        return json.optString("selector").takeIf { it.isNotBlank() && it.length <= MAX_SELECTOR }
+        if (text != null && json.optString("text").trim() != text.trim()) return null
+        val selector = json.optString("selector").takeIf { it.isNotBlank() && it.length <= MAX_SELECTOR } ?: return null
+        return Capture(selector, json.optString("before").takeIf { json.has("before") }, json.optString("after").takeIf { json.has("after") })
     }
 
     /** [locator] with [selector] written in, where the companion reads it. */
@@ -87,13 +100,26 @@ internal object SelectionBlock {
             }
             return "body" + (parts.length ? " > " + parts.join(" > ") : "");
           };
-          const start = selection.getRangeAt(0).startContainer;
+          const range = selection.getRangeAt(0);
+          const start = range.startContainer;
           let block = start.nodeType === Node.ELEMENT_NODE ? start : start.parentElement;
           while (block && block !== document.body && !blockTags.has(tag(block))) {
             block = block.parentElement;
           }
           if (!block || !document.body.contains(block)) return null;
-          return JSON.stringify({href: location.href, selector: selector(block)});
+          const result = {href: location.href, selector: selector(block)};
+          if (INCLUDE_TEXT) result.text = range.toString();
+          if (INCLUDE_CONTEXT && block !== document.body && block.contains(range.endContainer)) {
+            const prefix = document.createRange();
+            prefix.selectNodeContents(block);
+            prefix.setEnd(start, range.startOffset);
+            const suffix = document.createRange();
+            suffix.selectNodeContents(block);
+            suffix.setStart(range.endContainer, range.endOffset);
+            result.before = prefix.toString().slice(-1000);
+            result.after = suffix.toString().slice(0, 1000);
+          }
+          return JSON.stringify(result);
         })()
     """.trimIndent()
 }
