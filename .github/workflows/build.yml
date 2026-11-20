@@ -10,8 +10,10 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  policy:
     runs-on: ubuntu-latest
+    outputs:
+      full: ${{ steps.full.outputs.run }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -27,10 +29,10 @@ jobs:
           hack/test-openai-voices
 
       # Tests, lint and builds run locally and in the pre-push hook, so
-      # pull requests only get the quick checks above: skipping this step
-      # skips every Gradle step, and the required `build` check still
-      # reports. The full build runs on push to main, and on a pull
-      # request that carries the full-ci label.
+      # pull requests only get the quick checks above: skipping the full
+      # jobs still lets the required `build` aggregator check report.
+      # The full build runs on push to main, and on a pull request that
+      # carries the full-ci label.
       - name: Check for Android/Gradle changes
         id: changes
         if: github.event_name != 'pull_request'
@@ -56,27 +58,87 @@ jobs:
           )
         run: echo "run=true" >> "$GITHUB_OUTPUT"
 
+  unit-tests:
+    needs: policy
+    if: needs.policy.outputs.full == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
       - name: Set up JDK 17
-        if: steps.full.outputs.run == 'true'
         uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v5
         with:
           distribution: temurin
           java-version: "17"
 
       - name: Set up Gradle
-        if: steps.full.outputs.run == 'true'
         uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6
 
+      - name: Cache Robolectric SDK jars
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ~/.m2/repository/org/robolectric
+          key: robolectric-${{ runner.os }}-${{ hashFiles('gradle/libs.versions.toml') }}
+          restore-keys: |
+            robolectric-${{ runner.os }}-
+
       - name: Unit tests
-        if: steps.full.outputs.run == 'true'
         run: ./gradlew testFossDebugUnitTest testPlayDebugUnitTest --console=plain
 
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: unit-test-reports
+          path: app/build/reports/tests
+          if-no-files-found: ignore
+
+  lint:
+    needs: policy
+    if: needs.policy.outputs.full == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6
+
       - name: Lint
-        if: steps.full.outputs.run == 'true'
         run: ./gradlew lintFossDebug lintPlayDebug --console=plain
 
+      - name: Upload lint reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: lint-reports
+          path: |
+            app/build/reports/lint-results-fossDebug.html
+            app/build/reports/lint-results-playDebug.html
+          if-no-files-found: ignore
+
+  assemble:
+    needs: policy
+    if: needs.policy.outputs.full == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6
+
       - name: Assemble debug APKs
-        if: steps.full.outputs.run == 'true'
         run: ./gradlew assembleFossDebug assemblePlayDebug --console=plain
 
       # The release build is the one people install, and it is the only
@@ -85,23 +147,36 @@ jobs:
       # is cut. Unsigned without a keystore, which is fine: the point is
       # that it builds and shrinks.
       - name: Assemble release APKs
-        if: steps.full.outputs.run == 'true'
         run: ./gradlew assembleFossRelease assemblePlayRelease --console=plain
 
       - name: Upload debug APK
-        if: steps.full.outputs.run == 'true'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: liseur-debug-apk
           path: app/build/outputs/apk/*/debug/*.apk
 
-      - name: Upload test/lint reports
-        if: always() && steps.full.outputs.run == 'true'
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
-        with:
-          name: reports
-          path: |
-            app/build/reports/tests
-            app/build/reports/lint-results-fossDebug.html
-            app/build/reports/lint-results-playDebug.html
-          if-no-files-found: ignore
+  # Required status check on main (ruleset `Main`). Keeps one stable
+  # check name whether only `policy` ran or all full-build jobs ran.
+  build:
+    needs: [policy, unit-tests, lint, assemble]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify build status
+        env:
+          POLICY_RESULT: ${{ needs.policy.result }}
+          FULL: ${{ needs.policy.outputs.full }}
+          UNIT_TESTS_RESULT: ${{ needs.unit-tests.result }}
+          LINT_RESULT: ${{ needs.lint.result }}
+          ASSEMBLE_RESULT: ${{ needs.assemble.result }}
+        run: |
+          set -euo pipefail
+          [[ "$POLICY_RESULT" == "success" ]] || { echo "policy: $POLICY_RESULT"; exit 1; }
+          if [[ "$FULL" == "true" ]]; then
+            for name in UNIT_TESTS_RESULT LINT_RESULT ASSEMBLE_RESULT; do
+              if [[ "${!name}" != "success" ]]; then
+                echo "$name: ${!name}"
+                exit 1
+              fi
+            done
+          fi

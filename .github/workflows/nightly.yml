@@ -46,6 +46,14 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6
 
+      - name: Cache Robolectric SDK jars
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ~/.m2/repository/org/robolectric
+          key: robolectric-${{ runner.os }}-${{ hashFiles('gradle/libs.versions.toml') }}
+          restore-keys: |
+            robolectric-${{ runner.os }}-
+
       # Kept in separate invocations, like build.yml: AGP 9 compiles
       # Kotlin inside the Gradle daemon's heap, and asking for all four
       # variants at once runs out of memory on a runner here.
