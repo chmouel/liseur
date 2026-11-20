@@ -264,6 +264,50 @@ class LiseurSyncMetadataOverridesTest {
     }
 
     @Test
+    fun `a cover push that is no longer bound leaves the other copies owed`() = runTest {
+        db.bookDao().upsert(
+            Book(
+                url = "copy",
+                title = "File title",
+                author = "File author",
+                coverPath = "file-cover-copy.jpg",
+                source = null,
+                addedAt = 1,
+                lastOpenedAt = null,
+                fileTitle = "File title",
+                fileAuthor = "File author",
+            ),
+        )
+        db.workIdentityDao().upsert(WorkAlias("copy", account.accountKey, "work", "high", resolvedAt = 1))
+
+        val bookCover = "book-cover".toByteArray()
+        assertTrue(repository.setCoverFromBytes("book", bookCover))
+        assertTrue(repository.setCoverFromBytes("copy", "copy-cover".toByteArray()))
+        // The copy's edit is the newer one, so it wins the cover election.
+        val copyRevision = db.bookMetadataOverrideDao().revision("copy", MetadataOverrideFields.COVER)!!
+        db.bookMetadataOverrideDao().upsertRevision(copyRevision.copy(updatedAt = Long.MAX_VALUE))
+        // The copy also owes a text edit, so a request leaves the device
+        // before the cover election and the copy can be rebound meanwhile.
+        repository.applyTextEdits(bookUrl = "copy", title = FieldEdit.Set("Copy title"))
+        remote.onMetadataPost = {
+            db.workIdentityDao().upsert(WorkAlias("copy", account.accountKey, "other-work", "high", resolvedAt = 2))
+        }
+
+        sync.sync(account, null)
+
+        assertEquals(emptyList<String>(), remote.coverMethods)
+        val bookStillOwed = db.bookMetadataOverrideDao().revision("book", MetadataOverrideFields.COVER)!!
+        assertEquals(0L, bookStillOwed.retiredRevision)
+
+        remote.onMetadataPost = null
+        sync.sync(account, null)
+
+        // The copy is a work of its own now and pushes there; what matters
+        // here is that the book's cover was not lost with the retired ones.
+        assertTrue(remote.coverPutBodies.any { it.toList() == bookCover.toList() })
+    }
+
+    @Test
     fun `a cover the server does not have leaves the work aliases alone`() = runTest {
         remote.coverBytes = "vanished-cover".toByteArray()
         remote.coverSha = BookMetadataOverrideRepository.sha256Hex(remote.coverBytes!!)
@@ -374,6 +418,7 @@ class LiseurSyncMetadataOverridesTest {
         var coverGetCode: Int? = null
         var coverGets = 0
         var metadataPostCode: Int? = null
+        var onMetadataPost: (suspend () -> Unit)? = null
         var beforeMetadataGet: (suspend () -> Unit)? = null
 
         val dispatcher = object : Dispatcher() {
@@ -383,6 +428,7 @@ class LiseurSyncMetadataOverridesTest {
                     path.endsWith("/metadata") && request.method == "POST" -> {
                         val body = JSONObject(request.body!!.utf8())
                         metadataPosts += body
+                        onMetadataPost?.let { runBlocking { it() } }
                         val refusal = metadataPostCode
                         if (refusal != null) {
                             MockResponse(code = refusal, body = "{}")
