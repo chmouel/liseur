@@ -73,11 +73,11 @@ Examples:
 
 -n (--non-interactive, --yes) answers every confirmation prompt with
 yes, for a release run from a script or a CI job with nothing on the
-other end of stdin. Without it the run stops at "Continue?" and, reading
-end-of-file as no, exits having done nothing. It does not conjure up an
-answer that has no default: picking a version and writing a changelog
-still need a terminal, so a run with no VERSION refuses either way,
---rc included.
+other end of stdin. Without it the run stops at "Continue?", where an
+empty answer takes the default (yes) while end-of-file answers no and
+exits having done nothing. It does not conjure up an answer that has no
+default: picking a version and writing a changelog still need a
+terminal, so a run with no VERSION refuses either way, --rc included.
 
 --rc builds the same signed APK and publishes it as a GitHub prerelease
 and uploads it to the Google Play testing tracks (unless --no-play is
@@ -255,8 +255,9 @@ confirm() {
         return
     fi
 
-    read -r -p "Continue? [y/N] " answer
-    [[ "$answer" =~ ^[Yy]$ ]] || die "release cancelled"
+    local answer
+    read -r -p "Continue? [Y/n] " answer || die "release cancelled"
+    [[ -z "$answer" || "$answer" =~ ^[Yy]$ ]] || die "release cancelled"
 }
 
 pass_show() {
