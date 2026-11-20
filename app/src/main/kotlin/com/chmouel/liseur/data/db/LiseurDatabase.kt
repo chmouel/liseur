@@ -114,14 +114,16 @@ abstract class LiseurDatabase : RoomDatabase() {
                     connection.execSQL(
                         "ALTER TABLE metadata_override_sync ADD COLUMN adopted INTEGER NOT NULL DEFAULT 0",
                     )
-                    // A value this device never acknowledged is one it took
-                    // from the server, and the pull only clears a reset for
-                    // a value it knows it adopted. Marking those rows keeps
-                    // a reset made on another device from leaving the old
-                    // value here forever.
+                    // A text value with no request left to send is one the
+                    // server already holds: either this device wrote it and
+                    // the write was accepted, or it took the value from the
+                    // server. Both are followed when the server drops the
+                    // field, and the pull only clears what it knows it
+                    // adopted, so those rows are marked here. A request
+                    // still waiting to go out keeps its value.
                     connection.execSQL(
                         "UPDATE metadata_override_sync SET adopted = 1 " +
-                            "WHERE acked_revision = 0 AND sent_json IS NULL " +
+                            "WHERE sent_json IS NULL " +
                             "AND field IN ('title', 'author', 'description')",
                     )
                 }
