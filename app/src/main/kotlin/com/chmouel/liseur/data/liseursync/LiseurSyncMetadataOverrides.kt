@@ -224,13 +224,17 @@ class LiseurSyncMetadataOverrides(
                 }
             }
             val winner = pushable.maxByOrNull { it.second.updatedAt } ?: return@inTransaction
+            // The winner has to name the book and work it was elected for
+            // before anything else is given up: retiring the other copies'
+            // revisions for a push that then never happens would drop them
+            // for good.
+            val currentBook = books.getByUrl(winner.first.alias.bookUrl) ?: return@inTransaction
+            if (!stillBound(winner.first)) return@inTransaction
             for ((target, rev, _) in pushable) {
                 if (target.alias.bookUrl != winner.first.alias.bookUrl) {
                     overrides.upsertRevision(rev.copy(retiredRevision = rev.revision))
                 }
             }
-            val currentBook = books.getByUrl(winner.first.alias.bookUrl) ?: return@inTransaction
-            if (!stillBound(winner.first)) return@inTransaction
             coverPushTarget = Triple(winner.first, currentBook, winner.second.revision)
         }
         coverPushTarget?.let { (target, book, rev) ->
@@ -284,10 +288,6 @@ class LiseurSyncMetadataOverrides(
         for (target in copies) {
             val bookUrl = target.alias.bookUrl
             val before = books.getByUrl(bookUrl)
-            // The download may have written over the cover this book already
-            // shows, since the path is the same book and the same bytes. Left
-            // over is only deleted when it is nobody's cover.
-            val awaitedCoverPath = before?.userCoverPath
             val removedHere = before != null && before.coverOverridden && before.userCoverPath == null
             var writtenCoverFile: File? = null
             if (downloadedCover != null && !removedHere) {
@@ -368,8 +368,12 @@ class LiseurSyncMetadataOverrides(
                 }
             }
             oldCoverToDelete?.let { File(it).delete() }
-            if (!coverWritten && writtenCoverFile != null && writtenCoverFile.absolutePath != awaitedCoverPath) {
-                writtenCoverFile.delete()
+            if (!coverWritten && writtenCoverFile != null) {
+                // The path is the same book and the same bytes, so the file
+                // may already be, or have just become, this book's cover: a
+                // restore writes the same one. Only an orphan goes.
+                val owner = books.getByUrl(bookUrl)?.userCoverPath
+                if (owner != writtenCoverFile.absolutePath) writtenCoverFile.delete()
             }
         }
     }
