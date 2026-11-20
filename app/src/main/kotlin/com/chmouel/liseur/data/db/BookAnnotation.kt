@@ -63,8 +63,30 @@ data class BookAnnotation(
     @ColumnInfo(name = "updated_at", defaultValue = "0") val updatedAt: Long = 0,
 )
 
+data class LibraryNote(
+    val id: String,
+    val bookId: String,
+    val title: String?,
+    val author: String?,
+    val kind: String,
+    val chapter: String?,
+    val passage: String?,
+    val body: String?,
+    val locatorJson: String,
+    val tint: String?,
+)
+
 @Dao
 interface BookAnnotationDao {
+    @Query("""
+        SELECT a.id, a.book_id AS bookId, b.title, b.author, a.kind, a.chapter,
+            a.text AS passage, a.note AS body, a.locator_json AS locatorJson, a.tint
+        FROM annotations a LEFT JOIN books b ON b.url = a.book_id
+        WHERE a.kind != 'BOOKMARK'
+        ORDER BY COALESCE(a.note_updated_at, COALESCE(a.note_created_at, a.created_at) * 1000) DESC, a.id
+    """)
+    fun observeLibraryNotes(): Flow<List<LibraryNote>>
+
     @Query("SELECT * FROM annotations WHERE book_id = :bookId ORDER BY total_progression, created_at")
     fun observe(bookId: String): Flow<List<BookAnnotation>>
 
@@ -105,6 +127,14 @@ interface BookAnnotationDao {
     suspend fun update(id: String, change: (BookAnnotation) -> BookAnnotation): BookAnnotation? {
         val current = byId(id) ?: return null
         return change(current).also { upsert(it) }
+    }
+
+    @Transaction
+    suspend fun editOrDelete(id: String, change: (BookAnnotation) -> BookAnnotation?): String? {
+        val current = byId(id) ?: return null
+        val changed = change(current)
+        if (changed == null) delete(current) else upsert(changed)
+        return current.bookId
     }
 
     /**

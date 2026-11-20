@@ -552,6 +552,19 @@
     <string name="reader_navigate">导航</string>
     <string name="reader_bookmarks">书签</string>
     <string name="reader_highlights">标注</string>
+    <string name="library_notes_by_book">按书籍</string>
+    <string name="library_notes_all">全部</string>
+    <string name="library_notes_subtitle">所有高亮与批注</string>
+    <string name="library_notes_collapse_all">收起全部书籍</string>
+    <string name="library_notes_expand_all">展开全部书籍</string>
+    <plurals name="library_notes_count">
+        <item quantity="other">%1$d 条批注</item>
+    </plurals>
+    <string name="library_notes_no_results">没有匹配的批注或高亮。</string>
+    <string name="library_notes_open">在书中打开</string>
+    <string name="library_notes_search">搜索批注</string>
+    <string name="library_notes_empty">你的高亮和批注会显示在这里。</string>
+    <string name="library_notes_missing_book">书籍不可用</string>
     <string name="reader_notes">批注</string>
     <string name="reader_no_bookmarks">还没有书签。点击页面右上角即可标记。</string>
     <string name="reader_no_highlights">还没有标注。选中一段文字即可标记。</string>

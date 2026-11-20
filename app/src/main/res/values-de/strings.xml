@@ -473,6 +473,20 @@
     <string name="reader_navigate">Navigieren</string>
     <string name="reader_bookmarks">Lesezeichen</string>
     <string name="reader_highlights">Markierungen</string>
+    <string name="library_notes_by_book">Nach Buch</string>
+    <string name="library_notes_all">Alle</string>
+    <string name="library_notes_subtitle">Alle Markierungen und Notizen</string>
+    <string name="library_notes_collapse_all">Alle Bücher einklappen</string>
+    <string name="library_notes_expand_all">Alle Bücher ausklappen</string>
+    <plurals name="library_notes_count">
+        <item quantity="one">%1$d Notiz</item>
+        <item quantity="other">%1$d Notizen</item>
+    </plurals>
+    <string name="library_notes_no_results">Keine passenden Notizen oder Markierungen.</string>
+    <string name="library_notes_open">Im Buch öffnen</string>
+    <string name="library_notes_search">Notizen durchsuchen</string>
+    <string name="library_notes_empty">Deine Markierungen und Notizen erscheinen hier.</string>
+    <string name="library_notes_missing_book">Nicht verfügbares Buch</string>
     <string name="reader_notes">Notizen</string>
     <string name="reader_no_bookmarks">Noch keine Lesezeichen. Tippe oben rechts auf einer Seite, um sie zu markieren.</string>
     <string name="reader_no_highlights">Noch keine Markierungen. Wähle eine Passage, um sie zu markieren.</string>

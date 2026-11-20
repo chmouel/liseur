@@ -469,6 +469,20 @@
     <string name="reader_navigate">Naviga</string>
     <string name="reader_bookmarks">Segnalibri</string>
     <string name="reader_highlights">Evidenziazioni</string>
+    <string name="library_notes_by_book">Per libro</string>
+    <string name="library_notes_all">Tutti</string>
+    <string name="library_notes_subtitle">Tutte le evidenziazioni e le note</string>
+    <string name="library_notes_collapse_all">Comprimi tutti i libri</string>
+    <string name="library_notes_expand_all">Espandi tutti i libri</string>
+    <plurals name="library_notes_count">
+        <item quantity="one">%1$d nota</item>
+        <item quantity="other">%1$d note</item>
+    </plurals>
+    <string name="library_notes_no_results">Nessuna nota o evidenziazione corrispondente.</string>
+    <string name="library_notes_open">Apri nel libro</string>
+    <string name="library_notes_search">Cerca nelle note</string>
+    <string name="library_notes_empty">Le tue evidenziazioni e note appariranno qui.</string>
+    <string name="library_notes_missing_book">Libro non disponibile</string>
     <string name="reader_notes">Note</string>
     <string name="reader_no_bookmarks">Nessun segnalibro ancora. Tocca l\'angolo in alto a destra di una pagina per segnarla.</string>
     <string name="reader_no_highlights">Nessuna evidenziazione ancora. Seleziona un passaggio per segnarlo.</string>

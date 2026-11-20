@@ -469,6 +469,20 @@
     <string name="reader_navigate">Naviguer</string>
     <string name="reader_bookmarks">Signets</string>
     <string name="reader_highlights">Surlignages</string>
+    <string name="library_notes_by_book">Par livre</string>
+    <string name="library_notes_all">Tout</string>
+    <string name="library_notes_subtitle">Tous vos passages surlignés et vos notes</string>
+    <string name="library_notes_collapse_all">Tout replier</string>
+    <string name="library_notes_expand_all">Tout déplier</string>
+    <plurals name="library_notes_count">
+        <item quantity="one">%1$d note</item>
+        <item quantity="other">%1$d notes</item>
+    </plurals>
+    <string name="library_notes_no_results">Aucune note ou passage surligné ne correspond.</string>
+    <string name="library_notes_open">Ouvrir dans le livre</string>
+    <string name="library_notes_search">Rechercher dans les notes</string>
+    <string name="library_notes_empty">Vos passages surlignés et vos notes apparaîtront ici.</string>
+    <string name="library_notes_missing_book">Livre indisponible</string>
     <string name="reader_notes">Notes</string>
     <string name="reader_no_bookmarks">Aucun signet pour l\'instant. Touchez le coin supérieur droit d\'une page pour la marquer.</string>
     <string name="reader_no_highlights">Aucun surlignage pour l\'instant. Sélectionnez un passage pour le marquer.</string>

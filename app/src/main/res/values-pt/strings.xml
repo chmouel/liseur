@@ -494,6 +494,20 @@
     <string name="reader_navigate">Navegar</string>
     <string name="reader_bookmarks">Marcadores</string>
     <string name="reader_highlights">Destaques</string>
+    <string name="library_notes_by_book">Por livro</string>
+    <string name="library_notes_all">Tudo</string>
+    <string name="library_notes_subtitle">Todos os seus destaques e notas</string>
+    <string name="library_notes_collapse_all">Recolher todos os livros</string>
+    <string name="library_notes_expand_all">Expandir todos os livros</string>
+    <plurals name="library_notes_count">
+        <item quantity="one">%1$d nota</item>
+        <item quantity="other">%1$d notas</item>
+    </plurals>
+    <string name="library_notes_no_results">Nenhuma nota ou destaque encontrado.</string>
+    <string name="library_notes_open">Abrir no livro</string>
+    <string name="library_notes_search">Pesquisar nas notas</string>
+    <string name="library_notes_empty">Seus destaques e notas aparecerão aqui.</string>
+    <string name="library_notes_missing_book">Livro indisponível</string>
     <string name="reader_notes">Notas</string>
     <string name="reader_no_bookmarks">Ainda não há marcadores. Toque no canto superior direito de uma página para marcá-la.</string>
     <string name="reader_no_highlights">Ainda não há destaques. Selecione um trecho para destacá-lo.</string>
