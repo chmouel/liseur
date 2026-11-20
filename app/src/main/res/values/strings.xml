@@ -2141,6 +2141,11 @@
     <string name="home_quote_highlight">Your highlight</string>
     <string name="home_quote_another">Another quote</string>
     <string name="home_quote_open">open the passage</string>
+    <string name="home_quote_actions">Quote actions</string>
+    <string name="home_quote_edit_note">Edit note</string>
+    <string name="home_series_share">Share series</string>
+    <string name="home_shelf_open">Open shelf</string>
+    <string name="home_shelf_actions">Shelf actions</string>
     <string name="home_quote_text">“%1$s”</string>
     <string name="home_quote_source">— %1$s</string>
     <string name="home_quote_setting">Quote from your reading</string>

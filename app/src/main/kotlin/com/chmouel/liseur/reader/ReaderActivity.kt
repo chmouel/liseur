@@ -136,6 +136,7 @@ class ReaderActivity : FragmentActivity() {
         val at: String? = null,
         /** The shelf's Continue listening opens this book to play its paused listening. */
         val resumeListening: Boolean = false,
+        val editAnnotationId: String? = null,
     )
 
     private var target by mutableStateOf<OpenTarget?>(null)
@@ -180,6 +181,7 @@ class ReaderActivity : FragmentActivity() {
                     intentToken = intent.getStringExtra(EXTRA_RESUME_LISTENING_TOKEN),
                     expectedToken = container.resumeListeningToken,
                 ),
+                intent.getStringExtra(EXTRA_EDIT_ANNOTATION_ID).takeIf { savedInstanceState == null },
             )
         } else {
             // Handed over by another app. Shelve it, then read the copy
@@ -743,6 +745,10 @@ class ReaderActivity : FragmentActivity() {
                                     },
                                     companion = companion,
                                     foldPosture = foldPosture,
+                                    initialEditAnnotationId = target?.editAnnotationId,
+                                    onInitialEditAnnotationHandled = {
+                                        target = target?.copy(editAnnotationId = null)
+                                    },
                                 )
                             }
                         }
@@ -921,7 +927,17 @@ class ReaderActivity : FragmentActivity() {
         super.onNewIntent(intent)
         val url = intent.getStringExtra(EXTRA_URL) ?: return
         val id = intent.getStringExtra(EXTRA_ID) ?: url
-        if (target?.id != id) startActivity(intent(this, url, id, intent.getStringExtra(EXTRA_AT)))
+        if (target?.id != id) {
+            startActivity(
+                intent(
+                    this,
+                    url,
+                    id,
+                    intent.getStringExtra(EXTRA_AT),
+                    editAnnotationId = intent.getStringExtra(EXTRA_EDIT_ANNOTATION_ID),
+                ),
+            )
+        }
     }
 
     override fun onResume() {
@@ -1049,6 +1065,7 @@ class ReaderActivity : FragmentActivity() {
         private const val EXTRA_URL = "url"
         private const val EXTRA_ID = "id"
         private const val EXTRA_AT = "at"
+        private const val EXTRA_EDIT_ANNOTATION_ID = "edit_annotation_id"
 
         /** Opens the book to play its paused listening, as the shelf's Continue listening does. */
         const val EXTRA_RESUME_LISTENING = "resume_listening"
@@ -1092,11 +1109,13 @@ class ReaderActivity : FragmentActivity() {
             at: String? = null,
             resumeListening: Boolean = false,
             resumeListeningToken: String? = null,
+            editAnnotationId: String? = null,
         ): Intent =
             Intent(context, ReaderActivity::class.java)
                 .putExtra(EXTRA_URL, url)
                 .putExtra(EXTRA_ID, id)
                 .apply { if (at != null) putExtra(EXTRA_AT, at) }
+                .apply { if (editAnnotationId != null) putExtra(EXTRA_EDIT_ANNOTATION_ID, editAnnotationId) }
                 .apply {
                     if (resumeListening) {
                         putExtra(EXTRA_RESUME_LISTENING, true)

@@ -2065,6 +2065,11 @@
     <string name="home_quote_highlight">Tu subrayado</string>
     <string name="home_quote_another">Otra cita</string>
     <string name="home_quote_open">abrir el pasaje</string>
+    <string name="home_quote_actions">Acciones de la cita</string>
+    <string name="home_quote_edit_note">Editar nota</string>
+    <string name="home_series_share">Compartir serie</string>
+    <string name="home_shelf_open">Abrir estantería</string>
+    <string name="home_shelf_actions">Acciones de la estantería</string>
     <string name="home_quote_text">«%1$s»</string>
     <string name="home_quote_source">— %1$s</string>
     <string name="home_quote_setting">Cita de tus lecturas</string>

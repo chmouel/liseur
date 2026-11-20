@@ -1499,6 +1499,19 @@ private fun LibraryRoute(
                 context.startActivity(ReaderActivity.intent(context, it, quote.book.url, at = quote.locatorJson))
             }
         },
+        onEditQuoteNote = { quote ->
+            quote.book.openableUri()?.let {
+                context.startActivity(
+                    ReaderActivity.intent(
+                        context = context,
+                        url = it,
+                        id = quote.book.url,
+                        at = quote.locatorJson,
+                        editAnnotationId = quote.annotationId,
+                    ),
+                )
+            }
+        },
         onAnotherQuote = viewModel::anotherQuote,
         homeVocabulary = homeVocabulary,
         onReviewVocabulary = onReviewVocabulary,

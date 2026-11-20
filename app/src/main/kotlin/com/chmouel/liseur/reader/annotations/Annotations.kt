@@ -71,3 +71,15 @@ fun List<BookAnnotation>.toDecorations(): List<Decoration> =
 /** The stored locator, or null when it cannot be read back. */
 fun BookAnnotation.locator(): Locator? =
     runCatching { Locator.fromJSON(JSONObject(locatorJson)) }.getOrNull()
+
+/**
+ * The stored locator for editing the mark's note. Saving a note rebuilds the
+ * passage from the locator, so one stored without its passage text gets it
+ * back from [BookAnnotation.text] instead of losing it.
+ */
+fun BookAnnotation.noteLocator(): Locator? {
+    val locator = locator() ?: return null
+    val passage = text?.takeIf { it.isNotBlank() } ?: return locator
+    if (!locator.text.highlight.isNullOrBlank()) return locator
+    return locator.copy(text = locator.text.copy(highlight = passage))
+}

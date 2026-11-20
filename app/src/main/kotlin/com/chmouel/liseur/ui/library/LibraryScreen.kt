@@ -274,6 +274,7 @@ fun LibraryScreen(
     /** A quote from what has been read, shown on Home. */
     homeQuote: com.chmouel.liseur.data.quotes.HomeQuote? = null,
     onOpenQuote: (com.chmouel.liseur.data.quotes.HomeQuote) -> Unit = {},
+    onEditQuoteNote: (com.chmouel.liseur.data.quotes.HomeQuote) -> Unit = onOpenQuote,
     onAnotherQuote: () -> Unit = {},
     /** A vocabulary word due for review, shown on Home. */
     homeVocabulary: com.chmouel.liseur.vocabulary.HomeVocabulary? = null,
@@ -1050,6 +1051,7 @@ fun LibraryScreen(
                         hero = heroDetail,
                         quote = homeQuote,
                         onOpenQuote = onOpenQuote,
+                        onEditQuoteNote = onEditQuoteNote,
                         onAnotherQuote = onAnotherQuote,
                         vocabulary = homeVocabulary,
                         onOpenVocabulary = onOpenVocabulary,
@@ -1059,7 +1061,9 @@ fun LibraryScreen(
                         listState = homeState,
                         onBookSelected = openShelfBook,
                         onBookLongPress = { sheetBook = it },
+                        onOpenBookDetails = onOpenBookDetails,
                         onSeriesSelected = onSeriesSelected,
+                        onChooseStyle = { choosingStyle = true },
                         onOpenShelf = { kind ->
                             when (kind) {
                                 HomeShelfKind.READING -> onSetReadingFilter(setOf(LibraryFilterOption.IN_PROGRESS))

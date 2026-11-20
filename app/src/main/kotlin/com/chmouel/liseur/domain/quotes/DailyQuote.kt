@@ -12,6 +12,7 @@ data class QuoteCandidate(
     val score: Double = 0.0,
     /** The reader's own highlight rather than a line found in the text. */
     val highlight: Boolean = false,
+    val annotationId: String? = null,
 )
 
 /**

@@ -2065,6 +2065,11 @@
     <string name="home_quote_highlight">Il tuo evidenziato</string>
     <string name="home_quote_another">Un\'altra citazione</string>
     <string name="home_quote_open">apri il passo</string>
+    <string name="home_quote_actions">Azioni della citazione</string>
+    <string name="home_quote_edit_note">Modifica nota</string>
+    <string name="home_series_share">Condividi serie</string>
+    <string name="home_shelf_open">Apri scaffale</string>
+    <string name="home_shelf_actions">Azioni dello scaffale</string>
     <string name="home_quote_text">«%1$s»</string>
     <string name="home_quote_source">— %1$s</string>
     <string name="home_quote_setting">Citazione dalle tue letture</string>

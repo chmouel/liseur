@@ -2217,6 +2217,11 @@
     <string name="home_quote_highlight">Ваше выделение</string>
     <string name="home_quote_another">Другая цитата</string>
     <string name="home_quote_open">открыть отрывок</string>
+    <string name="home_quote_actions">Действия с цитатой</string>
+    <string name="home_quote_edit_note">Изменить заметку</string>
+    <string name="home_series_share">Поделиться серией</string>
+    <string name="home_shelf_open">Открыть полку</string>
+    <string name="home_shelf_actions">Действия с полкой</string>
     <string name="home_quote_text">«%1$s»</string>
     <string name="home_quote_source">— %1$s</string>
     <string name="home_quote_setting">Цитата из прочитанного</string>

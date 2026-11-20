@@ -196,6 +196,7 @@ import com.chmouel.liseur.reader.annotations.SheetSelectionActionBar
 import com.chmouel.liseur.reader.annotations.SmartSelectionAction
 import com.chmouel.liseur.reader.annotations.rememberSmartSelectionActions
 import com.chmouel.liseur.reader.annotations.locator
+import com.chmouel.liseur.reader.annotations.noteLocator
 import com.chmouel.liseur.reader.annotations.lookUpExternally
 import com.chmouel.liseur.reader.annotations.openDictionaryEntry
 import com.chmouel.liseur.reader.annotations.shareText
@@ -589,6 +590,8 @@ internal fun ReaderScreen(
     // Who a selected name is, from the chapters before; null leaves the action out.
     companion: ReaderCompanion? = null,
     foldPosture: ReaderFoldPosture = ReaderFoldPosture.Flat,
+    initialEditAnnotationId: String? = null,
+    onInitialEditAnnotationHandled: () -> Unit = {},
 ) {
     val builtNavigator = remember { mutableStateOf<EpubNavigatorFragment?>(null) }
     val navigator by rememberViewedFragment(builtNavigator, ::consumeInsetsForReadium)
@@ -2963,6 +2966,14 @@ internal fun ReaderScreen(
                 active.copy(existing = it)
             }
         }
+    }
+
+    LaunchedEffect(initialEditAnnotationId, annotations) {
+        val id = initialEditAnnotationId ?: return@LaunchedEffect
+        val annotation = annotations.firstOrNull { it.id == id } ?: return@LaunchedEffect
+        val locator = annotation.noteLocator() ?: return@LaunchedEffect
+        onInitialEditAnnotationHandled()
+        noteFor = ActiveSelection(locator, rect = null, existing = annotation)
     }
 
     DisposableEffect(navigator) {

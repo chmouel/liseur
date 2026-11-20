@@ -136,9 +136,12 @@ internal fun HomeLibrary(
     onBrowseAll: () -> Unit,
     modifier: Modifier = Modifier,
     onOpenRecent: () -> Unit = onBrowseAll,
+    onChooseStyle: () -> Unit = {},
+    onOpenBookDetails: (Book) -> Unit = onBookLongPress,
     bottomInset: Dp = 0.dp,
     quote: HomeQuote? = null,
     onOpenQuote: (HomeQuote) -> Unit = {},
+    onEditQuoteNote: (HomeQuote) -> Unit = {},
     onAnotherQuote: () -> Unit = {},
     vocabulary: HomeVocabulary? = null,
     onOpenVocabulary: () -> Unit = {},
@@ -190,12 +193,12 @@ internal fun HomeLibrary(
             if (wide && hasHero) {
                 Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = gutter) {
                     heroCard(Modifier.weight(0.55f))
-                    ShelfTiles(desk.tiles, onOpenShelf, onBrowseAll, Modifier.weight(0.45f))
+                    ShelfTiles(desk.tiles, onOpenShelf, onBrowseAll, onChooseStyle, Modifier.weight(0.45f))
                 }
             } else {
                 Column(verticalArrangement = Arrangement.spacedBy(24.dp), modifier = gutter) {
                     if (hasHero) heroCard(Modifier.fillMaxWidth())
-                    ShelfTiles(desk.tiles, onOpenShelf, onBrowseAll, Modifier.fillMaxWidth())
+                    ShelfTiles(desk.tiles, onOpenShelf, onBrowseAll, onChooseStyle, Modifier.fillMaxWidth())
                 }
             }
         }
@@ -204,7 +207,9 @@ internal fun HomeLibrary(
                 QuoteCard(
                     quote = quote,
                     onOpen = { onOpenQuote(quote) },
+                    onEditNote = { onEditQuoteNote(quote) },
                     onAnother = onAnotherQuote,
+                    onBookDetails = { onOpenBookDetails(quote.book) },
                     modifier = gutter.fillMaxWidth(),
                 )
             }
@@ -227,6 +232,7 @@ internal fun HomeLibrary(
                                     SeriesSetCard(
                                         set = set,
                                         onClick = { onSeriesSelected(set.shelf) },
+                                        onOpenBook = onBookSelected,
                                         modifier = Modifier.weight(1f),
                                     )
                                 }
@@ -368,97 +374,113 @@ private fun DeskCard(
 private fun QuoteCard(
     quote: HomeQuote,
     onOpen: () -> Unit,
+    onEditNote: () -> Unit,
     onAnother: () -> Unit,
+    onBookDetails: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val eInk = LocalEInk.current
     val palette = homePalette()
     val accent = palette?.onPill ?: MaterialTheme.colorScheme.primary
-    DeskCard(
-        onClick = onOpen,
-        onClickLabel = stringResource(R.string.home_quote_open),
-        shape = RoundedCornerShape(20.dp),
-        modifier = modifier,
-        borderColor = palette?.reading?.content?.copy(alpha = 0.28f),
-    ) {
-        Box {
-            palette?.let { QuoteBackdrop(quote.book, it, Modifier.matchParentSize()) }
-            Column(Modifier.padding(start = 20.dp, end = 16.dp, top = 16.dp, bottom = 14.dp)) {
-                Text(
-                    text = stringResource(
-                        if (quote.highlight) R.string.home_quote_highlight else R.string.home_quote_title,
-                    ).uppercase(),
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    letterSpacing = 0.8.sp,
-                    color = if (eInk) MaterialTheme.colorScheme.onSurfaceVariant else accent,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    text = quote.text.trimQuoteMarks(),
-                    style = MaterialTheme.typography.titleLarge.copy(
-                        fontSize = 20.sp,
-                        lineHeight = 29.sp,
-                        fontWeight = FontWeight.Normal,
-                    ),
-                    fontStyle = FontStyle.Italic,
-                    modifier = Modifier.padding(top = 10.dp),
-                )
-                val subtitle = listOfNotNull(quote.book.displayAuthor, quote.chapter).joinToString(" · ")
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(top = 16.dp).fillMaxWidth(),
-                ) {
-                    BookCover(
-                        book = quote.book,
-                        shape = RoundedCornerShape(4.dp),
-                        modifier = Modifier
-                            .width(30.dp)
-                            .height(45.dp)
-                            .then(if (eInk) Modifier else Modifier.shadow(2.dp, RoundedCornerShape(4.dp))),
+    var menuOpen by remember { mutableStateOf(false) }
+    Box(modifier) {
+        DeskCard(
+            onClick = onOpen,
+            onLongClick = { menuOpen = true },
+            onClickLabel = stringResource(R.string.home_quote_open),
+            onLongClickLabel = stringResource(R.string.home_quote_actions),
+            shape = RoundedCornerShape(20.dp),
+            modifier = Modifier.fillMaxWidth(),
+            borderColor = palette?.reading?.content?.copy(alpha = 0.28f),
+        ) {
+            Box {
+                palette?.let { QuoteBackdrop(quote.book, it, Modifier.matchParentSize()) }
+                Column(Modifier.padding(start = 20.dp, end = 16.dp, top = 16.dp, bottom = 14.dp)) {
+                    Text(
+                        text = stringResource(
+                            if (quote.highlight) R.string.home_quote_highlight else R.string.home_quote_title,
+                        ).uppercase(),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = 0.8.sp,
+                        color = if (eInk) MaterialTheme.colorScheme.onSurfaceVariant else accent,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
-                    Column(
-                        Modifier
-                            .padding(start = 12.dp)
-                            .weight(1f),
+                    Text(
+                        text = quote.text.trimQuoteMarks(),
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontSize = 20.sp,
+                            lineHeight = 29.sp,
+                            fontWeight = FontWeight.Normal,
+                        ),
+                        fontStyle = FontStyle.Italic,
+                        modifier = Modifier.padding(top = 10.dp),
+                    )
+                    val subtitle = listOfNotNull(quote.book.displayAuthor, quote.chapter).joinToString(" · ")
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(top = 16.dp).fillMaxWidth(),
                     ) {
-                        Text(
-                            text = quote.book.displayTitle,
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
+                        BookCover(
+                            book = quote.book,
+                            shape = RoundedCornerShape(4.dp),
+                            modifier = Modifier
+                                .width(30.dp)
+                                .height(45.dp)
+                                .then(if (eInk) Modifier else Modifier.shadow(2.dp, RoundedCornerShape(4.dp))),
                         )
-                        if (subtitle.isNotEmpty()) {
+                        Column(
+                            Modifier
+                                .padding(start = 12.dp)
+                                .weight(1f),
+                        ) {
                             Text(
-                                text = subtitle,
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                text = quote.book.displayTitle,
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.SemiBold,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.padding(top = 2.dp),
                             )
+                            if (subtitle.isNotEmpty()) {
+                                Text(
+                                    text = subtitle,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.padding(top = 2.dp),
+                                )
+                            }
                         }
-                    }
-                    Surface(
-                        shape = CircleShape,
-                        color = palette?.card?.copy(alpha = 0.7f) ?: Color.Transparent,
-                        border = BorderStroke(1.dp, palette?.cardBorder ?: MaterialTheme.colorScheme.outline),
-                        modifier = Modifier.padding(start = 12.dp).size(38.dp),
-                    ) {
-                        IconButton(onClick = onAnother) {
-                            Icon(
-                                Icons.Outlined.Shuffle,
-                                contentDescription = stringResource(R.string.home_quote_another),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(18.dp),
-                            )
+                        Surface(
+                            shape = CircleShape,
+                            color = palette?.card?.copy(alpha = 0.7f) ?: Color.Transparent,
+                            border = BorderStroke(1.dp, palette?.cardBorder ?: MaterialTheme.colorScheme.outline),
+                            modifier = Modifier.padding(start = 12.dp).size(38.dp),
+                        ) {
+                            IconButton(onClick = onAnother) {
+                                Icon(
+                                    Icons.Outlined.Shuffle,
+                                    contentDescription = stringResource(R.string.home_quote_another),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                            }
                         }
                     }
                 }
             }
         }
+        HomeQuoteMenu(
+            quote = quote,
+            expanded = menuOpen,
+            onDismiss = { menuOpen = false },
+            onOpenPassage = onOpen,
+            onEditNote = onEditNote,
+            onAnotherQuote = onAnother,
+            onBookDetails = onBookDetails,
+        )
     }
 }
 
@@ -958,7 +980,7 @@ private val HomeShelfKind.note: Int
         HomeShelfKind.FINISHED -> R.plurals.home_note_this_month
     }
 
-private val HomeShelfKind.icon: ImageVector
+internal val HomeShelfKind.icon: ImageVector
     get() = when (this) {
         HomeShelfKind.READING -> Icons.Outlined.AutoStories
         HomeShelfKind.TO_READ -> Icons.Outlined.BookmarkBorder
@@ -979,6 +1001,7 @@ private fun ShelfTiles(
     tiles: List<HomeShelfTile>,
     onOpenShelf: (HomeShelfKind) -> Unit,
     onSeeAll: () -> Unit,
+    onChooseStyle: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -991,7 +1014,12 @@ private fun ShelfTiles(
             tiles.filter { it.kind != HomeShelfKind.SERIES || it.count > 0 }.chunked(2).forEach { row ->
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     row.forEach { tile ->
-                        ShelfTile(tile = tile, onClick = { onOpenShelf(tile.kind) }, modifier = Modifier.weight(1f))
+                        ShelfTile(
+                            tile = tile,
+                            onClick = { onOpenShelf(tile.kind) },
+                            onChooseStyle = onChooseStyle,
+                            modifier = Modifier.weight(1f),
+                        )
                     }
                     if (row.size == 1) Spacer(Modifier.weight(1f))
                 }
@@ -1071,72 +1099,86 @@ private fun HomeSectionHeader(
 private fun ShelfTile(
     tile: HomeShelfTile,
     onClick: () -> Unit,
+    onChooseStyle: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val note = tile.note.takeIf { it > 0 }?.let { pluralStringResource(tile.kind.note, it, it) }
     val tint = homePalette()?.tint(tile.kind)
     val accent = tint?.content ?: MaterialTheme.colorScheme.primary
-    DeskCard(
-        onClick = onClick,
-        color = tint?.container,
-        modifier = modifier,
-    ) {
-        Column(
-            Modifier
-                .then(
-                    if (tint == null) {
-                        Modifier
-                    } else {
-                        // A lighter sweep from the top corner, as if the tile caught the light.
-                        Modifier.background(
-                            Brush.linearGradient(
-                                0f to tint.container,
-                                0.55f to tint.container,
-                                1f to tint.glow,
-                                start = Offset(0f, Float.POSITIVE_INFINITY),
-                                end = Offset(Float.POSITIVE_INFINITY, 0f),
-                            ),
-                        )
-                    },
-                )
-                .padding(16.dp),
+    var menuOpen by remember { mutableStateOf(false) }
+    Box(modifier) {
+        DeskCard(
+            onClick = onClick,
+            onLongClick = { menuOpen = true },
+            onClickLabel = stringResource(R.string.home_shelf_open),
+            onLongClickLabel = stringResource(R.string.home_shelf_actions),
+            color = tint?.container,
+            modifier = Modifier.fillMaxWidth(),
         ) {
-            Icon(
-                imageVector = tile.kind.icon,
-                contentDescription = null,
-                tint = accent,
-                modifier = Modifier.size(30.dp),
-            )
-            Row(
-                verticalAlignment = Alignment.Bottom,
-                modifier = Modifier.padding(top = 14.dp),
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        text = stringResource(tile.kind.label),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
+            Column(
+                Modifier
+                    .then(
+                        if (tint == null) {
+                            Modifier
+                        } else {
+                            // A lighter sweep from the top corner, as if the tile caught the light.
+                            Modifier.background(
+                                Brush.linearGradient(
+                                    0f to tint.container,
+                                    0.55f to tint.container,
+                                    1f to tint.glow,
+                                    start = Offset(0f, Float.POSITIVE_INFINITY),
+                                    end = Offset(Float.POSITIVE_INFINITY, 0f),
+                                ),
+                            )
+                        },
                     )
-                    // Kept as a line even when empty, so the tiles of a row line up.
+                    .padding(16.dp),
+            ) {
+                Icon(
+                    imageVector = tile.kind.icon,
+                    contentDescription = null,
+                    tint = accent,
+                    modifier = Modifier.size(30.dp),
+                )
+                Row(
+                    verticalAlignment = Alignment.Bottom,
+                    modifier = Modifier.padding(top = 14.dp),
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            text = stringResource(tile.kind.label),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        // Kept as a line even when empty, so the tiles of a row line up.
+                        Text(
+                            text = note.orEmpty(),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                     Text(
-                        text = note.orEmpty(),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
+                        text = tile.count.toString(),
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = accent,
+                        modifier = Modifier.padding(start = 8.dp),
                     )
                 }
-                Text(
-                    text = tile.count.toString(),
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = accent,
-                    modifier = Modifier.padding(start = 8.dp),
-                )
             }
         }
+        HomeShelfTileMenu(
+            tile = tile,
+            expanded = menuOpen,
+            onDismiss = { menuOpen = false },
+            onOpenShelf = onClick,
+            onChooseStyle = onChooseStyle,
+        )
     }
 }
 
@@ -1145,60 +1187,77 @@ private fun ShelfTile(
 private fun SeriesSetCard(
     set: HomeSeriesSet,
     onClick: () -> Unit,
+    onOpenBook: (Book) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val eInk = LocalEInk.current
     val total = set.shelf.volumes.size
-    DeskCard(onClick = onClick, modifier = modifier) {
-        Row(Modifier.padding(start = 14.dp, top = 12.dp, bottom = 12.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            BookCover(
-                book = set.next?.book ?: set.shelf.cover,
-                shape = RoundedCornerShape(6.dp),
-                modifier = Modifier
-                    .width(64.dp)
-                    .height(96.dp)
-                    .then(if (eInk) Modifier else Modifier.shadow(4.dp, RoundedCornerShape(6.dp))),
-            )
-            Column(
-                Modifier
-                    .padding(start = 16.dp)
-                    .weight(1f),
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = set.shelf.name,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false),
-                    )
-                    Pill(
-                        text = stringResource(R.string.home_series_read, set.read, total),
-                        modifier = Modifier.padding(start = 8.dp),
-                    )
+    var menuOpen by remember { mutableStateOf(false) }
+    Box(modifier) {
+        DeskCard(
+            onClick = onClick,
+            onLongClick = { menuOpen = true },
+            onClickLabel = stringResource(R.string.series_open),
+            onLongClickLabel = stringResource(R.string.series_actions),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Row(Modifier.padding(start = 14.dp, top = 12.dp, bottom = 12.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                BookCover(
+                    book = set.next?.book ?: set.shelf.cover,
+                    shape = RoundedCornerShape(6.dp),
+                    modifier = Modifier
+                        .width(64.dp)
+                        .height(96.dp)
+                        .then(if (eInk) Modifier else Modifier.shadow(4.dp, RoundedCornerShape(6.dp))),
+                )
+                Column(
+                    Modifier
+                        .padding(start = 16.dp)
+                        .weight(1f),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = set.shelf.name,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false),
+                        )
+                        Pill(
+                            text = stringResource(R.string.home_series_read, set.read, total),
+                            modifier = Modifier.padding(start = 8.dp),
+                        )
+                    }
+                    set.next?.let { next ->
+                        val number = seriesIndexLabel(next.index)
+                        val name = if (number != null) "#$number ${next.book.displayTitle}" else next.book.displayTitle
+                        Text(
+                            text = stringResource(R.string.home_series_next, name),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(top = 6.dp),
+                        )
+                    }
+                    VolumeBar(set.volumeProgress, Modifier.padding(top = 12.dp))
                 }
-                set.next?.let { next ->
-                    val number = seriesIndexLabel(next.index)
-                    val name = if (number != null) "#$number ${next.book.displayTitle}" else next.book.displayTitle
-                    Text(
-                        text = stringResource(R.string.home_series_next, name),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(top = 6.dp),
-                    )
-                }
-                VolumeBar(set.volumeProgress, Modifier.padding(top = 12.dp))
+                Icon(
+                    Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = homePalette()?.onPill ?: MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 8.dp),
+                )
             }
-            Icon(
-                Icons.AutoMirrored.Outlined.KeyboardArrowRight,
-                contentDescription = null,
-                tint = homePalette()?.onPill ?: MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(start = 8.dp),
-            )
         }
+        HomeSeriesMenu(
+            set = set,
+            expanded = menuOpen,
+            onDismiss = { menuOpen = false },
+            onOpenSeries = onClick,
+            onOpenBook = onOpenBook,
+        )
     }
 }
 
