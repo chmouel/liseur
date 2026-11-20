@@ -2033,9 +2033,9 @@ class MigrationTest {
                     "remote_cover_sha256, remote_cover_updated_at) " +
                     "VALUES ('peer', 'book', 'title', 'work', 3, NULL, NULL, 7, NULL, 0)",
             )
-            // A value this device never acknowledged is one it took from the
-            // server, so the migration marks it as adopted and the pull can
-            // clear it when the server resets it.
+            // A text value with nothing left to send is one the server
+            // already holds, so the migration marks it as adopted and the
+            // pull can clear it when the server resets it.
             db.execSQL(
                 "INSERT INTO metadata_override_sync " +
                     "(peer_id, book_url, field, work_id, acked_revision, sent_json, sent_revision, polled_at, " +
@@ -2080,7 +2080,7 @@ class MigrationTest {
                 assertTrue(it.moveToNext())
                 assertEquals("title", it.getString(0))
                 assertEquals(3L, it.getLong(1))
-                assertEquals(0, it.getInt(2))
+                assertEquals(1, it.getInt(2))
                 assertFalse(it.moveToNext())
             }
         }
