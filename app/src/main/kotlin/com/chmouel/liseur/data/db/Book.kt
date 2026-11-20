@@ -422,7 +422,7 @@ interface BookDao {
     @Query("UPDATE books SET remote_uuid = NULL, download_href = NULL, download_formats = NULL, cover_url = NULL, " +
             "catalog_title = NULL, catalog_author = NULL, " +
             "title = CASE WHEN title_override = 1 THEN COALESCE(user_title, '') ELSE COALESCE(file_title, title) END, " +
-            "author = CASE WHEN author_override = 1 THEN NULLIF(user_author, '') ELSE COALESCE(file_author, author) END, " +
+            "author = CASE WHEN author_override = 1 THEN NULLIF(user_author, '') ELSE file_author END, " +
             "link_generation = link_generation + 1 " +
             "WHERE browse_server_id = :serverId AND local_uri IS NOT NULL")
     suspend fun unlinkDownloadedFromBrowseServerRows(serverId: Long)
@@ -498,7 +498,7 @@ interface BookDao {
             "title = CASE WHEN title_override = 1 THEN COALESCE(user_title, '') " +
             "ELSE COALESCE(file_title, title) END, " +
             "author = CASE WHEN author_override = 1 THEN NULLIF(user_author, '') " +
-            "ELSE COALESCE(file_author, author) END, " +
+            "ELSE file_author END, " +
             "series_name = CASE WHEN series_override = 1 THEN user_series_name " +
             "ELSE file_series_name END, " +
             "series_index = CASE " +
@@ -535,7 +535,7 @@ interface BookDao {
             "title = CASE WHEN title_override = 1 THEN COALESCE(user_title, '') " +
             "ELSE COALESCE(file_title, title) END, " +
             "author = CASE WHEN author_override = 1 THEN NULLIF(user_author, '') " +
-            "ELSE COALESCE(file_author, author) END, " +
+            "ELSE file_author END, " +
             "series_name = CASE WHEN series_override = 1 THEN user_series_name " +
             "ELSE file_series_name END, " +
             "series_index = CASE " +

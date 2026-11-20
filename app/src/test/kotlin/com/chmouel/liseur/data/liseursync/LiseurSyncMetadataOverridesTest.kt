@@ -323,6 +323,23 @@ class LiseurSyncMetadataOverridesTest {
     }
 
     @Test
+    fun `a text push the server took is settled and adopted even if the book moved on`() = runTest {
+        repository.applyTextEdits(bookUrl = "book", title = FieldEdit.Set("Sent title"))
+        remote.onMetadataPost = {
+            db.workIdentityDao().upsert(WorkAlias("book", account.accountKey, "other-work", "high", resolvedAt = 2))
+        }
+
+        sync.sync(account, null)
+
+        assertEquals("Sent title", remote.fields[MetadataOverrideFields.TITLE])
+        val state = db.bookMetadataOverrideDao().state(account.accountKey, "book", MetadataOverrideFields.TITLE)
+        assertNull(state?.sentJson)
+        // The server holds this value now, so a reset made elsewhere is one
+        // this device follows on the next pull.
+        assertTrue(state!!.adopted)
+    }
+
+    @Test
     fun `a value the server refuses is dropped so the corrected one can go`() = runTest {
         repository.applyTextEdits(bookUrl = "book", title = FieldEdit.Set("First try"))
         remote.metadataPostCode = 400

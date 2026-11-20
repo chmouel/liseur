@@ -198,8 +198,25 @@ class BookMetadataOverrideTest {
             ),
         )
         repository.applyTextEdits(bookUrl = "edited", title = FieldEdit.Set("My title"), author = FieldEdit.Set(""))
+        // A catalog book whose own file names no author must not keep the
+        // catalog's once the catalog is gone.
+        db.bookDao().upsert(
+            Book(
+                url = "authorless",
+                title = "Catalog title",
+                author = "Catalog author",
+                coverPath = null,
+                source = null,
+                addedAt = 1,
+                lastOpenedAt = null,
+                remoteUuid = "remote-3",
+                fileTitle = "File title",
+                catalogTitle = "Catalog title",
+                catalogAuthor = "Catalog author",
+            ),
+        )
 
-        db.bookDao().unlinkFromRemote(listOf("book", "edited"))
+        db.bookDao().unlinkFromRemote(listOf("book", "edited", "authorless"))
 
         val plain = db.bookDao().getByUrl("book")!!
         assertNull(plain.catalogTitle)
@@ -214,6 +231,11 @@ class BookMetadataOverrideTest {
         assertTrue(edited.authorOverridden)
         assertEquals("My title", edited.title)
         assertNull(edited.author)
+
+        val authorless = db.bookDao().getByUrl("authorless")!!
+        assertEquals("File title", authorless.title)
+        assertNull(authorless.author)
+        assertNull(authorless.stableAuthor)
     }
 
     @Test
