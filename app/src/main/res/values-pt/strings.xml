@@ -2126,6 +2126,11 @@
     <string name="home_quote_highlight">Seu destaque</string>
     <string name="home_quote_another">Outra citação</string>
     <string name="home_quote_open">abrir o trecho</string>
+    <string name="home_quote_actions">Ações da citação</string>
+    <string name="home_quote_edit_note">Editar nota</string>
+    <string name="home_series_share">Compartilhar série</string>
+    <string name="home_shelf_open">Abrir estante</string>
+    <string name="home_shelf_actions">Ações da estante</string>
     <string name="home_quote_text">“%1$s”</string>
     <string name="home_quote_source">— %1$s</string>
     <string name="home_quote_setting">Citação das suas leituras</string>

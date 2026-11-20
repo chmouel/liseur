@@ -1990,6 +1990,11 @@
     <string name="home_quote_highlight">你的高亮</string>
     <string name="home_quote_another">换一句</string>
     <string name="home_quote_open">打开该段落</string>
+    <string name="home_quote_actions">摘句操作</string>
+    <string name="home_quote_edit_note">编辑笔记</string>
+    <string name="home_series_share">分享系列</string>
+    <string name="home_shelf_open">打开书架</string>
+    <string name="home_shelf_actions">书架操作</string>
     <string name="home_quote_text">“%1$s”</string>
     <string name="home_quote_source">—— %1$s</string>
     <string name="home_quote_setting">阅读摘句</string>

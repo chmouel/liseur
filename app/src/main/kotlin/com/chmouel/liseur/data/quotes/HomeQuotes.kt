@@ -62,6 +62,7 @@ data class HomeQuote(
     /** Where to open the book; null opens it at the reader's own place. */
     val locatorJson: String?,
     val highlight: Boolean,
+    val annotationId: String? = null,
 )
 
 /**
@@ -231,6 +232,7 @@ class HomeQuotes internal constructor(
                     mark.locatorJson.takeIf(String::isNotBlank),
                     mark.chapter,
                     highlight = true,
+                    annotationId = mark.id,
                 )
             }
         }
@@ -255,7 +257,14 @@ class HomeQuotes internal constructor(
         val picked = DailyQuote.pick(highlights + lines, day, nonce, keep = chosen) ?: return null
         remember(picked, day, nonce)
         val book = books[picked.bookUrl] ?: return null
-        return HomeQuote(book, DailyQuote.shorten(picked.text), picked.chapter, picked.locatorJson, picked.highlight)
+        return HomeQuote(
+            book = book,
+            text = DailyQuote.shorten(picked.text),
+            chapter = picked.chapter,
+            locatorJson = picked.locatorJson,
+            highlight = picked.highlight,
+            annotationId = picked.annotationId,
+        )
     }
 
     /** Keeps today's line the same while anything else on the screen moves. */

@@ -85,9 +85,12 @@ class HomeQuotesTest {
     fun `a highlight inside what was read is quoted`() = runTest {
         db.bookDao().upsert(book())
         db.readingProgressDao().upsert(progress(total = 0.2))
-        db.annotationDao().upsert(highlight("read", progression = 0.1, at = 0.1))
+        val mark = highlight("read", progression = 0.1, at = 0.1)
+        db.annotationDao().upsert(mark)
 
-        assertEquals("read", quotes.quote.first()?.text)
+        val quoted = quotes.quote.first()
+        assertEquals("read", quoted?.text)
+        assertEquals(mark.id, quoted?.annotationId)
     }
 
     @Test

@@ -2249,6 +2249,11 @@
     <string name="home_quote_highlight">Vaše zvýraznění</string>
     <string name="home_quote_another">Jiný citát</string>
     <string name="home_quote_open">otevřít pasáž</string>
+    <string name="home_quote_actions">Akce s citátem</string>
+    <string name="home_quote_edit_note">Upravit poznámku</string>
+    <string name="home_series_share">Sdílet sérii</string>
+    <string name="home_shelf_open">Otevřít polici</string>
+    <string name="home_shelf_actions">Akce s policí</string>
     <string name="home_quote_text">„%1$s“</string>
     <string name="home_quote_source">— %1$s</string>
     <string name="home_quote_setting">Citát z vaší četby</string>

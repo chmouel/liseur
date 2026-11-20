@@ -39,6 +39,16 @@ class AnnotationSurfacesTest {
         assertNotNull(highlight().locator())
     }
 
+    @Test
+    fun `editing a note keeps the stored passage when the locator lost it`() {
+        val bare = highlight().copy(locatorJson = BARE_LOCATOR, text = "kept passage")
+
+        assertEquals("kept passage", bare.noteLocator()?.text?.highlight)
+        assertEquals("a passage", highlight().copy(text = "other").noteLocator()?.text?.highlight)
+        assertNull(bare.copy(text = " ").noteLocator()?.text?.highlight)
+        assertNull(bookNote().noteLocator())
+    }
+
     private fun annotation(
         id: String,
         kind: AnnotationKind,
@@ -71,5 +81,7 @@ class AnnotationSurfacesTest {
         const val LOCATOR =
             """{"href":"/ch1.xhtml","type":"application/xhtml+xml",""" +
                 """"locations":{"progression":0.25},"text":{"highlight":"a passage"}}"""
+        const val BARE_LOCATOR =
+            """{"href":"/ch1.xhtml","type":"application/xhtml+xml","locations":{"progression":0.25}}"""
     }
 }

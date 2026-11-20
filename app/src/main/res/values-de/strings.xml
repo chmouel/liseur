@@ -2077,6 +2077,11 @@
     <string name="home_quote_highlight">Deine Markierung</string>
     <string name="home_quote_another">Anderes Zitat</string>
     <string name="home_quote_open">Stelle öffnen</string>
+    <string name="home_quote_actions">Zitataktionen</string>
+    <string name="home_quote_edit_note">Notiz bearbeiten</string>
+    <string name="home_series_share">Reihe teilen</string>
+    <string name="home_shelf_open">Regal öffnen</string>
+    <string name="home_shelf_actions">Regalaktionen</string>
     <string name="home_quote_text">„%1$s“</string>
     <string name="home_quote_source">— %1$s</string>
     <string name="home_quote_setting">Zitat aus deiner Lektüre</string>

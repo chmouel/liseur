@@ -27,9 +27,13 @@ class DailyQuoteTest {
 
     @Test
     fun `a book's highlights are quoted rather than its found lines`() {
-        val highlight = QuoteCandidate("book1", "Chosen by the reader.", null, null, highlight = true)
+        val highlight = QuoteCandidate("book1", "Chosen by the reader.", null, null, highlight = true, annotationId = "mark-1")
         val only = candidates.filter { it.bookUrl == "book1" } + highlight
-        repeat(10) { assertEquals(highlight, DailyQuote.pick(only, 20_000L + it, 0)) }
+        repeat(10) {
+            val picked = DailyQuote.pick(only, 20_000L + it, 0)
+            assertEquals(highlight, picked)
+            assertEquals("mark-1", picked?.annotationId)
+        }
     }
 
     @Test
