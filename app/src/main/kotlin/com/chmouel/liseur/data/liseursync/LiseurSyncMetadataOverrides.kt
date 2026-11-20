@@ -163,7 +163,7 @@ class LiseurSyncMetadataOverrides(
             }
             for ((target, state) in pending) {
                 if (!stillOurs(server)) return
-                sendText(server, metadataUrl, credentials, target, state)
+                sendText(server, metadataUrl, credentials, state)
             }
 
             var chosen: Pair<Target, MetadataOverrideSync>? = null
@@ -176,12 +176,12 @@ class LiseurSyncMetadataOverrides(
                 }
                 val winner = owed.maxByOrNull { it.second.updatedAt } ?: return@inTransaction
                 if (!stillBound(winner.first)) return@inTransaction
+                val currentBook = books.getByUrl(winner.first.alias.bookUrl) ?: return@inTransaction
                 for ((target, rev, _) in owed) {
                     if (target.alias.bookUrl != winner.first.alias.bookUrl) {
                         overrides.upsertRevision(rev.copy(retiredRevision = rev.revision))
                     }
                 }
-                val currentBook = books.getByUrl(winner.first.alias.bookUrl) ?: return@inTransaction
                 val rev = winner.second
                 val base = winner.third ?: MetadataOverrideSync(peer, currentBook.url, field, workId)
                 val payload = buildTextPayload(writer, workId, field, rev.revision, currentBook)
@@ -193,9 +193,9 @@ class LiseurSyncMetadataOverrides(
                 overrides.upsertState(prepared)
                 chosen = winner.first to prepared
             }
-            chosen?.let { (target, state) ->
+            chosen?.let { (_, state) ->
                 if (!stillOurs(server)) return
-                sendText(server, metadataUrl, credentials, target, state)
+                sendText(server, metadataUrl, credentials, state)
             }
         }
 
@@ -425,7 +425,6 @@ class LiseurSyncMetadataOverrides(
         server: RemoteServer,
         metadataUrl: String,
         credentials: com.chmouel.liseur.data.remote.RemoteCredentials,
-        target: Target,
         state: MetadataOverrideSync,
     ) {
         val body = state.sentJson ?: return
@@ -452,16 +451,20 @@ class LiseurSyncMetadataOverrides(
             return
         }
         inTransaction {
-            if (!stillOurs(server) || !stillBound(target)) return@inTransaction
-            acknowledge(state, body)
+            if (!stillOurs(server)) return@inTransaction
+            // The server has these bytes now, so the request is settled even
+            // if the book has moved on since: a pending body left behind is
+            // replayed to whatever work the state is relabelled with, and
+            // the server refuses the write ID it already knows.
+            acknowledge(state, body, adopted = true)
         }
     }
 
     private suspend fun settleText(state: MetadataOverrideSync, body: String) {
-        inTransaction { acknowledge(state, body) }
+        inTransaction { acknowledge(state, body, adopted = false) }
     }
 
-    private suspend fun acknowledge(state: MetadataOverrideSync, body: String) {
+    private suspend fun acknowledge(state: MetadataOverrideSync, body: String, adopted: Boolean) {
         val current = overrides.state(state.peerId, state.bookUrl, state.field)
         if (current != null && current.sentJson == body) {
             overrides.upsertState(
@@ -469,6 +472,7 @@ class LiseurSyncMetadataOverrides(
                     ackedRevision = maxOf(current.ackedRevision, current.sentRevision ?: 0L),
                     sentJson = null,
                     sentRevision = null,
+                    adopted = adopted,
                 ),
             )
         }
