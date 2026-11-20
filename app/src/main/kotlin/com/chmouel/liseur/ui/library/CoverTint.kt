@@ -68,7 +68,7 @@ private val tints = LruCache<String, Int>(256)
  */
 @Composable
 internal fun rememberCoverTint(book: Book): Color? {
-    val artwork = book.coverPath ?: book.coverUrl
+    val artwork = book.effectiveCover
     val eInk = LocalEInk.current
     val context = LocalContext.current
     val tint by produceState(
@@ -87,7 +87,7 @@ internal fun rememberCoverTint(book: Book): Color? {
         }
         val request = ImageRequest.Builder(context)
             .data(artwork)
-            .browseCover(artwork, book.coverUrl, book.browseServerId)
+            .browseCover(artwork, book.effectiveCoverUrl, book.browseServerId)
             .size(TINT_SAMPLE_PX)
             .allowHardware(false)
             .build()

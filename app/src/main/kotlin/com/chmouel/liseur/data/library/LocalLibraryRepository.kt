@@ -1167,6 +1167,8 @@ class LocalLibraryRepository(
                 url = url.toString(),
                 title = title,
                 author = author,
+                fileTitle = title,
+                fileAuthor = author,
                 coverPath = saveCover(publication, url.toString()),
                 source = source,
                 addedAt = System.currentTimeMillis(),

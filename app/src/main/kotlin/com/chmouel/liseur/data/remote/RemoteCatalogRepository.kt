@@ -499,8 +499,8 @@ class RemoteCatalogRepository(
             val remote = update.remote
             bookDao.updateCatalogFields(
                 url = book.url,
-                title = book.title,
-                author = book.author,
+                title = remote.title,
+                author = remote.author,
                 remoteUuid = book.remoteUuid,
                 remoteBookId = book.remoteBookId,
                 coverUrl = book.coverUrl,
@@ -825,10 +825,18 @@ internal fun mergeCatalogEntry(
         indexOverridden = indexOverridden,
         source = series,
     )
+    val effectiveTitle = if (book.titleOverridden) book.userTitle.orEmpty() else remote.title
+    val effectiveAuthor = if (book.authorOverridden) {
+        book.userAuthor?.ifEmpty { null }
+    } else {
+        remote.author ?: book.fileAuthor
+    }
     return book.copy(
         url = url,
-        title = remote.title,
-        author = remote.author,
+        title = effectiveTitle,
+        author = effectiveAuthor,
+        catalogTitle = remote.title,
+        catalogAuthor = remote.author,
         remoteUuid = remote.remoteId,
         remoteBookId = remote.calibreBookId,
         // A link out of a catalog Liseur has a client for is rebuilt

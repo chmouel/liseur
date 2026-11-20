@@ -2287,4 +2287,15 @@
     <string name="vocabulary_personal_note">Nota pessoal (opcional)</string>
     <string name="vocabulary_note_help">Um exemplo, uma associação ou uma dica para lembrar.</string>
     <string name="vocabulary_discard_changes">Suas alterações neste cartão serão perdidas.</string>
+    <string name="book_metadata_edit_title">Editar detalhes</string>
+    <string name="book_metadata_cover_label">Capa</string>
+    <string name="book_metadata_choose_cover">Escolher capa</string>
+    <string name="book_metadata_remove_cover">Remover capa</string>
+    <string name="book_metadata_title_label">Título</string>
+    <string name="book_metadata_author_label">Autor</string>
+    <string name="book_metadata_description_label">Descrição</string>
+    <string name="book_metadata_field_reset">Redefinir</string>
+    <string name="book_metadata_reset_all">Redefinir todas as alterações</string>
+    <string name="book_metadata_edit_series">Editar série</string>
+    <string name="book_metadata_no_series">Nenhuma</string>
 </resources>

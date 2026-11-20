@@ -19,6 +19,9 @@ import com.chmouel.liseur.vocabulary.VocabularyWord
         EvaluationSync::class,
         EvaluationPoll::class,
         RetainedEvaluation::class,
+        MetadataOverrideRevision::class,
+        MetadataOverrideSync::class,
+        MetadataOverridePoll::class,
         FurthestPosition::class,
         PeakDelivery::class,
         Book::class,
@@ -57,7 +60,7 @@ import com.chmouel.liseur.vocabulary.VocabularyWord
         VocabularyOccurrence::class,
         VocabularyReview::class,
     ],
-    version = 81,
+    version = 82,
     autoMigrations = [AutoMigration(from = 80, to = 81)],
     exportSchema = true,
 )
@@ -67,6 +70,7 @@ abstract class LiseurDatabase : RoomDatabase() {
     internal val bookOrbitStatusMutex = kotlinx.coroutines.sync.Mutex()
 
     abstract fun bookEvaluationDao(): BookEvaluationDao
+    abstract fun bookMetadataOverrideDao(): BookMetadataOverrideDao
 
     abstract fun readingProgressDao(): ReadingProgressDao
     abstract fun furthestPositionDao(): FurthestPositionDao
@@ -104,6 +108,79 @@ abstract class LiseurDatabase : RoomDatabase() {
     abstract fun vocabularyDao(): VocabularyDao
 
     companion object {
+        val MIGRATION_81_82 = object : Migration(81, 82) {
+            override fun migrate(connection: SQLiteConnection) {
+                val cols = connection.columnsOf("books")
+                val additions = listOf(
+                    "file_title" to "TEXT",
+                    "catalog_title" to "TEXT",
+                    "user_title" to "TEXT",
+                    "title_override" to "INTEGER NOT NULL DEFAULT 0",
+                    "file_author" to "TEXT",
+                    "catalog_author" to "TEXT",
+                    "user_author" to "TEXT",
+                    "author_override" to "INTEGER NOT NULL DEFAULT 0",
+                    "user_description" to "TEXT",
+                    "description_override" to "INTEGER NOT NULL DEFAULT 0",
+                    "user_cover_path" to "TEXT",
+                    "user_cover_sha256" to "TEXT",
+                    "cover_override" to "INTEGER NOT NULL DEFAULT 0",
+                )
+                for ((name, type) in additions) {
+                    if (name !in cols) {
+                        connection.execSQL("ALTER TABLE books ADD COLUMN $name $type")
+                    }
+                }
+                connection.execSQL(
+                    """
+                    UPDATE books SET
+                        file_title = CASE WHEN remote_uuid IS NULL AND file_title IS NULL THEN title ELSE file_title END,
+                        file_author = CASE WHEN remote_uuid IS NULL AND file_author IS NULL THEN author ELSE file_author END,
+                        catalog_title = CASE WHEN remote_uuid IS NOT NULL AND catalog_title IS NULL THEN title ELSE catalog_title END,
+                        catalog_author = CASE WHEN remote_uuid IS NOT NULL AND catalog_author IS NULL THEN author ELSE catalog_author END
+                    """.trimIndent(),
+                )
+                connection.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS metadata_override_revision (
+                        book_url TEXT NOT NULL,
+                        field TEXT NOT NULL,
+                        revision INTEGER NOT NULL,
+                        retired_revision INTEGER NOT NULL,
+                        updated_at INTEGER NOT NULL,
+                        PRIMARY KEY(book_url, field)
+                    )
+                    """.trimIndent(),
+                )
+                connection.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS metadata_override_sync (
+                        peer_id TEXT NOT NULL,
+                        book_url TEXT NOT NULL,
+                        field TEXT NOT NULL,
+                        work_id TEXT NOT NULL,
+                        acked_revision INTEGER NOT NULL,
+                        sent_json TEXT,
+                        sent_revision INTEGER,
+                        polled_at INTEGER NOT NULL DEFAULT 0,
+                        remote_cover_sha256 TEXT,
+                        remote_cover_updated_at INTEGER NOT NULL DEFAULT 0,
+                        PRIMARY KEY(peer_id, book_url, field)
+                    )
+                    """.trimIndent(),
+                )
+                connection.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS metadata_override_poll (
+                        peer_id TEXT NOT NULL,
+                        started_at INTEGER NOT NULL,
+                        PRIMARY KEY(peer_id)
+                    )
+                    """.trimIndent(),
+                )
+            }
+        }
+
         val MIGRATION_79_80 = object : Migration(79, 80) {
             override fun migrate(connection: SQLiteConnection) {
                 val cols = connection.columnsOf("book_typography")
@@ -2195,6 +2272,7 @@ abstract class LiseurDatabase : RoomDatabase() {
             MIGRATION_77_78,
             MIGRATION_78_79,
             MIGRATION_79_80,
+            MIGRATION_81_82,
         )
     }
 }

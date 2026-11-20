@@ -2139,4 +2139,15 @@
     <string name="vocabulary_personal_note">个人笔记（可选）</string>
     <string name="vocabulary_note_help">例句、联想或记忆提示。</string>
     <string name="vocabulary_discard_changes">对此卡片的更改将丢失。</string>
+    <string name="book_metadata_edit_title">编辑书籍信息</string>
+    <string name="book_metadata_cover_label">封面</string>
+    <string name="book_metadata_choose_cover">选择封面</string>
+    <string name="book_metadata_remove_cover">移除封面</string>
+    <string name="book_metadata_title_label">书名</string>
+    <string name="book_metadata_author_label">作者</string>
+    <string name="book_metadata_description_label">简介</string>
+    <string name="book_metadata_field_reset">还原</string>
+    <string name="book_metadata_reset_all">还原所有修改</string>
+    <string name="book_metadata_edit_series">编辑丛书</string>
+    <string name="book_metadata_no_series">无</string>
 </resources>

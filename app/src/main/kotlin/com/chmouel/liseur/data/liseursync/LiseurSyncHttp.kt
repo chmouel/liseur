@@ -159,6 +159,43 @@ class LiseurSyncHttp(private val http: RemoteHttp = RemoteHttp()) {
         expected: Set<Int> = emptySet(),
     ): JSONObject = send(Request.Builder().url(url).delete(), credentials, expected)
 
+    suspend fun putBytes(
+        url: String,
+        credentials: RemoteCredentials?,
+        bytes: ByteArray,
+        contentType: String = "image/jpeg",
+        expected: Set<Int> = emptySet(),
+    ): JSONObject = send(
+        Request.Builder().url(url).put(bytes.toRequestBody(contentType.toMediaType())),
+        credentials,
+        expected,
+    )
+
+    suspend fun getBytes(
+        url: String,
+        credentials: RemoteCredentials?,
+        ifNoneMatch: String? = null,
+        expected: Set<Int> = emptySet(),
+    ): ByteArray? = withContext(Dispatchers.IO) {
+        val builder = Request.Builder().url(url).get()
+        if (!ifNoneMatch.isNullOrBlank()) {
+            builder.header("If-None-Match", "\"$ifNoneMatch\"")
+        }
+        val request = builder.also { credentials?.signInto(it) }.build()
+        http.client.newCall(request).execute().use { response ->
+            if (response.code == 304) return@withContext null
+            if (response.code in expected) {
+                val text = response.body?.string().orEmpty()
+                throw LiseurSyncRejection(response.code, parseOrNull(text), text)
+            }
+            if (!response.isSuccessful) {
+                val text = response.body?.string().orEmpty()
+                throw failureFor(response, text)
+            }
+            response.body?.bytes() ?: ByteArray(0)
+        }
+    }
+
     suspend fun putNoContent(
         url: String,
         credentials: RemoteCredentials?,

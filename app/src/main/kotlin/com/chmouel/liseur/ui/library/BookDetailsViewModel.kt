@@ -17,6 +17,8 @@ import com.chmouel.liseur.data.db.ReadingProgressDao
 import com.chmouel.liseur.data.db.RemoteServer
 import com.chmouel.liseur.data.db.RemoteServerDao
 import com.chmouel.liseur.data.db.WorkIdentityDao
+import com.chmouel.liseur.data.library.BookMetadataOverrideRepository
+import com.chmouel.liseur.data.library.FieldEdit
 import com.chmouel.liseur.data.library.folderDisplayName
 import com.chmouel.liseur.data.remote.BookProvenance
 import com.chmouel.liseur.data.remote.DownloadFormat
@@ -64,6 +66,8 @@ data class BookDetails(
     /** The one a download would fetch now. */
     val chosenFormat: DownloadFormat? = null,
     val evaluations: List<com.chmouel.liseur.data.db.BookEvaluation> = emptyList(),
+    /** Description from catalog/file before any user override, for showing/resetting in the editor. */
+    val sourceDescription: String? = null,
 )
 
 /**
@@ -82,6 +86,7 @@ class BookDetailsViewModel(
     private val folderName: suspend (String) -> String?,
     private val inTransaction: suspend (suspend () -> Unit) -> Unit,
     private val evaluationDao: com.chmouel.liseur.data.db.BookEvaluationDao? = null,
+    private val metadataOverrides: BookMetadataOverrideRepository? = null,
     private val requestSync: (String) -> Unit = {},
 ) : ViewModel() {
     fun details(bookUrl: String): StateFlow<BookDetailsUiState> {
@@ -138,6 +143,11 @@ class BookDetailsViewModel(
                         // a catalog refresh stores it with the rest.
                         metadata =
                             resolved.copy(
+                                description = if (current.descriptionOverridden) {
+                                    current.userDescription?.takeIf { it.isNotEmpty() }
+                                } else {
+                                    resolved.description
+                                },
                                 pageCount = resolved.pageCount ?: validPageCount(current.remotePageCount),
                             ),
                         provenance = BookProvenance.of(current.url, current.source),
@@ -149,6 +159,7 @@ class BookDetailsViewModel(
                         formats = offered.first,
                         chosenFormat = offered.second,
                         evaluations = evaluations,
+                        sourceDescription = resolved.description,
                     ),
                 )
             }
@@ -178,6 +189,36 @@ class BookDetailsViewModel(
         if (saved) requestSync(book.url)
     }
 
+    fun saveMetadataEdits(
+        book: Book,
+        title: FieldEdit,
+        author: FieldEdit,
+        description: FieldEdit,
+    ) = viewModelScope.launch {
+        metadataOverrides?.applyTextEdits(
+            bookUrl = book.url,
+            title = title,
+            author = author,
+            description = description,
+        )
+    }
+
+    fun setCoverOverride(book: Book, bytes: ByteArray) = viewModelScope.launch {
+        metadataOverrides?.setCoverFromBytes(book.url, bytes)
+    }
+
+    fun clearCoverToEmpty(book: Book) = viewModelScope.launch {
+        metadataOverrides?.clearCoverToEmpty(book.url)
+    }
+
+    fun resetCoverOverride(book: Book) = viewModelScope.launch {
+        metadataOverrides?.resetCover(book.url)
+    }
+
+    fun resetAllMetadataOverrides(book: Book) = viewModelScope.launch {
+        metadataOverrides?.resetAllTextAndCover(book.url)
+    }
+
     companion object {
         private const val STOP_TIMEOUT_MS = 5_000L
 
@@ -196,6 +237,7 @@ class BookDetailsViewModel(
                         folderName = { folderDisplayName(application, it) },
                         inTransaction = { block -> database.withTransaction { block() } },
                         evaluationDao = database.bookEvaluationDao(),
+                        metadataOverrides = application.container.metadataOverrides,
                         requestSync = application.container::requestBookSync,
                     )
                 }

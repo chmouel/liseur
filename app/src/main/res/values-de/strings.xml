@@ -2232,4 +2232,15 @@
     <string name="vocabulary_personal_note">Persönliche Notiz (optional)</string>
     <string name="vocabulary_note_help">Ein Beispiel, eine Assoziation oder eine Eselsbrücke.</string>
     <string name="vocabulary_discard_changes">Deine Änderungen an dieser Karte gehen verloren.</string>
+    <string name="book_metadata_edit_title">Details bearbeiten</string>
+    <string name="book_metadata_cover_label">Cover</string>
+    <string name="book_metadata_choose_cover">Cover auswählen</string>
+    <string name="book_metadata_remove_cover">Cover entfernen</string>
+    <string name="book_metadata_title_label">Titel</string>
+    <string name="book_metadata_author_label">Autor</string>
+    <string name="book_metadata_description_label">Beschreibung</string>
+    <string name="book_metadata_field_reset">Zurücksetzen</string>
+    <string name="book_metadata_reset_all">Alle Änderungen zurücksetzen</string>
+    <string name="book_metadata_edit_series">Reihe bearbeiten</string>
+    <string name="book_metadata_no_series">Keine</string>
 </resources>

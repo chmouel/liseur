@@ -2812,7 +2812,7 @@ internal fun PlaceholderCover(book: Book, modifier: Modifier = Modifier) {
 
 @Composable
 fun BookCover(book: Book, modifier: Modifier = Modifier, shape: Shape = RoundedCornerShape(10.dp)) {
-    val artwork = book.coverPath ?: book.coverUrl
+    val artwork = book.effectiveCover
     val borderModifier = modifier
         .clip(shape)
         .border(
@@ -2831,7 +2831,7 @@ fun BookCover(book: Book, modifier: Modifier = Modifier, shape: Shape = RoundedC
         val request = remember(artwork, eInk, context, book.browseServerId) {
             ImageRequest.Builder(context)
                 .data(artwork)
-                .browseCover(artwork, book.coverUrl, book.browseServerId)
+                .browseCover(artwork, book.effectiveCoverUrl, book.browseServerId)
                 .crossfade(!eInk)
                 .build()
         }

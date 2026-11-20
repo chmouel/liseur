@@ -485,6 +485,16 @@ class AppContainer(
 
     val appSettings = AppSettingsRepository(context.applicationContext)
 
+    val metadataOverrides by lazy {
+        com.chmouel.liseur.data.library.BookMetadataOverrideRepository(
+            bookDao = database.bookDao(),
+            overrideDao = database.bookMetadataOverrideDao(),
+            coversDir = File(context.applicationContext.filesDir, "covers"),
+            inTransaction = { work -> database.withTransaction { work() } },
+            requestSync = ::requestBookSync,
+        )
+    }
+
     val settingsBackup =
         SettingsBackupRepository(
             context = context.applicationContext,
@@ -516,6 +526,11 @@ class AppContainer(
                     context.applicationContext,
                     database.bookDao(),
                     libraryRepository::importBackupBook,
+                ),
+            metadataOverrides =
+                com.chmouel.liseur.data.library.BookMetadataOverrideBackupRepository(
+                    database.bookDao(),
+                    metadataOverrides,
                 ),
             restoreAppSettings = { values -> serverConnections.restore(values) { appSettings.restoreBackupValues(values) } },
             exportConnections = { connectionBackup.export() },
@@ -635,6 +650,7 @@ class AppContainer(
             sessionDao = database.readingSessionDao(),
             annotationSyncDao = database.annotationSyncDao(),
             evaluationDao = database.bookEvaluationDao(),
+            metadataOverrideDao = database.bookMetadataOverrideDao(),
             uploadRefusalDao = database.uploadRefusalDao(),
             sessionRefusalDao = database.sessionRefusalDao(),
             sessionTransmissionDao = database.sessionTransmissionDao(),
@@ -824,6 +840,15 @@ class AppContainer(
             evaluations = com.chmouel.liseur.data.liseursync.LiseurSyncEvaluations(
                 database.remoteServerDao(), database.workIdentityDao(), database.bookDao(), database.bookEvaluationDao(),
                 works = workResolver,
+                inTransaction = { work -> database.withTransaction { work() } },
+                writerId = evaluationWriter::current,
+            ),
+            metadataOverrides = com.chmouel.liseur.data.liseursync.LiseurSyncMetadataOverrides(
+                servers = database.remoteServerDao(),
+                identities = database.workIdentityDao(),
+                books = database.bookDao(),
+                overrides = database.bookMetadataOverrideDao(),
+                repository = metadataOverrides,
                 inTransaction = { work -> database.withTransaction { work() } },
                 writerId = evaluationWriter::current,
             ),

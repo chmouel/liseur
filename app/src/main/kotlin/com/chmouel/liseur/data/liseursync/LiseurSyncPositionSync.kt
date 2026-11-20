@@ -109,6 +109,7 @@ class LiseurSyncPositionSync(
      */
     private val translations: LiseurSyncTranslations? = null,
     private val evaluations: LiseurSyncEvaluations? = null,
+    private val metadataOverrides: LiseurSyncMetadataOverrides? = null,
     private val settingsSync: LiseurSyncSettings? = null,
     /**
      * Whether a book is on screen right now.
@@ -815,6 +816,19 @@ class LiseurSyncPositionSync(
             }
         }
 
+        var moreMetadataOverrides = false
+        if (trouble.unreachable == null) {
+            try {
+                moreMetadataOverrides = metadataOverrides?.sync(server, book) == true
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: IOException) {
+                trouble.failed(e, reasonFor(e))
+            } catch (e: Exception) {
+                Log.w(TAG, "Metadata override sync failed: ${e.javaClass.simpleName}")
+            }
+        }
+
         // The sentence translation cache after them (ADR-0052): a cached
         // sentence can wait a run like a mark can, and it asks nothing of
         // the names the stages above fixed — it only uses them.
@@ -844,9 +858,10 @@ class LiseurSyncPositionSync(
 
         return if (firstFailure == null) {
             // A fresh stamp would hold off the foreground sync that finishes the catch-up
-            if (caughtUp && !moreEvaluations) forAccount(account) { serverDao.setPositionSyncedAt(at) }
+            val allCaughtUp = caughtUp && !moreEvaluations && !moreMetadataOverrides
+            if (allCaughtUp) forAccount(account) { serverDao.setPositionSyncedAt(at) }
             reporting.report(PositionSyncStatus.Synced(at))
-            if (caughtUp && !moreEvaluations) named.outcome() else SyncOutcome.Incomplete
+            if (allCaughtUp) named.outcome() else SyncOutcome.Incomplete
         } else {
             Log.i(TAG, "Some positions did not settle: ${firstFailure.label}")
             reporting.report(PositionSyncStatus.Failed(firstFailure))

@@ -701,6 +701,23 @@ private fun LiseurApp(
                             onChooseFormat = { format -> detailsBook?.let { model.chooseFormat(it, format) } },
                             onSetReadingChoice = { choice -> detailsBook?.let { library.setReadingChoice(it, choice) } },
                             onSetEvaluation = { field, value -> detailsBook?.let { model.setEvaluation(it, field, value) } },
+                            seriesOptions = libraryState.seriesOptions,
+                            canResetSharedSeries = libraryState.canResetSharedSeries,
+                            onSetSeries = library::setBookSeries,
+                            onResetSeries = library::resetBookSeries,
+                            onResetSharedSeries = library::resetBookSharedSeries,
+                            onSaveMetadataEdits = { book, title, author, description ->
+                                model.saveMetadataEdits(book, title, author, description)
+                            },
+                            onSetCoverOverride = { book, bytes -> model.setCoverOverride(book, bytes) },
+                            onClearCoverToEmpty = { book -> model.clearCoverToEmpty(book) },
+                            onResetCoverOverride = { book -> model.resetCoverOverride(book) },
+                            onResetAllMetadataOverrides = { book ->
+                                model.resetAllMetadataOverrides(book)
+                                if (book.seriesOverridden || book.indexOverridden) {
+                                    library.resetBookSeries(book)
+                                }
+                            },
                         )
                     }
 

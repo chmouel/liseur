@@ -2416,4 +2416,15 @@
     <string name="vocabulary_personal_note">Osobní poznámka (nepovinné)</string>
     <string name="vocabulary_note_help">Příklad, asociace nebo paměťová pomůcka.</string>
     <string name="vocabulary_discard_changes">Změny této kartičky budou ztraceny.</string>
+    <string name="book_metadata_edit_title">Upravit podrobnosti</string>
+    <string name="book_metadata_cover_label">Obálka</string>
+    <string name="book_metadata_choose_cover">Vybrat obálku</string>
+    <string name="book_metadata_remove_cover">Odebrat obálku</string>
+    <string name="book_metadata_title_label">Název</string>
+    <string name="book_metadata_author_label">Autor</string>
+    <string name="book_metadata_description_label">Popis</string>
+    <string name="book_metadata_field_reset">Obnovit</string>
+    <string name="book_metadata_reset_all">Obnovit vše</string>
+    <string name="book_metadata_edit_series">Upravit sérii</string>
+    <string name="book_metadata_no_series">Žádná</string>
 </resources>

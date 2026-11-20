@@ -4,6 +4,7 @@ import com.chmouel.liseur.R
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.BookFingerprintRow
 import com.chmouel.liseur.data.db.DownloadState
+import com.chmouel.liseur.data.library.FieldEdit
 import com.chmouel.liseur.data.remote.BookProvenance
 import com.chmouel.liseur.data.remote.ServerKind
 import com.chmouel.liseur.domain.BookAccessibility
@@ -123,6 +124,26 @@ class BookDetailsTest {
 
         assertTrue(StatusLine.Progress(0.4) in lines)
         assertTrue(StatusLine.TimeLeft(3600.0) in lines)
+    }
+
+    @Test
+    fun fieldEditDistinguishesUnchangedEmptyAndReset() {
+        assertEquals(
+            FieldEdit.Unchanged,
+            resolveFieldEdit(FieldEditMode.UNCHANGED, currentValue = "Dune", initialValue = "Dune"),
+        )
+        assertEquals(
+            FieldEdit.Set(""),
+            resolveFieldEdit(FieldEditMode.SET, currentValue = "", initialValue = "Dune"),
+        )
+        assertEquals(
+            FieldEdit.Set(""),
+            resolveFieldEdit(FieldEditMode.SET, currentValue = "", initialValue = ""),
+        )
+        assertEquals(
+            FieldEdit.Reset,
+            resolveFieldEdit(FieldEditMode.RESET, currentValue = "Dune", initialValue = "Custom"),
+        )
     }
 
     private fun details(

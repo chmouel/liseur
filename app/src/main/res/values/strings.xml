@@ -2296,4 +2296,15 @@
     <string name="vocabulary_personal_note">Personal note (optional)</string>
     <string name="vocabulary_note_help">An example, association, or memory aid.</string>
     <string name="vocabulary_discard_changes">Your changes to this card will be lost.</string>
+    <string name="book_metadata_edit_title">Edit details</string>
+    <string name="book_metadata_cover_label">Cover</string>
+    <string name="book_metadata_choose_cover">Choose cover</string>
+    <string name="book_metadata_remove_cover">Remove cover</string>
+    <string name="book_metadata_title_label">Title</string>
+    <string name="book_metadata_author_label">Author</string>
+    <string name="book_metadata_description_label">Description</string>
+    <string name="book_metadata_field_reset">Reset</string>
+    <string name="book_metadata_reset_all">Reset all overrides</string>
+    <string name="book_metadata_edit_series">Edit series</string>
+    <string name="book_metadata_no_series">None</string>
 </resources>

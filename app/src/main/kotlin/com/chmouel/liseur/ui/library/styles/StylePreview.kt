@@ -176,7 +176,7 @@ private fun MiniCover(book: Book?, index: Int, modifier: Modifier = Modifier) {
         .aspectRatio(COVER_ASPECT)
         .clip(RoundedCornerShape(1.5.dp))
         .background(fallback)
-    val artwork = book?.coverPath ?: book?.coverUrl
+    val artwork = book?.effectiveCover
     if (book == null || artwork == null) {
         Box(shaped)
         return
@@ -186,7 +186,7 @@ private fun MiniCover(book: Book?, index: Int, modifier: Modifier = Modifier) {
     val request = remember(artwork, eInk, context, book.browseServerId) {
         ImageRequest.Builder(context)
             .data(artwork)
-            .browseCover(artwork, book.coverUrl, book.browseServerId)
+            .browseCover(artwork, book.effectiveCoverUrl, book.browseServerId)
             .crossfade(!eInk)
             .build()
     }
