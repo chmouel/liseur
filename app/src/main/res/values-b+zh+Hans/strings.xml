@@ -2147,6 +2147,7 @@
     <string name="book_metadata_author_label">作者</string>
     <string name="book_metadata_description_label">简介</string>
     <string name="book_metadata_field_reset">还原</string>
+    <string name="book_metadata_field_too_long">太长，无法同步（最多 %1$d 字节）</string>
     <string name="book_metadata_reset_all">还原所有修改</string>
     <string name="book_metadata_edit_series">编辑丛书</string>
     <string name="book_metadata_no_series">无</string>

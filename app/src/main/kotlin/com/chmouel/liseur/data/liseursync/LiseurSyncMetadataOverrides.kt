@@ -162,10 +162,10 @@ class LiseurSyncMetadataOverrides(
             }
             for ((target, state) in pending) {
                 if (!stillOurs(server)) return
-                sendText(server, metadataUrl, credentials, state)
+                sendText(server, metadataUrl, credentials, target, state)
             }
 
-            var chosen: MetadataOverrideSync? = null
+            var chosen: Pair<Target, MetadataOverrideSync>? = null
             inTransaction {
                 if (!stillOurs(server)) return@inTransaction
                 val owed = copies.mapNotNull { target ->
@@ -174,6 +174,7 @@ class LiseurSyncMetadataOverrides(
                     if (rev.owed(st)) Triple(target, rev, st) else null
                 }
                 val winner = owed.maxByOrNull { it.second.updatedAt } ?: return@inTransaction
+                if (!stillBound(winner.first)) return@inTransaction
                 for ((target, rev, _) in owed) {
                     if (target.alias.bookUrl != winner.first.alias.bookUrl) {
                         overrides.upsertRevision(rev.copy(retiredRevision = rev.revision))
@@ -189,16 +190,16 @@ class LiseurSyncMetadataOverrides(
                     sentRevision = rev.revision,
                 )
                 overrides.upsertState(prepared)
-                chosen = prepared
+                chosen = winner.first to prepared
             }
-            chosen?.let {
+            chosen?.let { (target, state) ->
                 if (!stillOurs(server)) return
-                sendText(server, metadataUrl, credentials, it)
+                sendText(server, metadataUrl, credentials, target, state)
             }
         }
 
         // 2. Push owed cover change (PUT JPEG or DELETE).
-        var coverPushTarget: Pair<Book, Long>? = null
+        var coverPushTarget: Triple<Target, Book, Long>? = null
         inTransaction {
             if (!stillOurs(server)) return@inTransaction
             val owed = copies.mapNotNull { target ->
@@ -214,11 +215,29 @@ class LiseurSyncMetadataOverrides(
                 }
             }
             val currentBook = books.getByUrl(winner.first.alias.bookUrl) ?: return@inTransaction
-            coverPushTarget = currentBook to winner.second.revision
+            if (!stillBound(winner.first)) return@inTransaction
+            if (currentBook.coverOverridden && currentBook.userCoverPath == null) {
+                // Taking the cover away is this device's own answer, and the
+                // server's DELETE means "back to the original cover", so it
+                // is never the way to say it. Settle it without sending.
+                for ((target, rev, st) in owed) {
+                    val base = st
+                        ?: MetadataOverrideSync(peer, target.alias.bookUrl, MetadataOverrideFields.COVER, workId)
+                    overrides.upsertState(
+                        base.copy(
+                            workId = workId,
+                            ackedRevision = maxOf(base.ackedRevision, rev.revision),
+                            adopted = false,
+                        ),
+                    )
+                }
+                return@inTransaction
+            }
+            coverPushTarget = Triple(winner.first, currentBook, winner.second.revision)
         }
-        coverPushTarget?.let { (book, rev) ->
+        coverPushTarget?.let { (target, book, rev) ->
             if (!stillOurs(server)) return
-            pushCover(server, peer, workId, coverUrl, credentials, book, rev)
+            pushCover(server, peer, workId, coverUrl, credentials, target, book, rev)
         }
 
         // 3. Pull remote metadata & cover state.
@@ -242,11 +261,18 @@ class LiseurSyncMetadataOverrides(
                 !isOwed && current?.userCoverSha256 != remoteCover.sha256
             }
             if (needsDownload) {
-                val bytes = http.getBytes(
-                    coverUrl,
-                    credentials,
-                    expected = setOf(LiseurSyncHttp.NOT_FOUND),
-                )
+                val bytes = try {
+                    http.getBytes(
+                        coverUrl,
+                        credentials,
+                        expected = setOf(LiseurSyncHttp.NOT_FOUND),
+                    )
+                } catch (missing: LiseurSyncRejection) {
+                    // A work can hold no cover at all: the 404 is about the
+                    // picture, not about the work, so nothing here may be
+                    // taken for the work having gone.
+                    if (missing.code == LiseurSyncHttp.NOT_FOUND) null else throw missing
+                }
                 if (bytes != null && bytes.isNotEmpty()) {
                     downloadedCover = remoteCover.sha256 to bytes
                 }
@@ -264,42 +290,25 @@ class LiseurSyncMetadataOverrides(
                 )
             }
             var oldCoverToDelete: String? = null
+            var coverWritten = false
             inTransaction {
-                if (!stillOurs(server)) return@inTransaction
+                if (!stillOurs(server) || !stillBound(target)) return@inTransaction
                 val current = books.getByUrl(bookUrl) ?: return@inTransaction
                 for (field in MetadataOverrideFields.TEXT_FIELDS) {
                     val rev = overrides.revision(bookUrl, field)
                     val st = overrides.state(peer, bookUrl, field)
                     if (rev?.owed(st) == true || st?.sentJson != null) continue
                     val remoteValue = remoteFields[field]
-                    when (field) {
-                        MetadataOverrideFields.TITLE -> {
-                            if (remoteValue != null) {
-                                if (!current.titleOverridden || current.userTitle != remoteValue) {
-                                    books.setTitleOverride(bookUrl, remoteValue)
-                                }
-                            } else if (current.titleOverridden && st != null && st.ackedRevision > 0) {
-                                books.clearTitleOverride(bookUrl)
-                            }
+                    if (remoteValue != null) {
+                        if (overriddenValue(current, field) != remoteValue) {
+                            writeTextOverride(bookUrl, field, remoteValue)
                         }
-                        MetadataOverrideFields.AUTHOR -> {
-                            if (remoteValue != null) {
-                                if (!current.authorOverridden || current.userAuthor != remoteValue) {
-                                    books.setAuthorOverride(bookUrl, remoteValue)
-                                }
-                            } else if (current.authorOverridden && st != null && st.ackedRevision > 0) {
-                                books.clearAuthorOverride(bookUrl)
-                            }
-                        }
-                        MetadataOverrideFields.DESCRIPTION -> {
-                            if (remoteValue != null) {
-                                if (!current.descriptionOverridden || current.userDescription != remoteValue) {
-                                    books.setDescriptionOverride(bookUrl, remoteValue)
-                                }
-                            } else if (current.descriptionOverridden && st != null && st.ackedRevision > 0) {
-                                books.clearDescriptionOverride(bookUrl)
-                            }
-                        }
+                        if (st != null && !st.adopted) overrides.upsertState(st.copy(adopted = true))
+                    } else if (st?.adopted == true && overriddenValue(current, field) != null) {
+                        // Adopted from here in the first place, and now gone:
+                        // another device reset it, and this one follows.
+                        writeTextOverride(bookUrl, field, null)
+                        overrides.upsertState(st.copy(adopted = false))
                     }
                 }
 
@@ -307,8 +316,10 @@ class LiseurSyncMetadataOverrides(
                 if (remoteCover != null) {
                     val coverRev = overrides.revision(bookUrl, MetadataOverrideFields.COVER)
                     val coverState = overrides.state(peer, bookUrl, MetadataOverrideFields.COVER)
-                    if (coverRev?.owed(coverState) != true) {
+                    val removedHere = current.coverOverridden && current.userCoverPath == null
+                    if (coverRev?.owed(coverState) != true && !removedHere) {
                         if (remoteCover.sha256 != null && writtenCoverFile != null) {
+                            coverWritten = true
                             if (current.userCoverSha256 != remoteCover.sha256 || !current.coverOverridden) {
                                 if (current.userCoverPath != writtenCoverFile.absolutePath) {
                                     oldCoverToDelete = current.userCoverPath
@@ -351,6 +362,25 @@ class LiseurSyncMetadataOverrides(
                 }
             }
             oldCoverToDelete?.let { File(it).delete() }
+            if (!coverWritten) writtenCoverFile?.delete()
+        }
+    }
+
+    /** The value this book holds for [field] as an override, or null when it holds none. */
+    private fun overriddenValue(book: Book, field: String): String? = when (field) {
+        MetadataOverrideFields.TITLE -> if (book.titleOverridden) book.userTitle ?: "" else null
+        MetadataOverrideFields.AUTHOR -> if (book.authorOverridden) book.userAuthor ?: "" else null
+        else -> if (book.descriptionOverridden) book.userDescription ?: "" else null
+    }
+
+    private suspend fun writeTextOverride(bookUrl: String, field: String, value: String?) {
+        when (field) {
+            MetadataOverrideFields.TITLE ->
+                if (value == null) books.clearTitleOverride(bookUrl) else books.setTitleOverride(bookUrl, value)
+            MetadataOverrideFields.AUTHOR ->
+                if (value == null) books.clearAuthorOverride(bookUrl) else books.setAuthorOverride(bookUrl, value)
+            else ->
+                if (value == null) books.clearDescriptionOverride(bookUrl) else books.setDescriptionOverride(bookUrl, value)
         }
     }
 
@@ -358,27 +388,52 @@ class LiseurSyncMetadataOverrides(
         server: RemoteServer,
         metadataUrl: String,
         credentials: com.chmouel.liseur.data.remote.RemoteCredentials,
+        target: Target,
         state: MetadataOverrideSync,
     ) {
         val body = state.sentJson ?: return
-        http.postRaw(
-            metadataUrl,
-            credentials,
-            body,
-            expected = setOf(LiseurSyncHttp.NOT_FOUND, LiseurSyncHttp.CONFLICT),
-        )
+        try {
+            http.postRaw(
+                metadataUrl,
+                credentials,
+                body,
+                expected = setOf(
+                    LiseurSyncHttp.NOT_FOUND,
+                    LiseurSyncHttp.CONFLICT,
+                    LiseurSyncHttp.BAD_REQUEST,
+                    LiseurSyncHttp.UNPROCESSABLE,
+                ),
+            )
+        } catch (rejection: LiseurSyncRejection) {
+            // A value the server will never take would otherwise be
+            // replayed ahead of every later edit, and a corrected one could
+            // never get past it. Settle it here instead.
+            val permanent = !rejection.isUnknownWork &&
+                (rejection.code == LiseurSyncHttp.BAD_REQUEST || rejection.code == LiseurSyncHttp.UNPROCESSABLE)
+            if (!permanent) throw rejection
+            settleText(state, body)
+            return
+        }
         inTransaction {
-            if (!stillOurs(server)) return@inTransaction
-            val current = overrides.state(state.peerId, state.bookUrl, state.field)
-            if (current != null && current.sentJson == body) {
-                overrides.upsertState(
-                    current.copy(
-                        ackedRevision = maxOf(current.ackedRevision, current.sentRevision ?: 0L),
-                        sentJson = null,
-                        sentRevision = null,
-                    ),
-                )
-            }
+            if (!stillOurs(server) || !stillBound(target)) return@inTransaction
+            acknowledge(state, body)
+        }
+    }
+
+    private suspend fun settleText(state: MetadataOverrideSync, body: String) {
+        inTransaction { acknowledge(state, body) }
+    }
+
+    private suspend fun acknowledge(state: MetadataOverrideSync, body: String) {
+        val current = overrides.state(state.peerId, state.bookUrl, state.field)
+        if (current != null && current.sentJson == body) {
+            overrides.upsertState(
+                current.copy(
+                    ackedRevision = maxOf(current.ackedRevision, current.sentRevision ?: 0L),
+                    sentJson = null,
+                    sentRevision = null,
+                ),
+            )
         }
     }
 
@@ -388,6 +443,7 @@ class LiseurSyncMetadataOverrides(
         workId: String,
         coverUrl: String,
         credentials: com.chmouel.liseur.data.remote.RemoteCredentials,
+        target: Target,
         book: Book,
         revision: Long,
     ) {
@@ -416,7 +472,7 @@ class LiseurSyncMetadataOverrides(
         val remoteSha = response.optString("sha256").takeIf { it.isNotEmpty() }
         val remoteUpdated = parseIsoMillis(response.optString("updated_at"))
         inTransaction {
-            if (!stillOurs(server)) return@inTransaction
+            if (!stillOurs(server) || !stillBound(target)) return@inTransaction
             val current = overrides.state(peer, book.url, MetadataOverrideFields.COVER)
                 ?: MetadataOverrideSync(peer, book.url, MetadataOverrideFields.COVER, workId)
             overrides.upsertState(
@@ -438,12 +494,7 @@ class LiseurSyncMetadataOverrides(
         book: Book,
     ): String {
         val writeId = UUID.nameUUIDFromBytes("$writer|$workId|$field|$revision".toByteArray(Charsets.UTF_8)).toString()
-        val value: Any = when (field) {
-            MetadataOverrideFields.TITLE -> if (book.titleOverridden) (book.userTitle ?: "") else JSONObject.NULL
-            MetadataOverrideFields.AUTHOR -> if (book.authorOverridden) (book.userAuthor ?: "") else JSONObject.NULL
-            MetadataOverrideFields.DESCRIPTION -> if (book.descriptionOverridden) (book.userDescription ?: "") else JSONObject.NULL
-            else -> JSONObject.NULL
-        }
+        val value: Any = overriddenValue(book, field) ?: JSONObject.NULL
         return JSONObject()
             .put("write_id", writeId)
             .put("writer_id", writer)
@@ -483,4 +534,20 @@ class LiseurSyncMetadataOverrides(
 
     private suspend fun stillOurs(server: RemoteServer): Boolean =
         servers.get(server.id)?.let { it.accountKey == server.accountKey } == true
+
+    /**
+     * Whether [target] still names the same book and the same work.
+     *
+     * A rescan can replace the book at a URL, or resolve it to another
+     * work, while a metadata request is out. Answering that request then
+     * would write its title, author, description or cover onto a book it
+     * was never about.
+     */
+    private suspend fun stillBound(target: Target): Boolean {
+        val current = books.getByUrl(target.alias.bookUrl) ?: return false
+        if (!current.sameGeneration(target.book)) return false
+        val alias = identities.alias(target.alias.bookUrl, target.alias.peerId) ?: return false
+        return alias.usable && alias.workId == target.alias.workId &&
+            alias.resolvedAt == target.alias.resolvedAt && alias.editionSha == target.alias.editionSha
+    }
 }

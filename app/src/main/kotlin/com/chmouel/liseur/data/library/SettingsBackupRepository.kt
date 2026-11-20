@@ -419,6 +419,13 @@ class SettingsBackupRepository internal constructor(
             }
 
             val preparedMetadataOverrides = metadataOverrides?.exportOverrides()
+            if (preparedMetadataOverrides != null &&
+                preparedMetadataOverrides.jsonBytes.size > BookMetadataOverrideBackupRepository.MAX_JSON_BYTES
+            ) {
+                // Restore refuses an entry this size, so writing one would
+                // make a backup this very app cannot read back.
+                return SettingsBackupPreparation.Failed(SettingsBackupFailure.TOO_LARGE)
+            }
             val metadataOverridesMetadata = preparedMetadataOverrides?.let {
                 EntryMetadata(METADATA_OVERRIDES_PATH, it.jsonBytes.size.toLong(), sha256(it.jsonBytes))
             }

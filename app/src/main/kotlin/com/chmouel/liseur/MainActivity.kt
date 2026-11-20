@@ -706,12 +706,9 @@ private fun LiseurApp(
                             onSetSeries = library::setBookSeries,
                             onResetSeries = library::resetBookSeries,
                             onResetSharedSeries = library::resetBookSharedSeries,
-                            onSaveMetadataEdits = { book, title, author, description ->
-                                model.saveMetadataEdits(book, title, author, description)
+                            onSaveMetadataEdits = { book, title, author, description, cover ->
+                                model.saveMetadataEdits(book, title, author, description, cover)
                             },
-                            onSetCoverOverride = { book, bytes -> model.setCoverOverride(book, bytes) },
-                            onClearCoverToEmpty = { book -> model.clearCoverToEmpty(book) },
-                            onResetCoverOverride = { book -> model.resetCoverOverride(book) },
                             onResetAllMetadataOverrides = { book ->
                                 model.resetAllMetadataOverrides(book)
                                 if (book.seriesOverridden || book.indexOverridden) {

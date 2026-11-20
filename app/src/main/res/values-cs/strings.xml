@@ -2424,6 +2424,7 @@
     <string name="book_metadata_author_label">Autor</string>
     <string name="book_metadata_description_label">Popis</string>
     <string name="book_metadata_field_reset">Obnovit</string>
+    <string name="book_metadata_field_too_long">Příliš dlouhé pro synchronizaci (limit %1$d bajtů)</string>
     <string name="book_metadata_reset_all">Obnovit vše</string>
     <string name="book_metadata_edit_series">Upravit sérii</string>
     <string name="book_metadata_no_series">Žádná</string>

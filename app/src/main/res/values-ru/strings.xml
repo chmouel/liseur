@@ -2392,6 +2392,7 @@
     <string name="book_metadata_author_label">Автор</string>
     <string name="book_metadata_description_label">Описание</string>
     <string name="book_metadata_field_reset">Сбросить</string>
+    <string name="book_metadata_field_too_long">Слишком длинно для синхронизации (не более %1$d байт)</string>
     <string name="book_metadata_reset_all">Сбросить все изменения</string>
     <string name="book_metadata_edit_series">Изменить серию</string>
     <string name="book_metadata_no_series">Нет</string>

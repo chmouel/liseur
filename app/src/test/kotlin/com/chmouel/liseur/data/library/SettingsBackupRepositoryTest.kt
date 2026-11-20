@@ -2229,6 +2229,44 @@ class SettingsBackupRepositoryTest {
         }
     }
 
+    @Test
+    fun `an oversized metadata payload is refused before the archive is written`() = runTest {
+        val overrides = BookMetadataOverrideRepository(
+            bookDao = db.bookDao(),
+            overrideDao = db.bookMetadataOverrideDao(),
+            coversDir = folder.newFolder("settings-metadata-covers"),
+            inTransaction = { block -> db.withTransaction { block() } },
+            encodeCoverJpeg = { it },
+        )
+        // Restore reads metadata_overrides.json under one limit, so an export
+        // over it would produce an archive this app cannot open.
+        val description = "d".repeat(BookMetadataOverrideRepository.MAX_DESCRIPTION_BYTES)
+        val books = (BookMetadataOverrideBackupRepository.MAX_JSON_BYTES / description.length).toInt() + 2
+        for (index in 0 until books) {
+            val url = "metadata-book-$index"
+            db.bookDao().upsert(
+                Book(url = url, title = "Title $index", author = null, coverPath = null, source = null, addedAt = 1, lastOpenedAt = null),
+            )
+            db.bookDao().setDescriptionOverride(url, description)
+        }
+
+        val payload = BookMetadataOverrideBackupRepository(db.bookDao(), overrides).exportOverrides()
+        assertTrue(payload!!.jsonBytes.size > BookMetadataOverrideBackupRepository.MAX_JSON_BYTES)
+
+        val repository = SettingsBackupRepository(
+            context,
+            AppSettingsRepository(store("metadata-size-app.preferences_pb")),
+            ReaderPreferencesRepository(store("metadata-size-reader.preferences_pb")),
+            UserFontRepository(context, this, loadCheck = { true }),
+            AnnotationBackupRepository(context, db.annotationDao(), db.bookDao(), requested::add),
+            ReadingPositionBackupRepository(db.readingProgressDao(), db.bookDao(), requested::add),
+            companionBackup(),
+            metadataOverrides = BookMetadataOverrideBackupRepository(db.bookDao(), overrides),
+        )
+
+        assertEquals(SettingsBackupPreparation.Failed(SettingsBackupFailure.TOO_LARGE), repository.prepareExport())
+    }
+
     private fun repository(
         app: AppSettingsRepository,
         reader: ReaderPreferencesRepository,

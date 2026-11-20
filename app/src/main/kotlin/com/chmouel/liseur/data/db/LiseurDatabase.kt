@@ -60,7 +60,7 @@ import com.chmouel.liseur.vocabulary.VocabularyWord
         VocabularyOccurrence::class,
         VocabularyReview::class,
     ],
-    version = 82,
+    version = 83,
     autoMigrations = [AutoMigration(from = 80, to = 81)],
     exportSchema = true,
 )
@@ -108,6 +108,16 @@ abstract class LiseurDatabase : RoomDatabase() {
     abstract fun vocabularyDao(): VocabularyDao
 
     companion object {
+        val MIGRATION_82_83 = object : Migration(82, 83) {
+            override fun migrate(connection: SQLiteConnection) {
+                if ("adopted" !in connection.columnsOf("metadata_override_sync")) {
+                    connection.execSQL(
+                        "ALTER TABLE metadata_override_sync ADD COLUMN adopted INTEGER NOT NULL DEFAULT 0",
+                    )
+                }
+            }
+        }
+
         val MIGRATION_81_82 = object : Migration(81, 82) {
             override fun migrate(connection: SQLiteConnection) {
                 val cols = connection.columnsOf("books")
@@ -2273,6 +2283,7 @@ abstract class LiseurDatabase : RoomDatabase() {
             MIGRATION_78_79,
             MIGRATION_79_80,
             MIGRATION_81_82,
+            MIGRATION_82_83,
         )
     }
 }

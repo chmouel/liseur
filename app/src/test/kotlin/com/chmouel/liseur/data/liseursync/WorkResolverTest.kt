@@ -132,6 +132,33 @@ class WorkResolverTest {
     }
 
     @Test
+    fun `an edited title and author do not rename the work`() = runTest {
+        val book = sideloaded().copy(
+            title = "My own title",
+            author = "Myself",
+            userTitle = "My own title",
+            titleOverridden = true,
+            userAuthor = "Myself",
+            authorOverridden = true,
+            fileTitle = "A Memory Called Empire",
+            fileAuthor = "Arkady Martine",
+        )
+        db.bookDao().upsert(book)
+        answer(201, """{"work_id":"w-1","confidence":"high","created":true}""")
+
+        resolve(book, PEER, baseUrl(), TOKEN)
+
+        val body = JSONObject(server.takeRequest().body!!.utf8())
+        assertEquals("A Memory Called Empire", body.getString("title"))
+        assertEquals("Arkady Martine", body.getString("author"))
+        val identifiers = body.getJSONArray("identifiers")
+        val titleAuthor = (0 until identifiers.length()).map { identifiers.getJSONObject(it) }
+            .single { it.getString("kind") == "ta" }
+        assertEquals("a memory called empire|arkady martine", titleAuthor.getString("value"))
+        assertEquals(book.workId, identifiers.getJSONObject(2).getString("value"))
+    }
+
+    @Test
     fun `a book with no file is named on what the catalog knows`() = runTest {
         // Refusing to sync until a book is downloaded would strand the
         // reader's place on whichever device holds the file.

@@ -459,9 +459,9 @@ class WorkResolver(
         val identifiers = WorkIdentifiers.of(
             fingerprint = fingerprint,
             sourceId = sourceId,
-            dcIdentifier = WorkIdentifiers.dcFrom(book.workId, book.title, book.identityAuthor ?: book.author),
-            title = book.title,
-            author = book.author,
+            dcIdentifier = WorkIdentifiers.dcFrom(book.workId, book.stableTitle, book.identityAuthor ?: book.stableAuthor),
+            title = book.stableTitle,
+            author = book.stableAuthor,
         )
         if (identifiers.isEmpty()) return WorkResolution.Unresolved(cause = null)
 
@@ -557,8 +557,8 @@ class WorkResolver(
                 }
             },
         )
-        put("title", book.title)
-        book.author?.let { put("author", it) }
+        put("title", book.stableTitle)
+        book.stableAuthor?.let { put("author", it) }
         if (confirmed) put("confirmed", true)
     }
 

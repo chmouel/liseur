@@ -18,6 +18,7 @@ import com.chmouel.liseur.data.db.RemoteServer
 import com.chmouel.liseur.data.db.RemoteServerDao
 import com.chmouel.liseur.data.db.WorkIdentityDao
 import com.chmouel.liseur.data.library.BookMetadataOverrideRepository
+import com.chmouel.liseur.data.library.CoverEdit
 import com.chmouel.liseur.data.library.FieldEdit
 import com.chmouel.liseur.data.library.folderDisplayName
 import com.chmouel.liseur.data.remote.BookProvenance
@@ -194,25 +195,21 @@ class BookDetailsViewModel(
         title: FieldEdit,
         author: FieldEdit,
         description: FieldEdit,
+        cover: CoverEdit = CoverEdit.Unchanged,
     ) = viewModelScope.launch {
-        metadataOverrides?.applyTextEdits(
+        val repository = metadataOverrides ?: return@launch
+        repository.applyTextEdits(
             bookUrl = book.url,
             title = title,
             author = author,
             description = description,
         )
-    }
-
-    fun setCoverOverride(book: Book, bytes: ByteArray) = viewModelScope.launch {
-        metadataOverrides?.setCoverFromBytes(book.url, bytes)
-    }
-
-    fun clearCoverToEmpty(book: Book) = viewModelScope.launch {
-        metadataOverrides?.clearCoverToEmpty(book.url)
-    }
-
-    fun resetCoverOverride(book: Book) = viewModelScope.launch {
-        metadataOverrides?.resetCover(book.url)
+        when (cover) {
+            is CoverEdit.Set -> repository.setCoverFromBytes(book.url, cover.bytes)
+            CoverEdit.Empty -> repository.clearCoverToEmpty(book.url)
+            CoverEdit.Reset -> repository.resetCover(book.url)
+            CoverEdit.Unchanged -> Unit
+        }
     }
 
     fun resetAllMetadataOverrides(book: Book) = viewModelScope.launch {

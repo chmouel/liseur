@@ -18,6 +18,7 @@ import java.io.File
 import java.net.InetAddress
 import java.time.Instant
 import javax.crypto.KeyGenerator
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import mockwebserver3.Dispatcher
 import mockwebserver3.MockResponse
@@ -145,6 +146,11 @@ class LiseurSyncMetadataOverridesTest {
 
         repository.clearCoverToEmpty("book")
         sync.sync(account, null)
+        assertEquals(listOf("PUT"), remote.coverMethods)
+        assertTrue(db.bookDao().getByUrl("book")!!.coverOverridden)
+
+        repository.resetCover("book")
+        sync.sync(account, null)
         assertEquals(listOf("PUT", "DELETE"), remote.coverMethods)
     }
 
@@ -173,11 +179,6 @@ class LiseurSyncMetadataOverridesTest {
         assertTrue(File(firstCoverPath!!).isFile)
         assertEquals(remote.coverBytes!!.toList(), File(firstCoverPath).readBytes().toList())
 
-        for (field in MetadataOverrideFields.TEXT_FIELDS) {
-            val state = db.bookMetadataOverrideDao().state(account.accountKey, "book", field)!!
-            db.bookMetadataOverrideDao().upsertState(state.copy(ackedRevision = 1))
-        }
-
         remote.fields[MetadataOverrideFields.TITLE] = null
         remote.fields[MetadataOverrideFields.AUTHOR] = null
         remote.fields[MetadataOverrideFields.DESCRIPTION] = null
@@ -196,6 +197,80 @@ class LiseurSyncMetadataOverridesTest {
         assertEquals("File author", cleared.author)
         assertNull(cleared.userCoverPath)
         assertFalse(File(firstCoverPath).exists())
+    }
+
+    @Test
+    fun `a cover removed here is not sent and a pull does not put it back`() = runTest {
+        remote.coverBytes = "remote-cover".toByteArray()
+        remote.coverSha = BookMetadataOverrideRepository.sha256Hex(remote.coverBytes!!)
+        remote.coverUpdatedAt = 1_000
+        sync.sync(account, null)
+        assertTrue(db.bookDao().getByUrl("book")!!.coverOverridden)
+
+        repository.clearCoverToEmpty("book")
+        sync.sync(account, null)
+
+        assertEquals(emptyList<String>(), remote.coverMethods)
+        val emptied = db.bookDao().getByUrl("book")!!
+        assertTrue(emptied.coverOverridden)
+        assertNull(emptied.userCoverPath)
+        assertNull(emptied.effectiveCover)
+    }
+
+    @Test
+    fun `a cover the server does not have leaves the work aliases alone`() = runTest {
+        remote.coverBytes = "vanished-cover".toByteArray()
+        remote.coverSha = BookMetadataOverrideRepository.sha256Hex(remote.coverBytes!!)
+        remote.coverUpdatedAt = 1_000
+        remote.coverGetCode = 404
+
+        sync.sync(account, null)
+
+        assertNotNull(db.workIdentityDao().alias("book", account.accountKey))
+        val current = db.bookDao().getByUrl("book")!!
+        assertFalse(current.coverOverridden)
+        assertEquals("File title", current.title)
+    }
+
+    @Test
+    fun `a value the server refuses is dropped so the corrected one can go`() = runTest {
+        repository.applyTextEdits(bookUrl = "book", title = FieldEdit.Set("First try"))
+        remote.metadataPostCode = 400
+
+        sync.sync(account, null)
+
+        assertNull(db.bookMetadataOverrideDao().state(account.accountKey, "book", MetadataOverrideFields.TITLE)?.sentJson)
+        assertNull(remote.fields[MetadataOverrideFields.TITLE])
+
+        remote.metadataPostCode = null
+        repository.applyTextEdits(bookUrl = "book", title = FieldEdit.Set("Corrected"))
+        sync.sync(account, null)
+
+        assertEquals("Corrected", remote.fields[MetadataOverrideFields.TITLE])
+        assertEquals("Corrected", db.bookDao().getByUrl("book")!!.userTitle)
+    }
+
+    @Test
+    fun `a response is not applied once the book at the url is another generation`() = runTest {
+        remote.fields[MetadataOverrideFields.TITLE] = "Remote title"
+        remote.beforeMetadataGet = {
+            db.bookDao().refreshIndexedFile(
+                url = "book",
+                title = "Replaced title",
+                author = "Replaced author",
+                coverPath = null,
+                fileModifiedAt = 99,
+                workId = "work",
+                seriesName = null,
+                seriesIndex = null,
+            )
+        }
+
+        sync.sync(account, null)
+
+        val current = db.bookDao().getByUrl("book")!!
+        assertFalse(current.titleOverridden)
+        assertEquals("Replaced title", current.title)
     }
 
     @Test
@@ -250,6 +325,9 @@ class LiseurSyncMetadataOverridesTest {
         var coverSha: String? = null
         var coverUpdatedAt: Long = 0
         var coverBytes: ByteArray? = null
+        var coverGetCode: Int? = null
+        var metadataPostCode: Int? = null
+        var beforeMetadataGet: (suspend () -> Unit)? = null
 
         val dispatcher = object : Dispatcher() {
             override fun dispatch(request: RecordedRequest): MockResponse {
@@ -258,11 +336,17 @@ class LiseurSyncMetadataOverridesTest {
                     path.endsWith("/metadata") && request.method == "POST" -> {
                         val body = JSONObject(request.body!!.utf8())
                         metadataPosts += body
-                        val field = body.getString("field")
-                        fields[field] = if (body.isNull("value")) null else body.getString("value")
-                        MockResponse(body = "{}")
+                        val refusal = metadataPostCode
+                        if (refusal != null) {
+                            MockResponse(code = refusal, body = "{}")
+                        } else {
+                            val field = body.getString("field")
+                            fields[field] = if (body.isNull("value")) null else body.getString("value")
+                            MockResponse(body = "{}")
+                        }
                     }
                     path.endsWith("/metadata") && request.method == "GET" -> {
+                        beforeMetadataGet?.let { runBlocking { it() } }
                         val remoteFields = JSONArray()
                         for ((field, value) in fields) {
                             remoteFields.put(
@@ -312,7 +396,10 @@ class LiseurSyncMetadataOverridesTest {
                     }
                     path.endsWith("/cover") && request.method == "GET" -> {
                         val bytes = coverBytes
-                        if (bytes == null) {
+                        val refusal = coverGetCode
+                        if (refusal != null) {
+                            MockResponse(code = refusal, body = "{}")
+                        } else if (bytes == null) {
                             MockResponse(code = 404, body = "{}")
                         } else {
                             MockResponse(body = bytes.toString(Charsets.UTF_8))

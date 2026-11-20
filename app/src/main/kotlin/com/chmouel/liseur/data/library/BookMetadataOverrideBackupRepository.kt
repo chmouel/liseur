@@ -116,8 +116,13 @@ class BookMetadataOverrideBackupRepository(
 
             if (item.optBoolean("series_override", false)) {
                 val seriesName = if (item.isNull("user_series_name")) null else item.optString("user_series_name")
-                val seriesIndex = if (item.isNull("user_series_index")) null else item.optDouble("user_series_index").takeIf { it.isFinite() }
-                bookDao.setSeriesOverride(url, seriesName, seriesIndex)
+                bookDao.setSeriesNameOverride(url, seriesName)
+            }
+
+            if (item.optBoolean("series_index_override", false)) {
+                val seriesIndex =
+                    if (item.isNull("user_series_index")) null else item.optDouble("user_series_index").takeIf { it.isFinite() }
+                bookDao.setSeriesIndexOverride(url, seriesIndex)
             }
 
             if (item.optBoolean("cover_override", false)) {
@@ -127,11 +132,7 @@ class BookMetadataOverrideBackupRepository(
                 } else {
                     val staged = stagedCovers["metadata_covers/$sha.jpg"]
                     if (staged != null && staged.isFile) {
-                        val bytes = staged.readBytes()
-                        val saved = overrideRepository.writeExternalCoverFile(url, sha, bytes)
-                        if (saved != null) {
-                            bookDao.setCoverOverride(url, saved.absolutePath, sha)
-                        }
+                        overrideRepository.restoreCover(url, sha, staged.readBytes())
                     }
                 }
             }
