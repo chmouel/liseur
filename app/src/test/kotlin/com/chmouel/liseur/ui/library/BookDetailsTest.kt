@@ -4,6 +4,7 @@ import com.chmouel.liseur.R
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.BookFingerprintRow
 import com.chmouel.liseur.data.db.DownloadState
+import com.chmouel.liseur.data.db.MetadataOverrideFields
 import com.chmouel.liseur.data.library.CoverEdit
 import com.chmouel.liseur.data.library.FieldEdit
 import com.chmouel.liseur.data.remote.BookProvenance
@@ -171,6 +172,20 @@ class BookDetailsTest {
         assertTrue(canResetCover(book, CoverDraft.SET))
 
         assertTrue(!canResetCover(book, CoverDraft.RESET))
+    }
+
+    @Test
+    fun onlyAValueOnItsWayToTheServerHasAWireLimit() {
+        val long = "x".repeat(20_000)
+        val field = MetadataOverrideFields.DESCRIPTION
+
+        // The source text is long and left alone: nothing is sent.
+        assertTrue(!overWireLimit(FieldEditMode.UNCHANGED, long, long, field))
+        // Reset sends no value either.
+        assertTrue(!overWireLimit(FieldEditMode.RESET, long, "short", field))
+        // Editing it to something the server takes is fine.
+        assertTrue(!overWireLimit(FieldEditMode.SET, "short", "old", field))
+        assertTrue(overWireLimit(FieldEditMode.SET, long, "old", field))
     }
 
     private fun details(

@@ -88,6 +88,18 @@ internal fun resolveFieldEdit(
         }
     }
 
+/**
+ * Whether this field is about to be sent with a value the server refuses.
+ *
+ * Only a value on its way to the server has a wire limit: text the reader
+ * leaves alone, or resets to, is never sent as a value, so a long source
+ * description must not block editing the title or the cover.
+ */
+internal fun overWireLimit(mode: FieldEditMode, currentValue: String, initialValue: String, field: String): Boolean =
+    mode != FieldEditMode.RESET &&
+        resolveFieldEdit(mode, currentValue, initialValue) is FieldEdit.Set &&
+        !withinWireLimit(field, currentValue)
+
 internal enum class CoverDraft {
     UNCHANGED,
     SET,
@@ -159,9 +171,12 @@ internal fun BookMetadataEditSheet(
     var coverMode by rememberSaveable(book.url) { mutableStateOf(CoverDraft.UNCHANGED) }
     var coverUri by rememberSaveable(book.url) { mutableStateOf<String?>(null) }
 
-    val titleTooLong = !withinWireLimit(MetadataOverrideFields.TITLE, titleText)
-    val authorTooLong = !withinWireLimit(MetadataOverrideFields.AUTHOR, authorText)
-    val descriptionTooLong = !withinWireLimit(MetadataOverrideFields.DESCRIPTION, descriptionText)
+    // Only a value that is about to be sent has a wire limit: text the
+    // reader leaves alone, or resets to, is never sent as a value.
+    val titleTooLong = overWireLimit(titleMode, titleText, initialTitle, MetadataOverrideFields.TITLE)
+    val authorTooLong = overWireLimit(authorMode, authorText, initialAuthor, MetadataOverrideFields.AUTHOR)
+    val descriptionTooLong =
+        overWireLimit(descriptionMode, descriptionText, initialDescription, MetadataOverrideFields.DESCRIPTION)
     val tooLong = titleTooLong || authorTooLong || descriptionTooLong
 
     val pickCover = rememberLauncherForActivityResult(

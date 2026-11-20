@@ -369,13 +369,14 @@ class BookMetadataOverrideTest {
 
     @Test
     fun `backup keeps a series name and a series number apart from one another`() = runTest {
-        for (url in listOf("name-only", "index-only")) {
+        for (url in listOf("name-only", "index-only", "renamed")) {
             db.bookDao().upsert(
                 Book(url = url, title = "Title", author = null, coverPath = null, source = null, addedAt = 1, lastOpenedAt = null),
             )
         }
         db.bookDao().setSeriesNameOverride("name-only", "Saga")
         db.bookDao().setSeriesIndexOverride("index-only", 4.0)
+        db.bookDao().setSeriesNameOverride("renamed", "New series")
 
         val exported = BookMetadataOverrideBackupRepository(db.bookDao(), repository).exportOverrides()
         assertNotNull(exported)
@@ -398,6 +399,22 @@ class BookMetadataOverrideTest {
                     Book(url = url, title = "Title", author = null, coverPath = null, source = null, addedAt = 1, lastOpenedAt = null),
                 )
             }
+            // Where the source had numbered the book in its own series.
+            restoreDb.bookDao().upsert(
+                Book(
+                    url = "renamed",
+                    title = "Title",
+                    author = null,
+                    coverPath = null,
+                    source = null,
+                    addedAt = 1,
+                    lastOpenedAt = null,
+                    seriesName = "Old series",
+                    seriesIndex = 7.0,
+                    fileSeriesName = "Old series",
+                    fileSeriesIndex = 7.0,
+                ),
+            )
 
             BookMetadataOverrideBackupRepository(restoreDb.bookDao(), restoreRepository)
                 .restore(payload.jsonBytes, emptyMap())
@@ -407,11 +424,19 @@ class BookMetadataOverrideTest {
             assertFalse(named.indexOverridden)
             assertEquals("Saga", named.userSeriesName)
             assertNull(named.userSeriesIndex)
+            assertEquals("Saga", named.seriesName)
+            assertNull(named.seriesIndex)
 
             val numbered = restoreDb.bookDao().getByUrl("index-only")!!
             assertFalse(numbered.seriesOverridden)
             assertTrue(numbered.indexOverridden)
             assertEquals(4.0, numbered.userSeriesIndex!!, 0.0)
+            assertNull(numbered.seriesName)
+            assertNull(numbered.seriesIndex)
+
+            val renamed = restoreDb.bookDao().getByUrl("renamed")!!
+            assertEquals("New series", renamed.seriesName)
+            assertNull(renamed.seriesIndex)
         } finally {
             restoreDb.close()
         }

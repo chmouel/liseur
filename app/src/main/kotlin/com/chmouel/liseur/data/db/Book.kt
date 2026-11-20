@@ -265,12 +265,13 @@ data class Book(
      *
      * liseur-sync names books by their catalogue entry, their file or
      * their title and author; an edited title would name a different one
-     * and split the book away from its own reading history.
+     * and split the book away from its own reading history. A book with
+     * no source left falls back to nothing rather than to the edit.
      */
-    val stableTitle: String? get() = catalogTitle ?: fileTitle ?: title
+    val stableTitle: String? get() = catalogTitle ?: fileTitle ?: title.takeUnless { titleOverridden }
 
     /** The author a work's identity is built from, for the same reason. */
-    val stableAuthor: String? get() = catalogAuthor ?: fileAuthor ?: author
+    val stableAuthor: String? get() = catalogAuthor ?: fileAuthor ?: author.takeUnless { authorOverridden }
 
     val effectiveCoverUrl: String? get() = if (coverOverridden) null else coverUrl
 
@@ -792,7 +793,13 @@ interface BookDao {
         updatedAt: Long = System.currentTimeMillis(),
     )
 
-    /** Files a book in a series without claiming anything about its number. */
+    /**
+     * Files a book in a series without claiming anything about its number.
+     *
+     * The name the reader gives replaces whatever the source numbered the
+     * book in its own series, so only an index the reader chose survives;
+     * the same split every refresh query makes.
+     */
     @Query(
         """
         UPDATE books
@@ -802,14 +809,22 @@ interface BookDao {
             series_claim_pending = 1,
             series_claim_reset = 0,
             series_name = :name,
-            series_index = CASE WHEN series_index_override = 1 THEN user_series_index ELSE series_index END,
+            series_index = CASE
+                WHEN :name IS NOT NULL AND series_index_override = 1 THEN user_series_index
+                ELSE NULL END,
             series_id = NULL
         WHERE url = :url
         """,
     )
     suspend fun setSeriesNameOverride(url: String, name: String?, updatedAt: Long = System.currentTimeMillis())
 
-    /** Gives a book a number without claiming anything about its series. */
+    /**
+     * Gives a book a number without claiming anything about its series.
+     *
+     * A book the reader has not filed in a series has no number to show,
+     * so the value is kept for the series that may come and left out of
+     * the resolved column until then.
+     */
     @Query(
         """
         UPDATE books
@@ -818,7 +833,7 @@ interface BookDao {
             user_series_updated_at = :updatedAt,
             series_claim_pending = 1,
             series_claim_reset = 0,
-            series_index = :index,
+            series_index = CASE WHEN series_name IS NOT NULL THEN :index ELSE NULL END,
             series_id = NULL
         WHERE url = :url
         """,
