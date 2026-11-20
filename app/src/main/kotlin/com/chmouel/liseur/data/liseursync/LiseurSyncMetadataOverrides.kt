@@ -5,6 +5,7 @@ import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.db.BookMetadataOverrideDao
 import com.chmouel.liseur.data.db.MetadataOverrideFields
 import com.chmouel.liseur.data.db.MetadataOverridePoll
+import com.chmouel.liseur.data.db.MetadataOverrideRevision
 import com.chmouel.liseur.data.db.MetadataOverrideSync
 import com.chmouel.liseur.data.db.RemoteServer
 import com.chmouel.liseur.data.db.RemoteServerDao
@@ -208,31 +209,28 @@ class LiseurSyncMetadataOverrides(
                 val st = overrides.state(peer, target.alias.bookUrl, MetadataOverrideFields.COVER)
                 if (rev.owed(st)) Triple(target, rev, st) else null
             }
-            val winner = owed.maxByOrNull { it.second.updatedAt } ?: return@inTransaction
-            for ((target, rev, _) in owed) {
+            // Taking the cover away is this device's own answer, and the
+            // server's DELETE means "back to the original cover", so it is
+            // never the way to say it. Settle those books on their own, and
+            // before the election: a removal on one copy must not retire
+            // the custom cover another copy still owes.
+            val pushable = owed.filter { (target, rev, st) ->
+                val book = books.getByUrl(target.alias.bookUrl)
+                if (book != null && book.coverOverridden && book.userCoverPath == null) {
+                    settleCoverRemoval(peer, workId, target, rev, st)
+                    false
+                } else {
+                    true
+                }
+            }
+            val winner = pushable.maxByOrNull { it.second.updatedAt } ?: return@inTransaction
+            for ((target, rev, _) in pushable) {
                 if (target.alias.bookUrl != winner.first.alias.bookUrl) {
                     overrides.upsertRevision(rev.copy(retiredRevision = rev.revision))
                 }
             }
             val currentBook = books.getByUrl(winner.first.alias.bookUrl) ?: return@inTransaction
             if (!stillBound(winner.first)) return@inTransaction
-            if (currentBook.coverOverridden && currentBook.userCoverPath == null) {
-                // Taking the cover away is this device's own answer, and the
-                // server's DELETE means "back to the original cover", so it
-                // is never the way to say it. Settle it without sending.
-                for ((target, rev, st) in owed) {
-                    val base = st
-                        ?: MetadataOverrideSync(peer, target.alias.bookUrl, MetadataOverrideFields.COVER, workId)
-                    overrides.upsertState(
-                        base.copy(
-                            workId = workId,
-                            ackedRevision = maxOf(base.ackedRevision, rev.revision),
-                            adopted = false,
-                        ),
-                    )
-                }
-                return@inTransaction
-            }
             coverPushTarget = Triple(winner.first, currentBook, winner.second.revision)
         }
         coverPushTarget?.let { (target, book, rev) ->
@@ -258,7 +256,11 @@ class LiseurSyncMetadataOverrides(
                 val rev = overrides.revision(target.alias.bookUrl, MetadataOverrideFields.COVER)
                 val st = overrides.state(peer, target.alias.bookUrl, MetadataOverrideFields.COVER)
                 val isOwed = rev?.owed(st) == true
-                !isOwed && current?.userCoverSha256 != remoteCover.sha256
+                // A cover the reader deliberately removed here is not a
+                // cover to fetch: the pull would only write it and then
+                // throw it away until the next pass fetched it again.
+                val removedHere = current != null && current.coverOverridden && current.userCoverPath == null
+                !isOwed && !removedHere && current?.userCoverSha256 != remoteCover.sha256
             }
             if (needsDownload) {
                 val bytes = try {
@@ -281,8 +283,14 @@ class LiseurSyncMetadataOverrides(
 
         for (target in copies) {
             val bookUrl = target.alias.bookUrl
+            val before = books.getByUrl(bookUrl)
+            // The download may have written over the cover this book already
+            // shows, since the path is the same book and the same bytes. Left
+            // over is only deleted when it is nobody's cover.
+            val awaitedCoverPath = before?.userCoverPath
+            val removedHere = before != null && before.coverOverridden && before.userCoverPath == null
             var writtenCoverFile: File? = null
-            if (downloadedCover != null) {
+            if (downloadedCover != null && !removedHere) {
                 writtenCoverFile = repository.writeExternalCoverFile(
                     bookUrl,
                     downloadedCover.first,
@@ -291,8 +299,7 @@ class LiseurSyncMetadataOverrides(
             }
             var oldCoverToDelete: String? = null
             var coverWritten = false
-            inTransaction {
-                if (!stillOurs(server) || !stillBound(target)) return@inTransaction
+            inTransaction {                if (!stillOurs(server) || !stillBound(target)) return@inTransaction
                 val current = books.getByUrl(bookUrl) ?: return@inTransaction
                 for (field in MetadataOverrideFields.TEXT_FIELDS) {
                     val rev = overrides.revision(bookUrl, field)
@@ -316,7 +323,6 @@ class LiseurSyncMetadataOverrides(
                 if (remoteCover != null) {
                     val coverRev = overrides.revision(bookUrl, MetadataOverrideFields.COVER)
                     val coverState = overrides.state(peer, bookUrl, MetadataOverrideFields.COVER)
-                    val removedHere = current.coverOverridden && current.userCoverPath == null
                     if (coverRev?.owed(coverState) != true && !removedHere) {
                         if (remoteCover.sha256 != null && writtenCoverFile != null) {
                             coverWritten = true
@@ -362,8 +368,35 @@ class LiseurSyncMetadataOverrides(
                 }
             }
             oldCoverToDelete?.let { File(it).delete() }
-            if (!coverWritten) writtenCoverFile?.delete()
+            if (!coverWritten && writtenCoverFile != null && writtenCoverFile.absolutePath != awaitedCoverPath) {
+                writtenCoverFile.delete()
+            }
         }
+    }
+
+    /**
+     * Marks a cover the reader removed here as settled without sending it.
+     *
+     * The server's DELETE means "back to the original cover", which is a
+     * different answer from having no cover, so this one never leaves the
+     * device.
+     */
+    private suspend fun settleCoverRemoval(
+        peer: String,
+        workId: String,
+        target: Target,
+        revision: MetadataOverrideRevision,
+        state: MetadataOverrideSync?,
+    ) {
+        val base = state
+            ?: MetadataOverrideSync(peer, target.alias.bookUrl, MetadataOverrideFields.COVER, workId)
+        overrides.upsertState(
+            base.copy(
+                workId = workId,
+                ackedRevision = maxOf(base.ackedRevision, revision.revision),
+                adopted = false,
+            ),
+        )
     }
 
     /** The value this book holds for [field] as an override, or null when it holds none. */

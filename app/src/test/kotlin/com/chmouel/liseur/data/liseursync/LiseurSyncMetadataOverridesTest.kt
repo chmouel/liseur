@@ -218,6 +218,52 @@ class LiseurSyncMetadataOverridesTest {
     }
 
     @Test
+    fun `a cover removed here is not fetched again on the next pass`() = runTest {
+        remote.coverBytes = "remote-cover".toByteArray()
+        remote.coverSha = BookMetadataOverrideRepository.sha256Hex(remote.coverBytes!!)
+        remote.coverUpdatedAt = 1_000
+        sync.sync(account, null)
+        assertEquals(1, remote.coverGets)
+
+        repository.clearCoverToEmpty("book")
+        remote.coverGets = 0
+        sync.sync(account, null)
+
+        assertEquals(0, remote.coverGets)
+    }
+
+    @Test
+    fun `removing the cover on one copy keeps the cover another copy owes`() = runTest {
+        db.bookDao().upsert(
+            Book(
+                url = "copy",
+                title = "File title",
+                author = "File author",
+                coverPath = "file-cover-copy.jpg",
+                source = null,
+                addedAt = 1,
+                lastOpenedAt = null,
+                fileTitle = "File title",
+                fileAuthor = "File author",
+            ),
+        )
+        db.workIdentityDao().upsert(WorkAlias("copy", account.accountKey, "work", "high", resolvedAt = 1))
+
+        val coverBytes = "cover-owed".toByteArray()
+        assertTrue(repository.setCoverFromBytes("book", coverBytes))
+        repository.clearCoverToEmpty("copy")
+
+        sync.sync(account, null)
+
+        assertEquals(listOf("PUT"), remote.coverMethods)
+        assertEquals(coverBytes.toList(), remote.coverPutBodies.single().toList())
+        val removed = db.bookDao().getByUrl("copy")!!
+        assertTrue(removed.coverOverridden)
+        assertNull(removed.userCoverPath)
+        assertEquals(coverBytes.toList(), remote.coverBytes!!.toList())
+    }
+
+    @Test
     fun `a cover the server does not have leaves the work aliases alone`() = runTest {
         remote.coverBytes = "vanished-cover".toByteArray()
         remote.coverSha = BookMetadataOverrideRepository.sha256Hex(remote.coverBytes!!)
@@ -326,6 +372,7 @@ class LiseurSyncMetadataOverridesTest {
         var coverUpdatedAt: Long = 0
         var coverBytes: ByteArray? = null
         var coverGetCode: Int? = null
+        var coverGets = 0
         var metadataPostCode: Int? = null
         var beforeMetadataGet: (suspend () -> Unit)? = null
 
@@ -395,6 +442,7 @@ class LiseurSyncMetadataOverridesTest {
                         )
                     }
                     path.endsWith("/cover") && request.method == "GET" -> {
+                        coverGets++
                         val bytes = coverBytes
                         val refusal = coverGetCode
                         if (refusal != null) {

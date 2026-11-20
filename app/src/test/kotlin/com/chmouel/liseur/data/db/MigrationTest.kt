@@ -2033,13 +2033,55 @@ class MigrationTest {
                     "remote_cover_sha256, remote_cover_updated_at) " +
                     "VALUES ('peer', 'book', 'title', 'work', 3, NULL, NULL, 7, NULL, 0)",
             )
+            // A value this device never acknowledged is one it took from the
+            // server, so the migration marks it as adopted and the pull can
+            // clear it when the server resets it.
+            db.execSQL(
+                "INSERT INTO metadata_override_sync " +
+                    "(peer_id, book_url, field, work_id, acked_revision, sent_json, sent_revision, polled_at, " +
+                    "remote_cover_sha256, remote_cover_updated_at) " +
+                    "VALUES ('peer', 'book', 'author', 'work', 0, NULL, NULL, 7, NULL, 0)",
+            )
+            // One still waiting to be sent is this device's own, and one for
+            // a cover says nothing about a text value.
+            db.execSQL(
+                "INSERT INTO metadata_override_sync " +
+                    "(peer_id, book_url, field, work_id, acked_revision, sent_json, sent_revision, polled_at, " +
+                    "remote_cover_sha256, remote_cover_updated_at) " +
+                    "VALUES ('peer', 'book', 'description', 'work', 0, '{}', 4, 7, NULL, 0)",
+            )
+            db.execSQL(
+                "INSERT INTO metadata_override_sync " +
+                    "(peer_id, book_url, field, work_id, acked_revision, sent_json, sent_revision, polled_at, " +
+                    "remote_cover_sha256, remote_cover_updated_at) " +
+                    "VALUES ('peer', 'book', 'cover', 'work', 0, NULL, NULL, 7, NULL, 0)",
+            )
         }
 
         helper.runMigrationsAndValidate(TEST_DB, 83, true, LiseurDatabase.MIGRATION_82_83).use { db ->
-            db.query("SELECT acked_revision, adopted FROM metadata_override_sync").use {
+            db.query(
+                "SELECT field, acked_revision, adopted FROM metadata_override_sync ORDER BY field",
+            ).use {
                 assertTrue(it.moveToFirst())
-                assertEquals(3L, it.getLong(0))
-                assertEquals(0, it.getInt(1))
+                assertEquals("author", it.getString(0))
+                assertEquals(0L, it.getLong(1))
+                assertEquals(1, it.getInt(2))
+
+                assertTrue(it.moveToNext())
+                assertEquals("cover", it.getString(0))
+                assertEquals(0L, it.getLong(1))
+                assertEquals(0, it.getInt(2))
+
+                assertTrue(it.moveToNext())
+                assertEquals("description", it.getString(0))
+                assertEquals(0L, it.getLong(1))
+                assertEquals(0, it.getInt(2))
+
+                assertTrue(it.moveToNext())
+                assertEquals("title", it.getString(0))
+                assertEquals(3L, it.getLong(1))
+                assertEquals(0, it.getInt(2))
+                assertFalse(it.moveToNext())
             }
         }
     }
