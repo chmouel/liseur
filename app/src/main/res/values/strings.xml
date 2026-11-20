@@ -490,6 +490,20 @@
     <string name="reader_navigate">Navigate</string>
     <string name="reader_bookmarks">Bookmarks</string>
     <string name="reader_highlights">Highlights</string>
+    <string name="library_notes_by_book">By book</string>
+    <string name="library_notes_all">All</string>
+    <string name="library_notes_subtitle">All your highlights and notes</string>
+    <string name="library_notes_collapse_all">Collapse all books</string>
+    <string name="library_notes_expand_all">Expand all books</string>
+    <plurals name="library_notes_count">
+        <item quantity="one">%1$d note</item>
+        <item quantity="other">%1$d notes</item>
+    </plurals>
+    <string name="library_notes_no_results">No matching notes or highlights.</string>
+    <string name="library_notes_open">Open in book</string>
+    <string name="library_notes_search">Search notes</string>
+    <string name="library_notes_empty">Your highlights and notes will appear here.</string>
+    <string name="library_notes_missing_book">Unavailable book</string>
     <string name="reader_notes">Notes</string>
     <string name="reader_no_bookmarks">No bookmarks yet. Tap the top-right corner of a page to mark it.</string>
     <string name="reader_no_highlights">No highlights yet. Select a passage to mark it.</string>

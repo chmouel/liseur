@@ -61,6 +61,7 @@ import com.chmouel.liseur.domain.displayTitle
 import com.chmouel.liseur.domain.localeWeekStart
 import com.chmouel.liseur.ui.reading.FineTypographyActions
 import com.chmouel.liseur.ui.reading.orientationLockHonoured
+import com.chmouel.liseur.ui.library.LibraryNotesScreen
 import com.chmouel.liseur.ui.stats.BookReadingStatsScreen
 import com.chmouel.liseur.vocabulary.VocabularyScreen
 import com.chmouel.liseur.vocabulary.VocabularyOccurrence
@@ -512,6 +513,7 @@ private fun LiseurApp(
                             widgetRequest = launch?.request?.takeIf { !it.shortcut && it.bookUrl != null },
                             onWidgetHandled = { launch?.request?.let(onLaunchHandled) },
                             onOpenSettings = { backStack.push(Route.Settings) },
+                            onOpenNotes = { backStack.push(Route.Notes) },
                             onOpenStats = { backStack.push(Route.Stats) },
                             onOpenVocabulary = { backStack.push(Route.Vocabulary) },
                             onReviewVocabulary = { backStack.push(Route.VocabularyReview) },
@@ -547,6 +549,65 @@ private fun LiseurApp(
                         onOpenSettings = { backStack.push(Route.VocabularySettings) },
                         onOpenPassage = openVocabularyPassage,
                     )
+
+                    Route.Notes -> {
+                        val notes by remember(context) { context.container.database.annotationDao().observeLibraryNotes() }
+                            .collectAsStateWithLifecycle(initialValue = null)
+                        LibraryNotesScreen(
+                            notes = notes,
+                            onBack = back,
+                            dark = appIsDark,
+                            palette = settings.highlightPalette,
+                            onSave = { note, body, tint ->
+                                scope.launch {
+                                    val now = System.currentTimeMillis()
+                                    val bookId = context.container.database.annotationDao().editOrDelete(note.id) { current ->
+                                        if (body.isBlank()) {
+                                            if (current.kind == com.chmouel.liseur.data.db.AnnotationKind.BOOK_NOTE.name) {
+                                                null
+                                            } else {
+                                                com.chmouel.liseur.reader.annotations.NoteText.cleared(current, tint)
+                                                    .copy(updatedAt = now * 1000)
+                                            }
+                                        } else {
+                                            val stamps = com.chmouel.liseur.reader.annotations.NoteText.stamps(current, body, now)
+                                            current.copy(
+                                                kind = if (current.kind == com.chmouel.liseur.data.db.AnnotationKind.BOOK_NOTE.name) {
+                                                    current.kind
+                                                } else {
+                                                    com.chmouel.liseur.data.db.AnnotationKind.NOTE.name
+                                                },
+                                                note = body,
+                                                tint = tint?.name ?: current.tint,
+                                                noteCreatedAt = stamps.createdAt,
+                                                noteUpdatedAt = stamps.updatedAt,
+                                                updatedAt = now * 1000,
+                                            )
+                                        }
+                                    }
+                                    if (bookId != null) context.container.requestBookSync(bookId)
+                                }
+                            },
+                            onOpen = { note ->
+                                scope.launch {
+                                    val file = context.container.database.bookDao().getByUrl(note.bookId)?.openableUri()
+                                    if (file == null) {
+                                        android.widget.Toast.makeText(
+                                            context, R.string.vocabulary_book_unavailable, android.widget.Toast.LENGTH_SHORT,
+                                        ).show()
+                                    } else {
+                                        context.startActivity(ReaderActivity.intent(context, file, note.bookId, at = note.locatorJson))
+                                    }
+                                }
+                            },
+                            onDelete = { note ->
+                                scope.launch {
+                                    context.container.database.annotationDao().deleteById(note.id)
+                                    context.container.requestBookSync(note.bookId)
+                                }
+                            },
+                        )
+                    }
 
                     Route.Stats -> {
                         val model: ReadingStatsViewModel = viewModel(
@@ -1037,6 +1098,7 @@ private fun LibraryRoute(
     onReviewVocabulary: () -> Unit,
     onOpenVocabularyPassage: (VocabularyOccurrence) -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenNotes: () -> Unit,
     onOpenStats: () -> Unit,
     onOpenTranslation: () -> Unit,
     onSyncNow: suspend () -> com.chmouel.liseur.data.remote.SyncOutcome,
@@ -1476,6 +1538,7 @@ private fun LibraryRoute(
             }
         },
         onOpenSettings = onOpenSettings,
+        onOpenNotes = onOpenNotes,
         onOpenStats = onOpenStats,
         onOpenVocabulary = onOpenVocabulary,
         onOpenBookStats = onOpenBookStats,

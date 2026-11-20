@@ -517,6 +517,22 @@
     <string name="reader_navigate">Навигация</string>
     <string name="reader_bookmarks">Закладки</string>
     <string name="reader_highlights">Выделения</string>
+    <string name="library_notes_by_book">По книгам</string>
+    <string name="library_notes_all">Все</string>
+    <string name="library_notes_subtitle">Все ваши выделения и заметки</string>
+    <string name="library_notes_collapse_all">Свернуть все книги</string>
+    <string name="library_notes_expand_all">Развернуть все книги</string>
+    <plurals name="library_notes_count">
+        <item quantity="one">%1$d заметка</item>
+        <item quantity="few">%1$d заметки</item>
+        <item quantity="many">%1$d заметок</item>
+        <item quantity="other">%1$d заметок</item>
+    </plurals>
+    <string name="library_notes_no_results">Заметки и выделения не найдены.</string>
+    <string name="library_notes_open">Открыть в книге</string>
+    <string name="library_notes_search">Поиск по заметкам</string>
+    <string name="library_notes_empty">Здесь появятся ваши выделения и заметки.</string>
+    <string name="library_notes_missing_book">Книга недоступна</string>
     <string name="reader_notes">Заметки</string>
     <string name="reader_no_bookmarks">Закладок пока нет. Коснитесь правого верхнего угла страницы, чтобы отметить её.</string>
     <string name="reader_no_highlights">Выделений пока нет. Выделите фрагмент текста, чтобы отметить его.</string>

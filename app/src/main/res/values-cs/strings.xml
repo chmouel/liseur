@@ -529,6 +529,22 @@
     <string name="reader_navigate">Navigace</string>
     <string name="reader_bookmarks">Záložky</string>
     <string name="reader_highlights">Zvýraznění</string>
+    <string name="library_notes_by_book">Podle knihy</string>
+    <string name="library_notes_all">Vše</string>
+    <string name="library_notes_subtitle">Všechna zvýraznění a poznámky</string>
+    <string name="library_notes_collapse_all">Sbalit všechny knihy</string>
+    <string name="library_notes_expand_all">Rozbalit všechny knihy</string>
+    <plurals name="library_notes_count">
+        <item quantity="one">%1$d poznámka</item>
+        <item quantity="few">%1$d poznámky</item>
+        <item quantity="many">%1$d poznámky</item>
+        <item quantity="other">%1$d poznámek</item>
+    </plurals>
+    <string name="library_notes_no_results">Žádné odpovídající poznámky ani zvýraznění.</string>
+    <string name="library_notes_open">Otevřít v knize</string>
+    <string name="library_notes_search">Hledat v poznámkách</string>
+    <string name="library_notes_empty">Zde se zobrazí vaše zvýraznění a poznámky.</string>
+    <string name="library_notes_missing_book">Nedostupná kniha</string>
     <string name="reader_notes">Poznámky</string>
     <string name="reader_no_bookmarks">Zatím žádné záložky. Klepnutím do pravého horního rohu stránky ji přidáš.</string>
     <string name="reader_no_highlights">Zatím žádná zvýraznění. Vyber pasáž, kterou chceš zvýraznit.</string>

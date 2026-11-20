@@ -81,6 +81,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material.icons.outlined.ArrowDownward
 import androidx.compose.material.icons.outlined.ArrowUpward
+import androidx.compose.material.icons.outlined.EditNote
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenuItem
@@ -216,6 +217,7 @@ fun LibraryScreen(
     /** Opens [Book] to play the listening paused in it, as Continue listening asks. */
     onResumeListening: (Book) -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenNotes: () -> Unit,
     onOpenStats: () -> Unit,
     onOpenVocabulary: () -> Unit,
     /** Opens the sheet that turns translation on; shown in the menu only when set. */
@@ -870,6 +872,14 @@ fun LibraryScreen(
                                     onClick = {
                                         moreOpen = false
                                         onOpenStats()
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.reader_notes)) },
+                                    leadingIcon = { Icon(Icons.Outlined.EditNote, contentDescription = null) },
+                                    onClick = {
+                                        moreOpen = false
+                                        onOpenNotes()
                                     },
                                 )
                                 DropdownMenuItem(

@@ -2,6 +2,7 @@ package com.chmouel.liseur.data.db
 
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -46,6 +47,33 @@ class AnnotationRestoreTest {
         note = note,
         createdAt = 1,
     )
+
+    @Test
+    fun `library notes include highlights and removed books but omit bookmarks`() = runTest {
+        db.bookDao().upsert(Book(url = "known", title = "Known", author = "Author", coverPath = null,
+            source = null, addedAt = 1, lastOpenedAt = null))
+        dao.upsert(mark("highlight", book = "known").copy(text = "A passage", createdAt = 1))
+        dao.upsert(mark("note", note = "A note", book = "removed").copy(createdAt = 2))
+        dao.upsert(mark("bookmark", book = "known").copy(kind = "BOOKMARK", createdAt = 3))
+
+        val notes = dao.observeLibraryNotes().first()
+
+        assertEquals(listOf("note", "highlight"), notes.map { it.id })
+        assertEquals(null, notes.first().title)
+        assertEquals("Known", notes.last().title)
+        assertEquals("Author", notes.last().author)
+    }
+
+    @Test
+    fun `editing a deleted annotation does not recreate it`() = runTest {
+        dao.upsert(mark("a", note = "original"))
+        dao.deleteById("a")
+
+        val bookId = dao.editOrDelete("a") { it.copy(note = "changed") }
+
+        assertEquals(null, bookId)
+        assertEquals(null, dao.byId("a"))
+    }
 
     @Test
     fun `restoring brings in what is missing`() = runTest {

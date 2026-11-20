@@ -469,6 +469,20 @@
     <string name="reader_navigate">Navegar</string>
     <string name="reader_bookmarks">Marcadores</string>
     <string name="reader_highlights">Resaltados</string>
+    <string name="library_notes_by_book">Por libro</string>
+    <string name="library_notes_all">Todos</string>
+    <string name="library_notes_subtitle">Todos tus subrayados y notas</string>
+    <string name="library_notes_collapse_all">Contraer todos los libros</string>
+    <string name="library_notes_expand_all">Expandir todos los libros</string>
+    <plurals name="library_notes_count">
+        <item quantity="one">%1$d nota</item>
+        <item quantity="other">%1$d notas</item>
+    </plurals>
+    <string name="library_notes_no_results">No hay notas ni subrayados coincidentes.</string>
+    <string name="library_notes_open">Abrir en el libro</string>
+    <string name="library_notes_search">Buscar en las notas</string>
+    <string name="library_notes_empty">Tus subrayados y notas aparecerán aquí.</string>
+    <string name="library_notes_missing_book">Libro no disponible</string>
     <string name="reader_notes">Notas</string>
     <string name="reader_no_bookmarks">Aún no hay marcadores. Toca la esquina superior derecha de una página para marcarla.</string>
     <string name="reader_no_highlights">Aún no hay resaltados. Selecciona un pasaje para marcarlo.</string>
