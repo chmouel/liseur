@@ -2304,6 +2304,7 @@
     <string name="book_metadata_author_label">Author</string>
     <string name="book_metadata_description_label">Description</string>
     <string name="book_metadata_field_reset">Reset</string>
+    <string name="book_metadata_field_too_long">Too long to sync (limit of %1$d bytes)</string>
     <string name="book_metadata_reset_all">Reset all overrides</string>
     <string name="book_metadata_edit_series">Edit series</string>
     <string name="book_metadata_no_series">None</string>

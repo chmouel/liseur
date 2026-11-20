@@ -164,6 +164,124 @@ class BookMetadataOverrideTest {
     }
 
     @Test
+    fun `unlinking a catalog clears its title and author but keeps the reader's edits`() = runTest {
+        db.bookDao().upsert(
+            Book(
+                url = "book",
+                title = "Catalog title",
+                author = "Catalog author",
+                coverPath = null,
+                source = null,
+                addedAt = 1,
+                lastOpenedAt = null,
+                remoteUuid = "remote-1",
+                fileTitle = "File title",
+                fileAuthor = "File author",
+                catalogTitle = "Catalog title",
+                catalogAuthor = "Catalog author",
+            ),
+        )
+        db.bookDao().upsert(
+            Book(
+                url = "edited",
+                title = "Catalog title",
+                author = "Catalog author",
+                coverPath = null,
+                source = null,
+                addedAt = 1,
+                lastOpenedAt = null,
+                remoteUuid = "remote-2",
+                fileTitle = "File title",
+                fileAuthor = "File author",
+                catalogTitle = "Catalog title",
+                catalogAuthor = "Catalog author",
+            ),
+        )
+        repository.applyTextEdits(bookUrl = "edited", title = FieldEdit.Set("My title"), author = FieldEdit.Set(""))
+
+        db.bookDao().unlinkFromRemote(listOf("book", "edited"))
+
+        val plain = db.bookDao().getByUrl("book")!!
+        assertNull(plain.catalogTitle)
+        assertNull(plain.catalogAuthor)
+        assertEquals("File title", plain.title)
+        assertEquals("File author", plain.author)
+
+        val edited = db.bookDao().getByUrl("edited")!!
+        assertNull(edited.catalogTitle)
+        assertNull(edited.catalogAuthor)
+        assertTrue(edited.titleOverridden)
+        assertTrue(edited.authorOverridden)
+        assertEquals("My title", edited.title)
+        assertNull(edited.author)
+    }
+
+    @Test
+    fun `a value longer than the wire limit is refused while the others still land`() = runTest {
+        db.bookDao().upsert(
+            Book(url = "book", title = "Original", author = "Original author", coverPath = null, source = null, addedAt = 1, lastOpenedAt = null),
+        )
+
+        repository.applyTextEdits(
+            bookUrl = "book",
+            title = FieldEdit.Set("x".repeat(BookMetadataOverrideRepository.MAX_TITLE_BYTES + 1)),
+            author = FieldEdit.Set("Short author"),
+        )
+
+        val book = db.bookDao().getByUrl("book")!!
+        assertFalse(book.titleOverridden)
+        assertEquals("Original", book.title)
+        assertEquals("Short author", book.userAuthor)
+        assertNull(db.bookMetadataOverrideDao().revision("book", com.chmouel.liseur.data.db.MetadataOverrideFields.TITLE))
+    }
+
+    @Test
+    fun `revisions rise across every book so two copies of a work cannot share one`() = runTest {
+        for (url in listOf("copy-a", "copy-b")) {
+            db.bookDao().upsert(
+                Book(url = url, title = "Title", author = null, coverPath = null, source = null, addedAt = 1, lastOpenedAt = null),
+            )
+        }
+        repository.applyTextEdits(bookUrl = "copy-a", title = FieldEdit.Set("One"))
+        val first = db.bookMetadataOverrideDao().revision("copy-a", com.chmouel.liseur.data.db.MetadataOverrideFields.TITLE)!!.revision
+        repository.applyTextEdits(bookUrl = "copy-b", title = FieldEdit.Set("Two"))
+        val second = db.bookMetadataOverrideDao().revision("copy-b", com.chmouel.liseur.data.db.MetadataOverrideFields.TITLE)!!.revision
+        assertTrue(second > first)
+
+        repository.applyTextEdits(bookUrl = "copy-a", author = FieldEdit.Set("Writer"))
+        val other = db.bookMetadataOverrideDao().revision("copy-a", com.chmouel.liseur.data.db.MetadataOverrideFields.AUTHOR)!!.revision
+        assertTrue(other > second)
+    }
+
+    @Test
+    fun `a restored cover is an edit of its own that owes a sync`() = runTest {
+        val synced = mutableListOf<String>()
+        val syncing = BookMetadataOverrideRepository(
+            bookDao = db.bookDao(),
+            overrideDao = db.bookMetadataOverrideDao(),
+            coversDir = folder.newFolder("restored-covers"),
+            inTransaction = { block -> db.withTransaction { block() } },
+            requestSync = { synced += it },
+            encodeCoverJpeg = { it },
+        )
+        db.bookDao().upsert(
+            Book(url = "book", title = "Title", author = null, coverPath = null, source = null, addedAt = 1, lastOpenedAt = null),
+        )
+        val jpeg = byteArrayOf(9, 8, 7)
+
+        assertTrue(syncing.restoreCover("book", BookMetadataOverrideRepository.sha256Hex(jpeg), jpeg))
+
+        val book = db.bookDao().getByUrl("book")!!
+        assertTrue(book.coverOverridden)
+        assertEquals(BookMetadataOverrideRepository.sha256Hex(jpeg), book.userCoverSha256)
+        assertEquals(jpeg.toList(), File(book.userCoverPath!!).readBytes().toList())
+        assertEquals(listOf("book"), synced)
+        val revision = db.bookMetadataOverrideDao()
+            .revision("book", com.chmouel.liseur.data.db.MetadataOverrideFields.COVER)!!
+        assertTrue(revision.revision > 0)
+    }
+
+    @Test
     fun `backup export and restore round trip explicit empty text series and custom cover`() = runTest {
         val url = "book"
         db.bookDao().upsert(
@@ -244,6 +362,56 @@ class BookMetadataOverrideTest {
             val restoredCover = File(roundTripped.userCoverPath!!)
             assertTrue(restoredCover.isFile)
             assertEquals(coverBytes.toList(), restoredCover.readBytes().toList())
+        } finally {
+            restoreDb.close()
+        }
+    }
+
+    @Test
+    fun `backup keeps a series name and a series number apart from one another`() = runTest {
+        for (url in listOf("name-only", "index-only")) {
+            db.bookDao().upsert(
+                Book(url = url, title = "Title", author = null, coverPath = null, source = null, addedAt = 1, lastOpenedAt = null),
+            )
+        }
+        db.bookDao().setSeriesNameOverride("name-only", "Saga")
+        db.bookDao().setSeriesIndexOverride("index-only", 4.0)
+
+        val exported = BookMetadataOverrideBackupRepository(db.bookDao(), repository).exportOverrides()
+        assertNotNull(exported)
+        val payload = exported!!
+
+        val restoreDb = Room.inMemoryDatabaseBuilder(
+            ApplicationProvider.getApplicationContext(),
+            LiseurDatabase::class.java,
+        ).build()
+        try {
+            val restoreRepository = BookMetadataOverrideRepository(
+                bookDao = restoreDb.bookDao(),
+                overrideDao = restoreDb.bookMetadataOverrideDao(),
+                coversDir = folder.newFolder("series-restore-covers"),
+                inTransaction = { block -> restoreDb.withTransaction { block() } },
+                encodeCoverJpeg = { it },
+            )
+            for (url in listOf("name-only", "index-only")) {
+                restoreDb.bookDao().upsert(
+                    Book(url = url, title = "Title", author = null, coverPath = null, source = null, addedAt = 1, lastOpenedAt = null),
+                )
+            }
+
+            BookMetadataOverrideBackupRepository(restoreDb.bookDao(), restoreRepository)
+                .restore(payload.jsonBytes, emptyMap())
+
+            val named = restoreDb.bookDao().getByUrl("name-only")!!
+            assertTrue(named.seriesOverridden)
+            assertFalse(named.indexOverridden)
+            assertEquals("Saga", named.userSeriesName)
+            assertNull(named.userSeriesIndex)
+
+            val numbered = restoreDb.bookDao().getByUrl("index-only")!!
+            assertFalse(numbered.seriesOverridden)
+            assertTrue(numbered.indexOverridden)
+            assertEquals(4.0, numbered.userSeriesIndex!!, 0.0)
         } finally {
             restoreDb.close()
         }

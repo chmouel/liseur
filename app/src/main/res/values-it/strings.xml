@@ -2228,6 +2228,7 @@
     <string name="book_metadata_author_label">Autore</string>
     <string name="book_metadata_description_label">Descrizione</string>
     <string name="book_metadata_field_reset">Ripristina</string>
+    <string name="book_metadata_field_too_long">Troppo lungo per la sincronizzazione (massimo %1$d byte)</string>
     <string name="book_metadata_reset_all">Ripristina tutte le modifiche</string>
     <string name="book_metadata_edit_series">Modifica serie</string>
     <string name="book_metadata_no_series">Nessuna</string>

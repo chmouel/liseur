@@ -260,6 +260,18 @@ data class Book(
 
     val effectiveCoverPath: String? get() = if (coverOverridden) userCoverPath else coverPath
 
+    /**
+     * The title a work's identity is built from, never the reader's edit.
+     *
+     * liseur-sync names books by their catalogue entry, their file or
+     * their title and author; an edited title would name a different one
+     * and split the book away from its own reading history.
+     */
+    val stableTitle: String? get() = catalogTitle ?: fileTitle ?: title
+
+    /** The author a work's identity is built from, for the same reason. */
+    val stableAuthor: String? get() = catalogAuthor ?: fileAuthor ?: author
+
     val effectiveCoverUrl: String? get() = if (coverOverridden) null else coverUrl
 
     val effectiveCover: String? get() = if (coverOverridden) userCoverPath else (coverPath ?: coverUrl)
@@ -407,6 +419,9 @@ interface BookDao {
     suspend fun undownloadedFromBrowseServer(serverId: Long): List<Book>
 
     @Query("UPDATE books SET remote_uuid = NULL, download_href = NULL, download_formats = NULL, cover_url = NULL, " +
+            "catalog_title = NULL, catalog_author = NULL, " +
+            "title = CASE WHEN title_override = 1 THEN COALESCE(user_title, '') ELSE COALESCE(file_title, title) END, " +
+            "author = CASE WHEN author_override = 1 THEN NULLIF(user_author, '') ELSE COALESCE(file_author, author) END, " +
             "link_generation = link_generation + 1 " +
             "WHERE browse_server_id = :serverId AND local_uri IS NOT NULL")
     suspend fun unlinkDownloadedFromBrowseServerRows(serverId: Long)
@@ -477,7 +492,12 @@ interface BookDao {
             "download_href = NULL, download_formats = NULL, remote_updated_at = NULL, remote_page_count = NULL, " +
             "catalog_series_name = NULL, catalog_series_index = NULL, " +
             "catalog_folder_id = NULL, catalog_series_source = NULL, " +
+            "catalog_title = NULL, catalog_author = NULL, " +
             "catalog_missing_since = NULL, " +
+            "title = CASE WHEN title_override = 1 THEN COALESCE(user_title, '') " +
+            "ELSE COALESCE(file_title, title) END, " +
+            "author = CASE WHEN author_override = 1 THEN NULLIF(user_author, '') " +
+            "ELSE COALESCE(file_author, author) END, " +
             "series_name = CASE WHEN series_override = 1 THEN user_series_name " +
             "ELSE file_series_name END, " +
             "series_index = CASE " +
@@ -509,7 +529,12 @@ interface BookDao {
             "download_href = NULL, download_formats = NULL, remote_updated_at = NULL, remote_page_count = NULL, " +
             "catalog_series_name = NULL, catalog_series_index = NULL, " +
             "catalog_folder_id = NULL, catalog_series_source = NULL, " +
+            "catalog_title = NULL, catalog_author = NULL, " +
             "catalog_missing_since = NULL, " +
+            "title = CASE WHEN title_override = 1 THEN COALESCE(user_title, '') " +
+            "ELSE COALESCE(file_title, title) END, " +
+            "author = CASE WHEN author_override = 1 THEN NULLIF(user_author, '') " +
+            "ELSE COALESCE(file_author, author) END, " +
             "series_name = CASE WHEN series_override = 1 THEN user_series_name " +
             "ELSE file_series_name END, " +
             "series_index = CASE " +
@@ -766,6 +791,39 @@ interface BookDao {
         index: Double?,
         updatedAt: Long = System.currentTimeMillis(),
     )
+
+    /** Files a book in a series without claiming anything about its number. */
+    @Query(
+        """
+        UPDATE books
+        SET user_series_name = :name,
+            series_override = 1,
+            user_series_updated_at = :updatedAt,
+            series_claim_pending = 1,
+            series_claim_reset = 0,
+            series_name = :name,
+            series_index = CASE WHEN series_index_override = 1 THEN user_series_index ELSE series_index END,
+            series_id = NULL
+        WHERE url = :url
+        """,
+    )
+    suspend fun setSeriesNameOverride(url: String, name: String?, updatedAt: Long = System.currentTimeMillis())
+
+    /** Gives a book a number without claiming anything about its series. */
+    @Query(
+        """
+        UPDATE books
+        SET user_series_index = :index,
+            series_index_override = 1,
+            user_series_updated_at = :updatedAt,
+            series_claim_pending = 1,
+            series_claim_reset = 0,
+            series_index = :index,
+            series_id = NULL
+        WHERE url = :url
+        """,
+    )
+    suspend fun setSeriesIndexOverride(url: String, index: Double?, updatedAt: Long = System.currentTimeMillis())
 
     /**
      * Records the server's own id for the series this book now sits in,

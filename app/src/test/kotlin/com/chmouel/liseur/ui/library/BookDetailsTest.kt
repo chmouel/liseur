@@ -4,6 +4,7 @@ import com.chmouel.liseur.R
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.BookFingerprintRow
 import com.chmouel.liseur.data.db.DownloadState
+import com.chmouel.liseur.data.library.CoverEdit
 import com.chmouel.liseur.data.library.FieldEdit
 import com.chmouel.liseur.data.remote.BookProvenance
 import com.chmouel.liseur.data.remote.ServerKind
@@ -144,6 +145,32 @@ class BookDetailsTest {
             FieldEdit.Reset,
             resolveFieldEdit(FieldEditMode.RESET, currentValue = "Dune", initialValue = "Custom"),
         )
+    }
+
+    @Test
+    fun aCoverDraftBecomesOneEditOnSave() {
+        val bytes = byteArrayOf(1, 2, 3)
+        assertEquals(CoverEdit.Unchanged, coverEditOf(CoverDraft.UNCHANGED, null))
+        assertEquals(CoverEdit.Empty, coverEditOf(CoverDraft.EMPTY, bytes))
+        assertEquals(CoverEdit.Reset, coverEditOf(CoverDraft.RESET, null))
+        val set = coverEditOf(CoverDraft.SET, bytes) as CoverEdit.Set
+        assertEquals(bytes.toList(), set.bytes.toList())
+        assertEquals(CoverEdit.Unchanged, coverEditOf(CoverDraft.SET, null))
+    }
+
+    @Test
+    fun aCoverDraftDecidesWhichCoverButtonsAreOffered() {
+        val book = details(progression = null).book.copy(coverPath = "file-cover.jpg")
+        assertTrue(canRemoveCover(book, CoverDraft.UNCHANGED))
+        assertTrue(!canResetCover(book, CoverDraft.UNCHANGED))
+
+        assertTrue(!canRemoveCover(book, CoverDraft.EMPTY))
+        assertTrue(canResetCover(book, CoverDraft.EMPTY))
+
+        assertTrue(canRemoveCover(book, CoverDraft.SET))
+        assertTrue(canResetCover(book, CoverDraft.SET))
+
+        assertTrue(!canResetCover(book, CoverDraft.RESET))
     }
 
     private fun details(

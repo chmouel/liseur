@@ -53,9 +53,11 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -74,6 +76,7 @@ import com.chmouel.liseur.R
 import com.chmouel.liseur.data.calibre.DownloadProgress
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.DownloadState
+import com.chmouel.liseur.data.library.CoverEdit
 import com.chmouel.liseur.data.library.FieldEdit
 import com.chmouel.liseur.data.remote.BookProvenance
 import com.chmouel.liseur.data.remote.DownloadFormat
@@ -132,10 +135,7 @@ fun BookDetailsScreen(
     onSetSeries: (Book, String?, Double?) -> Unit = { _, _, _ -> },
     onResetSeries: (Book) -> Unit = {},
     onResetSharedSeries: (Book) -> Unit = {},
-    onSaveMetadataEdits: (Book, FieldEdit, FieldEdit, FieldEdit) -> Unit = { _, _, _, _ -> },
-    onSetCoverOverride: (Book, ByteArray) -> Unit = { _, _ -> },
-    onClearCoverToEmpty: (Book) -> Unit = {},
-    onResetCoverOverride: (Book) -> Unit = {},
+    onSaveMetadataEdits: (Book, FieldEdit, FieldEdit, FieldEdit, CoverEdit) -> Unit = { _, _, _, _, _ -> },
     onResetAllMetadataOverrides: (Book) -> Unit = {},
 ) {
     if (state is BookDetailsUiState.Gone) {
@@ -145,6 +145,18 @@ fun BookDetailsScreen(
     var editingMetadata by rememberSaveable(details?.book?.url) { mutableStateOf(false) }
     var editingSeries by rememberSaveable(details?.book?.url) { mutableStateOf(false) }
     var returnToMetadataAfterSeries by rememberSaveable(details?.book?.url) { mutableStateOf(false) }
+    // The editor is dropped from composition while the series picker is up,
+    // so what the reader typed has to outlive it. A new key, used when the
+    // editor is really dismissed, is what empties it.
+    var metadataEditRound by rememberSaveable(details?.book?.url) { mutableIntStateOf(0) }
+    val metadataEditStates = rememberSaveableStateHolder()
+    val closeMetadataEditor: () -> Unit = {
+        editingMetadata = false
+        metadataEditRound++
+    }
+    LaunchedEffect(metadataEditRound) {
+        if (metadataEditRound > 0) metadataEditStates.removeState("metadata-edit-${metadataEditRound - 1}")
+    }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -239,22 +251,21 @@ fun BookDetailsScreen(
                 item(key = "fileinfo") { FileInfo(details, section) }
             }
             if (editingMetadata) {
-                BookMetadataEditSheet(
-                    details = details,
-                    onSave = { title, author, description ->
-                        onSaveMetadataEdits(details.book, title, author, description)
-                    },
-                    onSetCoverOverride = { bytes -> onSetCoverOverride(details.book, bytes) },
-                    onClearCoverToEmpty = { onClearCoverToEmpty(details.book) },
-                    onResetCoverOverride = { onResetCoverOverride(details.book) },
-                    onResetAllOverrides = { onResetAllMetadataOverrides(details.book) },
-                    onEditSeries = {
-                        returnToMetadataAfterSeries = true
-                        editingMetadata = false
-                        editingSeries = true
-                    },
-                    onDismiss = { editingMetadata = false },
-                )
+                metadataEditStates.SaveableStateProvider("metadata-edit-$metadataEditRound") {
+                    BookMetadataEditSheet(
+                        details = details,
+                        onSave = { title, author, description, cover ->
+                            onSaveMetadataEdits(details.book, title, author, description, cover)
+                        },
+                        onResetAllOverrides = { onResetAllMetadataOverrides(details.book) },
+                        onEditSeries = {
+                            returnToMetadataAfterSeries = true
+                            editingMetadata = false
+                            editingSeries = true
+                        },
+                        onDismiss = closeMetadataEditor,
+                    )
+                }
             }
             if (editingSeries) {
                 val closeSeries = {

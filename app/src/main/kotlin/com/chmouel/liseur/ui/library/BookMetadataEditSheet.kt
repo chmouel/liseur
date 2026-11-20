@@ -51,7 +51,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.db.Book
+import com.chmouel.liseur.data.db.MetadataOverrideFields
+import com.chmouel.liseur.data.library.BookMetadataOverrideRepository
 import com.chmouel.liseur.data.library.BookMetadataOverrideRepository.Companion.MAX_COVER_SOURCE_BYTES
+import com.chmouel.liseur.data.library.BookMetadataOverrideRepository.Companion.withinWireLimit
+import com.chmouel.liseur.data.library.CoverEdit
 import com.chmouel.liseur.data.library.FieldEdit
 import com.chmouel.liseur.domain.seriesIndexLabel
 import com.chmouel.liseur.domain.validSeriesPosition
@@ -84,14 +88,44 @@ internal fun resolveFieldEdit(
         }
     }
 
+internal enum class CoverDraft {
+    UNCHANGED,
+    SET,
+    EMPTY,
+    RESET,
+}
+
+/** What a cover draft asks the library for once the reader saves. */
+internal fun coverEditOf(draft: CoverDraft, bytes: ByteArray?): CoverEdit =
+    when (draft) {
+        CoverDraft.UNCHANGED -> CoverEdit.Unchanged
+        CoverDraft.EMPTY -> CoverEdit.Empty
+        CoverDraft.RESET -> CoverEdit.Reset
+        CoverDraft.SET -> bytes?.let { CoverEdit.Set(it) } ?: CoverEdit.Unchanged
+    }
+
+/** Whether the draft leaves a cover that can be taken away. */
+internal fun canRemoveCover(book: Book, draft: CoverDraft): Boolean =
+    when (draft) {
+        CoverDraft.UNCHANGED -> book.effectiveCover != null || !book.coverOverridden
+        CoverDraft.EMPTY -> false
+        CoverDraft.SET -> true
+        CoverDraft.RESET -> book.coverPath != null || book.coverUrl != null
+    }
+
+/** Whether the draft holds an edit the original cover can replace. */
+internal fun canResetCover(book: Book, draft: CoverDraft): Boolean =
+    when (draft) {
+        CoverDraft.UNCHANGED -> book.coverOverridden
+        CoverDraft.RESET -> false
+        else -> true
+    }
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 internal fun BookMetadataEditSheet(
     details: BookDetails,
-    onSave: (title: FieldEdit, author: FieldEdit, description: FieldEdit) -> Unit,
-    onSetCoverOverride: (ByteArray) -> Unit,
-    onClearCoverToEmpty: () -> Unit,
-    onResetCoverOverride: () -> Unit,
+    onSave: (title: FieldEdit, author: FieldEdit, description: FieldEdit, cover: CoverEdit) -> Unit,
     onResetAllOverrides: () -> Unit,
     onEditSeries: () -> Unit,
     onDismiss: () -> Unit,
@@ -120,14 +154,22 @@ internal fun BookMetadataEditSheet(
     var descriptionText by rememberSaveable(book.url) { mutableStateOf(initialDescription) }
     var descriptionMode by rememberSaveable(book.url) { mutableStateOf(FieldEditMode.UNCHANGED) }
 
+    // The cover is a draft like the rest: nothing reaches the library until
+    // the reader saves, and Cancel takes it all back.
+    var coverMode by rememberSaveable(book.url) { mutableStateOf(CoverDraft.UNCHANGED) }
+    var coverUri by rememberSaveable(book.url) { mutableStateOf<String?>(null) }
+
+    val titleTooLong = !withinWireLimit(MetadataOverrideFields.TITLE, titleText)
+    val authorTooLong = !withinWireLimit(MetadataOverrideFields.AUTHOR, authorText)
+    val descriptionTooLong = !withinWireLimit(MetadataOverrideFields.DESCRIPTION, descriptionText)
+    val tooLong = titleTooLong || authorTooLong || descriptionTooLong
+
     val pickCover = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument(),
     ) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
-        scope.launch {
-            val bytes = readCoverBytes(context, uri) ?: return@launch
-            onSetCoverOverride(bytes)
-        }
+        coverUri = uri.toString()
+        coverMode = CoverDraft.SET
     }
 
     LiseurModalBottomSheet(
@@ -188,17 +230,23 @@ internal fun BookMetadataEditSheet(
                             ) {
                                 Text(stringResource(R.string.book_metadata_choose_cover))
                             }
-                            if (book.effectiveCover != null || !book.coverOverridden) {
+                            if (canRemoveCover(book, coverMode)) {
                                 TextButton(
-                                    onClick = onClearCoverToEmpty,
+                                    onClick = {
+                                        coverMode = CoverDraft.EMPTY
+                                        coverUri = null
+                                    },
                                     modifier = Modifier.heightIn(min = 48.dp),
                                 ) {
                                     Text(stringResource(R.string.book_metadata_remove_cover))
                                 }
                             }
-                            if (book.coverOverridden) {
+                            if (canResetCover(book, coverMode)) {
                                 TextButton(
-                                    onClick = onResetCoverOverride,
+                                    onClick = {
+                                        coverMode = CoverDraft.RESET
+                                        coverUri = null
+                                    },
                                     modifier = Modifier.heightIn(min = 48.dp),
                                 ) {
                                     Text(stringResource(R.string.book_metadata_field_reset))
@@ -221,6 +269,14 @@ internal fun BookMetadataEditSheet(
                         titleMode = if (book.titleOverridden) FieldEditMode.RESET else FieldEditMode.UNCHANGED
                     },
                     singleLine = true,
+                    error = if (titleTooLong) {
+                        stringResource(
+                            R.string.book_metadata_field_too_long,
+                            BookMetadataOverrideRepository.MAX_TITLE_BYTES,
+                        )
+                    } else {
+                        null
+                    },
                 )
 
                 MetadataTextFieldSection(
@@ -236,6 +292,14 @@ internal fun BookMetadataEditSheet(
                         authorMode = if (book.authorOverridden) FieldEditMode.RESET else FieldEditMode.UNCHANGED
                     },
                     singleLine = true,
+                    error = if (authorTooLong) {
+                        stringResource(
+                            R.string.book_metadata_field_too_long,
+                            BookMetadataOverrideRepository.MAX_AUTHOR_BYTES,
+                        )
+                    } else {
+                        null
+                    },
                 )
 
                 MetadataTextFieldSection(
@@ -255,6 +319,14 @@ internal fun BookMetadataEditSheet(
                     singleLine = false,
                     minLines = 3,
                     maxLines = 6,
+                    error = if (descriptionTooLong) {
+                        stringResource(
+                            R.string.book_metadata_field_too_long,
+                            BookMetadataOverrideRepository.MAX_DESCRIPTION_BYTES,
+                        )
+                    } else {
+                        null
+                    },
                 )
 
                 val seriesName = book.seriesName?.takeIf { it.isNotBlank() }
@@ -331,13 +403,16 @@ internal fun BookMetadataEditSheet(
                 Spacer(Modifier.width(8.dp))
                 Button(
                     onClick = {
-                        onSave(
-                            resolveFieldEdit(titleMode, titleText, initialTitle),
-                            resolveFieldEdit(authorMode, authorText, initialAuthor),
-                            resolveFieldEdit(descriptionMode, descriptionText, initialDescription),
-                        )
-                        onDismiss()
+                        val title = resolveFieldEdit(titleMode, titleText, initialTitle)
+                        val author = resolveFieldEdit(authorMode, authorText, initialAuthor)
+                        val description = resolveFieldEdit(descriptionMode, descriptionText, initialDescription)
+                        scope.launch {
+                            val bytes = coverUri?.let { uri -> readCoverBytes(context, Uri.parse(uri)) }
+                            onSave(title, author, description, coverEditOf(coverMode, bytes))
+                            onDismiss()
+                        }
                     },
+                    enabled = !tooLong,
                     modifier = Modifier.heightIn(min = 48.dp),
                 ) {
                     Text(stringResource(R.string.save))
@@ -357,6 +432,7 @@ private fun MetadataTextFieldSection(
     singleLine: Boolean,
     minLines: Int = 1,
     maxLines: Int = if (singleLine) 1 else Int.MAX_VALUE,
+    error: String? = null,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         if (canReset) {
@@ -380,6 +456,8 @@ private fun MetadataTextFieldSection(
             singleLine = singleLine,
             minLines = minLines,
             maxLines = maxLines,
+            isError = error != null,
+            supportingText = error?.let { message -> { Text(message) } },
             modifier = Modifier.fillMaxWidth(),
         )
     }

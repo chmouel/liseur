@@ -431,8 +431,8 @@ class BookRemoval(
         val fingerprint = identityDao.fingerprint(bookUrl)?.takeIf { it.fileModifiedAt == book?.fileModifiedAt }
         val identifiers = WorkIdentifiers.of(
             fingerprint?.fingerprint, sourceId = book?.let(::workSourceOf),
-            dcIdentifier = WorkIdentifiers.dcFrom(book?.workId, book?.title, book?.identityAuthor ?: book?.author),
-            title = book?.title, author = book?.author,
+            dcIdentifier = WorkIdentifiers.dcFrom(book?.workId, book?.stableTitle, book?.identityAuthor ?: book?.stableAuthor),
+            title = book?.stableTitle, author = book?.stableAuthor,
         )
         evaluations.retain(bookUrl, JSONArray().apply {
             identifiers.forEach { put(JSONObject().put("kind", it.kind).put("value", it.value)) }

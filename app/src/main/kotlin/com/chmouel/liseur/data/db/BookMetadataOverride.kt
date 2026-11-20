@@ -42,6 +42,8 @@ data class MetadataOverrideSync(
     @ColumnInfo(name = "polled_at", defaultValue = "0") val polledAt: Long = 0,
     @ColumnInfo(name = "remote_cover_sha256") val remoteCoverSha256: String? = null,
     @ColumnInfo(name = "remote_cover_updated_at", defaultValue = "0") val remoteCoverUpdatedAt: Long = 0,
+    /** This device took its value for [field] from the server, and not from the reader. */
+    @ColumnInfo(name = "adopted", defaultValue = "0") val adopted: Boolean = false,
 )
 
 @Entity(tableName = "metadata_override_poll")
@@ -63,6 +65,19 @@ interface BookMetadataOverrideDao {
 
     @Upsert
     suspend fun upsertRevision(row: MetadataOverrideRevision)
+
+    /**
+     * The next revision for any edit, for any book.
+     *
+     * The server orders metadata writes by writer, work and field, so a
+     * counter kept per book URL lets two copies of one work claim the
+     * same revision, and a later edit on one copy then reads as older
+     * than an accepted write from the other. Rising above every revision
+     * this device ever stored, retired included, keeps one order for all
+     * of them.
+     */
+    @Query("SELECT COALESCE(MAX(revision), 0) + 1 FROM metadata_override_revision")
+    suspend fun nextRevision(): Long
 
     @Query("SELECT * FROM metadata_override_sync WHERE peer_id = :peerId")
     suspend fun states(peerId: String): List<MetadataOverrideSync>
