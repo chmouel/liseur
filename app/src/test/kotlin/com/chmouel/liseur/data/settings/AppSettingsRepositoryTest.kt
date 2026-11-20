@@ -461,4 +461,21 @@ class AppSettingsRepositoryTest {
         assertEquals(LibraryScope.SIMPLE, repo.settings.first().libraryLayout.scope)
         assertNull(store.data.first()[booleanPreferencesKey("library_bottom_bar")])
     }
+
+    @Test
+    fun `support card stamp clamps to card bounds, clears cleanly, and stays out of backups`() = runTest {
+        val store = store()
+        val repo = AppSettingsRepository(store)
+        assertNull(repo.settings.first().cardStamp)
+
+        repo.setCardStamp(CardStamp(x = 0.02f, y = 0.99f, stampedAt = 123_456L))
+        val clamped = repo.settings.first().cardStamp
+        assertEquals(CardStamp(CardStamp.MIN_X, CardStamp.MAX_Y, 123_456L), clamped)
+        assertFalse(repo.backupValues().has("support_card_stamp"))
+
+        repo.setCardStamp(null)
+        assertNull(repo.settings.first().cardStamp)
+        assertNull(CardStamp.decode("malformed"))
+        assertNull(CardStamp.decode("NaN,0.5,100"))
+    }
 }

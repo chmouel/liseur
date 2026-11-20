@@ -95,7 +95,7 @@ private val LiteraryQuotes = listOf(
 fun AboutScreen(
     onBack: () -> Unit,
     onOpenSource: () -> Unit,
-    onOpenSponsor: () -> Unit,
+    onOpenSupport: () -> Unit,
     onOpenLicences: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -160,7 +160,7 @@ fun AboutScreen(
                 AuthorBlock(modifier = Modifier.padding(top = 40.dp))
 
                 OutlinedButton(
-                    onClick = onOpenSponsor,
+                    onClick = onOpenSupport,
                     border = BorderStroke(1.dp, colors.outlineVariant),
                     modifier = Modifier
                         .padding(top = 32.dp)

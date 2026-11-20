@@ -360,9 +360,48 @@ enum class DefinitionTarget(val id: String) {
  *   or null for the default.
  * @param companionDetail How long the reading companion's answers are.
  */
+/**
+ * Where the reader pressed the supporter rubber stamp on the support
+ * screen's checkout card, in fractions of the card's ledger area.
+ *
+ * Kept only in local preferences on this device; never backed up,
+ * synced, or checked against a payment.
+ */
+data class CardStamp(
+    val x: Float,
+    val y: Float,
+    val stampedAt: Long,
+) {
+    fun encode(): String = "$x,$y,$stampedAt"
+
+    companion object {
+        const val MIN_X = 0.18f
+        const val MAX_X = 0.82f
+        const val MIN_Y = 0.22f
+        const val MAX_Y = 0.80f
+
+        fun clamped(x: Float, y: Float, stampedAt: Long): CardStamp = CardStamp(
+            x = x.coerceIn(MIN_X, MAX_X),
+            y = y.coerceIn(MIN_Y, MAX_Y),
+            stampedAt = stampedAt,
+        )
+
+        fun decode(raw: String?): CardStamp? {
+            if (raw.isNullOrBlank()) return null
+            val parts = raw.split(',')
+            if (parts.size != 3) return null
+            val x = parts[0].toFloatOrNull()?.takeIf { it.isFinite() } ?: return null
+            val y = parts[1].toFloatOrNull()?.takeIf { it.isFinite() } ?: return null
+            val at = parts[2].toLongOrNull() ?: return null
+            return clamped(x, y, at)
+        }
+    }
+}
+
 data class AppSettings(
     val themeMode: ThemeMode = ThemeMode.Default,
     val dynamicColor: Boolean = true,
+    val cardStamp: CardStamp? = null,
     val volumeKeyMode: VolumeKeyMode = VolumeKeyMode.Default,
     val tapZones: TapZones = TapZones.Default,
     val tapSideWidth: Int = TapSideWidth.WIDE,
@@ -563,6 +602,7 @@ class AppSettingsRepository(
     private object Keys {
         val THEME_MODE = stringPreferencesKey("theme_mode")
         val DYNAMIC_COLOR = booleanPreferencesKey("dynamic_color")
+        val CARD_STAMP = stringPreferencesKey("support_card_stamp")
         val LEGACY_VOLUME_KEYS = booleanPreferencesKey("volume_keys_turn_pages")
         val VOLUME_KEY_MODE = stringPreferencesKey("volume_keys_mode")
         val TAP_ZONES = stringPreferencesKey("tap_zones")
@@ -688,6 +728,7 @@ class AppSettingsRepository(
         AppSettings(
             themeMode = ThemeMode.fromId(p[Keys.THEME_MODE]),
             dynamicColor = p[Keys.DYNAMIC_COLOR] ?: true,
+            cardStamp = CardStamp.decode(p[Keys.CARD_STAMP]),
             volumeKeyMode = p.volumeKeyMode(),
             tapZones = TapZones.fromId(p[Keys.TAP_ZONES]),
             tapSideWidth = TapSideWidth.sanitize(p[Keys.TAP_SIDE_WIDTH]),
@@ -870,6 +911,16 @@ class AppSettingsRepository(
 
     suspend fun setDynamicColor(enabled: Boolean) {
         store.edit { it[Keys.DYNAMIC_COLOR] = enabled }
+    }
+
+    suspend fun setCardStamp(stamp: CardStamp?) {
+        store.edit {
+            if (stamp == null) {
+                it.remove(Keys.CARD_STAMP)
+            } else {
+                it[Keys.CARD_STAMP] = CardStamp.clamped(stamp.x, stamp.y, stamp.stampedAt).encode()
+            }
+        }
     }
 
     suspend fun setVolumeKeyMode(mode: VolumeKeyMode) {

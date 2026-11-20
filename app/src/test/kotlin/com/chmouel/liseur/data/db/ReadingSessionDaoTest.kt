@@ -71,6 +71,33 @@ class ReadingSessionDaoTest {
 
     private suspend fun totalAll(): Long = dao.observeAll().first().sumOf { it.durationMs }
 
+    @Test
+    fun `support reading groups completed sittings by book and puts recent books first`() = runTest {
+        fun session(url: String, start: Long, end: Long?, duration: Long) =
+            ReadingSession(
+                bookUrl = url,
+                startedAt = start * minute,
+                endedAt = end?.times(minute),
+                lastCheckpointAt = (end ?: start) * minute,
+                durationMs = duration * minute,
+            )
+
+        dao.insertAll(
+            listOf(
+                session(book, 1, 4, 3),
+                session(book, 8, 10, 2),
+                session(other, 11, 12, 1),
+                session(book, 20, 20, 0),
+                session(book, 21, null, 2),
+            ),
+        )
+
+        assertEquals(
+            listOf(SupportReading(other, minute, 12 * minute), SupportReading(book, 5 * minute, 10 * minute)),
+            dao.observeSupportReading().first(),
+        )
+    }
+
     /** What a successfully opened reader does when it reaches the foreground. */
     private suspend fun ReadingSessionRecorder.resumed() {
         onReaderReady()

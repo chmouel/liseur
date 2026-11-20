@@ -87,6 +87,7 @@ import com.chmouel.liseur.ui.library.LibraryViewModel
 import com.chmouel.liseur.ui.settings.ServerAccountScreen
 import com.chmouel.liseur.ui.settings.ServerAccountViewModel
 import com.chmouel.liseur.ui.settings.AboutScreen
+import com.chmouel.liseur.ui.settings.SupportScreen
 import com.chmouel.liseur.ui.settings.AppLocales
 import com.chmouel.liseur.ui.settings.LicencesScreen
 import com.chmouel.liseur.ui.settings.SettingsPagePlaceholder
@@ -310,6 +311,7 @@ class MainActivity : ComponentActivity() {
 
 private const val SOURCE_URL = "https://github.com/chmouel/liseur"
 private const val SPONSOR_URL = "https://github.com/sponsors/chmouel"
+private const val PLAY_LISTING = "https://play.google.com/store/apps/details?id=com.chmouel.liseur"
 
 @OptIn(ExperimentalMaterial3AdaptiveApi::class)
 @Composable
@@ -744,6 +746,7 @@ private fun LiseurApp(
                             hiddenBooks = library.hidden,
                             server = context.container.remoteAccount.server,
                             onOpenAbout = { openPage(Route.About) },
+                            onOpenSupport = { openPage(Route.Support) },
                             onBack = closeSettings.takeIf { shownTab == null },
                             bottomBarSpace = if (shownTab != null) mainTabBarSpace() else 0.dp,
                             onOpenSearch = { backStack.push(Route.SettingsSearch) },
@@ -981,8 +984,45 @@ private fun LiseurApp(
                         AboutScreen(
                             onBack = back,
                             onOpenSource = { context.openLink(SOURCE_URL.toUri()) },
-                            onOpenSponsor = { context.openLink(SPONSOR_URL.toUri()) },
+                            onOpenSupport = { backStack.push(Route.Support) },
                             onOpenLicences = { backStack.push(Route.Licences) },
+                        )
+                    }
+
+                    Route.Support -> {
+                        val books by remember(context) {
+                            context.container.database.bookDao().observeAll()
+                        }.collectAsStateWithLifecycle(initialValue = emptyList())
+                        val reading by remember(context) {
+                            context.container.database.readingSessionDao().observeSupportReading()
+                        }.collectAsStateWithLifecycle(initialValue = emptyList())
+                        val shareText = stringResource(R.string.support_share_text, SOURCE_URL)
+                        SupportScreen(
+                            books = books,
+                            reading = reading,
+                            cardStamp = settingsState.value.cardStamp,
+                            onCardStamp = { stamp -> scope.launch { repository.setCardStamp(stamp) } },
+                            onBack = back,
+                            nested = below == Route.About,
+                            onSponsor = { context.openLink(SPONSOR_URL.toUri()) },
+                            onStar = { context.openLink(SOURCE_URL.toUri()) },
+                            onShare = {
+                                val send = Intent(Intent.ACTION_SEND).apply {
+                                    type = "text/plain"
+                                    putExtra(Intent.EXTRA_TEXT, shareText)
+                                }
+                                runCatching { context.startActivity(Intent.createChooser(send, null)) }
+                            },
+                            onReport = { context.openLink("$SOURCE_URL/issues/new/choose".toUri()) },
+                            onRate = if (BuildConfig.FLAVOR == "play") {
+                                {
+                                    val uri = "market://details?id=com.chmouel.liseur".toUri()
+                                    runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, uri)) }
+                                        .onFailure { context.openLink(PLAY_LISTING.toUri()) }
+                                }
+                            } else {
+                                null
+                            },
                         )
                     }
 
