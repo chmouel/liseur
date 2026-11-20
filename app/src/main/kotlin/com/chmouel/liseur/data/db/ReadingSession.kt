@@ -78,6 +78,12 @@ data class ReadingSession(
     val isOpen: Boolean get() = endedAt == null
 }
 
+data class SupportReading(
+    val bookUrl: String,
+    val durationMs: Long,
+    val lastReadAt: Long,
+)
+
 @Dao
 interface ReadingSessionDao {
 
@@ -158,6 +164,17 @@ interface ReadingSessionDao {
     /** Every session anywhere, newest first. The dashboard's whole input. */
     @Query("SELECT * FROM reading_sessions ORDER BY started_at DESC")
     fun observeAll(): Flow<List<ReadingSession>>
+
+    @Query(
+        """
+        SELECT book_url AS bookUrl, SUM(duration_ms) AS durationMs, MAX(ended_at) AS lastReadAt
+        FROM reading_sessions
+        WHERE ended_at IS NOT NULL AND duration_ms > 0
+        GROUP BY book_url
+        ORDER BY lastReadAt DESC, bookUrl ASC
+        """,
+    )
+    fun observeSupportReading(): Flow<List<SupportReading>>
 
     @Query("SELECT * FROM reading_sessions ORDER BY id")
     suspend fun allOnce(): List<ReadingSession>

@@ -32,6 +32,7 @@ sealed interface Route {
     data object BrowseLibraries : Route
     data object Licences : Route
     data object About : Route
+    data object Support : Route
     data object Vocabulary : Route
 
     /** The Vocabulary Builder opened straight on its review, leaving it when the review closes. */
@@ -67,6 +68,7 @@ internal val Route.tag: String
         Route.BrowseLibraries -> "BrowseLibraries"
         Route.Licences -> "Licences"
         Route.About -> "About"
+        Route.Support -> "Support"
         Route.Vocabulary -> "Vocabulary"
         Route.VocabularyReview -> "VocabularyReview"
         Route.VocabularySettings -> "VocabularySettings"
@@ -80,7 +82,7 @@ private val objectRoutes: Map<String, Route> = listOf(
     Route.Library, Route.Settings, Route.SettingsSearch, Route.SettingsBackup, Route.ReadingAppearance, Route.SelectionToolbar,
     Route.ReadingNavigation, Route.PageTaps, Route.ReadAloud, Route.Translation, Route.ReadingCompanion, Route.Services,
     Route.WatchedFolders, Route.HiddenBooks, Route.ServerAccount, Route.BrowseLibraries, Route.Licences,
-    Route.About, Route.Notes, Route.Stats, Route.Vocabulary, Route.VocabularyReview, Route.VocabularySettings,
+    Route.About, Route.Support, Route.Notes, Route.Stats, Route.Vocabulary, Route.VocabularyReview, Route.VocabularySettings,
 ).associateBy { it.tag }
 
 /**
@@ -147,7 +149,7 @@ val Route.isSettingsPage: Boolean
     get() = when (this) {
         Route.ReadingAppearance, Route.SelectionToolbar, Route.ReadingNavigation, Route.PageTaps, Route.ReadAloud,
         Route.Translation, Route.ReadingCompanion, Route.Services, Route.SettingsBackup,
-        Route.WatchedFolders, Route.HiddenBooks, Route.About, Route.ServerAccount, Route.VocabularySettings,
+        Route.WatchedFolders, Route.HiddenBooks, Route.About, Route.Support, Route.ServerAccount, Route.VocabularySettings,
         -> true
         else -> false
     }

@@ -12,6 +12,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.ClickableText
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
@@ -109,6 +110,7 @@ fun SettingsScreen(
     onOpenSettingsBackup: () -> Unit,
     server: Flow<RemoteServer?>,
     onOpenAbout: () -> Unit,
+    onOpenSupport: () -> Unit,
     /** Null when Settings is a tab of the bottom bar, which has no way back. */
     onBack: (() -> Unit)?,
     modifier: Modifier = Modifier,
@@ -424,6 +426,14 @@ fun SettingsScreen(
                         ),
                         onClick = onOpenAbout,
                         modifier = Modifier.settingsAnchor(SettingsEntries.About),
+                    )
+                    RowDivider()
+                    ConnectionRow(
+                        icon = { Icon(Icons.Outlined.FavoriteBorder, contentDescription = null) },
+                        title = stringResource(R.string.about_sponsor),
+                        subtitle = stringResource(R.string.support_settings_summary),
+                        onClick = onOpenSupport,
+                        modifier = Modifier.settingsAnchor(SettingsEntries.Support),
                     )
                 }
             }

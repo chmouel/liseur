@@ -112,6 +112,9 @@ object SettingsEntries {
         "backup", Route.Settings, R.string.settings_backup_title, R.string.settings_backup_detail,
     )
     val About = entry("about", Route.Settings, R.string.about_open, section = R.string.settings_about)
+    val Support = entry(
+        "support", Route.Settings, R.string.about_sponsor, R.string.support_settings_summary, R.string.settings_about,
+    )
 
     // Reading appearance
     val ReaderTheme = entry("reader_theme", Route.ReadingAppearance, R.string.settings_theme)
