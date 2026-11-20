@@ -60,21 +60,23 @@ class BookMetadataOverrideRepository(
         if (changed) requestSync(bookUrl)
     }
 
-    private suspend fun applyTextEdit(bookUrl: String, field: String, edit: FieldEdit, at: Long): Boolean =
-        when (edit) {
-            is FieldEdit.Set -> {
-                if (!withinWireLimit(field, edit.value)) return false
+    private suspend fun applyTextEdit(bookUrl: String, field: String, edit: FieldEdit, at: Long): Boolean = when (edit) {
+        is FieldEdit.Set -> {
+            if (!withinWireLimit(field, edit.value)) {
+                false
+            } else {
                 writeTextValue(bookUrl, field, edit.value)
                 bumpRevision(bookUrl, field, at)
                 true
             }
-            FieldEdit.Reset -> {
-                writeTextValue(bookUrl, field, null)
-                bumpRevision(bookUrl, field, at)
-                true
-            }
-            FieldEdit.Unchanged -> false
         }
+        FieldEdit.Reset -> {
+            writeTextValue(bookUrl, field, null)
+            bumpRevision(bookUrl, field, at)
+            true
+        }
+        FieldEdit.Unchanged -> false
+    }
 
     private suspend fun writeTextValue(bookUrl: String, field: String, value: String?) =
         when (field) {
