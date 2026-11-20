@@ -188,6 +188,7 @@ class SettingsBackupRepository internal constructor(
     private val translations: TranslationBackupRepository? = null,
     private val sessions: ReadingSessionBackupRepository? = null,
     private val books: BookBackupRepository? = null,
+    private val metadataOverrides: BookMetadataOverrideBackupRepository? = null,
     internal val bookLimits: BookArchiveLimits = BookArchiveLimits(),
 ) {
     constructor(
@@ -204,6 +205,7 @@ class SettingsBackupRepository internal constructor(
         translations: TranslationBackupRepository? = null,
         sessions: ReadingSessionBackupRepository? = null,
         books: BookBackupRepository? = null,
+        metadataOverrides: BookMetadataOverrideBackupRepository? = null,
     ) : this(
         context = context,
         appSettings = appSettings,
@@ -218,6 +220,7 @@ class SettingsBackupRepository internal constructor(
         translations = translations,
         sessions = sessions,
         books = books,
+        metadataOverrides = metadataOverrides,
         bookLimits = BookArchiveLimits(),
     )
     private val operationMutex = Mutex()
@@ -415,7 +418,13 @@ class SettingsBackupRepository internal constructor(
                 return SettingsBackupPreparation.Failed(SettingsBackupFailure.TOO_LARGE)
             }
 
-            val listed = ArrayList<EntryMetadata>(fonts.size + preparedBooks.entries.size + 8)
+            val preparedMetadataOverrides = metadataOverrides?.exportOverrides()
+            val metadataOverridesMetadata = preparedMetadataOverrides?.let {
+                EntryMetadata(METADATA_OVERRIDES_PATH, it.jsonBytes.size.toLong(), sha256(it.jsonBytes))
+            }
+            val metadataCoverMetadata = ArrayList<EntryMetadata>()
+
+            val listed = ArrayList<EntryMetadata>(fonts.size + preparedBooks.entries.size + 10)
             listed += EntryMetadata(SETTINGS_PATH, settingsBytes.size.toLong(), sha256(settingsBytes))
             listed += annotationMetadata
             listed += positionMetadata
@@ -424,6 +433,7 @@ class SettingsBackupRepository internal constructor(
             connectionBytes?.let { listed += EntryMetadata(CONNECTIONS_PATH, it.size.toLong(), sha256(it)) }
             sessionMetadata?.let { listed += it }
             booksIndexMetadata?.let { listed += it }
+            metadataOverridesMetadata?.let { listed += it }
 
             var totalBytes = settingsBytes.size.toLong() +
                 annotationMetadata.size +
@@ -432,7 +442,19 @@ class SettingsBackupRepository internal constructor(
                 (connectionBytes?.size ?: 0) +
                 (translationMetadata?.size ?: 0) +
                 (sessionMetadata?.size ?: 0) +
-                (booksIndexMetadata?.size ?: 0)
+                (booksIndexMetadata?.size ?: 0) +
+                (metadataOverridesMetadata?.size ?: 0)
+
+            preparedMetadataOverrides?.covers?.forEach { cover ->
+                currentCoroutineContext().ensureActive()
+                val meta = hashFile(cover.path, cover.file)
+                totalBytes += meta.size
+                if (totalBytes > MAX_TOTAL_BYTES) {
+                    return SettingsBackupPreparation.Failed(SettingsBackupFailure.TOO_LARGE)
+                }
+                metadataCoverMetadata += meta
+                listed += meta
+            }
 
             val fontMetadata = ArrayList<EntryMetadata>(fonts.size)
             val fontNames = fonts.associate { "fonts/${it.fileName}" to it.displayName }
@@ -492,6 +514,16 @@ class SettingsBackupRepository internal constructor(
                 sessionFile?.let { writeFileEntry(zip, SESSIONS_PATH, it) }
                 if (booksIndexMetadata != null && booksIndexFile != null) {
                     writeFileEntry(zip, BOOKS_PATH, booksIndexFile)
+                }
+                preparedMetadataOverrides?.let { overridesBackup ->
+                    writeEntry(zip, METADATA_OVERRIDES_PATH, overridesBackup.jsonBytes)
+                    overridesBackup.covers.zip(metadataCoverMetadata).forEach { (cover, expected) ->
+                        currentCoroutineContext().ensureActive()
+                        val actual = writeFileEntry(zip, expected.path, cover.file)
+                        if (actual != expected) {
+                            throw BackupFailureException(SettingsBackupFailure.FILE_ACCESS)
+                        }
+                    }
                 }
                 fonts.zip(fontMetadata).forEach { (font, expected) ->
                     currentCoroutineContext().ensureActive()
@@ -895,6 +927,25 @@ class SettingsBackupRepository internal constructor(
 
                 val aliases = bookOutcome.aliases
 
+                try {
+                    val overridesEntry = archive.entries[METADATA_OVERRIDES_PATH]
+                    if (overridesEntry != null && metadataOverrides != null) {
+                        val overridesBytes = readStagedBytes(
+                            overridesEntry.file,
+                            BookMetadataOverrideBackupRepository.MAX_JSON_BYTES,
+                        )
+                        val stagedCovers = archive.entries
+                            .filterKeys { it.startsWith("metadata_covers/") }
+                            .mapValues { (_, entry) -> entry.file }
+                        metadataOverrides.restore(overridesBytes, stagedCovers, aliases)
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.w(TAG, "Metadata override restore stopped after settings were restored", e)
+                    return@withContext SettingsBackupRestoreResult.PartiallyRestored(liseurSyncNeedsPairing)
+                }
+
                 val annotationResult = try {
                     annotations.importContents(annotationContents, aliases)
                 } catch (e: CancellationException) {
@@ -1111,7 +1162,8 @@ class SettingsBackupRepository internal constructor(
                         TRANSLATIONS_PATH,
                         SESSIONS_PATH,
                         BOOKS_PATH,
-                    ) || path.startsWith("fonts/")
+                        METADATA_OVERRIDES_PATH,
+                    ) || path.startsWith("fonts/") || METADATA_COVER_ENTRY_PATH.matches(path)
                     if (
                         entry.isDirectory ||
                         !safePath(path) ||
@@ -1731,6 +1783,8 @@ class SettingsBackupRepository internal constructor(
 
     private fun entryLimit(path: String): Long = when {
         path.startsWith("books/") -> bookLimits.maxBookBytes
+        path.startsWith("metadata_covers/") -> BookMetadataOverrideBackupRepository.MAX_COVER_BYTES
+        path == METADATA_OVERRIDES_PATH -> BookMetadataOverrideBackupRepository.MAX_JSON_BYTES
         path == SESSIONS_PATH -> MAX_SESSIONS_BYTES
         path == BOOKS_PATH -> MAX_BOOK_INDEX_BYTES
         path == TRANSLATIONS_PATH -> TranslationBackupRepository.MAX_BYTES
@@ -1780,6 +1834,8 @@ class SettingsBackupRepository internal constructor(
         private const val TRANSLATIONS_PATH = "translations.json"
         private const val SESSIONS_PATH = "sessions.json"
         private const val BOOKS_PATH = "books.json"
+        private const val METADATA_OVERRIDES_PATH = "metadata_overrides.json"
+        private val METADATA_COVER_ENTRY_PATH = Regex("metadata_covers/[0-9a-f]{64}\\.jpg")
         // JSON trees expand well beyond their file size during inspection and restore.
         private const val MAX_READING_DATA_BYTES = 4L * 1024 * 1024
         private const val MAX_POSITIONS_BYTES = MAX_READING_DATA_BYTES

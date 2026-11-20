@@ -2384,4 +2384,15 @@
     <string name="vocabulary_personal_note">Личная заметка (необязательно)</string>
     <string name="vocabulary_note_help">Пример, ассоциация или подсказка для запоминания.</string>
     <string name="vocabulary_discard_changes">Изменения этой карточки будут потеряны.</string>
+    <string name="book_metadata_edit_title">Изменить сведения</string>
+    <string name="book_metadata_cover_label">Обложка</string>
+    <string name="book_metadata_choose_cover">Выбрать обложку</string>
+    <string name="book_metadata_remove_cover">Удалить обложку</string>
+    <string name="book_metadata_title_label">Название</string>
+    <string name="book_metadata_author_label">Автор</string>
+    <string name="book_metadata_description_label">Описание</string>
+    <string name="book_metadata_field_reset">Сбросить</string>
+    <string name="book_metadata_reset_all">Сбросить все изменения</string>
+    <string name="book_metadata_edit_series">Изменить серию</string>
+    <string name="book_metadata_no_series">Нет</string>
 </resources>

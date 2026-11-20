@@ -139,7 +139,7 @@ internal fun LibraryStyleSheet(
     // The previews want covers before blanks, and never more than a
     // screenful; whichever screen opens the sheet gets the same ones.
     val previewBooks = remember(books) {
-        val (withArt, without) = books.partition { (it.coverPath ?: it.coverUrl) != null }
+        val (withArt, without) = books.partition { it.effectiveCover != null }
         (withArt + without).take(PREVIEW_BOOK_COUNT)
     }
     val context = LocalContext.current

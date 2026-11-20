@@ -1227,7 +1227,7 @@ class LibraryViewModel(
                 framedCovers =
                     if (layout.style == LibraryStyle.SHELVES) {
                         onTheShelf
-                            .filter { it.finished && (it.coverPath ?: it.coverUrl) != null }
+                            .filter { it.finished && it.effectiveCover != null }
                             .sortedByDescending { it.finishedAt }
                     } else {
                         emptyList()

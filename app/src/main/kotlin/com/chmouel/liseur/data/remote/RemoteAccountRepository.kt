@@ -68,6 +68,7 @@ class RemoteAccountRepository(
      */
     private val annotationSyncDao: AnnotationSyncDao? = null,
     private val evaluationDao: com.chmouel.liseur.data.db.BookEvaluationDao? = null,
+    private val metadataOverrideDao: com.chmouel.liseur.data.db.BookMetadataOverrideDao? = null,
     /**
      * What a server would not take. One server's opinion, and no use to
      * the next: the same book may be perfectly acceptable there, and a
@@ -959,6 +960,7 @@ class RemoteAccountRepository(
             (identityDao?.countForPeer(to) ?: 0) +
             (annotationSyncDao?.countForPeer(to) ?: 0) +
             (evaluationDao?.countForPeer(to) ?: 0) +
+            (metadataOverrideDao?.countForPeer(to) ?: 0) +
             (sessionRefusalDao?.countForPeer(to) ?: 0) +
             (sessionTransmissionDao?.countForPeer(to) ?: 0)
         // The settings baseline is deliberately not counted. It lives in
@@ -976,6 +978,7 @@ class RemoteAccountRepository(
         identityDao?.rekeyPeer(from, to)
         annotationSyncDao?.rekeyPeer(from, to)
         evaluationDao?.rekeyPeer(from, to)
+        metadataOverrideDao?.rekeyPeer(from, to)
         uploadRefusalDao?.rekeyAccount(from, to)
         sessionRefusalDao?.rekeyPeer(from, to)
         sessionTransmissionDao?.rekeyPeer(from, to)
@@ -1199,6 +1202,7 @@ class RemoteAccountRepository(
         // wherever the last one happened to be.
         annotationSyncDao?.forgetPeer(server.accountKey)
         evaluationDao?.forgetPeer(server.accountKey)
+        metadataOverrideDao?.forgetPeer(server.accountKey)
         dao.setAnnotationCursor(0)
         sessionDao?.forgetUploads()
         sessionDao?.forgetTransmissionEvidence()

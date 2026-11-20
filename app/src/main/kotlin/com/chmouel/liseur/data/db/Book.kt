@@ -233,6 +233,19 @@ data class Book(
      * is the entry, and putting it back has to give all of it back.
      */
     @ColumnInfo(name = "hidden_at") val hiddenAt: Long? = null,
+    @ColumnInfo(name = "file_title") val fileTitle: String? = null,
+    @ColumnInfo(name = "catalog_title") val catalogTitle: String? = null,
+    @ColumnInfo(name = "user_title") val userTitle: String? = null,
+    @ColumnInfo(name = "title_override", defaultValue = "0") val titleOverridden: Boolean = false,
+    @ColumnInfo(name = "file_author") val fileAuthor: String? = null,
+    @ColumnInfo(name = "catalog_author") val catalogAuthor: String? = null,
+    @ColumnInfo(name = "user_author") val userAuthor: String? = null,
+    @ColumnInfo(name = "author_override", defaultValue = "0") val authorOverridden: Boolean = false,
+    @ColumnInfo(name = "user_description") val userDescription: String? = null,
+    @ColumnInfo(name = "description_override", defaultValue = "0") val descriptionOverridden: Boolean = false,
+    @ColumnInfo(name = "user_cover_path") val userCoverPath: String? = null,
+    @ColumnInfo(name = "user_cover_sha256") val userCoverSha256: String? = null,
+    @ColumnInfo(name = "cover_override", defaultValue = "0") val coverOverridden: Boolean = false,
 ) {
     internal fun sameGeneration(other: Book): Boolean =
         id == other.id && url == other.url && workId == other.workId &&
@@ -244,6 +257,16 @@ data class Book(
 
     /** Off the shelf, file and all its history kept. */
     val hidden: Boolean get() = hiddenAt != null
+
+    val effectiveCoverPath: String? get() = if (coverOverridden) userCoverPath else coverPath
+
+    val effectiveCoverUrl: String? get() = if (coverOverridden) null else coverUrl
+
+    val effectiveCover: String? get() = if (coverOverridden) userCoverPath else (coverPath ?: coverUrl)
+
+    val hasMetadataOverride: Boolean
+        get() = titleOverridden || authorOverridden || descriptionOverridden ||
+            coverOverridden || seriesOverridden || indexOverridden
 
     /**
      * The series id worth asking a server about.
@@ -556,8 +579,14 @@ interface BookDao {
 
     @Query(
         """
-        UPDATE books SET identity_author = COALESCE(identity_author, author, ''), author = :author
-        WHERE url = :url AND (author IS NOT :author OR identity_author IS NULL)
+        UPDATE books
+        SET identity_author = COALESCE(identity_author, file_author, author, ''),
+            file_author = :author,
+            author = CASE
+                WHEN author_override = 1 THEN NULLIF(user_author, '')
+                ELSE COALESCE(catalog_author, :author)
+            END
+        WHERE url = :url AND (file_author IS NOT :author OR identity_author IS NULL)
         """,
     )
     suspend fun updateAuthor(url: String, author: String?)
@@ -578,7 +607,17 @@ interface BookDao {
     @Query(
         """
         UPDATE books
-        SET title = :title, author = :author, cover_path = :coverPath,
+        SET file_title = :title,
+            file_author = :author,
+            title = CASE
+                WHEN title_override = 1 THEN COALESCE(user_title, '')
+                ELSE COALESCE(catalog_title, :title)
+            END,
+            author = CASE
+                WHEN author_override = 1 THEN NULLIF(user_author, '')
+                ELSE COALESCE(catalog_author, :author)
+            END,
+            cover_path = :coverPath,
             file_modified_at = :fileModifiedAt, work_id = :workId, identity_author = :identityAuthor,
             file_series_name = :seriesName, file_series_index = :seriesIndex,
             series_name = CASE
@@ -855,6 +894,106 @@ interface BookDao {
     @Query("UPDATE books SET last_opened_at = NULL, finished_at = NULL WHERE url = :url")
     suspend fun forgetReadingHistory(url: String)
 
+    @Query(
+        """
+        UPDATE books
+        SET user_title = :title,
+            title_override = 1,
+            title = :title
+        WHERE url = :url
+        """,
+    )
+    suspend fun setTitleOverride(url: String, title: String)
+
+    @Query(
+        """
+        UPDATE books
+        SET user_title = NULL,
+            title_override = 0,
+            title = COALESCE(catalog_title, file_title, title)
+        WHERE url = :url
+        """,
+    )
+    suspend fun clearTitleOverride(url: String)
+
+    @Query(
+        """
+        UPDATE books
+        SET user_author = :author,
+            author_override = 1,
+            author = NULLIF(:author, '')
+        WHERE url = :url
+        """,
+    )
+    suspend fun setAuthorOverride(url: String, author: String)
+
+    @Query(
+        """
+        UPDATE books
+        SET user_author = NULL,
+            author_override = 0,
+            author = COALESCE(catalog_author, file_author)
+        WHERE url = :url
+        """,
+    )
+    suspend fun clearAuthorOverride(url: String)
+
+    @Query(
+        """
+        UPDATE books
+        SET user_description = :description,
+            description_override = 1
+        WHERE url = :url
+        """,
+    )
+    suspend fun setDescriptionOverride(url: String, description: String)
+
+    @Query(
+        """
+        UPDATE books
+        SET user_description = NULL,
+            description_override = 0
+        WHERE url = :url
+        """,
+    )
+    suspend fun clearDescriptionOverride(url: String)
+
+    @Query(
+        """
+        UPDATE books
+        SET user_cover_path = :coverPath,
+            user_cover_sha256 = :coverSha256,
+            cover_override = 1
+        WHERE url = :url
+        """,
+    )
+    suspend fun setCoverOverride(url: String, coverPath: String?, coverSha256: String?)
+
+    @Query(
+        """
+        UPDATE books
+        SET user_cover_path = NULL,
+            user_cover_sha256 = NULL,
+            cover_override = 0
+        WHERE url = :url
+        """,
+    )
+    suspend fun clearCoverOverride(url: String)
+
+    @Query(
+        """
+        SELECT * FROM books
+        WHERE title_override = 1
+           OR author_override = 1
+           OR description_override = 1
+           OR cover_override = 1
+           OR series_override = 1
+           OR series_index_override = 1
+        ORDER BY url
+        """,
+    )
+    suspend fun booksWithMetadataOverrides(): List<Book>
+
     @Query("UPDATE books SET cover_path = :coverPath WHERE url = :url")
     suspend fun setCoverPath(url: String, coverPath: String)
 
@@ -917,7 +1056,17 @@ interface BookDao {
     @Query(
         """
         UPDATE books
-        SET title = :title, author = :author, remote_uuid = :remoteUuid,
+        SET catalog_title = :title,
+            catalog_author = :author,
+            title = CASE
+                WHEN title_override = 1 THEN COALESCE(user_title, '')
+                ELSE COALESCE(:title, file_title, title)
+            END,
+            author = CASE
+                WHEN author_override = 1 THEN NULLIF(user_author, '')
+                ELSE COALESCE(:author, file_author)
+            END,
+            remote_uuid = :remoteUuid,
             browse_server_id = CASE WHEN :promoteBrowse THEN NULL ELSE browse_server_id END,
             remote_book_id = :remoteBookId, cover_url = :coverUrl,
             download_href = :downloadHref, download_formats = :downloadFormats,

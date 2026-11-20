@@ -619,8 +619,8 @@ class ReadingStatsViewModel(
                 author = book.displayAuthor,
                 progression = progressionByUrl[book.url],
                 finished = book.finished,
-                coverPath = book.coverPath,
-                coverUrl = book.coverUrl,
+                coverPath = book.effectiveCoverPath,
+                coverUrl = book.effectiveCoverUrl,
                 browseServerId = book.browseServerId,
             )
         }

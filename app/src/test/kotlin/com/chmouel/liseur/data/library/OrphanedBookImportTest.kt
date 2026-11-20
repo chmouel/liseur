@@ -270,7 +270,14 @@ class OrphanedBookImportTest {
         } finally {
             publication.close()
         }
-        assertEquals(before.copy(author = "Original author", identityAuthor = before.author), db.bookDao().getByUrl(url))
+        assertEquals(
+            before.copy(
+                author = "Original author",
+                identityAuthor = before.author,
+                fileAuthor = "Original author",
+            ),
+            db.bookDao().getByUrl(url),
+        )
         assertFallbackIsNotSent(url)
         assertEquals(place, db.readingProgressDao().get(url))
         assertEquals(annotation, db.annotationDao().byId("note"))

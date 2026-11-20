@@ -30,6 +30,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.outlined.CloudDownload
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Insights
@@ -70,16 +71,20 @@ import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
+import com.chmouel.liseur.data.calibre.DownloadProgress
+import com.chmouel.liseur.data.db.Book
+import com.chmouel.liseur.data.db.DownloadState
+import com.chmouel.liseur.data.library.FieldEdit
+import com.chmouel.liseur.data.remote.BookProvenance
 import com.chmouel.liseur.data.remote.DownloadFormat
 import com.chmouel.liseur.data.remote.DownloadFormats
-import com.chmouel.liseur.data.calibre.DownloadProgress
-import com.chmouel.liseur.data.db.DownloadState
-import com.chmouel.liseur.data.remote.BookProvenance
 import com.chmouel.liseur.domain.BookAccessibility
 import com.chmouel.liseur.domain.BookDetailsBounds
 import com.chmouel.liseur.domain.ContributorRoles
 import com.chmouel.liseur.domain.LibraryFilterOption
 import com.chmouel.liseur.domain.ReadingStatusChoice
+import com.chmouel.liseur.domain.SeriesPickOption
+import com.chmouel.liseur.domain.displayAuthor
 import com.chmouel.liseur.domain.displayTitle
 import com.chmouel.liseur.domain.seriesIndexLabel
 import com.chmouel.liseur.domain.shelfStateFor
@@ -122,11 +127,24 @@ fun BookDetailsScreen(
     onChooseFormat: (DownloadFormat) -> Unit = {},
     onSetReadingChoice: (ReadingStatusChoice) -> Unit = {},
     onSetEvaluation: (String, String?) -> Unit = { _, _ -> },
+    seriesOptions: List<SeriesPickOption> = emptyList(),
+    canResetSharedSeries: Boolean = false,
+    onSetSeries: (Book, String?, Double?) -> Unit = { _, _, _ -> },
+    onResetSeries: (Book) -> Unit = {},
+    onResetSharedSeries: (Book) -> Unit = {},
+    onSaveMetadataEdits: (Book, FieldEdit, FieldEdit, FieldEdit) -> Unit = { _, _, _, _ -> },
+    onSetCoverOverride: (Book, ByteArray) -> Unit = { _, _ -> },
+    onClearCoverToEmpty: (Book) -> Unit = {},
+    onResetCoverOverride: (Book) -> Unit = {},
+    onResetAllMetadataOverrides: (Book) -> Unit = {},
 ) {
     if (state is BookDetailsUiState.Gone) {
         LaunchedEffect(Unit) { onBack() }
     }
     val details = (state as? BookDetailsUiState.Ready)?.details
+    var editingMetadata by rememberSaveable(details?.book?.url) { mutableStateOf(false) }
+    var editingSeries by rememberSaveable(details?.book?.url) { mutableStateOf(false) }
+    var returnToMetadataAfterSeries by rememberSaveable(details?.book?.url) { mutableStateOf(false) }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -144,6 +162,16 @@ fun BookDetailsScreen(
                             Icons.AutoMirrored.Outlined.ArrowBack,
                             contentDescription = stringResource(R.string.back),
                         )
+                    }
+                },
+                actions = {
+                    if (details != null) {
+                        IconButton(onClick = { editingMetadata = true }) {
+                            Icon(
+                                Icons.Outlined.Edit,
+                                contentDescription = stringResource(R.string.book_metadata_edit_title),
+                            )
+                        }
                     }
                 },
             )
@@ -210,6 +238,51 @@ fun BookDetailsScreen(
                 }
                 item(key = "fileinfo") { FileInfo(details, section) }
             }
+            if (editingMetadata) {
+                BookMetadataEditSheet(
+                    details = details,
+                    onSave = { title, author, description ->
+                        onSaveMetadataEdits(details.book, title, author, description)
+                    },
+                    onSetCoverOverride = { bytes -> onSetCoverOverride(details.book, bytes) },
+                    onClearCoverToEmpty = { onClearCoverToEmpty(details.book) },
+                    onResetCoverOverride = { onResetCoverOverride(details.book) },
+                    onResetAllOverrides = { onResetAllMetadataOverrides(details.book) },
+                    onEditSeries = {
+                        returnToMetadataAfterSeries = true
+                        editingMetadata = false
+                        editingSeries = true
+                    },
+                    onDismiss = { editingMetadata = false },
+                )
+            }
+            if (editingSeries) {
+                val closeSeries = {
+                    editingSeries = false
+                    if (returnToMetadataAfterSeries) {
+                        returnToMetadataAfterSeries = false
+                        editingMetadata = true
+                    }
+                }
+                SeriesPickerSheet(
+                    book = details.book,
+                    options = seriesOptions,
+                    canResetSharedSeries = canResetSharedSeries,
+                    onConfirm = { name, index ->
+                        onSetSeries(details.book, name, index)
+                        closeSeries()
+                    },
+                    onReset = {
+                        onResetSeries(details.book)
+                        closeSeries()
+                    },
+                    onResetShared = {
+                        onResetSharedSeries(details.book)
+                        closeSeries()
+                    },
+                    onDismiss = closeSeries,
+                )
+            }
         }
     }
 }
@@ -250,7 +323,11 @@ private fun Header(
                 )
             }
             val byRole = meta.contributors.groupBy({ it.role }, { it.name })
-            val authors = byRole[ContributorRoles.AUTHOR] ?: listOfNotNull(book.author?.takeIf { it.isNotBlank() })
+            val authors = if (book.authorOverridden) {
+                listOfNotNull(book.displayAuthor)
+            } else {
+                byRole[ContributorRoles.AUTHOR] ?: listOfNotNull(book.displayAuthor)
+            }
             if (authors.isNotEmpty()) {
                 Text(
                     authors.joinToString(", "),
