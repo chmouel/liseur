@@ -116,10 +116,10 @@ fun BookSyncDialog(
 
         is ReaderViewModel.BookSync.BookOrbitChoice -> PositionsDialog(
             helpRes = when {
+                !state.preview.canKeepLocal -> R.string.reader_bookorbit_take_only_help
                 state.preview.retryRequired && state.canTakeRemote -> R.string.reader_bookorbit_retry_help
                 state.preview.retryRequired -> R.string.reader_bookorbit_retry_only_help
-                state.preview.canKeepLocal -> R.string.reader_bookorbit_choice_help
-                else -> R.string.reader_bookorbit_take_only_help
+                else -> R.string.reader_bookorbit_choice_help
             },
             places = listOf(
                 Place(Mark.HERE, R.string.reader_sync_here, state.here),

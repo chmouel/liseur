@@ -218,7 +218,7 @@ class BookOrbitPositionSync(
         val position = database.readingProgressDao().get(context.bookUrl)
         if (automaticPush && (position?.hasSavedPlace != true ||
                 position.locatorJson == ReadingProgress.EMPTY_LOCATOR &&
-                position.override == FinishedOverride.UNREAD && position.totalProgression == 0.0) &&
+                position.totalProgression == 0.0) &&
             database.bookOrbitPositionAgreementDao().get(context.request.accountKey, context.bookUrl)
                 ?.outgoingBytes == null
         ) return@outcome SyncOutcome.NotApplicable

@@ -226,7 +226,10 @@ class BookOrbitIncomingAnchorTest {
 
     @Test
     fun `direct body text after an element does not join the preceding paragraph`() {
-        for (previous in listOf("<p>Previous</p>", "Previous<p/>")) {
+        for (previous in listOf(
+            "<p>Previous</p>", "Previous<p/>", "<section>Previous</section>", "<article>Previous</article>",
+            "<dl>Previous</dl>", "<dt>Previous</dt>", "<dd>Previous</dd>",
+        )) {
             val doc = DocumentBuilderFactory.newInstance().apply {
                 isNamespaceAware = true
             }.newDocumentBuilder().parse(InputSource(StringReader(

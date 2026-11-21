@@ -222,6 +222,7 @@ internal object BookOrbitIncomingAnchor {
     internal val BLOCK_TAGS = setOf(
         "p", "li", "blockquote", "pre", "td", "th", "figcaption",
         "h1", "h2", "h3", "h4", "h5", "h6", "div",
+        "section", "article", "dl", "dt", "dd",
     )
 
     private val IGNORED_TAGS = setOf(
