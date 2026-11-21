@@ -174,6 +174,43 @@ class FootnoteLayoutTest {
         assertTrue(FootnoteLayout.SCRIPT.contains("localFragment"))
     }
 
+    @Test
+    fun `a text footnote marker inherits the theme and loses its underline`() {
+        assertTrue(FootnoteLayout.SCRIPT.contains("data-liseur-reflink-"))
+        assertTrue(FootnoteLayout.SCRIPT.contains("color:inherit!important"))
+        assertTrue(FootnoteLayout.SCRIPT.contains("text-decoration:none!important"))
+    }
+
+    @Test
+    fun `a text marker is a single superscript`() {
+        assertTrue(FootnoteLayout.SCRIPT.contains("font-size:0.75em!important"))
+        assertTrue(FootnoteLayout.SCRIPT.contains("vertical-align:super!important"))
+        assertTrue(FootnoteLayout.SCRIPT.contains("line-height:0!important"))
+    }
+
+    @Test
+    fun `a marker already wrapped in sup is not double-raised`() {
+        assertTrue(FootnoteLayout.SCRIPT.contains("sup a["))
+        assertTrue(FootnoteLayout.SCRIPT.contains("vertical-align:baseline!important"))
+    }
+
+    @Test
+    fun `a majority-notes document is not restyled either`() {
+        // The guard clears both notes and reflinks so a table of contents
+        // in a notes chapter keeps its own layout.
+        assertTrue(FootnoteLayout.SCRIPT.contains("reflinks = []"))
+    }
+
+    @Test
+    fun `text marker styling wins over Readium link rules`() {
+        // Readium's :root[style*=readium-night-on] a:link is (0,3,1); the
+        // reflink rule uses :root a[attr]:link for the same specificity
+        // and later DOM order.
+        assertTrue(FootnoteLayout.SCRIPT.contains(":root a["))
+        assertTrue(FootnoteLayout.SCRIPT.contains(":link"))
+        assertTrue(FootnoteLayout.SCRIPT.contains(":visited"))
+    }
+
     /** The words of a `var NAME = [...]` list in the script. */
     private fun scriptWords(name: String): Set<String> {
         val list = Regex("var $name = \\[([^\\]]*)]")
