@@ -299,24 +299,11 @@ fun DefinitionSheet(
                     ?.takeIf { it.headword == term }
                     ?.pronunciation
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = term,
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.weight(1f),
-                        )
-                        if (onSelectText != null) {
-                            AssistChip(
-                                onClick = onSelectText,
-                                label = { Text(stringResource(R.string.dictionary_select_text)) },
-                            )
-                        }
-                    }
+                    Text(
+                        text = term,
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.SemiBold,
+                    )
                     if (firstPronunciation != null) {
                         Text(
                             text = firstPronunciation,
@@ -326,7 +313,7 @@ fun DefinitionSheet(
                     }
                 }
 
-                if (vocabularyAction != null) {
+                if (vocabularyAction != null || onSelectText != null) {
                     val definition = remember(offlineEntries, found, bookLanguage) {
                         val lines = if (offlineResolved) {
                             vocabularyOfflineDefinitionLines(offlineEntries.orEmpty())
@@ -337,7 +324,22 @@ fun DefinitionSheet(
                             .joinToString("\n").take(24000).ifBlank { null }
                     }
                     val translated = (translations as? TranslationsState.Found)?.first
-                    vocabularyAction(definition ?: translated, target.takeIf { definition == null && translated != null })
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        itemVerticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        vocabularyAction?.invoke(
+                            definition ?: translated,
+                            target.takeIf { definition == null && translated != null },
+                        )
+                        if (onSelectText != null) {
+                            AssistChip(
+                                onClick = onSelectText,
+                                label = { Text(stringResource(R.string.dictionary_select_text)) },
+                            )
+                        }
+                    }
                 }
 
                 CompositionLocalProvider(

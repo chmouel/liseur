@@ -2360,7 +2360,6 @@
     <string name="no_file_picker">V tomto zařízení není k dispozici žádný výběr souborů</string>
     <string name="vocabulary_title">Slovíčka</string>
     <string name="vocabulary_save">Uložit do slovíček</string>
-    <string name="vocabulary_saved_remove">Uloženo · Odebrat</string>
     <string name="vocabulary_error">Slovíčka se nepodařilo upravit</string>
     <string name="vocabulary_all_words">Všechna slovíčka</string>
     <string name="vocabulary_all_books">Všechny knihy</string>
