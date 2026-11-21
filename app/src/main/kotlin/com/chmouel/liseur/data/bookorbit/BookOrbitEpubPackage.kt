@@ -284,14 +284,18 @@ data class BookOrbitEpubPackage(
                 while (at < limit && (raw[at].isAsciiLetter() || raw[at].isDigit())) at++
                 if (at < limit && raw[at] == ';') {
                     val name = raw.substring(start + 1, at)
-                    if (name !in XML_BUILTINS) {
+                    if (name in XML_BUILTINS) {
+                        out.append(raw, start, at + 1)
+                    } else {
                         val unescaped = Entities.getByName(name)
-                        if (unescaped.isNotEmpty()) {
-                            unescaped.codePoints().forEach { out.append("&#").append(it).append(';') }
-                            return at + 1
-                        }
+                        if (unescaped.isEmpty()) throw ParseException("EPUB XHTML has an unknown named entity")
+                        unescaped.codePoints().forEach { out.append("&#").append(it).append(';') }
                     }
+                    return at + 1
                 }
+            }
+            if (raw.getOrNull(start + 1) != '#') {
+                throw ParseException("EPUB XHTML has an unsupported entity reference")
             }
             out.append('&')
             return start + 1

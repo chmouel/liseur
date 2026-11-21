@@ -6,6 +6,7 @@ import com.chmouel.liseur.data.bookorbit.BookOrbitCfiResource
 import com.chmouel.liseur.data.bookorbit.BookOrbitEpubPackage
 import com.chmouel.liseur.data.db.ReadingProgress
 import com.chmouel.liseur.reader.ResourceAddress
+import com.chmouel.liseur.reader.progress.ExactLocatorAnchor.BLOCK_TAGS
 import org.readium.r2.shared.publication.Locator
 import org.w3c.dom.Document
 import org.w3c.dom.Element
@@ -146,7 +147,23 @@ internal object BookOrbitIncomingAnchor {
     }
 
     private fun isIgnored(node: Node): Boolean =
-        node is Element && (node.localName?.lowercase() in IGNORED_TAGS || node.hasAttribute("hidden"))
+        node is Element && (node.localName?.lowercase() in IGNORED_TAGS || node.hasAttribute("hidden") ||
+            inlineDisplayNone(node.getAttribute("style")))
+
+    private fun inlineDisplayNone(style: String): Boolean {
+        if (!style.contains("display", ignoreCase = true)) return false
+        // Complex CSS is left to the WebView's exact-position check.
+        if (style.any { it in "\"'()\\{}" } || "/*" in style) return false
+        val displays = style.split(';').mapNotNull { declaration ->
+            val parts = declaration.split(':', limit = 2)
+            if (parts.size != 2 || !parts[0].trim().equals("display", ignoreCase = true)) return@mapNotNull null
+            val value = parts[1].trim()
+            val important = IMPORTANT.find(value)
+            value.substring(0, important?.range?.first ?: value.length).trim() to (important != null)
+        }
+        val display = displays.lastOrNull { it.second } ?: displays.lastOrNull()
+        return display?.first.equals("none", ignoreCase = true)
+    }
 
     /** Word boundaries follow blocks; offsets still include every node in WebView's textContent. */
     private fun inlineRun(block: Element, target: Node): IntRange {
@@ -219,11 +236,7 @@ internal object BookOrbitIncomingAnchor {
     private fun String.takeLastCodePoints(count: Int): String =
         substring(offsetByCodePoints(length, -codePointCount(0, length).coerceAtMost(count)))
 
-    internal val BLOCK_TAGS = setOf(
-        "p", "li", "blockquote", "pre", "td", "th", "figcaption",
-        "h1", "h2", "h3", "h4", "h5", "h6", "div",
-        "section", "article", "dl", "dt", "dd",
-    )
+    private val IMPORTANT = Regex("!\\s*important\\s*$", RegexOption.IGNORE_CASE)
 
     private val IGNORED_TAGS = setOf(
         "script", "style", "noscript", "template", "title", "desc", "defs", "metadata",

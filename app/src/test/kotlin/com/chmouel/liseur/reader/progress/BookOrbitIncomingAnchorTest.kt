@@ -245,6 +245,45 @@ class BookOrbitIncomingAnchorTest {
     }
 
     @Test
+    fun `incoming direct section text has no context from the preceding paragraph`() {
+        for (tag in listOf("section", "article", "dl", "dt", "dd")) {
+            val doc = DocumentBuilderFactory.newInstance().apply {
+                isNamespaceAware = true
+            }.newDocumentBuilder().parse(InputSource(StringReader(
+                """<html xmlns="http://www.w3.org/1999/xhtml"><head/><body><p>Previous.</p><$tag><a id="mark"/>Current sentence.</$tag></body></html>""",
+            )))
+            val target = BookOrbitIncomingAnchor.resolve(
+                "epubcfi(/6[reading-order]/2[ref-one]!/4/4/2[mark])", publication, doc,
+            )!!
+            assertEquals("body > $tag:nth-of-type(1)", target.anchor.cssSelector)
+            assertEquals("", target.anchor.before)
+            assertEquals("Current", target.anchor.highlight)
+        }
+    }
+
+    @Test
+    fun `element cfis skip inline display none according to declaration order and priority`() {
+        for ((style, expected) in listOf(
+            "display:none" to "Visible",
+            "color:red; DISPLAY: none ! important;" to "Visible",
+            "display:none;display:block" to "Hidden",
+            "display:none!important;display:block" to "Visible",
+            "display:none!important;display:block!important" to "Hidden",
+            "background:url('data:;display:none;');display:block" to "Hidden",
+        )) {
+            val doc = DocumentBuilderFactory.newInstance().apply {
+                isNamespaceAware = true
+            }.newDocumentBuilder().parse(InputSource(StringReader(
+                """<html xmlns="http://www.w3.org/1999/xhtml"><head/><body><a id="mark"/><p style="$style">Hidden</p><p>Visible text.</p></body></html>""",
+            )))
+            val target = BookOrbitIncomingAnchor.resolve(
+                "epubcfi(/6[reading-order]/2[ref-one]!/4/2[mark])", publication, doc,
+            )!!
+            assertEquals(style, expected, target.anchor.highlight)
+        }
+    }
+
+    @Test
     fun `inline illustrations and breaks separate the following visible word`() {
         for (separator in listOf(
             "<img id=\"plate\"/>",

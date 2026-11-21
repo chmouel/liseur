@@ -272,7 +272,7 @@ internal object BookOrbitViewportCfi {
               for (let part = first; part &&
                 (part.nodeType === Node.TEXT_NODE || part.nodeType === Node.CDATA_SECTION_NODE);
                 part = part.nextSibling) text += part.nodeValue;
-              const blocks = new Set([${BookOrbitIncomingAnchor.BLOCK_TAGS.joinToString(",") { "\"$it\"" }}]);
+              const blocks = new Set([${ExactLocatorAnchor.BLOCK_TAGS.joinToString(",") { "\"$it\"" }}]);
               let block = node.parentElement;
               while (block && block !== document.body &&
                 !blocks.has(block.localName.toLowerCase())) block = block.parentElement;

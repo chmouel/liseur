@@ -131,7 +131,7 @@ class ExactLocatorAnchorTest {
         // element names are read through localName, lower-cased once.
         assertFalse(script.contains(".tagName"))
         assertTrue(script.contains("localName"))
-        for (tag in listOf("p", "li", "blockquote", "div", "h1", "script", "style")) {
+        for (tag in listOf("p", "li", "blockquote", "div", "h1", "section", "article", "dl", "dt", "dd", "script", "style")) {
             assertTrue(tag, script.contains("\"$tag\""))
             assertFalse(tag, script.contains("\"${tag.uppercase()}\""))
         }
