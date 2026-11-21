@@ -2240,7 +2240,6 @@
     <string name="no_file_picker">No file picker is available on this device</string>
     <string name="vocabulary_title">Vocabulary Builder</string>
     <string name="vocabulary_save">Save to vocabulary</string>
-    <string name="vocabulary_saved_remove">Saved · Remove</string>
     <string name="vocabulary_error">Couldn’t update vocabulary</string>
     <string name="vocabulary_all_words">All words</string>
     <string name="vocabulary_all_books">All books</string>

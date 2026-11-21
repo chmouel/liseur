@@ -2328,7 +2328,6 @@
     <string name="no_file_picker">На этом устройстве нет средства выбора файлов</string>
     <string name="vocabulary_title">Словарь для изучения</string>
     <string name="vocabulary_save">Добавить в словарь</string>
-    <string name="vocabulary_saved_remove">Сохранено · Удалить</string>
     <string name="vocabulary_error">Не удалось обновить словарь</string>
     <string name="vocabulary_all_words">Все слова</string>
     <string name="vocabulary_all_books">Все книги</string>

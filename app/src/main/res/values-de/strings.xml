@@ -2176,7 +2176,6 @@
     <string name="no_file_picker">Auf diesem Gerät ist keine Dateiauswahl verfügbar</string>
     <string name="vocabulary_title">Vokabeltrainer</string>
     <string name="vocabulary_save">Als Vokabel speichern</string>
-    <string name="vocabulary_saved_remove">Gespeichert · Entfernen</string>
     <string name="vocabulary_error">Vokabelliste konnte nicht geändert werden</string>
     <string name="vocabulary_all_words">Alle Wörter</string>
     <string name="vocabulary_all_books">Alle Bücher</string>

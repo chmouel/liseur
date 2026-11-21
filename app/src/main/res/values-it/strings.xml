@@ -2164,7 +2164,6 @@
     <string name="no_file_picker">Nessun selettore di file disponibile su questo dispositivo</string>
     <string name="vocabulary_title">Vocabolario</string>
     <string name="vocabulary_save">Salva nel vocabolario</string>
-    <string name="vocabulary_saved_remove">Salvata · Rimuovi</string>
     <string name="vocabulary_error">Impossibile aggiornare il vocabolario</string>
     <string name="vocabulary_all_words">Tutte le parole</string>
     <string name="vocabulary_all_books">Tutti i libri</string>

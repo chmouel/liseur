@@ -1,8 +1,14 @@
 package com.chmouel.liseur.vocabulary
 
 import android.widget.Toast
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.AssistChip
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -12,8 +18,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.semantics
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.chmouel.liseur.R
 import kotlinx.coroutines.CancellationException
@@ -71,11 +80,27 @@ internal fun VocabularyLookupAction(
 
     val current = found
     val alreadySaved = current != null || savedId != null
-    AssistChip(
+    val actionLabel = stringResource(if (alreadySaved) R.string.vocabulary_remove_word else R.string.vocabulary_save)
+    val onChipClick = { if (alreadySaved) confirmRemove = true else save() }
+    FilterChip(
+        selected = alreadySaved,
         enabled = !busy,
-        onClick = { if (alreadySaved) confirmRemove = true else save() },
+        onClick = onChipClick,
         label = {
-            Text(stringResource(if (alreadySaved) R.string.vocabulary_saved_remove else R.string.vocabulary_save))
+            Text(stringResource(if (alreadySaved) R.string.vocabulary_saved else R.string.vocabulary_save))
+        },
+        leadingIcon = {
+            Icon(
+                imageVector = if (alreadySaved) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
+                contentDescription = null,
+                modifier = Modifier.size(FilterChipDefaults.IconSize),
+            )
+        },
+        modifier = Modifier.semantics {
+            onClick(label = actionLabel) {
+                onChipClick()
+                true
+            }
         },
     )
     if (confirmRemove) {
