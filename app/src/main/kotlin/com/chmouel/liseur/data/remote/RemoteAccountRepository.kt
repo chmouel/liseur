@@ -82,6 +82,8 @@ class RemoteAccountRepository(
      */
     private val sessionRefusalDao: SessionRefusalDao? = null,
     private val sessionTransmissionDao: com.chmouel.liseur.data.db.SessionTransmissionDao? = null,
+    private val vocabularyDao: com.chmouel.liseur.vocabulary.VocabularyDao? = null,
+    private val vocabularySyncDao: com.chmouel.liseur.data.db.VocabularySyncDao? = null,
     private val remoteStatsDao: com.chmouel.liseur.data.db.RemoteStatsDao? = null,
     /**
      * How far a starter shelf has been explored. The walk belongs to the
@@ -815,6 +817,7 @@ class RemoteAccountRepository(
                 // same reasoning. Leaving it out reset it on every token
                 // rotation, which replayed the whole annotation log.
                 annotationCursorSeq = existing?.annotationCursorSeq ?: 0,
+                vocabularyCursorSeq = existing?.vocabularyCursorSeq ?: 0,
                 liseurAccountId = capabilities.liseurAccountId
                     ?: existing?.liseurAccountId,
                 // BookOrbit's session. A capability refresh that signed
@@ -963,7 +966,9 @@ class RemoteAccountRepository(
             (evaluationDao?.countForPeer(to) ?: 0) +
             (metadataOverrideDao?.countForPeer(to) ?: 0) +
             (sessionRefusalDao?.countForPeer(to) ?: 0) +
-            (sessionTransmissionDao?.countForPeer(to) ?: 0)
+            (sessionTransmissionDao?.countForPeer(to) ?: 0) +
+            (vocabularyDao?.countForOwner(to) ?: 0) +
+            (vocabularySyncDao?.countForPeer(to) ?: 0)
         // The settings baseline is deliberately not counted. It lives in
         // its own store, which commits without waiting for this
         // transaction, so its copy under the new name may be there while
@@ -983,6 +988,8 @@ class RemoteAccountRepository(
         uploadRefusalDao?.rekeyAccount(from, to)
         sessionRefusalDao?.rekeyPeer(from, to)
         sessionTransmissionDao?.rekeyPeer(from, to)
+        vocabularySyncDao?.rekeyPeer(from, to)
+        vocabularyDao?.rekeyAccount(from, to)
         // Not counted above: it is derived from a snapshot, so anything
         // already under the new key is replaced rather than guarded.
         remoteStatsDao?.rekeyPeer(from, to)
@@ -1204,7 +1211,9 @@ class RemoteAccountRepository(
         annotationSyncDao?.forgetPeer(server.accountKey)
         evaluationDao?.forgetPeer(server.accountKey)
         metadataOverrideDao?.forgetPeer(server.accountKey)
+        vocabularySyncDao?.forgetPeer(server.accountKey)
         dao.setAnnotationCursor(0)
+        dao.setVocabularyCursor(0)
         sessionDao?.forgetUploads()
         sessionDao?.forgetTransmissionEvidence()
         sessionTransmissionDao?.clearPeer(server.accountKey)

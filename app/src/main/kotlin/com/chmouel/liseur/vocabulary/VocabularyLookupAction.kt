@@ -92,7 +92,7 @@ internal fun VocabularyLookupAction(
                         busy = true
                         scope.launch {
                             try {
-                                repository.dao.deleteWord(id)
+                                repository.deleteWord(id)
                                 savedId = null
                             } catch (error: CancellationException) {
                                 throw error

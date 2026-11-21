@@ -1,5 +1,6 @@
 package com.chmouel.liseur.vocabulary
 
+import com.chmouel.liseur.domain.VocabularyMerge
 import java.io.Reader
 import java.io.Writer
 import java.text.Normalizer
@@ -49,6 +50,15 @@ internal fun writeVocabularyJson(records: List<VocabularyRecord>, writer: Writer
             put("intervalMinutes", word.intervalMinutes)
             put("repetitions", word.repetitions)
             put("definitionEdited", word.definitionEdited)
+            if (word.definitionUpdatedAt > 0L) put("definitionUpdatedAt", word.definitionUpdatedAt)
+            if (word.notesUpdatedAt > 0L) put("notesUpdatedAt", word.notesUpdatedAt)
+            if (word.baselineDueAt != null && word.baselineRepetitions > 0) {
+                put("baselineDueAt", word.baselineDueAt)
+                if (word.baselineReviewedAt != null) put("baselineReviewedAt", word.baselineReviewedAt)
+                put("baselineStreak", word.baselineStreak)
+                put("baselineIntervalMinutes", word.baselineIntervalMinutes)
+                put("baselineRepetitions", word.baselineRepetitions)
+            }
             put("occurrences", JSONArray(record.occurrences.map { source ->
                 JSONObject().apply {
                     put("bookUrl", source.bookUrl)
@@ -56,6 +66,10 @@ internal fun writeVocabularyJson(records: List<VocabularyRecord>, writer: Writer
                     put("locationKey", source.locationKey)
                     put("locator", source.locator)
                     put("sentence", source.sentence)
+                    if (source.occurrenceKey.isNotBlank()) put("occurrenceKey", source.occurrenceKey)
+                    if (!source.workId.isNullOrBlank()) put("workId", source.workId)
+                    if (source.sentenceEdited) put("sentenceEdited", true)
+                    if (source.sentenceUpdatedAt > 0L) put("sentenceUpdatedAt", source.sentenceUpdatedAt)
                     put("lastSeenAt", source.lastSeenAt)
                     put("encounters", source.encounters)
                 }
@@ -67,6 +81,7 @@ internal fun writeVocabularyJson(records: List<VocabularyRecord>, writer: Writer
                     put("intervalMinutes", review.intervalMinutes)
                     put("dueAt", review.dueAt)
                     put("firstReview", review.firstReview)
+                    if (!review.syncId.isNullOrBlank()) put("syncId", review.syncId)
                 }
             }))
         }.toString())
@@ -89,20 +104,62 @@ private fun readVocabularyJson(root: JSONObject, now: Long): List<VocabularyReco
                 intervalMinutes = entry.interval(),
                 repetitions = entry.getInt("repetitions").also { require(it in 0 until Int.MAX_VALUE) },
                 definitionEdited = entry.getBoolean("definitionEdited"),
+                definitionUpdatedAt = if (entry.has("definitionUpdatedAt")) entry.optLong("definitionUpdatedAt", 0L) else 0L,
+                notesUpdatedAt = if (entry.has("notesUpdatedAt")) entry.optLong("notesUpdatedAt", 0L) else 0L,
+                baselineDueAt = if (entry.has("baselineDueAt") && !entry.isNull("baselineDueAt")) {
+                    entry.time("baselineDueAt", now)
+                } else {
+                    null
+                },
+                baselineReviewedAt = if (entry.has("baselineReviewedAt") && !entry.isNull("baselineReviewedAt")) {
+                    entry.time("baselineReviewedAt", now)
+                } else {
+                    null
+                },
+                baselineStreak = if (entry.has("baselineStreak") && !entry.isNull("baselineStreak")) {
+                    entry.getInt("baselineStreak").also { require(it in 0..14) }
+                } else {
+                    0
+                },
+                baselineIntervalMinutes = if (entry.has("baselineIntervalMinutes") && !entry.isNull("baselineIntervalMinutes")) {
+                    entry.getInt("baselineIntervalMinutes").also { require(it in 0..10_000_000) }
+                } else {
+                    0
+                },
+                baselineRepetitions = if (entry.has("baselineRepetitions") && !entry.isNull("baselineRepetitions")) {
+                    entry.getInt("baselineRepetitions").also { require(it in 0 until Int.MAX_VALUE) }
+                } else {
+                    0
+                },
             ).withSearchText(),
             occurrences = entry.getJSONArray("occurrences").objects { src ->
                 val locator = src.optionalText("locator", 32000)
                 require(locator == null || Locator.fromJSON(JSONObject(locator)) != null)
+                val bookUrl = src.optionalText("bookUrl", 8000).orEmpty()
                 val title = src.optionalText("bookTitle", 4000).orEmpty()
+                val locationKey = src.getString("locationKey").checked(32000)
                 val sentence = src.optionalText("sentence", 4000)
+                val workId = src.optionalText("workId", 128)?.takeIf(String::isNotBlank)
+                val occurrenceKey = src.optionalText("occurrenceKey", 128)?.takeIf(String::isNotBlank)
+                    ?: VocabularyMerge.provisionalOccurrenceKey(bookUrl, title, locationKey)
+                val sentenceEdited = src.optBoolean("sentenceEdited", false)
+                val sentenceUpdatedAt = if (src.has("sentenceUpdatedAt") && !src.isNull("sentenceUpdatedAt")) {
+                    src.time("sentenceUpdatedAt", now)
+                } else {
+                    0L
+                }
                 VocabularyOccurrence(
-                    bookUrl = src.optionalText("bookUrl", 8000).orEmpty(),
+                    bookUrl = bookUrl,
                     bookTitle = title,
                     locator = locator,
-                    locationKey = src.getString("locationKey").checked(32000),
+                    locationKey = locationKey,
                     sentence = sentence,
                     lastSeenAt = src.time("lastSeenAt", now),
                     encounters = src.getInt("encounters").also { require(it in 1 until Int.MAX_VALUE) },
+                    workId = workId,
+                    occurrenceKey = occurrenceKey,
+                    sentenceEdited = sentenceEdited,
+                    sentenceUpdatedAt = sentenceUpdatedAt,
                 )
             },
             reviews = entry.getJSONArray("reviews").objects { review ->
@@ -113,6 +170,7 @@ private fun readVocabularyJson(root: JSONObject, now: Long): List<VocabularyReco
                     intervalMinutes = review.interval(),
                     dueAt = review.time("dueAt", now),
                     firstReview = review.getBoolean("firstReview"),
+                    syncId = review.optionalText("syncId", 128)?.takeIf(String::isNotBlank),
                 )
             },
         )

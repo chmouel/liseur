@@ -349,6 +349,7 @@ class BookOrbitCatalogClientTest {
         override suspend fun setCanReadInsights(allowed: Boolean, tokenCipher: String?, id: Long): Int = 0
         override suspend fun setSyncCursor(seq: Long, id: Long) = Unit
         override suspend fun setAnnotationCursor(seq: Long, id: Long) = Unit
+        override suspend fun setVocabularyCursor(seq: Long, id: Long) = Unit
         override suspend fun setOrbitEpoch(epoch: Long, id: Long) = Unit
         override suspend fun rotateOrbitTokens(
             access: String?,

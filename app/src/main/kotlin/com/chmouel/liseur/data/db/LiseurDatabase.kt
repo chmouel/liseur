@@ -7,6 +7,7 @@ import androidx.room.migration.Migration
 import com.chmouel.liseur.data.calibre.CredentialCipher
 import androidx.sqlite.SQLiteConnection
 import androidx.sqlite.execSQL
+import com.chmouel.liseur.domain.VocabularyMerge
 import com.chmouel.liseur.vocabulary.VocabularyDao
 import com.chmouel.liseur.vocabulary.VocabularyOccurrence
 import com.chmouel.liseur.vocabulary.VocabularyReview
@@ -59,8 +60,11 @@ import com.chmouel.liseur.vocabulary.VocabularyWord
         VocabularyWord::class,
         VocabularyOccurrence::class,
         VocabularyReview::class,
+        VocabularyWordSync::class,
+        VocabularyReviewSync::class,
+        VocabularyStagedReview::class,
     ],
-    version = 83,
+    version = 84,
     autoMigrations = [AutoMigration(from = 80, to = 81)],
     exportSchema = true,
 )
@@ -106,8 +110,216 @@ abstract class LiseurDatabase : RoomDatabase() {
 
     abstract fun sessionImportSourceDao(): SessionImportSourceDao
     abstract fun vocabularyDao(): VocabularyDao
+    abstract fun vocabularySyncDao(): VocabularySyncDao
 
     companion object {
+        val MIGRATION_83_84 = object : Migration(83, 84) {
+            override fun migrate(connection: SQLiteConnection) {
+                if ("vocabulary_cursor_seq" !in connection.columnsOf("remote_server")) {
+                    connection.execSQL(
+                        "ALTER TABLE remote_server ADD COLUMN vocabulary_cursor_seq INTEGER NOT NULL DEFAULT 0",
+                    )
+                }
+
+                val wordCols = connection.columnsOf("vocabulary_words")
+                if ("ownerAccount" !in wordCols) {
+                    connection.execSQL(
+                        "ALTER TABLE vocabulary_words ADD COLUMN ownerAccount TEXT NOT NULL DEFAULT ''",
+                    )
+                }
+                if ("definitionUpdatedAt" !in wordCols) {
+                    connection.execSQL(
+                        "ALTER TABLE vocabulary_words ADD COLUMN definitionUpdatedAt INTEGER NOT NULL DEFAULT 0",
+                    )
+                }
+                if ("notesUpdatedAt" !in wordCols) {
+                    connection.execSQL(
+                        "ALTER TABLE vocabulary_words ADD COLUMN notesUpdatedAt INTEGER NOT NULL DEFAULT 0",
+                    )
+                }
+                if ("baselineDueAt" !in wordCols) {
+                    connection.execSQL("ALTER TABLE vocabulary_words ADD COLUMN baselineDueAt INTEGER")
+                }
+                if ("baselineReviewedAt" !in wordCols) {
+                    connection.execSQL("ALTER TABLE vocabulary_words ADD COLUMN baselineReviewedAt INTEGER")
+                }
+                if ("baselineStreak" !in wordCols) {
+                    connection.execSQL(
+                        "ALTER TABLE vocabulary_words ADD COLUMN baselineStreak INTEGER NOT NULL DEFAULT 0",
+                    )
+                }
+                if ("baselineIntervalMinutes" !in wordCols) {
+                    connection.execSQL(
+                        "ALTER TABLE vocabulary_words ADD COLUMN baselineIntervalMinutes INTEGER NOT NULL DEFAULT 0",
+                    )
+                }
+                if ("baselineRepetitions" !in wordCols) {
+                    connection.execSQL(
+                        "ALTER TABLE vocabulary_words ADD COLUMN baselineRepetitions INTEGER NOT NULL DEFAULT 0",
+                    )
+                }
+                // Backfill imported SRS baseline for existing words whose repetitions
+                // outnumber their stored review rows (e.g. legacy JSON imports).
+                connection.execSQL(
+                    """
+                    UPDATE vocabulary_words
+                    SET baselineDueAt = dueAt,
+                        baselineReviewedAt = reviewedAt,
+                        baselineStreak = streak,
+                        baselineIntervalMinutes = intervalMinutes,
+                        baselineRepetitions = repetitions
+                    WHERE baselineDueAt IS NULL
+                      AND repetitions > (SELECT count(*) FROM vocabulary_reviews r WHERE r.wordId = vocabulary_words.id)
+                    """.trimIndent(),
+                )
+                connection.execSQL("DROP INDEX IF EXISTS `index_vocabulary_words_normalized_language`")
+                connection.execSQL(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS `index_vocabulary_words_normalized_language_ownerAccount` " +
+                        "ON `vocabulary_words` (`normalized`, `language`, `ownerAccount`)",
+                )
+
+                val occCols = connection.columnsOf("vocabulary_occurrences")
+                if ("workId" !in occCols) {
+                    connection.execSQL("ALTER TABLE vocabulary_occurrences ADD COLUMN workId TEXT")
+                }
+                if ("occurrenceKey" !in occCols) {
+                    connection.execSQL(
+                        "ALTER TABLE vocabulary_occurrences ADD COLUMN occurrenceKey TEXT NOT NULL DEFAULT ''",
+                    )
+                }
+                if ("sentenceEdited" !in occCols) {
+                    connection.execSQL(
+                        "ALTER TABLE vocabulary_occurrences ADD COLUMN sentenceEdited INTEGER NOT NULL DEFAULT 0",
+                    )
+                }
+                if ("sentenceUpdatedAt" !in occCols) {
+                    connection.execSQL(
+                        "ALTER TABLE vocabulary_occurrences ADD COLUMN sentenceUpdatedAt INTEGER NOT NULL DEFAULT 0",
+                    )
+                }
+                // Backfill deterministic provisional occurrenceKey for existing rows.
+                val occRows = mutableListOf<Pair<Long, String>>()
+                val selectOcc = connection.prepare(
+                    "SELECT id, bookUrl, bookTitle, locationKey FROM vocabulary_occurrences WHERE occurrenceKey = ''",
+                )
+                try {
+                    while (selectOcc.step()) {
+                        val id = selectOcc.getLong(0)
+                        val bookUrl = selectOcc.getText(1)
+                        val bookTitle = selectOcc.getText(2)
+                        val locationKey = selectOcc.getText(3)
+                        occRows += id to VocabularyMerge.provisionalOccurrenceKey(bookUrl, bookTitle, locationKey)
+                    }
+                } finally {
+                    selectOcc.close()
+                }
+                for ((id, key) in occRows) {
+                    val updateOcc = connection.prepare(
+                        "UPDATE vocabulary_occurrences SET occurrenceKey = ? WHERE id = ?",
+                    )
+                    try {
+                        updateOcc.bindText(1, key)
+                        updateOcc.bindLong(2, id)
+                        updateOcc.step()
+                    } finally {
+                        updateOcc.close()
+                    }
+                }
+                connection.execSQL("DROP INDEX IF EXISTS `index_vocabulary_occurrences_wordId_bookUrl_locationKey`")
+                connection.execSQL(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS `index_vocabulary_occurrences_wordId_occurrenceKey` " +
+                        "ON `vocabulary_occurrences` (`wordId`, `occurrenceKey`)",
+                )
+
+                val revCols = connection.columnsOf("vocabulary_reviews")
+                if ("syncId" !in revCols) {
+                    connection.execSQL("ALTER TABLE vocabulary_reviews ADD COLUMN syncId TEXT")
+                }
+                connection.execSQL("DROP INDEX IF EXISTS `index_vocabulary_reviews_syncId`")
+                connection.execSQL(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS `index_vocabulary_reviews_wordId_syncId` " +
+                        "ON `vocabulary_reviews` (`wordId`, `syncId`)",
+                )
+                connection.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_vocabulary_reviews_syncId` " +
+                        "ON `vocabulary_reviews` (`syncId`)",
+                )
+
+                connection.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `vocabulary_word_sync` (
+                        `peer_id` TEXT NOT NULL,
+                        `language` TEXT NOT NULL,
+                        `normalized` TEXT NOT NULL,
+                        `rev` INTEGER NOT NULL DEFAULT 0,
+                        `generation` INTEGER NOT NULL DEFAULT 0,
+                        `seq` INTEGER NOT NULL DEFAULT 0,
+                        `synced_word_id` INTEGER,
+                        `lifecycle` TEXT NOT NULL DEFAULT 'SYNCED',
+                        `acked_fingerprint` TEXT NOT NULL DEFAULT '',
+                        `acked_base_json` TEXT,
+                        `pending_json` TEXT,
+                        `pending_rev` INTEGER,
+                        `pending_fingerprint` TEXT,
+                        `pending_base_json` TEXT,
+                        `pending_intent` TEXT,
+                        `pending_word_id` INTEGER,
+                        `refused_fingerprint` TEXT,
+                        `refused_reason` TEXT,
+                        PRIMARY KEY(`peer_id`, `language`, `normalized`)
+                    )
+                    """.trimIndent(),
+                )
+                connection.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `vocabulary_review_sync` (
+                        `peer_id` TEXT NOT NULL,
+                        `review_id` TEXT NOT NULL,
+                        `local_review_id` INTEGER,
+                        `language` TEXT NOT NULL,
+                        `normalized` TEXT NOT NULL,
+                        `word_generation` INTEGER NOT NULL DEFAULT 0,
+                        `seq` INTEGER NOT NULL DEFAULT 0,
+                        `acked_deleted` INTEGER NOT NULL DEFAULT 0,
+                        `pending_json` TEXT,
+                        `pending_deleted` INTEGER NOT NULL DEFAULT 0,
+                        `refused_reason` TEXT,
+                        PRIMARY KEY(`peer_id`, `review_id`)
+                    )
+                    """.trimIndent(),
+                )
+                connection.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_vocabulary_review_sync_peer_id_local_review_id` " +
+                        "ON `vocabulary_review_sync` (`peer_id`, `local_review_id`)",
+                )
+                connection.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_vocabulary_review_sync_peer_id_language_normalized` " +
+                        "ON `vocabulary_review_sync` (`peer_id`, `language`, `normalized`)",
+                )
+                connection.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `vocabulary_staged_review` (
+                        `peer_id` TEXT NOT NULL,
+                        `review_id` TEXT NOT NULL,
+                        `language` TEXT NOT NULL,
+                        `normalized` TEXT NOT NULL,
+                        `word_generation` INTEGER NOT NULL,
+                        `rating` TEXT NOT NULL,
+                        `reviewed_at` INTEGER NOT NULL,
+                        `interval_minutes` INTEGER NOT NULL,
+                        `due_at` INTEGER NOT NULL,
+                        `seq` INTEGER NOT NULL,
+                        PRIMARY KEY(`peer_id`, `review_id`)
+                    )
+                    """.trimIndent(),
+                )
+                connection.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_vocabulary_staged_review_peer_id_language_normalized` " +
+                        "ON `vocabulary_staged_review` (`peer_id`, `language`, `normalized`)",
+                )
+            }
+        }
+
         val MIGRATION_82_83 = object : Migration(82, 83) {
             override fun migrate(connection: SQLiteConnection) {
                 if ("adopted" !in connection.columnsOf("metadata_override_sync")) {
@@ -2296,6 +2508,7 @@ abstract class LiseurDatabase : RoomDatabase() {
             MIGRATION_79_80,
             MIGRATION_81_82,
             MIGRATION_82_83,
+            MIGRATION_83_84,
         )
     }
 }

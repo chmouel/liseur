@@ -93,6 +93,16 @@ object LiseurSyncApi {
     fun annotationChanges(baseUrl: String, since: Long, limit: Int): String =
         url(baseUrl, "$ANNOTATIONS/changes?since=$since&limit=$limit")
 
+    /** One page of the vocabulary word & review feed, tombstones included. */
+    fun vocabularyChanges(baseUrl: String, since: Long, limit: Int): String =
+        url(baseUrl, "/v1/vocabulary/changes?since=$since&limit=$limit")
+
+    /** Batched vocabulary word push (compare-and-set on rev). */
+    fun pushVocabularyWords(baseUrl: String): String = url(baseUrl, "/v1/vocabulary/words")
+
+    /** Batched vocabulary review push (immutable events + undo tombstones). */
+    fun pushVocabularyReviews(baseUrl: String): String = url(baseUrl, "/v1/vocabulary/reviews")
+
     /**
      * Every annotation still standing on one work.
      *
