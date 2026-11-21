@@ -181,6 +181,13 @@ interface VocabularyDao {
     @Query("SELECT * FROM vocabulary_reviews WHERE wordId = :id")
     suspend fun reviews(id: Long): List<VocabularyReview>
 
+    @Query(
+        "SELECT r.* FROM vocabulary_reviews r " +
+            "JOIN vocabulary_words w ON w.id = r.wordId " +
+            "WHERE w.ownerAccount = :ownerAccount AND r.syncId IS NULL",
+    )
+    suspend fun reviewsWithoutSyncId(ownerAccount: String): List<VocabularyReview>
+
     @Update
     suspend fun updateOccurrence(occurrence: VocabularyOccurrence)
 

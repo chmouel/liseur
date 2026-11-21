@@ -104,8 +104,16 @@ private fun readVocabularyJson(root: JSONObject, now: Long): List<VocabularyReco
                 intervalMinutes = entry.interval(),
                 repetitions = entry.getInt("repetitions").also { require(it in 0 until Int.MAX_VALUE) },
                 definitionEdited = entry.getBoolean("definitionEdited"),
-                definitionUpdatedAt = if (entry.has("definitionUpdatedAt")) entry.optLong("definitionUpdatedAt", 0L) else 0L,
-                notesUpdatedAt = if (entry.has("notesUpdatedAt")) entry.optLong("notesUpdatedAt", 0L) else 0L,
+                definitionUpdatedAt = if (entry.has("definitionUpdatedAt") && !entry.isNull("definitionUpdatedAt")) {
+                    entry.time("definitionUpdatedAt", now)
+                } else {
+                    0L
+                },
+                notesUpdatedAt = if (entry.has("notesUpdatedAt") && !entry.isNull("notesUpdatedAt")) {
+                    entry.time("notesUpdatedAt", now)
+                } else {
+                    0L
+                },
                 baselineDueAt = if (entry.has("baselineDueAt") && !entry.isNull("baselineDueAt")) {
                     entry.time("baselineDueAt", now)
                 } else {
