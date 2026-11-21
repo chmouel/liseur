@@ -486,6 +486,7 @@
     <string name="kosync_stranded">Сопряжено как %1$s с %2$s, но не используется: этот сервер сам хранит ваше место. Отключите сопряжение или подключите его вместе с каталогом «Свой».</string>
     <string name="kosync_disconnect">Отключить синхронизацию KOReader</string>
     <string name="kosync_error_credentials">Сервер синхронизации отклонил это имя пользователя или пароль.</string>
+    <string name="kosync_error_account_exists">Эта учётная запись уже существует на сервере синхронизации. Отключите создание учётной записи, чтобы войти, или выберите другое имя пользователя.</string>
     <string name="kosync_error_not_kosync">По этому адресу не ответил сервер синхронизации KOReader. Проверьте адрес, включая путь, по которому он отдаётся.</string>
     <string name="server_sync_moved_both">Позиции чтения при последней синхронизации: %1$d получено, %2$d отправлено</string>
     <plurals name="server_sync_pulled">

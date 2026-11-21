@@ -545,6 +545,7 @@
     <string name="kosync_stranded">已以 %1$s 的身份与 %2$s 配对，但未生效：此服务器自行保存您的阅读位置。请断开配对，或将其与自定义书库一起连接。</string>
     <string name="kosync_disconnect">断开 KOReader 同步</string>
     <string name="kosync_error_credentials">同步服务器拒绝了该用户名或密码。</string>
+    <string name="kosync_error_account_exists">该账号已存在于同步服务器上。请关闭创建账号开关以登录，或更换其他用户名。</string>
     <string name="kosync_error_not_kosync">该地址没有 KOReader 同步服务器响应。请检查地址，包括其服务路径。</string>
     <string name="server_sync_moved_both">上次同步的阅读位置：接收 %1$d 条，发送 %2$d 条</string>
     <string name="save">保存</string>

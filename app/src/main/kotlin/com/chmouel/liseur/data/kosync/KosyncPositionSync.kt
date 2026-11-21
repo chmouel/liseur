@@ -118,14 +118,14 @@ class KosyncPositionSync(
     override suspend fun syncBook(bookUrl: String): SyncOutcome = run(book = bookUrl)
 
     override suspend fun canSync(bookUrl: String): Boolean {
-        account() ?: return false
+        val account = account() ?: return false
         val book = bookDao.getByUrl(bookUrl) ?: return false
-        return book.isCandidate
+        return book.isCandidate(account.hasCatalog)
     }
 
     override suspend fun previewBook(bookUrl: String): PreviewOutcome {
         val account = account() ?: return PreviewOutcome.NotSynced
-        val book = bookDao.getByUrl(bookUrl)?.takeIf { it.isCandidate }
+        val book = bookDao.getByUrl(bookUrl)?.takeIf { it.isCandidate(account.hasCatalog) }
             ?: return PreviewOutcome.NotSynced
         val document = fingerprints.of(book)?.partialMd5 ?: return PreviewOutcome.NotSynced
         if (!networkAvailability.isAvailable()) return PreviewOutcome.Failed(SyncFailure.Offline)
@@ -255,16 +255,21 @@ class KosyncPositionSync(
         peerId: String?,
     ): ResolveOutcome {
         val account = account() ?: return ResolveOutcome.Done
-        val state = peerStateDao.get(bookUrl, account.peerId) ?: return ResolveOutcome.Done
-        peerStateDao.settle(
-            bookUrl = bookUrl,
-            peerId = account.peerId,
-            ackedRevision = state.ackedRevision,
-            progression = state.pendingProgression ?: state.agreedProgression,
-            status = state.pendingStatus ?: state.agreedStatus,
-            now = now(),
-        )
-        return ResolveOutcome.Done
+        var accountMatches = false
+        inTransaction {
+            if (!sameAccount(account)) return@inTransaction
+            accountMatches = true
+            val state = peerStateDao.get(bookUrl, account.peerId) ?: return@inTransaction
+            peerStateDao.settle(
+                bookUrl = bookUrl,
+                peerId = account.peerId,
+                ackedRevision = state.ackedRevision,
+                progression = state.pendingProgression ?: state.agreedProgression,
+                status = state.pendingStatus ?: state.agreedStatus,
+                now = now(),
+            )
+        }
+        return if (accountMatches) ResolveOutcome.Done else ResolveOutcome.Superseded
     }
 
     override suspend fun refreshUnresolved() {
@@ -289,10 +294,12 @@ class KosyncPositionSync(
         val peerId: String,
         val connectionStamp: Long,
         val login: String,
+        /** Whether the connected server also lists books. See [candidates]. */
+        val hasCatalog: Boolean,
     )
 
     private suspend fun account(): Account? {
-        if (!eligible()) return null
+        val server = connectedServer()?.takeIf { it.kind.hostsKosyncPeer } ?: return null
         val peer = kosyncDao.get() ?: return null
         val credentials = peer.credentials ?: return null
         return Account(
@@ -301,29 +308,14 @@ class KosyncPositionSync(
             peerId = peer.accountKey,
             connectionStamp = peer.addedAt,
             login = peer.username,
+            hasCatalog = server.catalogUrl != null,
         )
     }
-
-    /**
-     * Whether the connected server is one the pairing belongs to.
-     *
-     * A saved peer is not permission to sync. Nothing guarantees the
-     * peer is removed before another server is connected — an account
-     * switch that fails halfway, a crash, or a database restored onto a
-     * phone that never made the pairing all leave one behind — and this
-     * is the test that keeps such a peer from talking to a server on
-     * behalf of a library it knows nothing about.
-     */
-    private suspend fun eligible(): Boolean =
-        connectedServer()?.kind?.hostsKosyncPeer == true
-
-    /** Whether the connected server also lists books. See [candidates]. */
-    private suspend fun hasCatalog(): Boolean = connectedServer()?.catalogUrl != null
 
     // -- The run ----------------------------------------------------------
 
     private suspend fun run(book: String?): SyncOutcome {
-        if (!eligible()) {
+        val server = connectedServer()?.takeIf { it.kind.hostsKosyncPeer } ?: run {
             reporting.report(PositionSyncStatus.Idle, peerId)
             return SyncOutcome.NotApplicable
         }
@@ -348,11 +340,12 @@ class KosyncPositionSync(
             peerId = peer.accountKey,
             connectionStamp = peer.addedAt,
             login = peer.username,
+            hasCatalog = server.catalogUrl != null,
         )
 
         reporting.report(PositionSyncStatus.Syncing, peerId)
         val identity = device()
-        val books = candidates(book)
+        val books = candidates(book, account.hasCatalog)
 
         var firstFailure: SyncFailure? = null
         var unreachable: SyncFailure? = null
@@ -633,33 +626,33 @@ class KosyncPositionSync(
      * whole set down to it. kosync has no list endpoint, so syncing a
      * single book never had a reason to read the shelf.
      */
-    private suspend fun candidates(book: String?): List<Book> {
-        val catalogued = hasCatalog()
+    private suspend fun candidates(book: String?, catalogued: Boolean): List<Book> {
         val found = if (book == null) {
             if (catalogued) bookDao.allRemote() else bookDao.allOpenable()
         } else {
-            listOfNotNull(bookDao.getByUrl(book)).filter { it.openableUrl != null }
+            listOfNotNull(bookDao.getByUrl(book))
         }
-        // isCandidate already keeps browse-catalog books out; the
-        // device-wide set skips it, so it says so again.
-        return if (catalogued) found.filter { it.isCandidate } else found.filter { it.browseServerId == null }
+        return found.filter { it.isCandidate(catalogued) }
     }
 
 
     /**
-     * Whether kosync can speak about this book at all: it came from the
-     * connected catalog server and its bytes are on this device to hash.
+     * Whether kosync can speak about this book at all: its bytes are on
+     * this device to hash, it does not belong to a saved browse catalog,
+     * and when a catalog server is connected alongside kosync it came
+     * from that connected catalog server.
      *
-     * The URL check is what holds the confirmed scope: a locally added
-     * book *adopted* after an upload to liseur-sync also carries a
-     * `remoteUuid`, but keeps its own local `url` by design — its
-     * positions already travel natively, and kosync leaves it alone. A
-     * book from a saved browse catalog came from another server, not
-     * the connected one, and its reading place is promised to stay put.
+     * The URL check is what holds the confirmed scope when [catalogued]
+     * is true: a locally added book *adopted* after an upload to
+     * liseur-sync also carries a `remoteUuid`, but keeps its own local
+     * `url` by design — its positions already travel natively, and
+     * kosync leaves it alone. A book from a saved browse catalog came
+     * from another server, not the connected one, and its reading place
+     * is promised to stay put.
      */
-    private val Book.isCandidate: Boolean
-        get() = remoteUuid != null && openableUrl != null && browseServerId == null &&
-            ServerKind.isRemoteUrl(url)
+    private fun Book.isCandidate(catalogued: Boolean): Boolean =
+        openableUrl != null && browseServerId == null &&
+            (!catalogued || (remoteUuid != null && ServerKind.isRemoteUrl(url)))
 
     private fun ReadingProgress.statusOrDerived(): ReadingStatus =
         status?.let { ReadingStatus.fromWire(it) }

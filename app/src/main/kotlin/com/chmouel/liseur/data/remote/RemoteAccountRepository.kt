@@ -456,6 +456,7 @@ class RemoteAccountRepository(
         kosyncUrl: String,
         kosyncUsername: String,
         kosyncPassword: String,
+        kosyncRegister: Boolean = false,
         allowHttp: Boolean = false,
         speaksForKosync: Boolean = true,
         /**
@@ -498,7 +499,7 @@ class RemoteAccountRepository(
         }
 
         val pairing = if (wantsKosync) {
-            when (val probe = kosync().verify(kosyncUrl, kosyncUsername, kosyncPassword)) {
+            when (val probe = kosync().verify(kosyncUrl, kosyncUsername, kosyncPassword, kosyncRegister)) {
                 is KosyncProbe.Failure -> return CustomSetupResult(kosync = probe.reason)
                 is KosyncProbe.Proved -> probe.pairing
             }

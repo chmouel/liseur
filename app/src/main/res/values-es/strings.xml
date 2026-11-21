@@ -446,6 +446,7 @@
     <string name="kosync_stranded">Emparejado como %1$s con %2$s, pero sin uso: este servidor guarda tu lugar él mismo. Desconecta el emparejamiento, o conéctalo junto a un catálogo personalizado.</string>
     <string name="kosync_disconnect">Desconectar sincronización KOReader</string>
     <string name="kosync_error_credentials">Ese usuario o contraseña fue rechazado por el servidor de sincronización.</string>
+    <string name="kosync_error_account_exists">Esa cuenta ya existe en el servidor de sincronización. Desactiva la creación de cuenta para iniciar sesión o elige otro nombre de usuario.</string>
     <string name="kosync_error_not_kosync">Ningún servidor de sincronización KOReader respondió en esa dirección. Comprueba la dirección, incluida la ruta desde la que se sirve.</string>
     <string name="server_sync_moved_both">Posiciones de lectura en la última sincronización: %1$d recibidas, %2$d enviadas</string>
     <plurals name="server_sync_pulled">

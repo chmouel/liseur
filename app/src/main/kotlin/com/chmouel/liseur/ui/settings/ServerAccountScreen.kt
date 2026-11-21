@@ -224,6 +224,7 @@ fun ServerAccountScreen(
                         onKosyncUrlChange = onKosyncUrlChange,
                         onKosyncUsernameChange = onKosyncUsernameChange,
                         onKosyncPasswordChange = onKosyncPasswordChange,
+                        onKosyncRegisterChange = onKosyncRegisterChange,
                         onConnect = onConnect,
                         prompt = localNetwork,
                         addressOnly = state.editingAddress,
@@ -621,6 +622,7 @@ private fun ConnectForm(
     onKosyncUrlChange: (String) -> Unit,
     onKosyncUsernameChange: (String) -> Unit,
     onKosyncPasswordChange: (String) -> Unit,
+    onKosyncRegisterChange: (Boolean) -> Unit,
     onConnect: (Boolean) -> Unit,
     prompt: LocalNetworkPrompt,
     /**
@@ -807,6 +809,11 @@ private fun ConnectForm(
                     modifier = Modifier.fillMaxWidth(),
                 )
                 FieldHelp(stringResource(R.string.server_custom_kosync_help))
+                KosyncRegisterToggle(
+                    checked = state.kosyncRegister,
+                    enabled = !state.connecting,
+                    onCheckedChange = onKosyncRegisterChange,
+                )
                 state.kosyncError?.let {
                     if (it == AccountError.LOCAL_NETWORK_BLOCKED) {
                         LocalNetworkNotice(
@@ -1354,25 +1361,10 @@ private fun KosyncSection(
             ),
             modifier = Modifier.fillMaxWidth(),
         )
-        ListItem(
-            headlineContent = { Text(stringResource(R.string.kosync_register)) },
-            supportingContent = {
-                Text(stringResource(R.string.kosync_register_help_custom))
-            },
-            trailingContent = {
-                Switch(
-                    checked = state.kosyncRegister,
-                    onCheckedChange = null,
-                    enabled = !state.kosyncConnecting,
-                )
-            },
-            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-            modifier = Modifier.toggleable(
-                value = state.kosyncRegister,
-                enabled = !state.kosyncConnecting,
-                role = Role.Switch,
-                onValueChange = onRegisterChange,
-            ),
+        KosyncRegisterToggle(
+            checked = state.kosyncRegister,
+            enabled = !state.kosyncConnecting,
+            onCheckedChange = onRegisterChange,
         )
         state.kosyncError?.let { error ->
             if (error == AccountError.LOCAL_NETWORK_BLOCKED) {
@@ -1409,10 +1401,39 @@ private fun KosyncSection(
     }
 }
 
+@Composable
+private fun KosyncRegisterToggle(
+    checked: Boolean,
+    enabled: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    ListItem(
+        headlineContent = { Text(stringResource(R.string.kosync_register)) },
+        supportingContent = {
+            Text(stringResource(R.string.kosync_register_help_custom))
+        },
+        trailingContent = {
+            Switch(
+                checked = checked,
+                onCheckedChange = null,
+                enabled = enabled,
+            )
+        },
+        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+        modifier = Modifier.toggleable(
+            value = checked,
+            enabled = enabled,
+            role = Role.Switch,
+            onValueChange = onCheckedChange,
+        ),
+    )
+}
+
 private fun AccountError.kosyncMessageRes(): Int = when (this) {
     AccountError.BAD_CREDENTIALS -> R.string.kosync_error_credentials
     AccountError.WRONG_SERVER -> R.string.kosync_error_not_kosync
     AccountError.INSECURE_TRANSPORT -> R.string.server_sync_insecure
+    AccountError.ACCOUNT_EXISTS -> R.string.kosync_error_account_exists
     AccountError.RATE_LIMITED -> R.string.server_error_rate_limited
     AccountError.LOCAL_NETWORK_BLOCKED -> R.string.server_error_local_network
     else -> R.string.server_error_unreachable
@@ -1761,6 +1782,7 @@ internal fun AccountError.messageRes(kind: ServerKind): Int = when (this) {
     AccountError.UNREACHABLE_TRY_HTTP -> R.string.server_error_https
     AccountError.INSECURE_TRANSPORT -> R.string.server_sync_insecure
     AccountError.INSUFFICIENT_SCOPES -> R.string.server_error_scopes_liseur_sync
+    AccountError.ACCOUNT_EXISTS -> R.string.kosync_error_account_exists
     AccountError.RATE_LIMITED -> R.string.server_error_rate_limited
     AccountError.LOCAL_NETWORK_BLOCKED -> R.string.server_error_local_network
 }

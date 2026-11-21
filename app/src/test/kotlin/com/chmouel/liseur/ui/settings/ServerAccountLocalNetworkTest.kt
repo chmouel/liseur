@@ -601,6 +601,7 @@ class ServerAccountLocalNetworkTest {
             url: String,
             username: String,
             password: String,
+            register: Boolean,
         ): KosyncProbe {
             kosyncPairings += url
             return KosyncProbe.Proved(

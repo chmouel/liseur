@@ -231,6 +231,9 @@ sealed interface SetupFailure {
     /** The server insists on HTTPS and the address given was plain HTTP. */
     data object InsecureTransport : SetupFailure
 
+    /** Registration was refused because the username or pairing slot is already taken. */
+    data object AccountExists : SetupFailure
+
     /** Too many sign-in attempts; the server is asking us to wait. */
     data object RateLimited : SetupFailure
 

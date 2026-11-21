@@ -65,7 +65,7 @@ data class KosyncProgress(
  * calibre-web 308-redirects sloppy download paths, and OkHttp protects
  * that case by stripping `Authorization` when a redirect changes host —
  * but kosync signs with custom `x-auth-*` headers, which OkHttp would
- * forward wholesale, and a register body even carries the raw password.
+ * forward wholesale, and a register body carries the derived auth key.
  * No kosync endpoint legitimately redirects (the mount root is typed by
  * the reader), so a 3xx reads as the wrong address, not a hop to take.
  */
@@ -103,8 +103,9 @@ class KosyncClient(
      * one. liseur-sync redeems a pairing code this way, while many
      * servers require the account to be created in their own settings.
      *
-     * The body carries the password as typed, per the protocol; only
-     * the derived key is ever kept afterwards.
+     * Like KOReader, the body carries the MD5-derived auth key in the
+     * `password` field so subsequent `x-auth-key` requests match what
+     * the server stored.
      */
     suspend fun register(
         rootUrl: String,
@@ -114,7 +115,7 @@ class KosyncClient(
         remoteCall {
             val body = JSONObject()
                 .put("username", username)
-                .put("password", password)
+                .put("password", KosyncCredentials.keyFor(password))
                 .toString()
                 .toRequestBody(JSON)
             val request = Request.Builder()
@@ -129,8 +130,9 @@ class KosyncClient(
 
     /**
      * Where the server thinks the reader is in one document, or null
-     * when it has never heard of it — kosync says that with an empty
-     * 200 body rather than a 404.
+     * when it has never heard of it — the reference server says that
+     * with an empty 200 body, while several third-party kosync servers
+     * answer 404 instead.
      */
     suspend fun getProgress(
         rootUrl: String,
@@ -142,6 +144,7 @@ class KosyncClient(
                 .get()
                 .build()
             call(request).use { response ->
+                if (response.code == 404) return@use null
                 if (!response.isSuccessful) throw RemoteHttpFailure(failureFor(response.code))
                 parseProgress(JSONObject(response.body?.string().orEmpty().ifBlank { "{}" }))
             }
@@ -228,11 +231,14 @@ class KosyncClient(
         }
         return KosyncProgress(
             percentage = percentage,
-            device = body.optString("device").takeIf { it.isNotBlank() },
-            deviceId = body.optString("device_id").takeIf { it.isNotBlank() },
+            device = body.optionalString("device"),
+            deviceId = body.optionalString("device_id"),
             timestamp = body.optLong("timestamp", 0L).takeIf { it > 0 }?.times(1000),
         )
     }
+
+    private fun JSONObject.optionalString(name: String): String? =
+        if (!has(name) || isNull(name)) null else optString(name).takeIf { it.isNotBlank() }
 
     private companion object {
         val JSON = "application/json; charset=utf-8".toMediaType()
