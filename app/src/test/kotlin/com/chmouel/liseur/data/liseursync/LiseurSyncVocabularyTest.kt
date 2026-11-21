@@ -576,15 +576,15 @@ class LiseurSyncVocabularyTest {
         assertNotNull(
             repo.review(db.vocabularyDao().word(id)!!, Recall.GOOD, newLimit = 0, reviewLimit = 0, now = 2_000L),
         )
-        val localReview = db.vocabularyDao().reviews(id).single()
-        db.vocabularyDao().updateReview(localReview.copy(syncId = null))
-        assertNull(db.vocabularyDao().reviews(id).single().syncId)
-
-        // Build a JSON backup carrying that same review with canonical syncId "r-canon".
+        // Build a JSON backup carrying that same review with canonical syncId "r-canon",
+        // then simulate a migrated (v83) local row whose syncId is null.
         val exportedRecords = repo.export().map { record ->
             record.copy(reviews = record.reviews.map { it.copy(syncId = "r-canon") })
         }
         val backupJson = StringWriter().also { writeVocabularyJson(exportedRecords, it) }.toString()
+        val localReview = db.vocabularyDao().reviews(id).single()
+        db.vocabularyDao().updateReview(localReview.copy(syncId = null))
+        assertNull(db.vocabularyDao().reviews(id).single().syncId)
 
         // Seed the server with the word (gen 1) and the canonical review "r-canon".
         fake.seq++
@@ -826,6 +826,71 @@ class LiseurSyncVocabularyTest {
         val rebound = db.vocabularyDao().occurrencesList(wordId).single()
         assertEquals("file:///later-book.epub", rebound.bookUrl)
         assertEquals(canonKey, rebound.occurrenceKey)
+    }
+
+    @Test
+    fun `import honors acked review tombstones and recomputes schedule`() = runTest {
+        val wordId = checkNotNull(
+            repo.collect(VocabularyLookup("Nostalgia", "en", null), "Longing", null, now = 1_000L),
+        )
+        val undo = checkNotNull(
+            repo.review(db.vocabularyDao().word(wordId)!!, Recall.GOOD, newLimit = 0, reviewLimit = 0, now = 2_000L),
+        )
+        sync.sync(account)
+        val backupBeforeUndo = java.io.StringWriter().also { writeVocabularyJson(repo.export(), it) }.toString()
+
+        // Undo and sync so the review tombstone is acknowledged.
+        assertTrue(repo.undoReview(undo))
+        sync.sync(account)
+        assertEquals(0, db.vocabularyDao().word(wordId)!!.repetitions)
+
+        // Importing the older backup must NOT restore the undone review or inflate repetitions.
+        assertEquals(1, repo.import(readVocabulary(backupBeforeUndo.reader(), now = 5_000L)))
+        val afterImport = db.vocabularyDao().word(wordId)!!
+        assertEquals(0, afterImport.repetitions)
+        assertEquals(0, afterImport.streak)
+        assertTrue(db.vocabularyDao().reviews(wordId).isEmpty())
+    }
+
+    @Test
+    fun `resolveLocalOccurrences refreshes stale imported workId from current account alias`() = runTest {
+        val wordId = checkNotNull(
+            repo.collect(
+                VocabularyLookup(
+                    word = "Aether",
+                    language = "en",
+                    occurrence = VocabularyOccurrence(
+                        bookUrl = "file:///book-a.epub",
+                        bookTitle = "Book A",
+                        locationKey = "ch1:1",
+                        locator = null,
+                        sentence = "Through the aether.",
+                        lastSeenAt = 1_000L,
+                        workId = "foreign-work-id",
+                    ),
+                ),
+                definition = "Upper sky",
+                translationLanguage = null,
+                now = 1_000L,
+            ),
+        )
+        db.workIdentityDao().upsert(
+            com.chmouel.liseur.data.db.WorkAlias(
+                bookUrl = "file:///book-a.epub",
+                peerId = account.accountKey,
+                workId = "local-account-work-id",
+                confidence = "exact",
+                confirmed = true,
+                editionSha = "sha-a",
+                resolvedAt = 1_500L,
+            ),
+        )
+
+        sync.sync(account)
+        val occ = db.vocabularyDao().occurrencesList(wordId).single()
+        assertEquals("local-account-work-id", occ.workId)
+        val wireOcc = fake.words["en|aether"]!!.getJSONArray("occurrences").getJSONObject(0)
+        assertEquals("local-account-work-id", wireOcc.getString("work_id"))
     }
 
     private class FakeVocabularyServer {

@@ -157,14 +157,30 @@ internal class VocabularyRepository(
 
     suspend fun export(): List<VocabularyRecord> = database.withTransaction {
         val sources = dao.exportOccurrences().groupBy(VocabularyOccurrence::wordId)
-        val reviews = dao.exportReviews().groupBy(VocabularyReview::wordId)
+        val rawReviews = dao.exportReviews()
+        val reviews = rawReviews.map { review ->
+            if (review.syncId != null) {
+                review
+            } else {
+                review.copy(syncId = UUID.randomUUID().toString()).also { dao.updateReview(it) }
+            }
+        }.groupBy(VocabularyReview::wordId)
         dao.exportWords().map { word -> VocabularyRecord(word, sources[word.id].orEmpty(), reviews[word.id].orEmpty()) }
     }
 
     suspend fun import(records: List<VocabularyRecord>): Int = database.withTransaction {
         val owner = activeOwnerAccount()
+        val deletedReviewSyncIds = if (owner.isNotEmpty()) {
+            syncDao.allReviews(owner)
+                .filter { it.pendingDeleted || it.ackedDeleted }
+                .mapTo(mutableSetOf()) { it.reviewId }
+        } else {
+            emptySet()
+        }
         val imported = mutableSetOf<Long>()
         for ((word, sources, reviews) in records) {
+            val acceptedReviews = reviews.filter { it.syncId == null || it.syncId !in deletedReviewSyncIds }
+            val droppedDeletedReview = acceptedReviews.size != reviews.size
             val hasIncompleteHistory = word.repetitions > reviews.size && word.baselineDueAt == null
             val preparedWord = if (hasIncompleteHistory) {
                 word.copy(
@@ -236,7 +252,7 @@ internal class VocabularyRepository(
                     if (merged != saved) dao.updateOccurrence(merged)
                 }
             }
-            if (reviews.isNotEmpty()) {
+            if (acceptedReviews.isNotEmpty()) {
                 val existingReviews = if (existing == null) emptyList() else dao.reviews(id)
                 val existingSyncIds = existingReviews.mapNotNull { it.syncId }.toMutableSet()
                 val nullSyncIdByContent = existingReviews
@@ -247,7 +263,7 @@ internal class VocabularyRepository(
                 val legacyContentKeys = existingReviews
                     .map { it.copy(id = 0, wordId = id, syncId = null) }
                     .toMutableSet()
-                for (review in reviews) {
+                for (review in acceptedReviews) {
                     val contentKey = review.copy(id = 0, wordId = id, syncId = null)
                     val sid = review.syncId
                     if (sid != null) {
@@ -271,6 +287,39 @@ internal class VocabularyRepository(
                                 syncId = nextSid,
                             ),
                         )
+                    }
+                }
+            }
+            if (droppedDeletedReview) {
+                val storedWord = dao.word(id)
+                if (storedWord != null) {
+                    val liveReviews = dao.reviews(id)
+                    val reconciled = VocabularyMerge.reconcileSchedule(
+                        addedAt = storedWord.addedAt,
+                        baseline = storedWord.baselineOrNull(),
+                        reviews = liveReviews.map { r ->
+                            VocabularyMerge.ReviewEvent(
+                                syncId = r.syncId ?: r.id.toString(),
+                                rating = r.rating,
+                                reviewedAt = r.reviewedAt,
+                                intervalMinutes = r.intervalMinutes,
+                                dueAt = r.dueAt,
+                            )
+                        },
+                    )
+                    val updated = storedWord.copy(
+                        dueAt = reconciled.dueAt,
+                        reviewedAt = reconciled.reviewedAt,
+                        streak = reconciled.streak,
+                        intervalMinutes = reconciled.intervalMinutes,
+                        repetitions = reconciled.repetitions,
+                    )
+                    if (updated != storedWord) dao.updateWord(updated)
+                    for (r in liveReviews) {
+                        val shouldBeFirst = (r.syncId ?: r.id.toString()) == reconciled.firstReviewSyncId
+                        if (r.firstReview != shouldBeFirst) {
+                            dao.updateReview(r.copy(firstReview = shouldBeFirst))
+                        }
                     }
                 }
             }

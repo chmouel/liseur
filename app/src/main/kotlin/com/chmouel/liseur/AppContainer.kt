@@ -483,7 +483,11 @@ class AppContainer(
         com.chmouel.liseur.vocabulary.VocabularyRepository(
             database = database,
             report = usageReporting::capture,
-            onChanged = { applicationScope.launch { requestFullSync() } },
+            onChanged = {
+                applicationScope.launch {
+                    if (remoteRouter.supportsVocabularySync()) requestFullSync()
+                }
+            },
         )
     }
 
