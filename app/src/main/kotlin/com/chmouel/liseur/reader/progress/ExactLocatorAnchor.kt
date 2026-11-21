@@ -28,6 +28,12 @@ object ExactLocatorAnchor {
     private const val MAX_SELECTOR = 2_048
     private const val MAX_LOCATOR_BYTES = 16 * 1024
 
+    internal val BLOCK_TAGS = setOf(
+        "p", "li", "blockquote", "pre", "td", "th", "figcaption",
+        "h1", "h2", "h3", "h4", "h5", "h6", "div",
+        "section", "article", "dl", "dt", "dd",
+    )
+
     fun parseJavascriptResult(result: String?): ViewportTextAnchor? {
         if (result.isNullOrBlank() || result == "null") return null
         val decoded = runCatching { JSONTokener(result).nextValue() }.getOrNull()
@@ -270,10 +276,7 @@ object ExactLocatorAnchor {
     internal val CAPTURE_SCRIPT = """
         (() => {
           const blocked = new Set(["script", "style", "noscript", "template"]);
-          const blockTags = new Set([
-            "p", "li", "blockquote", "pre", "td", "th", "figcaption",
-            "h1", "h2", "h3", "h4", "h5", "h6", "div"
-          ]);
+          const blockTags = new Set([${BLOCK_TAGS.joinToString(",") { "\"$it\"" }}]);
           // An EPUB resource is served as application/xhtml+xml, and an
           // XML document reports tagName as it was written rather than
           // upper-cased the way an HTML one does. Comparing against

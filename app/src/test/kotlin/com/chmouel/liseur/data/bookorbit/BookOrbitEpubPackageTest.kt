@@ -336,6 +336,12 @@ class BookOrbitEpubPackageTest {
             """<!DOCTYPE svg>
                <html xmlns="http://www.w3.org/1999/xhtml"><body><p>text</p></body></html>""",
             """<html xmlns="http://www.w3.org/1999/xhtml"><body><p>&notanxhtmlentity;</p></body></html>""",
+            """<!DOCTYPE html SYSTEM "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+               <html xmlns="http://www.w3.org/1999/xhtml"><body><p>Before&notanxhtmlentity;after</p></body></html>""",
+            """<!DOCTYPE html SYSTEM "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+               <html xmlns="http://www.w3.org/1999/xhtml"><body><p>Before&${"a".repeat(40)};after</p></body></html>""",
+            """<!DOCTYPE html SYSTEM "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+               <html xmlns="http://www.w3.org/1999/xhtml"><body><p>Before&inconnü;after</p></body></html>""",
         )
         forbidden.forEach { xhtml ->
             for (charset in listOf(Charsets.UTF_8, Charsets.UTF_16)) {
