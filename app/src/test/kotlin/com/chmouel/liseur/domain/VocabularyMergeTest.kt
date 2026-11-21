@@ -274,6 +274,28 @@ class VocabularyMergeTest {
     }
 
     @Test
+    fun `mergeOccurrencePair adopts remote-only bookTitle change and converges on concurrent edits`() {
+        val base = Occurrence(
+            occurrenceKey = "k1",
+            workId = "w1",
+            bookTitle = "Old Title",
+            locationKey = "ch1",
+            locator = null,
+            sentence = "S",
+            sentenceEdited = false,
+            sentenceUpdatedAt = 0L,
+            lastSeenAt = 100L,
+            encounters = 1,
+        )
+        val remoteRenamed = base.copy(bookTitle = "New Title")
+        assertEquals("New Title", VocabularyMerge.mergeOccurrencePair(base, base, remoteRenamed).bookTitle)
+        val localRenamed = base.copy(bookTitle = "Local Title")
+        assertEquals("Local Title", VocabularyMerge.mergeOccurrencePair(base, localRenamed, base).bookTitle)
+        // Concurrent edits deterministically pick remote so both peers converge.
+        assertEquals("New Title", VocabularyMerge.mergeOccurrencePair(base, localRenamed, remoteRenamed).bookTitle)
+    }
+
+    @Test
     fun `reconcileSchedule folds offline reviews deterministically and respects baseline`() {
         val reviews = listOf(
             ReviewEvent("r2", "EASY", reviewedAt = 2_000L, intervalMinutes = 0, dueAt = 0),

@@ -316,10 +316,15 @@ object VocabularyMerge {
         remote: Occurrence,
     ): Occurrence {
         val (sentence, sentenceEdited, sentenceUpdatedAt) = mergeSentence(base, local, remote)
+        val bookTitle = when {
+            base != null && local.bookTitle != base.bookTitle && remote.bookTitle == base.bookTitle -> local.bookTitle
+            base != null && remote.bookTitle != base.bookTitle && local.bookTitle == base.bookTitle -> remote.bookTitle
+            else -> remote.bookTitle.ifBlank { local.bookTitle }
+        }
         return Occurrence(
             occurrenceKey = remote.occurrenceKey,
             workId = remote.workId ?: local.workId,
-            bookTitle = local.bookTitle.ifBlank { remote.bookTitle },
+            bookTitle = bookTitle,
             locationKey = wireLocationKey(local.locationKey.ifBlank { remote.locationKey }),
             locator = local.locator ?: remote.locator,
             sentence = sentence,
