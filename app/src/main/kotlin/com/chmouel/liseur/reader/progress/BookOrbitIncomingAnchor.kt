@@ -152,7 +152,7 @@ internal object BookOrbitIncomingAnchor {
     // CSS can reveal hidden content, so only intrinsically non-rendering nodes are skipped.
     private fun isIgnored(node: Node): Boolean = node is Element && when (node.namespaceURI) {
         "http://www.w3.org/2000/svg" -> node.localName?.lowercase() in SVG_NON_TEXT_TAGS
-        "http://www.w3.org/1999/xhtml", null -> node.localName?.lowercase() in VOID_TAGS
+        "http://www.w3.org/1999/xhtml", null -> node.localName?.lowercase() in XHTML_NON_TEXT_TAGS
         else -> false
     }
 
@@ -227,5 +227,5 @@ internal object BookOrbitIncomingAnchor {
     private fun String.takeLastCodePoints(count: Int): String =
         substring(offsetByCodePoints(length, -codePointCount(0, length).coerceAtMost(count)))
 
-    private val VOID_TAGS = setOf("br", "hr", "img")
+    private val XHTML_NON_TEXT_TAGS = setOf("br", "hr", "img", "script", "style", "noscript", "template")
 }

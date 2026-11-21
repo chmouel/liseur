@@ -225,6 +225,42 @@ class BookOrbitIncomingAnchorTest {
     }
 
     @Test
+    fun `element cfi skips non-rendered XHTML subtrees before the next passage`() {
+        for (tag in listOf("script", "style", "noscript", "template")) {
+            val doc = DocumentBuilderFactory.newInstance().apply {
+                isNamespaceAware = true
+            }.newDocumentBuilder().parse(InputSource(StringReader(
+                """<html xmlns="http://www.w3.org/1999/xhtml"><head/><body><a id="mark"/><$tag>Hidden</$tag><p>Current sentence.</p></body></html>""",
+            )))
+            val target = BookOrbitIncomingAnchor.resolve(
+                "epubcfi(/6[reading-order]/2[ref-one]!/4/2[mark])", publication, doc,
+            )!!
+            assertEquals(tag, "body > p:nth-of-type(1)", target.anchor.cssSelector)
+            assertEquals(tag, "Current", target.anchor.highlight)
+        }
+    }
+
+    @Test
+    fun `non-rendered XHTML text retains offsets without joining the visible word`() {
+        for (tag in listOf("script", "style", "noscript", "template")) {
+            val doc = DocumentBuilderFactory.newInstance().apply {
+                isNamespaceAware = true
+            }.newDocumentBuilder().parse(InputSource(StringReader(
+                """<html xmlns="http://www.w3.org/1999/xhtml"><head/><body><p><a id="mark"/><$tag id="skip">Hidden</$tag>Current<i>ly</i><$tag>suffix</$tag> sentence.</p></body></html>""",
+            )))
+            for (step in listOf("2[mark]", "4[skip]", "4[skip]/1:2")) {
+                val target = BookOrbitIncomingAnchor.resolve(
+                    "epubcfi(/6[reading-order]/2[ref-one]!/4/2/$step)", publication, doc,
+                )!!
+                assertEquals(tag, "Hidden", target.anchor.before)
+                assertEquals(tag, "Currently", target.anchor.highlight)
+                assertEquals(tag, "suffix sentence.", target.anchor.after)
+                assertEquals(6.0 / "HiddenCurrentlysuffix sentence.".length, target.progression!!, 0.0)
+            }
+        }
+    }
+
+    @Test
     fun `direct body text after an element does not join the preceding paragraph`() {
         for (previous in listOf(
             "<p>Previous</p>", "Previous<p/>", "<section>Previous</section>", "<article>Previous</article>",
