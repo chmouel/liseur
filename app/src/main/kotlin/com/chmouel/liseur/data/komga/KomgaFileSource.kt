@@ -15,6 +15,16 @@ import okhttp3.Request
  */
 class KomgaFileSource(private val http: RemoteHttp = RemoteHttp()) : FileSource {
 
+    // Never follow redirects on authenticated downloads: OkHttp does not
+    // strip Komga's custom X-API-Key header on cross-origin or HTTPS->HTTP
+    // redirects.
+    private val transport = RemoteHttp(
+        RemoteHttp.forDownloads().newBuilder()
+            .followRedirects(false)
+            .followSslRedirects(false)
+            .build(),
+    )
+
     override fun downloadRequest(
         server: com.chmouel.liseur.data.db.RemoteServer,
         credentials: RemoteCredentials,
@@ -24,4 +34,6 @@ class KomgaFileSource(private val http: RemoteHttp = RemoteHttp()) : FileSource 
         val id = book.remoteUuid ?: return null
         return http.request(KomgaUrl.api(baseUrl, "/api/v1/books/$id/file"), credentials)
     }
+
+    override fun downloadHttp(): RemoteHttp = transport
 }
