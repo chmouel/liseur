@@ -121,6 +121,8 @@ internal object FootnoteLayout {
                           (state.noteAttr = "data-liseur-note-" + tok);
           var MARK_ATTR = state.markAttr ||
                           (state.markAttr = "data-liseur-mark-" + tok);
+          var REFLINK_ATTR = state.reflinkAttr ||
+                             (state.reflinkAttr = "data-liseur-reflink-" + tok);
           // A bare object answers for `constructor` and `toString`, which
           // are legal ids, and would report a note revealed that never was.
           var revealed = state.revealed || (state.revealed = Object.create(null));
@@ -215,6 +217,12 @@ internal object FootnoteLayout {
             var css = document.createElement("style");
             css.textContent =
               '[' + NOTE_ATTR + ']{display:none!important}' +
+              ':root a[' + REFLINK_ATTR + '],:root a[' + REFLINK_ATTR + ']:link,:root a[' + REFLINK_ATTR + ']:visited,:root a[' + REFLINK_ATTR + ']:hover,:root a[' + REFLINK_ATTR + ']:active,:root a[' + REFLINK_ATTR + ']:focus{' +
+                'color:inherit!important;text-decoration:none!important;' +
+                'font-size:0.75em!important;vertical-align:super!important;' +
+                'line-height:0!important}' +
+              ':root a[' + REFLINK_ATTR + '] *,:root a[' + REFLINK_ATTR + ']:link *,:root a[' + REFLINK_ATTR + ']:visited *{color:inherit!important;text-decoration:none!important}' +
+              ':root sup a[' + REFLINK_ATTR + '],:root sup a[' + REFLINK_ATTR + ']:link,:root sup a[' + REFLINK_ATTR + ']:visited,:root a[' + REFLINK_ATTR + '] sup,:root a[' + REFLINK_ATTR + ']:link sup,:root a[' + REFLINK_ATTR + ']:visited sup{font-size:inherit!important;vertical-align:baseline!important;line-height:inherit!important}' +
               '[' + MARK_ATTR + ']{' +
                 'height:1em!important;width:auto!important;' +
                 'max-height:1.2em!important;max-width:4em!important;' +
@@ -233,7 +241,7 @@ internal object FootnoteLayout {
           if (!state.styleEl.sheet) return "blocked";
 
           var anchors = document.getElementsByTagName("a");
-          var notes = [], marks = [], i, j;
+          var notes = [], marks = [], reflinks = [], i, j;
           for (i = 0; i < anchors.length; i++) {
             var anchor = anchors[i];
             var id = localFragment(anchor);
@@ -251,6 +259,8 @@ internal object FootnoteLayout {
               for (j = 0; j < media.length; j++) {
                 if (marks.indexOf(media[j]) < 0) marks.push(media[j]);
               }
+              var hasMedia = anchor.querySelector("img, svg, image");
+              if (!hasMedia) reflinks.push(anchor);
             }
           }
 
@@ -266,6 +276,7 @@ internal object FootnoteLayout {
 
           var changed = installed;
           if (sync(NOTE_ATTR, wanted)) changed = true;
+          if (sync(REFLINK_ATTR, reflinks)) changed = true;
           if (sync(MARK_ATTR, marks)) changed = true;
           return changed ? "changed" : "stable";
         })();

@@ -1,6 +1,7 @@
 package com.chmouel.liseur.reader.chrome
 
 import androidx.activity.BackEventCompat
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -90,6 +91,8 @@ fun FootnoteCard(
     var boxHeight by remember { mutableIntStateOf(0) }
     var backProgress by remember { mutableFloatStateOf(0f) }
     var backEdge by remember { mutableIntStateOf(BackEventCompat.EDGE_LEFT) }
+
+    BackHandler { onDismiss() }
 
     PredictiveBackHandler { progress ->
         try {
