@@ -211,15 +211,7 @@ internal object BookOrbitViewportCfi {
           const visible = rect => rect.width > 0 && rect.height > 0 &&
             rect.right > 0 && rect.bottom > 0 &&
             rect.left < innerWidth && rect.top < innerHeight;
-          const painted = element => {
-            while (element) {
-              const style = getComputedStyle(element);
-              if (style.display === "none" || style.visibility !== "visible" ||
-                Number(style.opacity) === 0) return false;
-              element = element.parentElement;
-            }
-            return true;
-          };
+          ${ExactLocatorAnchor.PAINTED_SCRIPT}
           const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
           let node;
           while ((node = walker.nextNode())) {

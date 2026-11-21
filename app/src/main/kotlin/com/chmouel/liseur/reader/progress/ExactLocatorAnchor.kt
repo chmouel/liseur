@@ -34,6 +34,18 @@ object ExactLocatorAnchor {
         "section", "article", "dl", "dt", "dd",
     )
 
+    internal val PAINTED_SCRIPT = """
+        const painted = element => {
+          if (!element || getComputedStyle(element).visibility !== "visible") return false;
+          while (element) {
+            const style = getComputedStyle(element);
+            if (style.display === "none" || Number(style.opacity) === 0) return false;
+            element = element.parentElement;
+          }
+          return true;
+        };
+    """.trimIndent()
+
     fun parseJavascriptResult(result: String?): ViewportTextAnchor? {
         if (result.isNullOrBlank() || result == "null") return null
         val decoded = runCatching { JSONTokener(result).nextValue() }.getOrNull()
@@ -202,6 +214,7 @@ object ExactLocatorAnchor {
         val selector = locator.locations.otherLocations[CSS_SELECTOR] as String
         return """
             (() => {
+              $PAINTED_SCRIPT
               const block = document.querySelector(${JSONObject.quote(selector)});
               if (!block) return false;
               const text = block.textContent || "";
@@ -223,6 +236,8 @@ object ExactLocatorAnchor {
               let endInNode = 0;
               while ((node = walker.nextNode())) {
                 const next = consumed + node.data.length;
+                if (Math.max(consumed, startOffset) < Math.min(next, endOffset) &&
+                  !painted(node.parentElement)) return false;
                 if (!startNode && startOffset >= consumed && startOffset <= next) {
                   startNode = node;
                   startInNode = startOffset - consumed;
@@ -275,6 +290,7 @@ object ExactLocatorAnchor {
     // this script settles can be asked without a WebView.
     internal val CAPTURE_SCRIPT = """
         (() => {
+          $PAINTED_SCRIPT
           const blocked = new Set(["script", "style", "noscript", "template"]);
           const blockTags = new Set([${BLOCK_TAGS.joinToString(",") { "\"$it\"" }}]);
           // An EPUB resource is served as application/xhtml+xml, and an
@@ -336,7 +352,7 @@ object ExactLocatorAnchor {
           const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
             acceptNode: node => {
               const parent = node.parentElement;
-              if (!parent || blocked.has(tag(parent)) || !node.data.trim()) {
+              if (!parent || blocked.has(tag(parent)) || !painted(parent) || !node.data.trim()) {
                 return NodeFilter.FILTER_REJECT;
               }
               return NodeFilter.FILTER_ACCEPT;
