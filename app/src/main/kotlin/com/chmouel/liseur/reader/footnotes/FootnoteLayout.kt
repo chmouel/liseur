@@ -267,7 +267,7 @@ internal object FootnoteLayout {
           var page = document.body ? weight(document.body) : 0;
           var held = 0;
           for (i = 0; i < notes.length; i++) held += weight(notes[i]);
-          if (page > 0 && held / page > MOSTLY_NOTES) notes = [];
+          if (page > 0 && held / page > MOSTLY_NOTES) { notes = []; reflinks = []; }
 
           var wanted = [];
           for (i = 0; i < notes.length; i++) {
