@@ -271,6 +271,9 @@ sealed interface PreviewOutcome {
  * a second set of rules.
  */
 interface PositionSync {
+    /** Whether this provider also synchronizes Vocabulary Builder data. */
+    val supportsVocabularySync: Boolean get() = false
+
     suspend fun takeFurthestPosition(
         bookUrl: String, atRevision: Long, destination: FurthestDestination, peerId: String? = null,
     ): ResolveOutcome = ResolveOutcome.Superseded

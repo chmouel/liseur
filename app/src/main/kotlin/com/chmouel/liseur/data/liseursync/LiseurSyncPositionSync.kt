@@ -124,6 +124,7 @@ class LiseurSyncPositionSync(
     private val now: () -> Long = System::currentTimeMillis,
     private val inTransaction: suspend (suspend () -> Unit) -> Unit = { it() },
 ) : PositionSync {
+    override val supportsVocabularySync: Boolean get() = vocabulary != null
 
     /**
      * The server's address, and only while its token can still be read

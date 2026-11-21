@@ -58,10 +58,9 @@ class LiseurSyncVocabulary(
         try {
             // Two word push rounds let DELETE_THEN_RESURRECT retire the old
             // generation in round 1 and push the resurrection UPSERT in round 2.
-            repeat(2) {
+            for (round in 0 until 2) {
                 if (!stillOurs(server)) return false
-                val didWork = pushWords(server, peer, credentials)
-                if (!didWork) return@repeat
+                if (!pushWords(server, peer, credentials)) break
             }
             if (!stillOurs(server)) return false
             pushReviews(server, peer, credentials)
@@ -112,14 +111,24 @@ class LiseurSyncVocabulary(
                         local = existing.toMetadata(),
                         remote = word.toMetadata(),
                     )
+                    val existingOccs = vocabularyDao.occurrencesList(existing.id)
+                    val unownedOccs = vocabularyDao.occurrencesList(word.id)
                     val mergedOccs = VocabularyMerge.mergeOccurrences(
                         base = emptyList(),
-                        local = vocabularyDao.occurrencesList(existing.id).map { it.toMergeOccurrence() },
-                        remote = vocabularyDao.occurrencesList(word.id).map { it.toMergeOccurrence() },
+                        local = existingOccs.map { it.toMergeOccurrence() },
+                        remote = unownedOccs.map { it.toMergeOccurrence() },
                     )
+                    val localBookByKey = buildMap {
+                        for (o in unownedOccs) {
+                            if (o.bookUrl.isNotEmpty()) put(o.occurrenceKey, o.bookUrl)
+                        }
+                        for (o in existingOccs) {
+                            if (o.bookUrl.isNotEmpty()) put(o.occurrenceKey, o.bookUrl)
+                        }
+                    }
                     val updated = existing.applyingMetadata(mergedMeta).withSearchText()
                     vocabularyDao.updateWord(updated)
-                    replaceOccurrences(existing.id, mergedOccs, emptyMap())
+                    replaceOccurrences(existing.id, mergedOccs, emptyMap(), localBookByKey)
 
                     val existingReviews = vocabularyDao.reviews(existing.id)
                     val existingSyncIds = existingReviews.mapNotNull { it.syncId }.toMutableSet()
@@ -628,7 +637,7 @@ class LiseurSyncVocabulary(
                 val currentSync = syncDao.word(peer, lang, norm)
                 val occs = resolveLocalOccurrences(word.id, currentSync, bookToWork, workToBook)
                 val meta = word.toMetadata()
-                val mergeOccs = occs.map { it.toMergeOccurrence() }.take(MAX_WIRE_OCCURRENCES)
+                val mergeOccs = occs.map { it.toMergeOccurrence() }
                 val fp = fingerprint(meta, mergeOccs)
 
                 if (currentSync != null && (fp == currentSync.ackedFingerprint || fp == currentSync.refusedFingerprint)) {
@@ -760,7 +769,7 @@ class LiseurSyncVocabulary(
         val current = vocabularyDao.occurrencesList(wordId)
         var changed = false
         for (occ in current) {
-            val resolvedWork = occ.workId ?: bookToWork[occ.bookUrl]
+            val resolvedWork = bookToWork[occ.bookUrl] ?: occ.workId
             if (resolvedWork == null) continue
             val targetKey = if (alreadySynced) {
                 occ.occurrenceKey

@@ -45,6 +45,9 @@ class RemoteRouter(
 
     suspend fun positionSync(): PositionSync? = kind()?.let(positions::get)
 
+    /** Whether the currently connected server supports Vocabulary Builder sync. */
+    suspend fun supportsVocabularySync(): Boolean = positionSync()?.supportsVocabularySync == true
+
     /** liseur-sync can identify a downloaded book by its bytes, regardless of origin. */
     suspend fun maySyncBrowseBook(): Boolean = kind() == ServerKind.LISEUR_SYNC
 

@@ -255,6 +255,25 @@ class VocabularyMergeTest {
     }
 
     @Test
+    fun `initial merge with null base honors newer cleared notes timestamp`() {
+        val local = WordMetadata(
+            word = "Ephemeral",
+            definition = "short-lived",
+            translationLanguage = null,
+            notes = "",
+            definitionEdited = false,
+            definitionUpdatedAt = 100L,
+            notesUpdatedAt = 300L,
+            addedAt = 50L,
+            baseline = null,
+        )
+        val remote = local.copy(notes = "old note", notesUpdatedAt = 100L)
+        val merged = VocabularyMerge.mergeWordMetadata(base = null, local = local, remote = remote)
+        assertEquals("", merged.notes)
+        assertEquals(300L, merged.notesUpdatedAt)
+    }
+
+    @Test
     fun `reconcileSchedule folds offline reviews deterministically and respects baseline`() {
         val reviews = listOf(
             ReviewEvent("r2", "EASY", reviewedAt = 2_000L, intervalMinutes = 0, dueAt = 0),

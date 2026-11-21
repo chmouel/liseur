@@ -217,6 +217,13 @@ object VocabularyMerge {
                 return remote.notes to maxOf(local.notesUpdatedAt, remote.notesUpdatedAt)
             }
         } else {
+            if (local.notesUpdatedAt != remote.notesUpdatedAt) {
+                return if (local.notesUpdatedAt > remote.notesUpdatedAt) {
+                    local.notes to local.notesUpdatedAt
+                } else {
+                    remote.notes to remote.notesUpdatedAt
+                }
+            }
             if (local.notes.isBlank() && remote.notes.isNotBlank()) return remote.notes to remote.notesUpdatedAt
             if (remote.notes.isBlank() && local.notes.isNotBlank()) return local.notes to local.notesUpdatedAt
         }
