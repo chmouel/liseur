@@ -209,16 +209,16 @@ class BookOrbitIncomingAnchorTest {
     }
 
     @Test
-    fun `element cfi skips hidden subtrees without joining their text to the visible word`() {
+    fun `element cfi skips non-rendered SVG metadata without joining it to the visible word`() {
         val doc = DocumentBuilderFactory.newInstance().apply {
             isNamespaceAware = true
         }.newDocumentBuilder().parse(InputSource(StringReader(
-            """<html xmlns="http://www.w3.org/1999/xhtml"><head/><body><a id="mark"/><p hidden="hidden">Hidden</p><svg xmlns="http://www.w3.org/2000/svg"><defs><text>Metadata</text></defs></svg><p><script>prefix</script>Open<i>ing</i><span hidden="hidden">suffix</span> sentence.</p></body></html>""",
+            """<html xmlns="http://www.w3.org/1999/xhtml"><head/><body><a id="mark"/><svg xmlns="http://www.w3.org/2000/svg"><defs><text>Metadata</text></defs></svg><p><svg xmlns="http://www.w3.org/2000/svg"><title>prefix</title></svg>Open<i>ing</i><svg xmlns="http://www.w3.org/2000/svg"><desc>suffix</desc></svg> sentence.</p></body></html>""",
         )))
         val target = BookOrbitIncomingAnchor.resolve(
             "epubcfi(/6[reading-order]/2[ref-one]!/4/2[mark])", publication, doc,
         )!!
-        assertEquals("body > p:nth-of-type(2)", target.anchor.cssSelector)
+        assertEquals("body > p:nth-of-type(1)", target.anchor.cssSelector)
         assertEquals("Opening", target.anchor.highlight)
         assertEquals("prefix", target.anchor.before)
         assertEquals("suffix sentence.", target.anchor.after)
@@ -283,25 +283,38 @@ class BookOrbitIncomingAnchorTest {
     }
 
     @Test
-    fun `element cfis skip inline display none according to declaration order and priority`() {
-        for ((style, expected) in listOf(
-            "display:none" to "Visible",
-            "color:red; DISPLAY: none ! important;" to "Visible",
-            "display:none;display:block" to "Hidden",
-            "display:none!important;display:block" to "Visible",
-            "display:none!important;display:block!important" to "Hidden",
-            "background:url('data:;display:none;');display:block" to "Hidden",
+    fun `rendering attributes cannot skip the authored CFI target before WebView verification`() {
+        for (attributes in listOf(
+            "hidden=\"hidden\"",
+            "hidden=\"hidden\" style=\"display:block\"",
+            "style=\"display:none\"",
         )) {
             val doc = DocumentBuilderFactory.newInstance().apply {
                 isNamespaceAware = true
             }.newDocumentBuilder().parse(InputSource(StringReader(
-                """<html xmlns="http://www.w3.org/1999/xhtml"><head/><body><a id="mark"/><p style="$style">Hidden</p><p>Visible text.</p></body></html>""",
+                """<html xmlns="http://www.w3.org/1999/xhtml"><head><style>#requested { display:block!important; }</style></head><body><a id="mark"/><p id="requested" $attributes>Requested</p><p>Later passage.</p></body></html>""",
             )))
             val target = BookOrbitIncomingAnchor.resolve(
                 "epubcfi(/6[reading-order]/2[ref-one]!/4/2[mark])", publication, doc,
             )!!
-            assertEquals(style, expected, target.anchor.highlight)
+            assertEquals(attributes, "Requested", target.anchor.highlight)
+            assertEquals("body > p:nth-of-type(1)", target.anchor.cssSelector)
         }
+    }
+
+    @Test
+    fun `SVG text remains a candidate while SVG metadata is skipped`() {
+        val doc = DocumentBuilderFactory.newInstance().apply {
+            isNamespaceAware = true
+        }.newDocumentBuilder().parse(InputSource(StringReader(
+            """<html xmlns="http://www.w3.org/1999/xhtml"><head/><body><svg xmlns="http://www.w3.org/2000/svg"><title>Metadata</title><text>Requested</text></svg><p>Later passage.</p></body></html>""",
+        )))
+        val target = BookOrbitIncomingAnchor.resolve(
+            "epubcfi(/6[reading-order]/2[ref-one]!/4/2)", publication, doc,
+        )!!
+        assertEquals("body > svg:nth-of-type(1)", target.anchor.cssSelector)
+        assertEquals("Metadata", target.anchor.before)
+        assertEquals("Requested", target.anchor.highlight)
     }
 
     @Test

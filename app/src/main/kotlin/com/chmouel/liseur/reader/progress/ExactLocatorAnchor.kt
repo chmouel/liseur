@@ -31,15 +31,20 @@ object ExactLocatorAnchor {
     internal val BLOCK_TAGS = setOf(
         "p", "li", "blockquote", "pre", "td", "th", "figcaption",
         "h1", "h2", "h3", "h4", "h5", "h6", "div",
-        "section", "article", "dl", "dt", "dd",
+        "section", "article", "dl", "dt", "dd", "svg",
     )
 
+    internal val SVG_NON_TEXT_TAGS = setOf("title", "desc", "defs", "metadata", "image")
+
     internal val PAINTED_SCRIPT = """
+        const nonTextSvg = new Set([${SVG_NON_TEXT_TAGS.joinToString(",") { "\"$it\"" }}]);
         const painted = element => {
           if (!element || getComputedStyle(element).visibility !== "visible") return false;
           while (element) {
             const style = getComputedStyle(element);
-            if (style.display === "none" || Number(style.opacity) === 0) return false;
+            if (style.display === "none" || Number(style.opacity) === 0 ||
+              element.namespaceURI === "http://www.w3.org/2000/svg" &&
+              nonTextSvg.has((element.localName || "").toLowerCase())) return false;
             element = element.parentElement;
           }
           return true;
