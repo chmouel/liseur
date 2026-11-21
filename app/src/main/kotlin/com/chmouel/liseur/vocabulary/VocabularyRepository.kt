@@ -290,7 +290,7 @@ internal class VocabularyRepository(
                     }
                 }
             }
-            if (droppedDeletedReview) {
+            if (droppedDeletedReview || acceptedReviews.isNotEmpty() || preparedWord.baselineDueAt != null) {
                 val storedWord = dao.word(id)
                 if (storedWord != null) {
                     val liveReviews = dao.reviews(id)

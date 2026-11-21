@@ -151,13 +151,9 @@ class LiseurSyncVocabulary(
                 }
             }
 
-            // Ensure every live review of this account has a stable syncId.
-            for (word in vocabularyDao.wordsForOwner(peer)) {
-                for (review in vocabularyDao.reviews(word.id)) {
-                    if (review.syncId == null) {
-                        vocabularyDao.updateReview(review.copy(syncId = UUID.randomUUID().toString()))
-                    }
-                }
+            // Ensure every live review of this account has a stable syncId without scanning every word.
+            for (review in vocabularyDao.reviewsWithoutSyncId(peer)) {
+                vocabularyDao.updateReview(review.copy(syncId = UUID.randomUUID().toString()))
             }
         }
         return ok
@@ -287,6 +283,7 @@ class LiseurSyncVocabulary(
                             rev = remote.rev,
                             generation = remote.generation,
                             seq = remote.seq,
+                            ackedFingerprint = if (sync.ackedFingerprint == VocabularyWordSync.FINGERPRINT_DELETED) "" else sync.ackedFingerprint,
                             pendingJson = null,
                             pendingRev = null,
                             pendingFingerprint = null,
@@ -305,6 +302,7 @@ class LiseurSyncVocabulary(
                             rev = remote.rev,
                             generation = remote.generation,
                             seq = remote.seq,
+                            ackedFingerprint = if (sync.ackedFingerprint == VocabularyWordSync.FINGERPRINT_DELETED) "" else sync.ackedFingerprint,
                             pendingJson = null,
                             pendingRev = null,
                             pendingFingerprint = null,
@@ -794,7 +792,7 @@ class LiseurSyncVocabulary(
             } else {
                 VocabularyMerge.canonicalOccurrenceKey(resolvedWork, occ.locationKey)
             }
-            val targetBookUrl = occ.bookUrl.ifEmpty { workToBook[resolvedWork].orEmpty() }
+            val targetBookUrl = workToBook[resolvedWork] ?: occ.bookUrl
             if (occ.workId == resolvedWork && occ.occurrenceKey == targetKey && occ.bookUrl == targetBookUrl) {
                 continue
             }
@@ -1065,9 +1063,9 @@ class LiseurSyncVocabulary(
         }
         for (o in occurrences) {
             val existing = existingByKey[o.occurrenceKey]
-            val bookUrl = localBookByKey[o.occurrenceKey]?.takeIf { it.isNotEmpty() }
+            val bookUrl = o.workId?.let { workToBook[it] }
+                ?: localBookByKey[o.occurrenceKey]?.takeIf { it.isNotEmpty() }
                 ?: existing?.bookUrl?.takeIf { it.isNotEmpty() }
-                ?: o.workId?.let { workToBook[it] }
                 ?: ""
             val desired = VocabularyOccurrence(
                 id = existing?.id ?: 0,
