@@ -146,14 +146,10 @@ class OpeningRestoration(
         const val DEFAULT_TIMEOUT_MS = 5_000L
 
         /**
-         * A cold open gets longer than an in-book jump to let the WebView
-         * finish applying the initial locator before the exact anchor is
-         * declared missing. The wall-clock cap is the real bound: thirty
-         * two-frame waits are about one second at 60Hz and two seconds at
-         * 30Hz, but a starved frame clock must not run into the fail-open
-         * deadline.
+         * How long cold-open anchor verification may poll, independent of
+         * display refresh rate, before leaving room for the fallback ahead of
+         * the fail-open deadline.
          */
-        const val EXACT_OPEN_VERIFY_ATTEMPTS = 30
         const val EXACT_OPEN_VERIFY_BUDGET_MS = 3_000L
 
         /**

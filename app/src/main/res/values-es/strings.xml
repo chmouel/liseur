@@ -358,6 +358,7 @@
     <string name="reader_sync_book_kept">Se mantuvo la posición de este dispositivo. Irá al servidor en la próxima sincronización.</string>
     <string name="reader_sync_book_title">Desde dónde leer</string>
     <string name="reader_bookorbit_choice_help">Este dispositivo y el servidor guardaron posiciones distintas. La página de fondo muestra la del servidor. Elige desde cuál seguir leyendo y el otro lado se actualizará. Cancelar te devuelve a la posición de este dispositivo sin cambiar nada.</string>
+    <string name="reader_bookorbit_take_only_help">Este dispositivo y el servidor guardaron posiciones distintas. La página de fondo muestra la del servidor. Quédatela para leer desde aquí, o cancela para volver a la posición de este dispositivo.</string>
     <string name="reader_bookorbit_take">Conservar la posición del servidor</string>
     <string name="reader_bookorbit_retry">Volver a enviar la posición de este dispositivo</string>
     <string name="reader_bookorbit_retry_help">Un envío anterior no se confirmó. La página de fondo muestra la posición del servidor. Consérvala o vuelve a enviar la de este dispositivo para reemplazarla. Cancelar te devuelve a la posición de este dispositivo y deja el envío pendiente.</string>

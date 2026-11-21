@@ -357,7 +357,7 @@ class ReaderActivity : FragmentActivity() {
                                     scrollMode,
                                     fontKey,
                                 ) {
-                                    if (s.bookOrbitChoicePending) s.initialLocator
+                                    if (s.bookOrbitChoicePending || s.bookOrbitFallback != null) s.initialLocator
                                     else viewModel.lastLocator ?: s.initialLocator
                                 }
                                 // Every move the reader is sent on, counted

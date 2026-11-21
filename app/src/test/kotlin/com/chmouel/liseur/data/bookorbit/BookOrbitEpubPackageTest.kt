@@ -283,6 +283,69 @@ class BookOrbitEpubPackageTest {
         }
     }
 
+    @Test
+    fun `loads spine xhtml with external doctype named entities and declared encodings`() {
+        val epub = zip(
+            "META-INF/container.xml" to container("OEBPS/content.opf"),
+            "OEBPS/content.opf" to
+                """<package xmlns="http://www.idpf.org/2007/opf" version="2.0">
+                   <manifest><item id="ch" href="Text/chapter.xhtml" media-type="application/xhtml+xml"/></manifest>
+                   <spine><itemref idref="ch"/></spine></package>""",
+            "OEBPS/Text/chapter.xhtml" to
+                """<?xml version="1.0" encoding="utf-8"?>
+                   <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+                   <html xmlns="http://www.w3.org/1999/xhtml">
+                     <body>
+                       <p title="A&mdash;B&QUOT;">Wait&mdash;no&nbsp;way &amp;nbsp; <![CDATA[&nbsp;]]> &LT;tag&GT;</p>
+                     </body>
+                   </html>""",
+        )
+        val parsed = BookOrbitEpubPackage.parse(epub)
+        val paragraph = requireNotNull(BookOrbitEpubPackage.spineDocument(epub, parsed, "OEBPS/Text/chapter.xhtml"))
+            .getElementsByTagNameNS("*", "p").item(0) as org.w3c.dom.Element
+        assertEquals("A\u2014B\"", paragraph.getAttribute("title"))
+        assertEquals("Wait\u2014no\u00A0way &nbsp; &nbsp; <tag>", paragraph.textContent)
+
+        val latin1 = """<?xml version="1.0" encoding="ISO-8859-1"?>
+            <html xmlns="http://www.w3.org/1999/xhtml"><body><p>café&nbsp;au&nbsp;lait</p></body></html>"""
+        assertEquals(
+            "café\u00A0au\u00A0lait",
+            BookOrbitEpubPackage.parseSpineXhtml(latin1.toByteArray(Charsets.ISO_8859_1))
+                .getElementsByTagNameNS("*", "p").item(0).textContent,
+        )
+        val utf16 = "\n<html xmlns=\"http://www.w3.org/1999/xhtml\"><body><p>Hi&mdash;there</p></body></html>"
+        assertEquals(
+            "Hi\u2014there",
+            BookOrbitEpubPackage.parseSpineXhtml(utf16.toByteArray(Charsets.UTF_16BE))
+                .getElementsByTagNameNS("*", "p").item(0).textContent,
+        )
+    }
+
+    @Test
+    fun `spine xhtml rejects dtd declarations and file doctypes`() {
+        val secret = folder.newFile("secret-spine.txt").apply { writeText("leaked") }
+        val forbidden = listOf(
+            """<!DOCTYPE html [<!ENTITY xxe SYSTEM "${secret.toURI()}">]>
+               <html xmlns="http://www.w3.org/1999/xhtml"><body><p>&xxe;</p></body></html>""",
+            """<!DOCTYPE html [<!ENTITY local "value">]>
+               <html xmlns="http://www.w3.org/1999/xhtml"><body><p>&local;</p></body></html>""",
+            """<!DOCTYPE html SYSTEM "${secret.toURI()}">
+               <html xmlns="http://www.w3.org/1999/xhtml"><body><p>text</p></body></html>""",
+            """<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "${secret.toURI()}">
+               <html xmlns="http://www.w3.org/1999/xhtml"><body><p>text</p></body></html>""",
+            """<!DOCTYPE svg>
+               <html xmlns="http://www.w3.org/1999/xhtml"><body><p>text</p></body></html>""",
+            """<html xmlns="http://www.w3.org/1999/xhtml"><body><p>&notanxhtmlentity;</p></body></html>""",
+        )
+        forbidden.forEach { xhtml ->
+            for (charset in listOf(Charsets.UTF_8, Charsets.UTF_16)) {
+                assertThrows(xhtml, BookOrbitEpubPackage.ParseException::class.java) {
+                    BookOrbitEpubPackage.parseSpineXhtml(xhtml.toByteArray(charset))
+                }
+            }
+        }
+    }
+
     private fun container(path: String) =
         """<container xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
            <rootfiles><rootfile full-path="$path" media-type="application/oebps-package+xml"/></rootfiles>

@@ -2302,8 +2302,9 @@ KOReader surfaces (see
 - Remote places found while the book is closed are adopted after close,
   behind a fresh GET and a transaction that rechecks account, binding,
   agreement, and the exact local revision and locator. First-time
-  conflicts use a reader-verified choice applied in the open reader while
-  its position writes are paused (`OpenBooks.whileHeld`).
+  conflicts use a reader-verified choice in the open reader while position
+  writes are paused (`OpenBooks.whileHeld`), offering only the server's
+  verified place when the local place has no verified CFI.
   `BookOrbitPositionSync` walks at most 20 bindings per call over a
   persisted traversal (schema 58); its generic choice methods stay
   disabled.
@@ -2409,11 +2410,14 @@ Checked against v3.0.0 (`ghcr.io/bookorbit/bookorbit:3.0.0`).
 
 ### CFI bridge rules
 
-- `BookOrbitEpubPackage` reads `container.xml` and the OPF through the zip
-  central directory, each capped at 4 MiB. It keeps non-linear itemrefs
-  (they occupy CFI indices), drops remote manifest items, and refuses
-  duplicate ids, escaping paths, external identifiers and internal
-  subsets. `BookOrbitEpubInfoClient` compares package path and spine with
+- `BookOrbitEpubPackage` reads `container.xml`, the OPF, and spine XHTML
+  (`spineDocument`) through the zip central directory, each capped at
+  4 MiB. It keeps non-linear itemrefs (they occupy CFI indices), drops
+  remote manifest items, and refuses duplicate ids, escaping paths, and
+  internal DTD subsets. Package XML also refuses external DTD identifiers;
+  spine XHTML allows non-`file:` external `html` DOCTYPEs (resolved to an
+  empty stream) and decodes HTML named character entities before XML
+  parsing. `BookOrbitEpubInfoClient` compares package path and spine with
   the server's `/info` for the selected file.
 - `BookOrbitCfi` parses EPUB CFI 1.1 point and range CFIs, including
   foliate's side-biased text assertions; temporal and spatial offsets are

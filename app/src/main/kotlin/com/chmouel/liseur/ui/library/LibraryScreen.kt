@@ -350,11 +350,19 @@ fun LibraryScreen(
                     is SyncOutcome.Failure -> outcome.reason.messageRes()
                     null -> R.string.library_sync_failed
                 }
+                val failureReason = when (outcome) {
+                    is SyncOutcome.Partial -> outcome.reason
+                    is SyncOutcome.Failure -> outcome.reason
+                    else -> null
+                }
                 val needsAttention = outcome !is SyncOutcome.Success && outcome !is SyncOutcome.Incomplete &&
                     outcome !is SyncOutcome.NotApplicable
+                val offersSettings = needsAttention &&
+                    failureReason != SyncFailure.PositionUnresolved &&
+                    failureReason != SyncFailure.StatusUnresolved
                 val result = snackbarHost.showSnackbar(
                     message = resources.getString(message),
-                    actionLabel = if (needsAttention) resources.getString(R.string.settings) else null,
+                    actionLabel = if (offersSettings) resources.getString(R.string.settings) else null,
                     withDismissAction = needsAttention,
                 )
                 if (result == SnackbarResult.ActionPerformed) onConnectServer()

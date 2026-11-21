@@ -418,6 +418,18 @@ class BookOrbitPositionSyncTest {
     }
 
     @Test
+    fun `automatic position sync leaves an unread reset for status sync`(): Unit = runBlocking {
+        saveExact("epubcfi(/6/4!/4/2:3)")
+        com.chmouel.liseur.data.library.FinishedState(database.bookDao(), database.readingProgressDao())
+            .setFinished(bookUrl, false)
+
+        val sync = provider(accountSync = true, automaticPush = true)
+        assertEquals(SyncOutcome.NotApplicable, sync.syncAll())
+        assertEquals(SyncOutcome.NotApplicable, sync.syncBook(bookUrl))
+        assertEquals(0, web.requestCount)
+    }
+
+    @Test
     fun `automatic second page pushes after first page conflict across database reopen`(): Unit = runBlocking {
         val cfi = "epubcfi(/6/4!/4/2:3)"
         saveExact(cfi)

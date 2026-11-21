@@ -50,10 +50,11 @@ data class BookOrbitConflictPreview internal constructor(
     val localRevision: Long,
     val localLocator: String,
     val localProgression: Double?,
-    val localCfi: String,
+    val localCfi: String?,
     internal val baseline: BookOrbitPositionAgreement,
 ) {
     val retryRequired: Boolean get() = baseline.outgoingBytes != null
+    val canKeepLocal: Boolean get() = localCfi != null
 }
 
 sealed interface BookOrbitReadBack {
@@ -99,15 +100,20 @@ class BookOrbitPositionAgreementRepository(
             val local = database.readingProgressDao().get(context.bookUrl)
                 ?: return@withTransaction null
             val verified = database.bookOrbitLocalCfiDao().get(context.request.accountKey, context.bookUrl)
-                ?: return@withTransaction null
+                ?.takeIf {
+                    it.bookId == context.bookId && it.fileId == context.fileId &&
+                        it.bindingRevision == context.bindingRevision &&
+                        it.localRevision == local.positionRevision &&
+                        it.locatorJson == local.locatorJson
+                }
             if (!row.canChoose() ||
+                !local.hasSavedPlace ||
+                local.locatorJson == ReadingProgress.EMPTY_LOCATOR &&
+                    local.override == FinishedOverride.UNREAD && local.totalProgression == 0.0 ||
                 local.ownerAccount != null && local.ownerAccount != context.request.accountKey ||
-                verified.bookId != context.bookId || verified.fileId != context.fileId ||
-                verified.bindingRevision != context.bindingRevision ||
-                verified.localRevision != local.positionRevision ||
-                verified.locatorJson != local.locatorJson ||
+                (verified == null && (!remote.isSaved || remote.cfi == null)) ||
                 (row.outgoingBytes == null &&
-                    (!remote.isSaved || remote.cfi == null || remote.cfi == verified.rawCfi))
+                    (!remote.isSaved || remote.cfi == null || remote.cfi == verified?.rawCfi))
             ) return@withTransaction null
             val observed = row.copy(
                 candidateCfi = remote.cfi, candidatePercentage = remote.percentage,
@@ -116,7 +122,7 @@ class BookOrbitPositionAgreementRepository(
             dao.write(observed)
             BookOrbitConflictPreview(
                 context, remote, local.positionRevision, local.locatorJson,
-                local.totalProgression, verified.rawCfi, observed,
+                local.totalProgression, verified?.rawCfi, observed,
             )
         }
     }
@@ -151,6 +157,7 @@ class BookOrbitPositionAgreementRepository(
                 val row = current(context)
                 val local = database.readingProgressDao().get(context.bookUrl)
                     ?: throw BookOrbitPositionUnresolved()
+                val expectedLocalCfi = preview.localCfi ?: throw BookOrbitPositionUnresolved()
                 val verified = database.bookOrbitLocalCfiDao().get(context.request.accountKey, context.bookUrl)
                 if (!row.canChoose() ||
                     !row.matchesChoiceBaseline(preview.baseline) ||
@@ -163,7 +170,7 @@ class BookOrbitPositionAgreementRepository(
                     verified.bindingRevision != context.bindingRevision ||
                     verified.localRevision != preview.localRevision ||
                     verified.locatorJson != preview.localLocator ||
-                    verified.rawCfi != preview.localCfi ||
+                    verified.rawCfi != expectedLocalCfi ||
                     (!preview.retryRequired &&
                         (!fresh.isSaved || fresh.cfi == null || fresh.cfi == verified.rawCfi))
                 ) throw BookOrbitPositionUnresolved()
@@ -263,18 +270,17 @@ class BookOrbitPositionAgreementRepository(
                 return@withTransaction null
             if (local?.override == FinishedOverride.UNREAD && local.totalProgression == 0.0)
                 return@withTransaction null
-            val noPlace = local?.locatorJson == null && local?.totalProgression == null
-            val eligible = when {
-                noPlace -> true
-                local == null -> false
-                row.agreedRemoteSaved != null ->
-                    local.positionRevision == row.agreedLocalRevision &&
-                        local.locatorJson == row.agreedLocatorJson &&
-                        !(row.agreedRemoteSaved == true && row.agreedRemoteCfi == null &&
-                            row.agreedRemotePercentage == remote.percentage)
-                else ->
-                    database.bookOrbitLocalCfiDao().get(context.request.accountKey, context.bookUrl) == null &&
-                        (local.totalProgression ?: 0.0) + EPSILON < progression
+            val noPlace = local == null || !local.hasSavedPlace
+            val eligible = if (local == null || noPlace) {
+                true
+            } else if (row.agreedRemoteSaved != null) {
+                local.positionRevision == row.agreedLocalRevision &&
+                    local.locatorJson == row.agreedLocatorJson &&
+                    !(row.agreedRemoteSaved == true && row.agreedRemoteCfi == null &&
+                        row.agreedRemotePercentage == remote.percentage)
+            } else {
+                database.bookOrbitLocalCfiDao().get(context.request.accountKey, context.bookUrl) == null &&
+                    (local.totalProgression ?: 0.0) + EPSILON < progression
             }
             if (!eligible) return@withTransaction null
             val observed = row.copy(
@@ -373,7 +379,7 @@ class BookOrbitPositionAgreementRepository(
             ) return@withTransaction null
             BookOrbitApproximateOffer(
                 context, remote, progression,
-                replacesLocalPlace = local.locatorJson != null || local.totalProgression != null,
+                replacesLocalPlace = local.hasSavedPlace,
                 local.positionRevision, local.locatorJson, row,
             )
         }
@@ -435,13 +441,12 @@ class BookOrbitPositionAgreementRepository(
                             !row.matchesCandidate(fresh) ||
                             local.totalProgression != preview.localProgression ||
                             database.bookOrbitLocalCfiDao().get(context.request.accountKey, context.bookUrl)
-                                ?.let {
+                                ?.takeIf {
                                     it.bookId == context.bookId && it.fileId == context.fileId &&
                                         it.bindingRevision == context.bindingRevision &&
                                         it.localRevision == preview.localRevision &&
-                                        it.locatorJson == preview.localLocator &&
-                                        it.rawCfi == preview.localCfi
-                                } != true
+                                        it.locatorJson == preview.localLocator
+                                }?.rawCfi != preview.localCfi
                     ))
                 ) return@withTransaction false
                 val changed = database.readingProgressDao().adoptBookOrbitPosition(

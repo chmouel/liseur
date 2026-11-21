@@ -46,6 +46,7 @@ internal class BookOrbitOpening {
     fun choose(preview: BookOrbitConflictPreview, takeRemote: Boolean): Boolean {
         if (choice?.first != preview ||
             (takeRemote && choice?.second == null) ||
+            (!takeRemote && !preview.canKeepLocal) ||
             (choice?.second == null && !preview.retryRequired) ||
             (choice?.second != null && verifiedEpub == null)
         ) return false

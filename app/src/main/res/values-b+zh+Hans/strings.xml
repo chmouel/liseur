@@ -469,6 +469,7 @@
     <string name="reader_sync_book_kept">已保留本设备的进度，将在下次同步时上传到服务器。</string>
     <string name="reader_sync_book_title">从哪里继续阅读</string>
     <string name="reader_bookorbit_choice_help">本设备与服务器保存的位置不同。后面的页面显示的是服务器上的位置。选择要继续阅读的位置，另一侧会被更新。取消则回到本设备的位置，不做任何更改。</string>
+    <string name="reader_bookorbit_take_only_help">本设备与服务器保存的位置不同。后面的页面显示的是服务器上的位置。保留该位置可从此处阅读，取消则回到本设备的位置。</string>
     <string name="reader_bookorbit_take">保留服务器的位置</string>
     <string name="reader_bookorbit_retry">再次发送本设备的位置</string>
     <string name="reader_bookorbit_retry_help">之前的发送未获确认。后面的页面显示的是服务器上的位置。保留它，或再次发送本设备的位置来替换它。取消则回到本设备的位置，发送仍处于未解决状态。</string>
