@@ -430,6 +430,30 @@ class BookOrbitPositionSyncTest {
     }
 
     @Test
+    fun `status choices after an unread reset sync without touching file progress`(): Unit = runBlocking {
+        val finished = com.chmouel.liseur.data.library.FinishedState(database.bookDao(), database.readingProgressDao())
+        for ((choice, remoteStatus) in listOf(
+            com.chmouel.liseur.domain.ReadingStatusChoice.FINISHED to "read",
+            com.chmouel.liseur.domain.ReadingStatusChoice.PAUSED to "on_hold",
+        )) {
+            saveExact("epubcfi(/6/4!/4/2:3)")
+            finished.setFinished(bookUrl, false)
+            finished.setReadingChoice(bookUrl, choice)
+            web.enqueue(MockResponse(body = """{"id":12,"readStatus":{"status":"reading","source":"auto"}}"""))
+            web.enqueue(MockResponse(code = 204))
+            web.enqueue(MockResponse(body = """{"id":12,"readStatus":{"status":"$remoteStatus","source":"manual"}}"""))
+
+            assertEquals(SyncOutcome.Success,
+                provider(accountSync = true, automaticPush = true, syncStatuses = true).syncBook(bookUrl))
+            val requests = (1..3).map { web.takeRequest() }
+            assertEquals(listOf("GET", "PATCH", "GET"), requests.map { it.method })
+            assertEquals(listOf("/api/v1/books/12", "/api/v1/books/12/status", "/api/v1/books/12"),
+                requests.map { it.url.encodedPath })
+            assertEquals("{}", database.readingProgressDao().get(bookUrl)!!.locatorJson)
+        }
+    }
+
+    @Test
     fun `automatic second page pushes after first page conflict across database reopen`(): Unit = runBlocking {
         val cfi = "epubcfi(/6/4!/4/2:3)"
         saveExact(cfi)
