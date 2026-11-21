@@ -63,7 +63,9 @@ internal object BookOrbitIncomingAnchor {
         val word = Regex("[^\\s\\p{Z}]+").findAll(text.substring(run))
             .firstOrNull { it.range.last + run.first >= offset }
             ?: return null
-        val wordStart = run.first + word.range.first
+        val wordStart = (run.first + word.range.first).let {
+            if (node.nodeType == Node.ELEMENT_NODE) maxOf(it, offset) else it
+        }
         val wordEnd = run.first + word.range.last + 1
         val sliceStart = if (word.value.codePointCount(0, word.value.length) <= 64) {
             wordStart

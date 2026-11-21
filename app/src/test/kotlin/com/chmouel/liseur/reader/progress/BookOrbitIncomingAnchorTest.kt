@@ -245,6 +245,27 @@ class BookOrbitIncomingAnchorTest {
     }
 
     @Test
+    fun `element cfis never include text preceding the requested inline element`() {
+        for ((paragraph, step) in listOf(
+            "Previous<a id=\"mark\"/>Current sentence." to "mark",
+            "Previous<em id=\"mark\">Current</em> sentence." to "mark",
+            "<em id=\"mark\">Previous</em>Current sentence." to "mark;s=a",
+        )) {
+            val doc = DocumentBuilderFactory.newInstance().apply {
+                isNamespaceAware = true
+            }.newDocumentBuilder().parse(InputSource(StringReader(
+                """<html xmlns="http://www.w3.org/1999/xhtml"><head/><body><p>$paragraph</p></body></html>""",
+            )))
+            val target = BookOrbitIncomingAnchor.resolve(
+                "epubcfi(/6[reading-order]/2[ref-one]!/4/2/2[$step])", publication, doc,
+            )!!
+            assertEquals("Previous", target.anchor.before)
+            assertEquals("Current", target.anchor.highlight)
+            assertEquals(" sentence.", target.anchor.after)
+        }
+    }
+
+    @Test
     fun `incoming direct section text has no context from the preceding paragraph`() {
         for (tag in listOf("section", "article", "dl", "dt", "dd")) {
             val doc = DocumentBuilderFactory.newInstance().apply {
