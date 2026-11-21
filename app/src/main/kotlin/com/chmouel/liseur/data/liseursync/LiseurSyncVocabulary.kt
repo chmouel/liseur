@@ -381,10 +381,15 @@ class LiseurSyncVocabulary(
                     reconcileIds += wordId
                 } else {
                     wordId = local.id
-                    val confirmedBase = if (sync != null && sync.syncedWordId == local.id) {
-                        parseBaseJson(sync.ackedBaseJson)
-                    } else {
-                        null
+                    val echoOfLostPending = sync != null &&
+                        sync.pendingIntent == VocabularyWordSync.INTENT_UPSERT &&
+                        sync.pendingWordId == local.id &&
+                        sync.pendingFingerprint == remoteFp &&
+                        remote.rev == (sync.pendingRev ?: 0L) + 1L
+                    val confirmedBase = when {
+                        echoOfLostPending -> parseBaseJson(sync!!.pendingBaseJson)
+                        sync != null && sync.syncedWordId == local.id -> parseBaseJson(sync.ackedBaseJson)
+                        else -> null
                     }
                     val localOccs = vocabularyDao.occurrencesList(wordId)
                     val mergedMeta = VocabularyMerge.mergeWordMetadata(
