@@ -498,6 +498,7 @@
     <string name="kosync_stranded">Spárováno jako %1$s s %2$s, ale nepoužívá se: tento server si pozice ukládá sám. Odpoj párování nebo jej připoj k vlastnímu katalogu OPDS.</string>
     <string name="kosync_disconnect">Odpojit synchronizaci KOReader</string>
     <string name="kosync_error_credentials">Synchronizační server odmítl uživatelské jméno nebo heslo.</string>
+    <string name="kosync_error_account_exists">Tento účet už na synchronizačním serveru existuje. Pro přihlášení vypněte vytvoření účtu, nebo zvolte jiné uživatelské jméno.</string>
     <string name="kosync_error_not_kosync">Na této adrese neodpovídá synchronizační server KOReader. Zkontroluj adresu včetně případné cesty.</string>
     <string name="server_sync_moved_both">Pozice čtení při poslední synchronizaci: přijato %1$d, odesláno %2$d</string>
     <plurals name="server_sync_pulled">

@@ -453,12 +453,22 @@ class CustomConnectionTest {
         assertNull(db.kosyncPeerDao().get())
     }
 
+    @Test
+    fun `standalone custom setup forwards registration request to kosync pairing`() = runTest {
+        val result = connect(catalog = "", kosyncUrl = SYNC, kosyncRegister = true)
+
+        assertTrue(result.connected)
+        assertEquals(true, lastKosyncRegister)
+        assertEquals(SYNC, db.kosyncPeerDao().get()?.baseUrl)
+    }
+
     private suspend fun connect(
         catalog: String,
         kosyncUrl: String,
         username: String = "",
         password: String = "",
         kosyncUsername: String = "ada",
+        kosyncRegister: Boolean = false,
         speaksForKosync: Boolean = true,
     ) = account.connectCustom(
         catalogUrl = catalog,
@@ -467,14 +477,23 @@ class CustomConnectionTest {
         kosyncUrl = kosyncUrl,
         kosyncUsername = kosyncUsername,
         kosyncPassword = "pw",
+        kosyncRegister = kosyncRegister,
         speaksForKosync = speaksForKosync,
     )
+
+    private var lastKosyncRegister: Boolean? = null
 
     /** A kosync server that agrees, or refuses, on command. */
     private inner class ScriptedPairing : KosyncPairing {
         private val real = KosyncAccountRepository(db.kosyncPeerDao(), db.syncPeerStateDao())
 
-        override suspend fun verify(url: String, username: String, password: String): KosyncProbe {
+        override suspend fun verify(
+            url: String,
+            username: String,
+            password: String,
+            register: Boolean,
+        ): KosyncProbe {
+            lastKosyncRegister = register
             kosyncAnswer?.let { return KosyncProbe.Failure(it) }
             return KosyncProbe.Proved(
                 ProvedKosyncPairing(

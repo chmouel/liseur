@@ -49,7 +49,12 @@ sealed interface KosyncProbe {
 interface KosyncPairing {
 
     /** Asks the server, and keeps nothing. */
-    suspend fun verify(url: String, username: String, password: String): KosyncProbe
+    suspend fun verify(
+        url: String,
+        username: String,
+        password: String,
+        register: Boolean = false,
+    ): KosyncProbe
 
     /** Writes down a pairing [verify] already proved. */
     suspend fun adopt(pairing: ProvedKosyncPairing)
@@ -59,8 +64,12 @@ interface KosyncPairing {
 
     /** For tests, and for a build with no pairing wired up. */
     object None : KosyncPairing {
-        override suspend fun verify(url: String, username: String, password: String) =
-            KosyncProbe.Failure(SetupFailure.WrongServer)
+        override suspend fun verify(
+            url: String,
+            username: String,
+            password: String,
+            register: Boolean,
+        ) = KosyncProbe.Failure(SetupFailure.WrongServer)
 
         override suspend fun adopt(pairing: ProvedKosyncPairing) = Unit
 
@@ -118,43 +127,41 @@ class KosyncAccountRepository(
         username: String,
         password: String,
         register: Boolean = false,
-    ): KosyncSetupOutcome {
-        val root = normalise(url) ?: return KosyncSetupOutcome.Failure(SetupFailure.WrongServer)
-        val login = username.trim()
-        if (login.isEmpty() || password.isEmpty()) {
-            return KosyncSetupOutcome.Failure(SetupFailure.BadCredentials)
-        }
-
-        if (register) {
-            // Registering is the one call that carries the password as
-            // typed rather than the derived key. It does not go out in
-            // the clear.
-            if (root.startsWith("http://")) {
-                return KosyncSetupOutcome.Failure(SetupFailure.InsecureTransport)
-            }
-            when (val created = client.register(root, login, password)) {
-                is RemoteResult.Ok -> Unit
-                is RemoteResult.Failed -> return KosyncSetupOutcome.Failure(setupReason(created.reason))
-            }
-        }
-        return when (val probe = prove(root, login, password)) {
-            is KosyncProbe.Failure -> KosyncSetupOutcome.Failure(probe.reason)
-            is KosyncProbe.Proved -> {
-                adopt(probe.pairing)
-                KosyncSetupOutcome.Success
-            }
+    ): KosyncSetupOutcome = when (val probe = verify(url, username, password, register)) {
+        is KosyncProbe.Failure -> KosyncSetupOutcome.Failure(probe.reason)
+        is KosyncProbe.Proved -> {
+            adopt(probe.pairing)
+            KosyncSetupOutcome.Success
         }
     }
+
     /**
      * Proves a pairing and keeps nothing, so a caller with a second
      * address to prove can find out about both before writing down
      * either.
      */
-    override suspend fun verify(url: String, username: String, password: String): KosyncProbe {
+    override suspend fun verify(
+        url: String,
+        username: String,
+        password: String,
+        register: Boolean,
+    ): KosyncProbe {
         val root = normalise(url) ?: return KosyncProbe.Failure(SetupFailure.WrongServer)
         val login = username.trim()
         if (login.isEmpty() || password.isEmpty()) {
             return KosyncProbe.Failure(SetupFailure.BadCredentials)
+        }
+        if (register) {
+            // Registering creates a reusable auth key on the server;
+            // keep it off plain HTTP so the credential does not leave
+            // in the clear.
+            if (root.startsWith("http://")) {
+                return KosyncProbe.Failure(SetupFailure.InsecureTransport)
+            }
+            when (val created = client.register(root, login, password)) {
+                is RemoteResult.Ok -> Unit
+                is RemoteResult.Failed -> return KosyncProbe.Failure(registerReason(created.reason))
+            }
         }
         return prove(root, login, password)
     }
@@ -260,6 +267,13 @@ class KosyncAccountRepository(
             .build()
             .toString()
             .trimEnd('/')
+    }
+
+    private fun registerReason(reason: SyncFailure): SetupFailure = when (reason) {
+        // koreader-sync-server and liseur-sync answer 402 when the username or
+        // pairing slot already exists; some third-party servers answer 409.
+        SyncFailure.ServerError(402), SyncFailure.ServerError(409) -> SetupFailure.AccountExists
+        else -> setupReason(reason)
     }
 
     private fun setupReason(reason: SyncFailure): SetupFailure = when (reason) {

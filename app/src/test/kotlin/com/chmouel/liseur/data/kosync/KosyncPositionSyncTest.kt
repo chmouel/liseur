@@ -34,6 +34,7 @@ import okhttp3.tls.HeldCertificate
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -330,6 +331,36 @@ class KosyncPositionSyncTest {
     }
 
     @Test
+    fun `a 404 on progress lookup means nothing saved yet and still pushes local reading`() = runTest {
+        pair()
+        db.bookDao().upsert(book())
+        record(progression = 0.4)
+        server.enqueue(MockResponse(code = 404, body = "Not Found"))
+        server.enqueue(json("""{"message":"Progress updated"}"""))
+
+        assertEquals(SyncOutcome.Success, sync().syncAll(null))
+
+        val sent = requests()
+        assertEquals(2, sent.size)
+        assertEquals("GET", sent[0].method)
+        assertEquals("PUT", sent[1].method)
+        assertEquals(0.4, JSONObject(sent[1].body!!.utf8()).getDouble("percentage"), 0.0)
+        assertEquals(1L, db.syncPeerStateDao().get(BOOK, peerKey())?.ackedRevision)
+    }
+
+    @Test
+    fun `a 404 on auth still reads as not found`() = runTest {
+        server.enqueue(MockResponse(code = 404, body = "Not Found"))
+
+        val result = KosyncClient().authorize(
+            "http://127.0.0.1:${server.port}",
+            KosyncCredentials("ada", KosyncCredentials.keyFor("pw")),
+        )
+
+        assertEquals(SyncFailure.NotFound, (result as RemoteResult.Failed).reason)
+    }
+
+    @Test
     fun `an agreed position is not pushed again`() = runTest {
         pair()
         db.bookDao().upsert(book())
@@ -562,7 +593,7 @@ class KosyncPositionSyncTest {
     }
 
     @Test
-    fun `registering sends the password as typed, then proves the key works`() = runTest {
+    fun `registering sends the derived key, then proves it works`() = runTest {
         val (https, client) = httpsServer()
         try {
             https.enqueue(MockResponse(code = 201, body = """{"username":"ada"}"""))
@@ -574,15 +605,44 @@ class KosyncPositionSyncTest {
                 register = true,
             )
             assertEquals(KosyncSetupOutcome.Success, outcome)
+            val expectedKey = KosyncCredentials.keyFor("raw-pairing-code")
             val create = https.takeRequest()
             assertTrue(create.target.endsWith("/users/create"))
             assertEquals(
-                "raw-pairing-code",
+                expectedKey,
                 JSONObject(create.body!!.utf8()).getString("password"),
             )
             val auth = https.takeRequest()
-            assertEquals(KosyncCredentials.keyFor("raw-pairing-code"), auth.headers["x-auth-key"])
+            assertEquals(expectedKey, auth.headers["x-auth-key"])
             assertEquals("ada", db.kosyncPeerDao().get()?.username)
+        } finally {
+            https.close()
+        }
+    }
+
+    @Test
+    fun `registering an existing account reports account exists`() = runTest {
+        val (https, client) = httpsServer()
+        try {
+            for (code in listOf(402, 409)) {
+                https.enqueue(MockResponse(code = code, body = """{"message":"Username is already registered."}"""))
+                val outcome = repository(client).connect(
+                    url = "https://localhost:${https.port}",
+                    username = "ada",
+                    password = "raw-pairing-code",
+                    register = true,
+                )
+                assertEquals(KosyncSetupOutcome.Failure(SetupFailure.AccountExists), outcome)
+            }
+            // 402 outside registration stays an unreachable server error, not AccountExists.
+            https.enqueue(MockResponse(code = 402))
+            val authOutcome = repository(client).connect(
+                url = "https://localhost:${https.port}",
+                username = "ada",
+                password = "raw-pairing-code",
+                register = false,
+            )
+            assertTrue(authOutcome is KosyncSetupOutcome.Failure && authOutcome.reason is SetupFailure.Unreachable)
         } finally {
             https.close()
         }
@@ -804,6 +864,79 @@ class KosyncPositionSyncTest {
         assertEquals(0.4, db.readingProgressDao().get(BOOK)?.totalProgression ?: 0.0, 0.0001)
     }
 
+    @Test
+    fun `standalone kosync canSync and previewBook accept sideloaded books and reject browse books`() = runTest {
+        pair()
+        val localUrl = file.toURI().toString()
+        val browseUrl = "opds://browse-server/book-9"
+        db.bookDao().upsert(
+            book(url = localUrl, remoteUuid = null, localUri = localUrl),
+        )
+        db.bookDao().upsert(
+            book(url = browseUrl, remoteUuid = "browse-9", localUri = localUrl)
+                .copy(browseServerId = 7L),
+        )
+        val standalone = sync(catalogUrl = null)
+
+        assertTrue(standalone.canSync(localUrl))
+        assertFalse(standalone.canSync(browseUrl))
+
+        server.enqueue(progress(0.55))
+        val ready = standalone.previewBook(localUrl) as PreviewOutcome.Ready
+        assertEquals(0.55, ready.preview.remote ?: 0.0, 0.0001)
+        assertEquals(PreviewOutcome.NotSynced, standalone.previewBook(browseUrl))
+    }
+
+    @Test
+    fun `keepLocalPosition does not recreate agreements when the pairing changed`() = runTest {
+        pair()
+        db.bookDao().upsert(book())
+        val key = peerKey()
+        db.syncPeerStateDao().persistPending(
+            bookUrl = BOOK,
+            peerId = key,
+            progression = 0.7,
+            status = "Reading",
+            remoteUpdatedAt = NOW,
+        )
+
+        var disconnected = false
+        val syncing = sync(
+            inTransaction = { work ->
+                if (!disconnected) {
+                    disconnected = true
+                    repository().disconnect()
+                }
+                db.withTransaction { work() }
+            },
+        )
+
+        val outcome = syncing.keepLocalPosition(BOOK)
+
+        assertEquals(ResolveOutcome.Superseded, outcome)
+        assertNull(db.syncPeerStateDao().get(BOOK, key))
+    }
+
+    @Test
+    fun `null device fields in progress JSON become null while null percentage stays malformed`() = runTest {
+        val client = KosyncClient()
+        val doc = "0123456789abcdef0123456789abcdef"
+        val creds = KosyncCredentials("ada", KosyncCredentials.keyFor("pw"))
+        val root = "http://127.0.0.1:${server.port}"
+
+        server.enqueue(
+            json("""{"document":"$doc","percentage":0.5,"device":null,"device_id":null,"timestamp":1700000000}"""),
+        )
+        val ok = client.getProgress(root, creds, doc) as RemoteResult.Ok
+        assertEquals(0.5, ok.value?.percentage ?: 0.0, 0.0001)
+        assertNull(ok.value?.device)
+        assertNull(ok.value?.deviceId)
+
+        server.enqueue(json("""{"document":"$doc","percentage":null}"""))
+        val failed = client.getProgress(root, creds, doc) as RemoteResult.Failed
+        assertEquals(SyncFailure.Malformed, failed.reason)
+    }
+
     // -- Helpers -----------------------------------------------------------
 
     private suspend fun pair(baseUrl: String = "http://127.0.0.1:${server.port}") {
@@ -823,6 +956,7 @@ class KosyncPositionSyncTest {
         online: Boolean = true,
         connectedKind: ServerKind? = ServerKind.CUSTOM,
         catalogUrl: String? = "https://books.example",
+        inTransaction: suspend (suspend () -> Unit) -> Unit = { work -> db.withTransaction { work() } },
     ): KosyncPositionSync {
         val context = ApplicationProvider.getApplicationContext<android.app.Application>()
         return KosyncPositionSync(
@@ -855,7 +989,7 @@ class KosyncPositionSyncTest {
             },
             networkAvailability = { online },
             now = { NOW },
-            inTransaction = { work -> db.withTransaction { work() } },
+            inTransaction = inTransaction,
         )
     }
 

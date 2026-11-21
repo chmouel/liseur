@@ -467,6 +467,7 @@
     <string name="kosync_stranded">Paired as %1$s with %2$s, but not in use: this server keeps your place itself. Disconnect the pairing, or connect it alongside a Custom catalog.</string>
     <string name="kosync_disconnect">Disconnect KOReader sync</string>
     <string name="kosync_error_credentials">That username or password was refused by the sync server.</string>
+    <string name="kosync_error_account_exists">That account already exists on the sync server. Turn off account creation to sign in, or choose another username.</string>
     <string name="kosync_error_not_kosync">No KOReader sync server answered at that address. Check the address, including the path it is served from.</string>
     <string name="server_sync_moved_both">Reading positions at last sync: %1$d received, %2$d sent</string>
     <plurals name="server_sync_pulled">

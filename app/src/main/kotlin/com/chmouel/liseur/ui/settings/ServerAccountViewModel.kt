@@ -55,6 +55,7 @@ internal fun SetupFailure.toUiError(): AccountError = when (this) {
     SetupFailure.InsufficientScopes -> AccountError.INSUFFICIENT_SCOPES
     SetupFailure.WrongServer -> AccountError.WRONG_SERVER
     SetupFailure.InsecureTransport -> AccountError.INSECURE_TRANSPORT
+    SetupFailure.AccountExists -> AccountError.ACCOUNT_EXISTS
     SetupFailure.RateLimited -> AccountError.RATE_LIMITED
     is SetupFailure.Unreachable ->
         if (httpMayWork) AccountError.UNREACHABLE_TRY_HTTP else AccountError.UNREACHABLE
@@ -75,6 +76,7 @@ enum class AccountError {
     UNREACHABLE_TRY_HTTP,
     INSECURE_TRANSPORT,
     INSUFFICIENT_SCOPES,
+    ACCOUNT_EXISTS,
     RATE_LIMITED,
 
     /** The phone is blocking the network the server lives on. */
@@ -386,7 +388,7 @@ class ServerAccountViewModel(
         _state.update {
             when (outcome) {
                 KosyncSetupOutcome.Success ->
-                    it.copy(kosyncConnecting = false, kosyncPassword = "")
+                    it.copy(kosyncConnecting = false, kosyncPassword = "", kosyncRegister = false)
                 is KosyncSetupOutcome.Failure ->
                     it.copy(kosyncConnecting = false, kosyncError = outcome.reason.toUiError())
             }
@@ -514,6 +516,7 @@ class ServerAccountViewModel(
                     password = "",
                     apiKey = "",
                     deviceToken = "",
+                    kosyncRegister = false,
                     editingAddress = false,
                 )
                 is SetupResult.Failure ->
@@ -567,6 +570,7 @@ class ServerAccountViewModel(
                 kosyncUrl = "",
                 kosyncUsername = "",
                 kosyncPassword = "",
+                kosyncRegister = false,
                 kosyncError = null,
             )
         }
@@ -584,6 +588,7 @@ class ServerAccountViewModel(
                 kosyncUrl = "",
                 kosyncUsername = "",
                 kosyncPassword = "",
+                kosyncRegister = false,
                 kosyncError = null,
             )
         }
@@ -836,6 +841,7 @@ class ServerAccountViewModel(
             kosyncUrl = current.kosyncUrl.trim(),
             kosyncUsername = current.kosyncUsername.trim(),
             kosyncPassword = current.kosyncPassword,
+            kosyncRegister = current.kosyncRegister,
             allowHttp = allowHttp,
             // Changing the catalog address says nothing about the sync
             // partner, which has its own card further down the screen.
@@ -856,6 +862,7 @@ class ServerAccountViewModel(
                     connecting = false,
                     password = "",
                     kosyncPassword = "",
+                    kosyncRegister = false,
                     error = null,
                     kosyncError = null,
                     editingAddress = false,

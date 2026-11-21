@@ -450,6 +450,7 @@
     <string name="kosync_stranded">Gekoppelt als %1$s mit %2$s, aber nicht in Gebrauch: dieser Server hält deine Stelle selbst. Trenne die Kopplung, oder verbinde sie neben einem benutzerdefinierten Katalog.</string>
     <string name="kosync_disconnect">KOReader-Sync trennen</string>
     <string name="kosync_error_credentials">Dieser Benutzername oder dieses Passwort wurde vom Sync-Server abgelehnt.</string>
+    <string name="kosync_error_account_exists">Dieses Konto existiert auf dem Sync-Server bereits. Deaktiviere die Kontoerstellung, um dich anzumelden, oder wähle einen anderen Benutzernamen.</string>
     <string name="kosync_error_not_kosync">Unter dieser Adresse hat kein KOReader-Sync-Server geantwortet. Prüfe die Adresse, einschließlich des Pfads, aus dem sie ausgeliefert wird.</string>
     <string name="server_sync_moved_both">Lesepositionen beim letzten Sync: %1$d empfangen, %2$d gesendet</string>
     <plurals name="server_sync_pulled">
