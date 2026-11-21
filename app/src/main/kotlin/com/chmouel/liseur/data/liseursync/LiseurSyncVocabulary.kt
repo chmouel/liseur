@@ -55,6 +55,7 @@ class LiseurSyncVocabulary(
 
         if (!stillOurs(server)) return false
 
+        var morePushWork = false
         try {
             // Two word push rounds let DELETE_THEN_RESURRECT retire the old
             // generation in round 1 and push the resurrection UPSERT in round 2.
@@ -64,6 +65,12 @@ class LiseurSyncVocabulary(
             }
             if (!stillOurs(server)) return false
             pushReviews(server, peer, credentials)
+            morePushWork = syncDao.allWords(peer).any { w ->
+                w.pendingJson != null ||
+                    w.lifecycle == VocabularyWordSync.LOCAL_DELETE_PENDING ||
+                    w.lifecycle == VocabularyWordSync.DELETE_THEN_RESURRECT ||
+                    w.lifecycle == VocabularyWordSync.RESURRECT_PENDING
+            }
         } catch (e: LiseurSyncRejection) {
             if (isUnsupported(e)) {
                 unsupported += server.baseUrl
@@ -71,7 +78,7 @@ class LiseurSyncVocabulary(
             }
             throw e
         }
-        return more
+        return more || morePushWork
     }
 
     /**
@@ -168,7 +175,7 @@ class LiseurSyncVocabulary(
         while (pages < MAX_PULL_PAGES) {
             if (!stillOurs(server)) return false
             val url = LiseurSyncApi.vocabularyChanges(server.baseUrl, cursor, PULL_PAGE_LIMIT)
-            val body = http.get(url, credentials)
+            val body = http.get(url, credentials, expected = setOf(LiseurSyncHttp.NOT_FOUND))
             val page = parseChangesPage(body)
             val workToBook = identities.aliasesFor(peer)
                 .filter { it.usable }
@@ -676,78 +683,83 @@ class LiseurSyncVocabulary(
         if (queued.isEmpty()) return false
 
         val url = LiseurSyncApi.pushVocabularyWords(server.baseUrl)
-        for (batch in chunkByCountAndBytes(queued, MAX_WORD_BATCH, MAX_BATCH_BYTES) { it.rawJson }) {
+        for (initialBatch in chunkByCountAndBytes(queued, MAX_WORD_BATCH, MAX_BATCH_BYTES) { it.rawJson }) {
             if (!stillOurs(server)) return false
-            val body = """{"words":[${batch.joinToString(",") { it.rawJson }}]}"""
-            val response = http.postRaw(url, credentials, body)
-            val results = response.optJSONArray("results") ?: continue
-
-            inTransaction {
-                if (!stillOurs(server)) return@inTransaction
-                val reconcileIds = mutableSetOf<Long>()
-                for (i in 0 until minOf(batch.size, results.length())) {
-                    val q = batch[i]
-                    val res = results.optJSONObject(i) ?: continue
-                    val status = res.optString("status")
-                    val sync = syncDao.word(peer, q.language, q.normalized) ?: continue
-                    when (status) {
-                        "applied", "duplicate" -> {
-                            val settled = VocabularyMerge.onPushWordAck(
-                                sync = sync,
-                                resRev = res.optLong("rev", sync.rev),
-                                resGeneration = res.optLong("generation", sync.generation),
-                                resSeq = res.optLong("seq", sync.seq),
-                            )
-                            syncDao.upsertWord(settled)
-                        }
-
-                        "conflict" -> {
-                            val cleared = sync.copy(
-                                pendingJson = null,
-                                pendingRev = null,
-                                pendingFingerprint = null,
-                                pendingBaseJson = null,
-                                pendingIntent = null,
-                                pendingWordId = null,
-                            )
-                            syncDao.upsertWord(cleared)
-                            val serverObj = res.optJSONObject("server")
-                            if (serverObj != null) {
-                                parseRemoteWord(serverObj)?.let { remote ->
-                                    applyRemoteWord(peer, remote, workToBook, reconcileIds)
-                                }
-                            } else {
-                                // Absent word on server: reset rev/generation so next pass creates cleanly.
-                                syncDao.upsertWord(
-                                    cleared.copy(
-                                        rev = 0,
-                                        generation = 0,
-                                        syncedWordId = null,
-                                        ackedFingerprint = "",
-                                        ackedBaseJson = null,
-                                    ),
+            sendSplitBatch(
+                server = server,
+                url = url,
+                credentials = credentials,
+                envelopeField = "words",
+                batch = initialBatch,
+                rawOf = { it.rawJson },
+            ) { subBatch, results ->
+                inTransaction {
+                    if (!stillOurs(server)) return@inTransaction
+                    val reconcileIds = mutableSetOf<Long>()
+                    for (i in 0 until minOf(subBatch.size, results.length())) {
+                        val q = subBatch[i]
+                        val res = results.optJSONObject(i) ?: continue
+                        val status = res.optString("status")
+                        val sync = syncDao.word(peer, q.language, q.normalized) ?: continue
+                        when (status) {
+                            "applied", "duplicate" -> {
+                                val settled = VocabularyMerge.onPushWordAck(
+                                    sync = sync,
+                                    resRev = res.optLong("rev", sync.rev),
+                                    resGeneration = res.optLong("generation", sync.generation),
+                                    resSeq = res.optLong("seq", sync.seq),
                                 )
+                                syncDao.upsertWord(settled)
                             }
-                        }
 
-                        else -> {
-                            syncDao.upsertWord(
-                                sync.copy(
+                            "conflict" -> {
+                                val cleared = sync.copy(
                                     pendingJson = null,
                                     pendingRev = null,
                                     pendingFingerprint = null,
                                     pendingBaseJson = null,
                                     pendingIntent = null,
                                     pendingWordId = null,
-                                    refusedFingerprint = sync.pendingFingerprint,
-                                    refusedReason = res.optString("reason").ifBlank { status },
-                                ),
-                            )
+                                )
+                                syncDao.upsertWord(cleared)
+                                val serverObj = res.optJSONObject("server")
+                                if (serverObj != null) {
+                                    parseRemoteWord(serverObj)?.let { remote ->
+                                        applyRemoteWord(peer, remote, workToBook, reconcileIds)
+                                    }
+                                } else {
+                                    // Absent word on server: reset rev/generation so next pass creates cleanly.
+                                    syncDao.upsertWord(
+                                        cleared.copy(
+                                            rev = 0,
+                                            generation = 0,
+                                            syncedWordId = null,
+                                            ackedFingerprint = "",
+                                            ackedBaseJson = null,
+                                        ),
+                                    )
+                                }
+                            }
+
+                            else -> {
+                                syncDao.upsertWord(
+                                    sync.copy(
+                                        pendingJson = null,
+                                        pendingRev = null,
+                                        pendingFingerprint = null,
+                                        pendingBaseJson = null,
+                                        pendingIntent = null,
+                                        pendingWordId = null,
+                                        refusedFingerprint = sync.pendingFingerprint,
+                                        refusedReason = res.optString("reason").ifBlank { status },
+                                    ),
+                                )
+                            }
                         }
                     }
-                }
-                for (wordId in reconcileIds) {
-                    reconcileWordSchedule(wordId)
+                    for (wordId in reconcileIds) {
+                        reconcileWordSchedule(wordId)
+                    }
                 }
             }
         }
@@ -896,54 +908,103 @@ class LiseurSyncVocabulary(
         if (queued.isEmpty()) return
 
         val url = LiseurSyncApi.pushVocabularyReviews(server.baseUrl)
-        for (batch in chunkByCountAndBytes(queued, MAX_REVIEW_BATCH, MAX_BATCH_BYTES) { it.rawJson }) {
+        for (initialBatch in chunkByCountAndBytes(queued, MAX_REVIEW_BATCH, MAX_BATCH_BYTES) { it.rawJson }) {
             if (!stillOurs(server)) return
-            val body = """{"reviews":[${batch.joinToString(",") { it.rawJson }}]}"""
-            val response = http.postRaw(url, credentials, body)
-            val results = response.optJSONArray("results") ?: continue
+            sendSplitBatch(
+                server = server,
+                url = url,
+                credentials = credentials,
+                envelopeField = "reviews",
+                batch = initialBatch,
+                rawOf = { it.rawJson },
+            ) { subBatch, results ->
+                inTransaction {
+                    if (!stillOurs(server)) return@inTransaction
+                    for (i in 0 until minOf(subBatch.size, results.length())) {
+                        val q = subBatch[i]
+                        val res = results.optJSONObject(i) ?: continue
+                        val status = res.optString("status")
+                        val rSync = syncDao.review(peer, q.reviewId) ?: continue
+                        when (status) {
+                            "applied", "duplicate" -> {
+                                syncDao.upsertReview(
+                                    if (q.sentDeleted) {
+                                        rSync.copy(
+                                            seq = res.optLong("seq", rSync.seq),
+                                            ackedDeleted = true,
+                                            pendingJson = null,
+                                            pendingDeleted = false,
+                                            refusedReason = null,
+                                        )
+                                    } else {
+                                        rSync.copy(
+                                            seq = res.optLong("seq", rSync.seq),
+                                            ackedDeleted = false,
+                                            pendingJson = null,
+                                            refusedReason = null,
+                                        )
+                                    },
+                                )
+                            }
 
-            inTransaction {
-                if (!stillOurs(server)) return@inTransaction
-                for (i in 0 until minOf(batch.size, results.length())) {
-                    val q = batch[i]
-                    val res = results.optJSONObject(i) ?: continue
-                    val status = res.optString("status")
-                    val rSync = syncDao.review(peer, q.reviewId) ?: continue
-                    when (status) {
-                        "applied", "duplicate" -> {
-                            syncDao.upsertReview(
-                                if (q.sentDeleted) {
+                            else -> {
+                                syncDao.upsertReview(
                                     rSync.copy(
-                                        seq = res.optLong("seq", rSync.seq),
-                                        ackedDeleted = true,
                                         pendingJson = null,
-                                        pendingDeleted = false,
-                                        refusedReason = null,
-                                    )
-                                } else {
-                                    rSync.copy(
-                                        seq = res.optLong("seq", rSync.seq),
-                                        ackedDeleted = false,
-                                        pendingJson = null,
-                                        refusedReason = null,
-                                    )
-                                },
-                            )
-                        }
-
-                        else -> {
-                            syncDao.upsertReview(
-                                rSync.copy(
-                                    pendingJson = null,
-                                    pendingDeleted = if (q.sentDeleted) false else rSync.pendingDeleted,
-                                    refusedReason = res.optString("reason").ifBlank { status },
-                                ),
-                            )
+                                        pendingDeleted = if (q.sentDeleted) false else rSync.pendingDeleted,
+                                        refusedReason = res.optString("reason").ifBlank { status },
+                                    ),
+                                )
+                            }
                         }
                     }
                 }
             }
         }
+    }
+
+    /**
+     * Posts [batch] verbatim and splits it in half if the server rejects it for
+     * size (HTTP 413 or HTTP 400 "batch too large"), preserving each item's
+     * stored wire bytes.
+     */
+    private suspend fun <T> sendSplitBatch(
+        server: RemoteServer,
+        url: String,
+        credentials: com.chmouel.liseur.data.remote.RemoteCredentials,
+        envelopeField: String,
+        batch: List<T>,
+        rawOf: (T) -> String,
+        onResults: suspend (List<T>, JSONArray) -> Unit,
+    ) {
+        if (batch.isEmpty() || !stillOurs(server)) return
+        val body = """{"$envelopeField":[${batch.joinToString(",") { rawOf(it) }}]}"""
+        val response = try {
+            http.postRaw(
+                url,
+                credentials,
+                body,
+                expected = setOf(
+                    LiseurSyncHttp.BAD_REQUEST,
+                    LiseurSyncHttp.TOO_LARGE,
+                    LiseurSyncHttp.NOT_FOUND,
+                ),
+            )
+        } catch (e: LiseurSyncRejection) {
+            val isBatchSizeRejection = e.code == LiseurSyncHttp.TOO_LARGE ||
+                (e.code == LiseurSyncHttp.BAD_REQUEST &&
+                    (e.errorCode == LiseurSyncRejection.BATCH_TOO_LARGE ||
+                        e.error?.contains("batch too large", ignoreCase = true) == true))
+            if (isBatchSizeRejection && batch.size > 1) {
+                val mid = batch.size / 2
+                sendSplitBatch(server, url, credentials, envelopeField, batch.subList(0, mid), rawOf, onResults)
+                sendSplitBatch(server, url, credentials, envelopeField, batch.subList(mid, batch.size), rawOf, onResults)
+                return
+            }
+            throw e
+        }
+        val results = response.optJSONArray("results") ?: return
+        onResults(batch, results)
     }
 
     // -- Schedule reconciliation & occurrence persistence ----------------

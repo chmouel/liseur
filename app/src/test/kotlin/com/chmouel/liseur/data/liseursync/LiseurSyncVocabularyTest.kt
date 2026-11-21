@@ -893,12 +893,25 @@ class LiseurSyncVocabularyTest {
         assertEquals("local-account-work-id", wireOcc.getString("work_id"))
     }
 
+    @Test
+    fun `splits word batch when server rejects with 400 batch too large`() = runTest {
+        fake.maxWordBatch = 2
+        for (i in 1..5) {
+            checkNotNull(repo.collect(VocabularyLookup("word$i", "en", null), "Def $i", null, now = 1_000L + i))
+        }
+
+        val more = sync.sync(account)
+        assertEquals(false, more)
+        assertEquals(5, fake.words.size)
+    }
+
     private class FakeVocabularyServer {
         val words = linkedMapOf<String, JSONObject>()
         val reviews = linkedMapOf<String, JSONObject>()
         var seq = 0L
         var wordPushCount = 0
         var reviewPushCount = 0
+        var maxWordBatch = 100
         var refuseNormalized: String? = null
         var customPages: List<JSONObject>? = null
         var onBeforeReviewPushResponse: ((JSONObject) -> Unit)? = null
@@ -967,6 +980,9 @@ class LiseurSyncVocabularyTest {
                         wordPushCount++
                         val body = JSONObject(request.body?.utf8().orEmpty())
                         val items = body.getJSONArray("words")
+                        if (items.length() > maxWordBatch) {
+                            return MockResponse(code = 400, body = """{"error":"batch too large"}""")
+                        }
                         val results = JSONArray()
                         for (i in 0 until items.length()) {
                             val item = items.getJSONObject(i)
