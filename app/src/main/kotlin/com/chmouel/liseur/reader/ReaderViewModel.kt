@@ -230,19 +230,35 @@ class ReaderViewModel(
     fun onBookOrbitOpeningVerified(locator: Locator) {
         // A choice being applied has already been verified and answered.
         if (bookOrbitOpening.chosen != null) return
+        val ready = _state.value as? UiState.Ready
         bookOrbitOpening.verify(
-            locator.toJSON().toString(), (_state.value as? UiState.Ready)?.openedBookOrbit,
+            locator.toJSON().toString(), ready?.openedBookOrbit,
         )?.let { preview ->
             _bookSync.value = bookOrbitChoice(preview, bookOrbitOpening.choice?.second)
         }
-        if (bookOrbitOpening.verifiedPull != null) verifiedOpeningSettlementPending = true
+        if (bookOrbitOpening.verifiedPull != null) {
+            verifiedOpeningSettlementPending = true
+            if (ready != null && ready.bookOrbitFallback != null && bookOrbitOpening.choice == null) {
+                _state.value = ready.copy(bookOrbitFallback = null)
+            }
+        }
     }
 
     fun onBookOrbitOpeningFailed() {
-        if (bookOrbitOpening.chosen != null) return
-        val retry = bookOrbitOpening.choice?.first?.takeIf { it.retryRequired }
+        if (bookOrbitOpening.chosen != null || bookOrbitOpening.verifiedPull != null ||
+            bookOrbitOpening.pull == null && bookOrbitOpening.choice == null
+        ) return
+        val wasFreshPull = bookOrbitOpening.pull?.fresh == true
+        val retry = bookOrbitOpening.choice?.first?.takeIf { it.retryRequired && it.canKeepLocal }
         bookOrbitOpening.failed()
         verifiedOpeningSettlementPending = false
+        (_state.value as? UiState.Ready)?.bookOrbitFallback?.let(::prepareLocator)?.let { fallback ->
+            lastLocator = fallback
+            _progress.value = progressAt(fallback)
+            if (wasFreshPull && positionSaveBaseline == null) {
+                updatePositionSaveBaseline(fallback)
+            }
+        }
         if (_bookSync.value == BookSync.Asking || _bookSync.value is BookSync.BookOrbitChoice) {
             _bookSync.value = BookSync.Idle
         }
@@ -255,8 +271,8 @@ class ReaderViewModel(
 
     private fun clearBookOrbitChoicePending() {
         val ready = _state.value as? UiState.Ready ?: return
-        if (ready.bookOrbitChoicePending) {
-            _state.value = ready.copy(bookOrbitChoicePending = false)
+        if (ready.bookOrbitChoicePending || ready.bookOrbitFallback != null) {
+            _state.value = ready.copy(bookOrbitChoicePending = false, bookOrbitFallback = null)
         }
     }
 
@@ -588,7 +604,11 @@ class ReaderViewModel(
             val canTakeRemote: Boolean,
             val here: SyncPoint,
             val there: SyncPoint,
-        ) : BookSync
+        ) : BookSync {
+            init {
+                require(canTakeRemote || preview.canKeepLocal)
+            }
+        }
 
         /** Nothing left to do: a message, and then out of the way. */
         data class Note(val messageRes: Int) : BookSync
@@ -999,7 +1019,10 @@ class ReaderViewModel(
      * reader is told it is already there, so arriving is not a page turn.
      */
     private fun returnToLocalPlace(preview: BookOrbitConflictPreview) {
-        val local = runCatching { Locator.fromJSON(JSONObject(preview.localLocator)) }.getOrNull() ?: return
+        val local = (_state.value as? UiState.Ready)?.bookOrbitFallback
+            ?: runCatching { Locator.fromJSON(JSONObject(preview.localLocator)) }.getOrNull()
+            ?: preview.localProgression?.let(::locatorAtOrBeforeProgression)
+            ?: return
         val target = prepareLocator(local)
         lastLocator = target
         updatePositionSaveBaseline(target)
@@ -1563,6 +1586,7 @@ class ReaderViewModel(
             var pullOffer: BookOrbitPullOffer? = null
             var choicePreview: BookOrbitConflictPreview? = null
             var approximate: BookOrbitApproximateOffer? = null
+            var remoteHadSavedPlace = false
             val incoming = if (
                 safeFallback != null && openedBookOrbit != null &&
                 bookOrbitProgress != null && bookOrbitCfis != null
@@ -1573,6 +1597,7 @@ class ReaderViewModel(
                             val context = openedBookOrbit.context
                             bookOrbitAgreement?.readBackIfPending(context)
                             val remote = bookOrbitProgress.read(context)
+                            remoteHadSavedPlace = remote.isSaved
                             val eligible = !freshBook && stored != null &&
                                 bookOrbitAgreement?.canOfferPull(context, remote) == true
                             if (!freshBook) bookOrbitAgreement?.observe(context, remote)
@@ -1683,10 +1708,14 @@ class ReaderViewModel(
             // the first page turn after the quote would agree a place the
             // reader never saw.
             if (lookTarget != null) approximateOpening = null
+            val unverifiedRemoteOpening = freshBook && stillCurrent && remoteHadSavedPlace &&
+                lookTarget == null && incoming == null && approximateTarget == null
+            val unverifiedStart = safeFallback?.takeIf { unverifiedRemoteOpening }?.let(::prepareLocator)
             val initialLocator = lookTarget
                 ?: incoming?.takeIf { stillCurrent }?.let(::prepareLocator)
                 ?: approximateTarget
                 ?: storedTarget
+                ?: unverifiedStart
             if (lookTarget != null && lookOrigin != null) _peek.value = SourcePeek(lookOrigin)
             val openingPull = pullOffer?.takeIf {
                 lookTarget == null && choicePreview == null && stillCurrent && incoming != null &&
@@ -1695,7 +1724,7 @@ class ReaderViewModel(
             val openingChoice = choicePreview?.takeIf { stillCurrent }?.let { preview ->
                 val checkedOffer = pullOffer?.takeIf { lookTarget == null && incoming != null && initialLocator != null }
                     ?.copy(locatorJson = checkNotNull(initialLocator).toJSON().toString())
-                if (checkedOffer != null || preview.retryRequired) preview to checkedOffer else null
+                if (checkedOffer != null || preview.retryRequired && preview.canKeepLocal) preview to checkedOffer else null
             }
             bookOrbitOpening.propose(openingPull, openingChoice)
             verifiedOpeningSettlementPending = false
@@ -1706,8 +1735,10 @@ class ReaderViewModel(
             }
             lastLocator = initialLocator
             // A BookOrbit place opened on is only proposed, not written,
-            // so going to it on purpose must still save it.
-            updatePositionSaveBaseline(storedTarget)
+            // so going to it on purpose must still save it. If a fresh
+            // book's server place could not be verified, keep the start
+            // of the book as the baseline so opening alone does not save 0%.
+            updatePositionSaveBaseline(unverifiedStart ?: storedTarget)
             val primaryAuthors = primaryEpubAuthors(publication)
             if (primaryAuthors != null) library.refreshAuthor(bookId, primaryAuthors, publication)
             library.markOpened(bookId)

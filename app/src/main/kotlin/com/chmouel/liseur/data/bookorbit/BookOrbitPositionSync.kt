@@ -3,6 +3,7 @@ package com.chmouel.liseur.data.bookorbit
 import androidx.room.withTransaction
 import com.chmouel.liseur.data.db.BookOrbitPositionTraversal
 import com.chmouel.liseur.data.db.LiseurDatabase
+import com.chmouel.liseur.data.db.ReadingProgress
 import com.chmouel.liseur.data.remote.PositionSync
 import com.chmouel.liseur.data.remote.PreviewOutcome
 import com.chmouel.liseur.data.remote.RemoteHttpFailure
@@ -215,8 +216,9 @@ class BookOrbitPositionSync(
     ): SyncOutcome = outcome {
         cfis.check(context)
         val position = database.readingProgressDao().get(context.bookUrl)
-        // Marking a book read or unread leaves a row with no place in it.
-        if (automaticPush && (position == null || position.locatorJson == NO_PLACE) &&
+        if (automaticPush && (position?.hasSavedPlace != true ||
+                position.locatorJson == ReadingProgress.EMPTY_LOCATOR &&
+                position.override == FinishedOverride.UNREAD && position.totalProgression == 0.0) &&
             database.bookOrbitPositionAgreementDao().get(context.request.accountKey, context.bookUrl)
                 ?.outgoingBytes == null
         ) return@outcome SyncOutcome.NotApplicable
@@ -297,6 +299,5 @@ class BookOrbitPositionSync(
     companion object {
         const val AUTOMATIC_SYNC_ENABLED = true
         internal const val PAGE_SIZE = 20
-        private const val NO_PLACE = "{}"
     }
 }

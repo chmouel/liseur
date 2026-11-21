@@ -403,6 +403,7 @@
     <string name="reader_sync_book_kept">Zachována pozice tohoto zařízení. Při příští synchronizaci se odešle na server.</string>
     <string name="reader_sync_book_title">Odkud pokračovat ve čtení</string>
     <string name="reader_bookorbit_choice_help">Toto zařízení a server mají uložené různé pozice. Stránka na pozadí ukazuje pozici ze serveru. Vyber pozici, od které chceš pokračovat; druhá strana se aktualizuje. Zrušení tě vrátí na pozici tohoto zařízení a nic nezmění.</string>
+    <string name="reader_bookorbit_take_only_help">Toto zařízení a server mají uložené různé pozice. Stránka na pozadí ukazuje pozici ze serveru. Ponech si ji a čti odtud, nebo volbu zruš a vrať se na pozici tohoto zařízení.</string>
     <string name="reader_bookorbit_take">Použít pozici ze serveru</string>
     <string name="reader_bookorbit_retry">Znovu odeslat pozici tohoto zařízení</string>
     <string name="reader_bookorbit_retry_help">Předchozí odeslání nebylo potvrzeno. Stránka na pozadí ukazuje pozici serveru. Můžeš ji zachovat nebo znovu odeslat pozici tohoto zařízení, která ji nahradí. Zrušení tě vrátí na pozici tohoto zařízení a odeslání zůstane nevyřešené.</string>

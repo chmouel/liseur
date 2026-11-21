@@ -361,6 +361,7 @@
     <string name="reader_sync_book_kept">Position dieses Geräts behalten. Sie geht beim nächsten Sync zum Server.</string>
     <string name="reader_sync_book_title">Wo weiterlesen</string>
     <string name="reader_bookorbit_choice_help">Dieses Gerät und der Server haben verschiedene Lesestellen gespeichert. Die Seite dahinter zeigt die des Servers. Wähle, wo du weiterlesen möchtest, dann wird die andere Seite aktualisiert. Abbrechen bringt dich zur Lesestelle dieses Geräts zurück und ändert nichts.</string>
+    <string name="reader_bookorbit_take_only_help">Dieses Gerät und der Server haben verschiedene Lesestellen gespeichert. Die Seite dahinter zeigt die des Servers. Übernimm sie, um hier weiterzulesen, oder brich ab, um zur Lesestelle dieses Geräts zurückzukehren.</string>
     <string name="reader_bookorbit_take">Lesestelle des Servers behalten</string>
     <string name="reader_bookorbit_retry">Lesestelle dieses Geräts erneut senden</string>
     <string name="reader_bookorbit_retry_help">Ein früherer Sendeversuch wurde nicht bestätigt. Die Seite dahinter zeigt die Lesestelle des Servers. Behalte sie, oder sende die Lesestelle dieses Geräts erneut, um sie zu ersetzen. Abbrechen bringt dich zur Lesestelle dieses Geräts zurück und lässt den Sendeversuch offen.</string>

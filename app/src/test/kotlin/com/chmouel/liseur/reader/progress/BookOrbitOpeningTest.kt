@@ -140,4 +140,14 @@ class BookOrbitOpeningTest {
         assertNull(restarted.verifiedEpub)
         assertFalse(restarted.choose(preview, takeRemote = true))
     }
+
+    @Test
+    fun `unverified local page allows taking verified remote place while refusing keep-local`() {
+        val localWithoutCfi = preview.copy(localCfi = null)
+        val opening = BookOrbitOpening().apply { propose(null, localWithoutCfi to offer) }
+        assertEquals(localWithoutCfi, opening.verify("remote", opened))
+        assertFalse(opening.choose(localWithoutCfi, takeRemote = false))
+        assertTrue(opening.choose(localWithoutCfi, takeRemote = true))
+        assertEquals(localWithoutCfi to true, opening.chosen)
+    }
 }

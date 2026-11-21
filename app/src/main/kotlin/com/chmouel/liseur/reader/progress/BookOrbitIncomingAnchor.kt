@@ -4,6 +4,7 @@ import com.chmouel.liseur.data.bookorbit.BookOrbitCfi
 import com.chmouel.liseur.data.bookorbit.BookOrbitCfiDom
 import com.chmouel.liseur.data.bookorbit.BookOrbitCfiResource
 import com.chmouel.liseur.data.bookorbit.BookOrbitEpubPackage
+import com.chmouel.liseur.data.db.ReadingProgress
 import com.chmouel.liseur.reader.ResourceAddress
 import org.readium.r2.shared.publication.Locator
 import org.w3c.dom.Document
@@ -16,7 +17,7 @@ internal object BookOrbitIncomingAnchor {
     data class Target(val href: String, val anchor: ViewportTextAnchor, val progression: Double? = null)
 
     fun mayOfferOnOpen(localLocatorJson: String?, localProgression: Double?): Boolean =
-        localLocatorJson == null && localProgression == null
+        !ReadingProgress.hasSavedPlace(localLocatorJson, localProgression)
 
     /** A restore proposal only; the active Readium navigator must verify it after going there. */
     fun mark(base: Locator, target: Target): Locator? {
@@ -46,22 +47,40 @@ internal object BookOrbitIncomingAnchor {
             Node.TEXT_NODE, Node.CDATA_SECTION_NODE -> node.parentNode as? Element
             else -> null
         } ?: return null
-        val block = generateSequence(element) { it.parentNode as? Element }
-            .firstOrNull { it.localName?.lowercase() in BLOCK_TAGS }
-            ?: return null
-        val body = generateSequence(block) { it.parentNode as? Element }
+        val body = generateSequence(element) { it.parentNode as? Element }
             .firstOrNull { it.localName?.lowercase() == "body" } ?: return null
+        val (textNode, offsetInNode) =
+            firstTextPosition(body, node, position.offset, position.sideBias) ?: return null
+        val block = generateSequence(textNode.parentNode as? Element) { it.parentNode as? Element }
+            .takeWhile { it !== body }
+            .firstOrNull { it.localName?.lowercase() in BLOCK_TAGS }
+            ?: body
         val selector = selector(body, block) ?: return null
-        val offset = textOffset(block, node, position.offset) ?: return null
+        val offset = textOffset(block, textNode, offsetInNode) ?: return null
         val text = block.textContent ?: return null
-        val word = Regex("\\S+").findAll(text).firstOrNull { it.range.last >= offset }
+        val run = inlineRun(block, textNode)
+        val word = Regex("[^\\s\\p{Z}]+").findAll(text.substring(run))
+            .firstOrNull { it.range.last + run.first >= offset }
             ?: return null
-        val before = text.substring(0, word.range.first).takeLastCodePoints(32)
-        val after = text.substring(word.range.last + 1).takeCodePoints(32)
-        val quote = before + word.value.takeCodePoints(64) + after
+        val wordStart = run.first + word.range.first
+        val wordEnd = run.first + word.range.last + 1
+        val sliceStart = if (word.value.codePointCount(0, word.value.length) <= 64) {
+            wordStart
+        } else {
+            val rawStart = offset.coerceIn(wordStart, wordEnd - 1)
+            if (rawStart > wordStart && text[rawStart].isLowSurrogate() && text[rawStart - 1].isHighSurrogate()) {
+                rawStart - 1
+            } else {
+                rawStart
+            }
+        }
+        val highlight = text.substring(sliceStart, wordEnd).takeCodePoints(64)
+        val before = text.substring(0, sliceStart).takeLastCodePoints(32)
+        val after = text.substring(sliceStart + highlight.length).takeCodePoints(32)
+        val quote = before + highlight + after
         if (text.indexOf(quote) != text.lastIndexOf(quote)) return null
         val whole = body.textContent.orEmpty().length
-        val progression = textOffset(body, node, position.offset)
+        val progression = textOffset(body, textNode, offsetInNode)
             ?.takeIf { whole > 0 }
             ?.let { (it.toDouble() / whole).coerceIn(0.0, 1.0) }
         return Target(
@@ -70,10 +89,91 @@ internal object BookOrbitIncomingAnchor {
             anchor = ViewportTextAnchor(
                 cssSelector = selector,
                 before = before,
-                highlight = word.value.takeCodePoints(64),
+                highlight = highlight,
                 after = after,
             ),
         )
+    }
+
+    private fun firstTextPosition(
+        body: Element,
+        start: Node,
+        within: Int,
+        sideBias: BookOrbitCfi.SideBias?,
+    ): Pair<Node, Int>? {
+        fun hasVisibleWord(node: Node, fromOffset: Int): Boolean {
+            if (node.nodeType != Node.TEXT_NODE && node.nodeType != Node.CDATA_SECTION_NODE) return false
+            val value = node.nodeValue ?: return false
+            val clamped = fromOffset.coerceIn(0, value.length)
+            return value.substring(clamped).any { !it.isWhitespace() }
+        }
+
+        val ignoredAncestor = generateSequence(start) { it.parentNode }
+            .takeWhile { it !== body }.lastOrNull(::isIgnored)
+        if (ignoredAncestor == null && hasVisibleWord(start, within)) {
+            return start to within
+        }
+
+        fun nextInBody(current: Node, enterChildren: Boolean): Node? {
+            if (enterChildren && !isIgnored(current) && current.firstChild != null) {
+                return current.firstChild
+            }
+            var cursor: Node? = current
+            while (cursor != null && cursor !== body) {
+                cursor.nextSibling?.let { return it }
+                cursor = cursor.parentNode
+            }
+            return null
+        }
+
+        var cursor: Node? = if (ignoredAncestor != null) {
+            nextInBody(ignoredAncestor, enterChildren = false)
+        } else {
+            val enterStart = start.nodeType == Node.ELEMENT_NODE &&
+                sideBias != BookOrbitCfi.SideBias.AFTER
+            nextInBody(start, enterChildren = enterStart)
+        }
+
+        while (cursor != null) {
+            if (isIgnored(cursor)) {
+                cursor = nextInBody(cursor, enterChildren = false)
+                continue
+            }
+            if (hasVisibleWord(cursor, 0)) return cursor to 0
+            cursor = nextInBody(cursor, enterChildren = true)
+        }
+        return null
+    }
+
+    private fun isIgnored(node: Node): Boolean =
+        node is Element && (node.localName?.lowercase() in IGNORED_TAGS || node.hasAttribute("hidden"))
+
+    /** Word boundaries follow blocks; offsets still include every node in WebView's textContent. */
+    private fun inlineRun(block: Element, target: Node): IntRange {
+        var offset = 0
+        var start = 0
+        var end: Int? = null
+        var found = false
+        fun visit(node: Node) {
+            when {
+                node !== block && (isIgnored(node) ||
+                    node is Element && node.localName?.lowercase() in BLOCK_TAGS) -> {
+                    if (found && end == null) end = offset
+                    offset += node.textContent.orEmpty().length
+                    if (!found) start = offset
+                }
+                node.nodeType == Node.TEXT_NODE || node.nodeType == Node.CDATA_SECTION_NODE -> {
+                    if (node === target) found = true
+                    offset += node.nodeValue.orEmpty().length
+                }
+                else -> {
+                    val children = node.childNodes
+                    for (i in 0 until children.length) visit(children.item(i))
+                }
+            }
+        }
+        visit(block)
+        return start until (end ?: offset)
     }
 
     private fun selector(body: Element, block: Element): String? {
@@ -119,7 +219,13 @@ internal object BookOrbitIncomingAnchor {
     private fun String.takeLastCodePoints(count: Int): String =
         substring(offsetByCodePoints(length, -codePointCount(0, length).coerceAtMost(count)))
 
-    private val BLOCK_TAGS = setOf(
-        "p", "li", "blockquote", "pre", "h1", "h2", "h3", "h4", "h5", "h6", "div",
+    internal val BLOCK_TAGS = setOf(
+        "p", "li", "blockquote", "pre", "td", "th", "figcaption",
+        "h1", "h2", "h3", "h4", "h5", "h6", "div",
+    )
+
+    private val IGNORED_TAGS = setOf(
+        "script", "style", "noscript", "template", "title", "desc", "defs", "metadata",
+        "br", "hr", "img", "svg", "image",
     )
 }

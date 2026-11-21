@@ -596,6 +596,7 @@ internal fun ReaderScreen(
     val builtNavigator = remember { mutableStateOf<EpubNavigatorFragment?>(null) }
     val navigator by rememberViewedFragment(builtNavigator, ::consumeInsetsForReadium)
     val navigatorNow by rememberUpdatedState(navigator)
+    val bookOrbitFallbackNow by rememberUpdatedState(bookOrbitFallback)
     val readingThemeNow by rememberUpdatedState(readingTheme)
     var boxInWindow by remember { mutableStateOf(Offset.Zero) }
     var boxSize by remember { mutableStateOf(IntSize.Zero) }
@@ -1291,7 +1292,7 @@ internal fun ReaderScreen(
         // whole-book fraction can move them to a different chapter
         // entirely, because that fraction may have been computed by the
         // other client, which does not compute it the same way.
-        if (bookOrbitFallback != null) onBookOrbitOpeningFailed()
+        if (bookOrbitFallbackNow != null) onBookOrbitOpeningFailed()
         val fallback = onProgressAction.resourceTargetFor(locator)
             ?: locator.locations.totalProgression
                 ?.takeIf(ResourceAnchor::isFraction)
@@ -1344,11 +1345,10 @@ internal fun ReaderScreen(
         // leaving at least 1000ms of the 5000ms gate for the fallback
         // navigation to be issued while the gate is still closed.
         return withTimeoutOrNull(budgetMs) {
-            repeat(OpeningRestoration.EXACT_OPEN_VERIFY_ATTEMPTS) {
+            do {
                 settleLayout()
-                if (verifyOpeningTarget(nav, locator)) return@withTimeoutOrNull true
-            }
-            false
+            } while (!verifyOpeningTarget(nav, locator))
+            true
         } == true
     }
 
