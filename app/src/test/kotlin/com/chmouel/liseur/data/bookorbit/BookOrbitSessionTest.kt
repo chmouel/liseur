@@ -322,6 +322,7 @@ class BookOrbitSessionTest {
         override suspend fun setCanUpload(allowed: Boolean, id: Long) = Unit
         override suspend fun setCanReadInsights(allowed: Boolean, tokenCipher: String?, id: Long): Int = 0
         override suspend fun setSyncCursor(seq: Long, id: Long) = Unit
+        override suspend fun setVocabularyCursor(seq: Long, id: Long) = Unit
         override suspend fun setAnnotationCursor(seq: Long, id: Long) = Unit
         override suspend fun setOrbitEpoch(epoch: Long, id: Long) = Unit
         override suspend fun delete(id: Long) { row = null }

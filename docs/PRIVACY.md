@@ -6,7 +6,7 @@ title: Liseur Privacy Policy
 
 **App:** Liseur (`com.chmouel.liseur`)
 **Developer:** Chmouel Boudjnah
-**Last updated:** 19 November 2026
+**Last updated:** 20 November 2026
 
 Liseur is an open-source ebook reader with no advertising or Liseur account.
 The F-Droid build has no analytics or crash reporting. Google Play releases
@@ -133,8 +133,14 @@ but the translation says what it means, and a hash is for matching, not
 for secrecy: an operator who knows the book can test whether a given
 sentence was translated. You can clear them from the account for one
 book, from the reader's menu or when removing or finishing it, or for
-every book from Settings, Translation, Advanced. You operate that server, or
-someone you trust does. This policy does not
+every book from Settings, Translation, Advanced. Your Vocabulary Builder
+also syncs with your liseur-sync account: saved words, definitions,
+personal notes, the book titles, locations and context sentences where
+you saw them, and your spaced-repetition review ratings and timestamps.
+Removing a word or undoing a review sends a deletion marker so it is
+cleared on your other devices as well. Vocabulary stays scoped to the
+account you signed in with and is never sent to other providers. You
+operate that server, or someone you trust does. This policy does not
 cover what the server does with the data it receives.
 
 ### Free book catalogs

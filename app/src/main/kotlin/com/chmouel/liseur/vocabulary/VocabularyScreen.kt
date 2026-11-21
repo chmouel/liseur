@@ -440,7 +440,7 @@ internal fun VocabularyWordDeleteDialog(
                 busy = true
                 scope.launch {
                     try {
-                        repository.dao.deleteWord(word.id)
+                        repository.deleteWord(word.id)
                         onDeleted()
                     } catch (error: CancellationException) {
                         throw error

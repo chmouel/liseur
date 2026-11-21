@@ -110,6 +110,7 @@ class LiseurSyncPositionSync(
     private val translations: LiseurSyncTranslations? = null,
     private val evaluations: LiseurSyncEvaluations? = null,
     private val metadataOverrides: LiseurSyncMetadataOverrides? = null,
+    private val vocabulary: LiseurSyncVocabulary? = null,
     private val settingsSync: LiseurSyncSettings? = null,
     /**
      * Whether a book is on screen right now.
@@ -187,6 +188,18 @@ class LiseurSyncPositionSync(
             outcome?.failure?.let { failures[LiveTopic.ANNOTATIONS] = it }
             if (outcome == null || (outcome.failure == null && !outcome.hasMore)) {
                 completed += LiveTopic.ANNOTATIONS
+            }
+        }
+        if (LiveTopic.VOCABULARY in topics && serverDao.get()?.let(LiveIdentity::from) == identity) {
+            try {
+                val more = vocabulary?.pullOnly(server) == true
+                if (!more) completed += LiveTopic.VOCABULARY
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: IOException) {
+                failures[LiveTopic.VOCABULARY] = reasonFor(e)
+            } catch (e: Exception) {
+                Log.w(TAG, "Vocabulary live refresh failed: ${e.javaClass.simpleName}")
             }
         }
         return LiveRefresh(completed, owed, failures)
@@ -829,6 +842,19 @@ class LiseurSyncPositionSync(
             }
         }
 
+        var moreVocabulary = false
+        if (book == null && trouble.unreachable == null) {
+            try {
+                moreVocabulary = vocabulary?.sync(server) == true
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: IOException) {
+                trouble.failed(e, reasonFor(e))
+            } catch (e: Exception) {
+                Log.w(TAG, "Vocabulary sync failed: ${e.javaClass.simpleName}")
+            }
+        }
+
         // The sentence translation cache after them (ADR-0052): a cached
         // sentence can wait a run like a mark can, and it asks nothing of
         // the names the stages above fixed — it only uses them.
@@ -858,7 +884,7 @@ class LiseurSyncPositionSync(
 
         return if (firstFailure == null) {
             // A fresh stamp would hold off the foreground sync that finishes the catch-up
-            val allCaughtUp = caughtUp && !moreEvaluations && !moreMetadataOverrides
+            val allCaughtUp = caughtUp && !moreEvaluations && !moreMetadataOverrides && !moreVocabulary
             if (allCaughtUp) forAccount(account) { serverDao.setPositionSyncedAt(at) }
             reporting.report(PositionSyncStatus.Synced(at))
             if (allCaughtUp) named.outcome() else SyncOutcome.Incomplete

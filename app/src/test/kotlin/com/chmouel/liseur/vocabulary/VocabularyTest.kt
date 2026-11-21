@@ -110,7 +110,7 @@ class VocabularyTest {
     fun `usage counts only new words and accepted review or undo actions`() = runBlocking {
         withDatabase { db ->
             val events = mutableListOf<UsageEvent>()
-            val repo = VocabularyRepository(db) { events += it }
+            val repo = VocabularyRepository(db, report = { events += it })
             val time = System.currentTimeMillis() - 1000
             val lookup = VocabularyLookup("basis", "en", source("one"))
             assertNull(repo.collect(lookup, null, null, time, existingOnly = true))
@@ -142,11 +142,11 @@ class VocabularyTest {
     fun `usage runs after commit and reporting errors do not fail vocabulary actions`() = runBlocking {
         withDatabase { db ->
             val events = mutableListOf<UsageEvent>()
-            val repo = VocabularyRepository(db) {
+            val repo = VocabularyRepository(db, report = {
                 assertFalse(db.inTransaction())
                 events += it
                 throw IllegalStateException("Reporting unavailable")
-            }
+            })
             val time = System.currentTimeMillis() - 1000
             val id = checkNotNull(repo.collect(VocabularyLookup("basis", "en", null), null, null, time))
             val card = checkNotNull(repo.dao.word(id))
@@ -265,7 +265,13 @@ class VocabularyTest {
         withDatabase { db ->
             val repo = VocabularyRepository(db)
             val id = checkNotNull(repo.collect(VocabularyLookup("word", "en", source("one")), "Meaning", null, 1))
-            repo.dao.insertOccurrence(source("one").copy(wordId = id, locationKey = "second"))
+            repo.dao.insertOccurrence(
+                source("one").copy(
+                    wordId = id,
+                    locationKey = "second",
+                    occurrenceKey = com.chmouel.liseur.domain.VocabularyMerge.provisionalOccurrenceKey("one", "Book one", "second"),
+                ),
+            )
             repo.dao.insertOccurrence(source("two").copy(wordId = id))
             val other = checkNotNull(repo.collect(VocabularyLookup("other", "en", source("three")), null, null, 1))
             for ((word, time) in listOf(id to 10L, id to 20L, other to 30L)) {

@@ -8,6 +8,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -165,7 +166,7 @@ class MigrationTest {
         helper.runMigrationsAndValidate(TEST_DB, 66, true, LiseurDatabase.MIGRATION_65_66).close()
         val context = ApplicationProvider.getApplicationContext<android.app.Application>()
         val db = Room.databaseBuilder(context, LiseurDatabase::class.java, TEST_DB)
-            .addMigrations(LiseurDatabase.MIGRATION_66_67, LiseurDatabase.MIGRATION_67_68, LiseurDatabase.MIGRATION_68_69, LiseurDatabase.MIGRATION_69_70, LiseurDatabase.MIGRATION_70_71, LiseurDatabase.MIGRATION_71_72, LiseurDatabase.MIGRATION_72_73, LiseurDatabase.MIGRATION_73_74, LiseurDatabase.MIGRATION_74_75, LiseurDatabase.MIGRATION_75_76, LiseurDatabase.MIGRATION_76_77, LiseurDatabase.MIGRATION_77_78, LiseurDatabase.MIGRATION_78_79, LiseurDatabase.MIGRATION_79_80, LiseurDatabase.MIGRATION_81_82, LiseurDatabase.MIGRATION_82_83)
+            .addMigrations(LiseurDatabase.MIGRATION_66_67, LiseurDatabase.MIGRATION_67_68, LiseurDatabase.MIGRATION_68_69, LiseurDatabase.MIGRATION_69_70, LiseurDatabase.MIGRATION_70_71, LiseurDatabase.MIGRATION_71_72, LiseurDatabase.MIGRATION_72_73, LiseurDatabase.MIGRATION_73_74, LiseurDatabase.MIGRATION_74_75, LiseurDatabase.MIGRATION_75_76, LiseurDatabase.MIGRATION_76_77, LiseurDatabase.MIGRATION_77_78, LiseurDatabase.MIGRATION_78_79, LiseurDatabase.MIGRATION_79_80, LiseurDatabase.MIGRATION_81_82, LiseurDatabase.MIGRATION_82_83, LiseurDatabase.MIGRATION_83_84, LiseurDatabase.MIGRATION_83_84)
             .build()
         try {
             val dao = db.readingProgressDao()
@@ -242,7 +243,7 @@ class MigrationTest {
         helper.runMigrationsAndValidate(TEST_DB, 67, true, LiseurDatabase.MIGRATION_66_67).close()
         val context = ApplicationProvider.getApplicationContext<android.app.Application>()
         val db = Room.databaseBuilder(context, LiseurDatabase::class.java, TEST_DB)
-            .addMigrations(LiseurDatabase.MIGRATION_67_68, LiseurDatabase.MIGRATION_68_69, LiseurDatabase.MIGRATION_69_70, LiseurDatabase.MIGRATION_70_71, LiseurDatabase.MIGRATION_71_72, LiseurDatabase.MIGRATION_72_73, LiseurDatabase.MIGRATION_73_74, LiseurDatabase.MIGRATION_74_75, LiseurDatabase.MIGRATION_75_76, LiseurDatabase.MIGRATION_76_77, LiseurDatabase.MIGRATION_77_78, LiseurDatabase.MIGRATION_78_79, LiseurDatabase.MIGRATION_79_80, LiseurDatabase.MIGRATION_81_82, LiseurDatabase.MIGRATION_82_83)
+            .addMigrations(LiseurDatabase.MIGRATION_67_68, LiseurDatabase.MIGRATION_68_69, LiseurDatabase.MIGRATION_69_70, LiseurDatabase.MIGRATION_70_71, LiseurDatabase.MIGRATION_71_72, LiseurDatabase.MIGRATION_72_73, LiseurDatabase.MIGRATION_73_74, LiseurDatabase.MIGRATION_74_75, LiseurDatabase.MIGRATION_75_76, LiseurDatabase.MIGRATION_76_77, LiseurDatabase.MIGRATION_77_78, LiseurDatabase.MIGRATION_78_79, LiseurDatabase.MIGRATION_79_80, LiseurDatabase.MIGRATION_81_82, LiseurDatabase.MIGRATION_82_83, LiseurDatabase.MIGRATION_83_84, LiseurDatabase.MIGRATION_83_84)
             .allowMainThreadQueries()
             .build()
         try {
@@ -277,7 +278,7 @@ class MigrationTest {
         }
         val context = ApplicationProvider.getApplicationContext<android.app.Application>()
         val db = Room.databaseBuilder(context, LiseurDatabase::class.java, TEST_DB)
-            .addMigrations(LiseurDatabase.MIGRATION_67_68, LiseurDatabase.MIGRATION_68_69, LiseurDatabase.MIGRATION_69_70, LiseurDatabase.MIGRATION_70_71, LiseurDatabase.MIGRATION_71_72, LiseurDatabase.MIGRATION_72_73, LiseurDatabase.MIGRATION_73_74, LiseurDatabase.MIGRATION_74_75, LiseurDatabase.MIGRATION_75_76, LiseurDatabase.MIGRATION_76_77, LiseurDatabase.MIGRATION_77_78, LiseurDatabase.MIGRATION_78_79, LiseurDatabase.MIGRATION_79_80, LiseurDatabase.MIGRATION_81_82, LiseurDatabase.MIGRATION_82_83)
+            .addMigrations(LiseurDatabase.MIGRATION_67_68, LiseurDatabase.MIGRATION_68_69, LiseurDatabase.MIGRATION_69_70, LiseurDatabase.MIGRATION_70_71, LiseurDatabase.MIGRATION_71_72, LiseurDatabase.MIGRATION_72_73, LiseurDatabase.MIGRATION_73_74, LiseurDatabase.MIGRATION_74_75, LiseurDatabase.MIGRATION_75_76, LiseurDatabase.MIGRATION_76_77, LiseurDatabase.MIGRATION_77_78, LiseurDatabase.MIGRATION_78_79, LiseurDatabase.MIGRATION_79_80, LiseurDatabase.MIGRATION_81_82, LiseurDatabase.MIGRATION_82_83, LiseurDatabase.MIGRATION_83_84, LiseurDatabase.MIGRATION_83_84)
             .allowMainThreadQueries()
             .build()
         try {
@@ -1862,7 +1863,7 @@ class MigrationTest {
             LiseurDatabase.MIGRATION_77_78,
             LiseurDatabase.MIGRATION_78_79,
             LiseurDatabase.MIGRATION_79_80,
-            LiseurDatabase.MIGRATION_81_82, LiseurDatabase.MIGRATION_82_83,
+            LiseurDatabase.MIGRATION_81_82, LiseurDatabase.MIGRATION_82_83, LiseurDatabase.MIGRATION_83_84,
         ).use { db ->
             db.query(
                 "SELECT total_progression, finished_override, coverage, status_revision " +
@@ -1912,7 +1913,7 @@ class MigrationTest {
             LiseurDatabase.MIGRATION_77_78,
             LiseurDatabase.MIGRATION_78_79,
             LiseurDatabase.MIGRATION_79_80,
-            LiseurDatabase.MIGRATION_81_82, LiseurDatabase.MIGRATION_82_83,
+            LiseurDatabase.MIGRATION_81_82, LiseurDatabase.MIGRATION_82_83, LiseurDatabase.MIGRATION_83_84,
         ).use { db ->
             db.query(
                 "SELECT peak_progression, peak_revision, coverage, peak_coverage FROM reading_progress",
@@ -1935,7 +1936,7 @@ class MigrationTest {
                     "VALUES ('book:1', '{}', 1.0, 100, 1, 4)",
             )
         }
-        helper.runMigrationsAndValidate(TEST_DB, LATEST, true, LiseurDatabase.MIGRATION_77_78, LiseurDatabase.MIGRATION_78_79, LiseurDatabase.MIGRATION_79_80, LiseurDatabase.MIGRATION_81_82, LiseurDatabase.MIGRATION_82_83).use { db ->
+        helper.runMigrationsAndValidate(TEST_DB, LATEST, true, LiseurDatabase.MIGRATION_77_78, LiseurDatabase.MIGRATION_78_79, LiseurDatabase.MIGRATION_79_80, LiseurDatabase.MIGRATION_81_82, LiseurDatabase.MIGRATION_82_83, LiseurDatabase.MIGRATION_83_84, LiseurDatabase.MIGRATION_83_84).use { db ->
             db.query(
                 "SELECT status_revision, status_retired_revision FROM reading_progress",
             ).use {
@@ -1956,7 +1957,7 @@ class MigrationTest {
                     "VALUES ('book:1', 'serif', 1.2, 1.5, 1.2)",
             )
         }
-        helper.runMigrationsAndValidate(TEST_DB, LATEST, true, LiseurDatabase.MIGRATION_79_80, LiseurDatabase.MIGRATION_81_82, LiseurDatabase.MIGRATION_82_83).use { db ->
+        helper.runMigrationsAndValidate(TEST_DB, LATEST, true, LiseurDatabase.MIGRATION_79_80, LiseurDatabase.MIGRATION_81_82, LiseurDatabase.MIGRATION_82_83, LiseurDatabase.MIGRATION_83_84, LiseurDatabase.MIGRATION_83_84).use { db ->
             db.query(
                 "SELECT page_margins, top_margin, bottom_margin, sync_vertical_margins FROM book_typography",
             ).use {
@@ -2086,10 +2087,76 @@ class MigrationTest {
         }
     }
 
+    @Test
+    fun `83 to 84 backfills vocabulary baseline and occurrence keys and creates sync tables`() {
+        helper.createDatabase(TEST_DB, 83).use { db ->
+            db.execSQL(
+                "INSERT INTO vocabulary_words (id, word, normalized, language, definition, translationLanguage, " +
+                    "notes, addedAt, dueAt, reviewedAt, streak, intervalMinutes, repetitions, definitionEdited, searchText) " +
+                    "VALUES (1, 'Legacy', 'legacy', 'en', 'Old', NULL, '', 100, 500, 400, 3, 1440, 3, 0, 'legacy old')",
+            )
+            db.execSQL(
+                "INSERT INTO vocabulary_words (id, word, normalized, language, definition, translationLanguage, " +
+                    "notes, addedAt, dueAt, reviewedAt, streak, intervalMinutes, repetitions, definitionEdited, searchText) " +
+                    "VALUES (2, 'Fresh', 'fresh', 'en', 'New', NULL, '', 100, 200, 150, 1, 30, 1, 0, 'fresh new')",
+            )
+            db.execSQL(
+                "INSERT INTO vocabulary_reviews (id, wordId, rating, reviewedAt, intervalMinutes, dueAt, firstReview) " +
+                    "VALUES (10, 2, 'GOOD', 150, 30, 200, 1)",
+            )
+            db.execSQL(
+                "INSERT INTO vocabulary_occurrences (id, wordId, bookUrl, bookTitle, locationKey, locator, sentence, lastSeenAt, encounters, searchSentence) " +
+                    "VALUES (20, 1, 'file:///book.epub', 'Dune', 'ch1', NULL, 'A legacy.', 100, 1, 'a legacy')",
+            )
+            db.execSQL(
+                "INSERT INTO vocabulary_occurrences (id, wordId, bookUrl, bookTitle, locationKey, locator, sentence, lastSeenAt, encounters, searchSentence) " +
+                    "VALUES (21, 1, 'file:///book.epub', 'A|B', 'C', NULL, NULL, 101, 1, '')",
+            )
+            db.execSQL(
+                "INSERT INTO vocabulary_occurrences (id, wordId, bookUrl, bookTitle, locationKey, locator, sentence, lastSeenAt, encounters, searchSentence) " +
+                    "VALUES (22, 1, 'file:///book.epub', 'A', 'B|C', NULL, NULL, 102, 1, '')",
+            )
+        }
+
+        helper.runMigrationsAndValidate(TEST_DB, 84, true, LiseurDatabase.MIGRATION_83_84).use { db ->
+            db.query("SELECT id, baselineDueAt, baselineRepetitions, ownerAccount FROM vocabulary_words ORDER BY id").use {
+                assertTrue(it.moveToFirst())
+                assertEquals(1L, it.getLong(0))
+                assertFalse(it.isNull(1))
+                assertEquals(500L, it.getLong(1))
+                assertEquals(3, it.getInt(2))
+                assertEquals("", it.getString(3))
+
+                assertTrue(it.moveToNext())
+                assertEquals(2L, it.getLong(0))
+                assertTrue(it.isNull(1))
+                assertEquals(0, it.getInt(2))
+                assertFalse(it.moveToNext())
+            }
+            db.query("SELECT id, occurrenceKey FROM vocabulary_occurrences WHERE id IN (20, 21, 22) ORDER BY id").use {
+                assertTrue(it.moveToFirst())
+                assertEquals(20L, it.getLong(0))
+                assertTrue(it.getString(1).isNotEmpty())
+
+                assertTrue(it.moveToNext())
+                assertEquals(21L, it.getLong(0))
+                val key21 = it.getString(1)
+                assertTrue(key21.isNotEmpty())
+
+                assertTrue(it.moveToNext())
+                assertEquals(22L, it.getLong(0))
+                val key22 = it.getString(1)
+                assertTrue(key22.isNotEmpty())
+                assertNotEquals(key21, key22)
+                assertFalse(it.moveToNext())
+            }
+        }
+    }
+
     private companion object {
         const val TEST_DB = "migration-test.db"
 
         /** Kept in step with the `version` on [LiseurDatabase]. */
-        const val LATEST = 83
+        const val LATEST = 84
     }
 }

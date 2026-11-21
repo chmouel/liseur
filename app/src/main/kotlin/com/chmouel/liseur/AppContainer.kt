@@ -480,7 +480,11 @@ class AppContainer(
 
     val usageReporting = com.chmouel.liseur.insights.createUsageReporting(context.applicationContext)
     internal val vocabulary by lazy {
-        com.chmouel.liseur.vocabulary.VocabularyRepository(database, usageReporting::capture)
+        com.chmouel.liseur.vocabulary.VocabularyRepository(
+            database = database,
+            report = usageReporting::capture,
+            onChanged = { applicationScope.launch { requestFullSync() } },
+        )
     }
 
     val appSettings = AppSettingsRepository(context.applicationContext)
@@ -654,6 +658,8 @@ class AppContainer(
             uploadRefusalDao = database.uploadRefusalDao(),
             sessionRefusalDao = database.sessionRefusalDao(),
             sessionTransmissionDao = database.sessionTransmissionDao(),
+            vocabularyDao = database.vocabularyDao(),
+            vocabularySyncDao = database.vocabularySyncDao(),
             remoteStatsDao = database.remoteStatsDao(),
             starterProgressDao = database.starterCatalogProgressDao(),
             settingsSyncState = settingsSyncState,
@@ -851,6 +857,13 @@ class AppContainer(
                 repository = metadataOverrides,
                 inTransaction = { work -> database.withTransaction { work() } },
                 writerId = evaluationWriter::current,
+            ),
+            vocabulary = com.chmouel.liseur.data.liseursync.LiseurSyncVocabulary(
+                servers = database.remoteServerDao(),
+                identities = database.workIdentityDao(),
+                vocabularyDao = database.vocabularyDao(),
+                syncDao = database.vocabularySyncDao(),
+                inTransaction = { work -> database.withTransaction { work() } },
             ),
             settingsSync = liseurSyncSettings,
             readerIsOpen = { ReaderPresence.isOpen },

@@ -38,6 +38,7 @@ internal fun liveTopics(type: String?, data: String): Set<LiveTopic> {
                     "positions" -> add(LiveTopic.POSITIONS)
                     "annotations" -> add(LiveTopic.ANNOTATIONS)
                     "insights" -> add(LiveTopic.INSIGHTS)
+                    "vocabulary" -> add(LiveTopic.VOCABULARY)
                 }
             }
         }

@@ -3,7 +3,7 @@ package com.chmouel.liseur.data.remote
 import com.chmouel.liseur.data.db.RemoteServer
 import kotlinx.coroutines.flow.Flow
 
-enum class LiveTopic { POSITIONS, ANNOTATIONS, INSIGHTS }
+enum class LiveTopic { POSITIONS, ANNOTATIONS, INSIGHTS, VOCABULARY }
 
 /** Credentials are compared in their stored form, never logged or sent as an identity. */
 data class LiveIdentity(

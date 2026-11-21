@@ -158,6 +158,13 @@ data class RemoteServer(
      */
     @ColumnInfo(name = "annotation_cursor_seq", defaultValue = "0")
     val annotationCursorSeq: Long = 0,
+    /**
+     * How far through the liseur-sync vocabulary feed this device has
+     * reconciled. Independent of [syncCursorSeq] and [annotationCursorSeq],
+     * advanced in the same transaction that writes the page it covers.
+     */
+    @ColumnInfo(name = "vocabulary_cursor_seq", defaultValue = "0")
+    val vocabularyCursorSeq: Long = 0,
 
     /**
      * The size of a Gutenberg starter shelf connected by an older
@@ -457,6 +464,10 @@ interface RemoteServerDao {
     /** Moves the annotation cursor, under the same rule as [setSyncCursor]. */
     @Query("UPDATE remote_server SET annotation_cursor_seq = :seq WHERE id = :id")
     suspend fun setAnnotationCursor(seq: Long, id: Long = RemoteServer.SINGLE_ID)
+
+    /** Moves the vocabulary cursor, under the same rule as [setSyncCursor]. */
+    @Query("UPDATE remote_server SET vocabulary_cursor_seq = :seq WHERE id = :id")
+    suspend fun setVocabularyCursor(seq: Long, id: Long = RemoteServer.SINGLE_ID)
 
     @Query("DELETE FROM remote_server WHERE id = :id")
     suspend fun delete(id: Long = RemoteServer.SINGLE_ID)
