@@ -69,7 +69,7 @@ class LiseurSyncVocabulary(
                 w.pendingJson != null ||
                     w.lifecycle == VocabularyWordSync.LOCAL_DELETE_PENDING ||
                     w.lifecycle == VocabularyWordSync.DELETE_THEN_RESURRECT ||
-                    w.lifecycle == VocabularyWordSync.RESURRECT_PENDING
+                    (w.lifecycle == VocabularyWordSync.RESURRECT_PENDING && w.refusedFingerprint == null)
             }
         } catch (e: LiseurSyncRejection) {
             if (isUnsupported(e)) {
@@ -785,7 +785,8 @@ class LiseurSyncVocabulary(
         val alreadySynced = (sync?.rev ?: 0L) > 0L
         val current = vocabularyDao.occurrencesList(wordId)
         var changed = false
-        for (occ in current) {
+        for (initial in current) {
+            val occ = vocabularyDao.occurrenceById(initial.id) ?: continue
             val resolvedWork = bookToWork[occ.bookUrl] ?: occ.workId
             if (resolvedWork == null) continue
             val targetKey = if (alreadySynced) {
@@ -1287,11 +1288,13 @@ class LiseurSyncVocabulary(
             .put("normalized", normalized)
             .put("base_rev", baseRev)
             .put("deleted", false)
-            .put("word", meta.word)
-            .put("notes", meta.notes)
+            .put("word", AnnotationWire.truncate(meta.word, MAX_WIRE_WORD_BYTES))
+            .put("notes", AnnotationWire.truncate(meta.notes, MAX_WIRE_NOTES_BYTES))
             .put("definition_edited", meta.definitionEdited)
             .put("added_at", formatIsoMillis(meta.addedAt))
-        if (meta.definition != null) obj.put("definition", meta.definition)
+        if (meta.definition != null) {
+            obj.put("definition", AnnotationWire.truncate(meta.definition, MAX_WIRE_DEFINITION_BYTES))
+        }
         if (meta.translationLanguage != null) obj.put("translation_language", meta.translationLanguage)
         if (meta.definitionUpdatedAt > 0L) obj.put("definition_updated_at", formatIsoMillis(meta.definitionUpdatedAt))
         if (meta.notesUpdatedAt > 0L) obj.put("notes_updated_at", formatIsoMillis(meta.notesUpdatedAt))
@@ -1319,13 +1322,15 @@ class LiseurSyncVocabulary(
         for (o in occurrences.sortedBy { it.occurrenceKey }.take(MAX_WIRE_OCCURRENCES)) {
             val item = JSONObject()
                 .put("occurrence_key", o.occurrenceKey)
-                .put("book_title", o.bookTitle)
+                .put("book_title", AnnotationWire.truncate(o.bookTitle, MAX_WIRE_BOOK_TITLE_BYTES))
                 .put("location_key", VocabularyMerge.wireLocationKey(o.locationKey))
                 .put("sentence_edited", o.sentenceEdited)
                 .put("last_seen_at", formatIsoMillis(o.lastSeenAt))
                 .put("encounters", o.encounters.coerceAtLeast(1))
             if (!o.workId.isNullOrBlank()) item.put("work_id", o.workId)
-            if (o.sentence != null) item.put("sentence", o.sentence)
+            if (o.sentence != null) {
+                item.put("sentence", AnnotationWire.truncate(o.sentence, MAX_WIRE_SENTENCE_BYTES))
+            }
             if (o.sentenceUpdatedAt > 0L) item.put("sentence_updated_at", formatIsoMillis(o.sentenceUpdatedAt))
             wireLocator(o.locator)?.let { item.put("locator", JSONObject(it)) }
             arr.put(item)
@@ -1446,10 +1451,10 @@ class LiseurSyncVocabulary(
         occurrences: List<VocabularyMerge.Occurrence>,
     ): String {
         val canonical = buildString {
-            append(meta.word).append('\u001f')
-            append(meta.definition.orEmpty()).append('\u001f')
+            append(AnnotationWire.truncate(meta.word, MAX_WIRE_WORD_BYTES)).append('\u001f')
+            append(meta.definition?.let { AnnotationWire.truncate(it, MAX_WIRE_DEFINITION_BYTES) }.orEmpty()).append('\u001f')
             append(meta.translationLanguage.orEmpty()).append('\u001f')
-            append(meta.notes).append('\u001f')
+            append(AnnotationWire.truncate(meta.notes, MAX_WIRE_NOTES_BYTES)).append('\u001f')
             append(meta.definitionEdited).append('\u001f')
             append(meta.definitionUpdatedAt).append('\u001f')
             append(meta.notesUpdatedAt).append('\u001f')
@@ -1462,10 +1467,10 @@ class LiseurSyncVocabulary(
                 append('\u001e')
                 append(o.occurrenceKey).append('\u001f')
                 append(o.workId.orEmpty()).append('\u001f')
-                append(o.bookTitle).append('\u001f')
+                append(AnnotationWire.truncate(o.bookTitle, MAX_WIRE_BOOK_TITLE_BYTES)).append('\u001f')
                 append(VocabularyMerge.wireLocationKey(o.locationKey)).append('\u001f')
                 append(wireLocator(o.locator).orEmpty()).append('\u001f')
-                append(o.sentence.orEmpty()).append('\u001f')
+                append(o.sentence?.let { AnnotationWire.truncate(it, MAX_WIRE_SENTENCE_BYTES) }.orEmpty()).append('\u001f')
                 append(o.sentenceEdited).append('\u001f')
                 append(o.sentenceUpdatedAt).append('\u001f')
                 append(o.lastSeenAt).append('\u001f')
@@ -1536,6 +1541,11 @@ class LiseurSyncVocabulary(
         private const val MAX_WIRE_ITEM_BYTES = 64 * 1024
         private const val MAX_WIRE_LOCATOR_BYTES = 16 * 1024
         private const val MAX_WIRE_OCCURRENCES = 50
+        private const val MAX_WIRE_WORD_BYTES = 512
+        private const val MAX_WIRE_DEFINITION_BYTES = 24_576
+        private const val MAX_WIRE_NOTES_BYTES = 12_288
+        private const val MAX_WIRE_BOOK_TITLE_BYTES = 1_024
+        private const val MAX_WIRE_SENTENCE_BYTES = 4_096
         private const val BATCH_ENVELOPE_OVERHEAD_BYTES = 32
 
         internal fun <T> chunkByCountAndBytes(

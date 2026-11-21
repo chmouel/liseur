@@ -138,10 +138,10 @@ interface VocabularyDao {
         """
         SELECT * FROM vocabulary_words w
         WHERE (w.ownerAccount = ''
-               OR NOT EXISTS (SELECT 1 FROM remote_server s WHERE s.kind = 'LISEUR_SYNC')
+               OR NOT EXISTS (SELECT 1 FROM remote_server s WHERE s.id = 1 AND s.kind = 'LISEUR_SYNC')
                OR w.ownerAccount = (
                    SELECT 'liseursync|' || s.base_url || '|' || coalesce(s.liseur_account_id, s.account_id, s.username, 'null')
-                   FROM remote_server s WHERE s.kind = 'LISEUR_SYNC' LIMIT 1
+                   FROM remote_server s WHERE s.id = 1 AND s.kind = 'LISEUR_SYNC' LIMIT 1
                ))
         ORDER BY w.id
         """,
@@ -153,10 +153,10 @@ interface VocabularyDao {
         SELECT o.* FROM vocabulary_occurrences o
         JOIN vocabulary_words w ON w.id = o.wordId
         WHERE (w.ownerAccount = ''
-               OR NOT EXISTS (SELECT 1 FROM remote_server s WHERE s.kind = 'LISEUR_SYNC')
+               OR NOT EXISTS (SELECT 1 FROM remote_server s WHERE s.id = 1 AND s.kind = 'LISEUR_SYNC')
                OR w.ownerAccount = (
                    SELECT 'liseursync|' || s.base_url || '|' || coalesce(s.liseur_account_id, s.account_id, s.username, 'null')
-                   FROM remote_server s WHERE s.kind = 'LISEUR_SYNC' LIMIT 1
+                   FROM remote_server s WHERE s.id = 1 AND s.kind = 'LISEUR_SYNC' LIMIT 1
                ))
         ORDER BY o.id
         """,
@@ -168,10 +168,10 @@ interface VocabularyDao {
         SELECT r.* FROM vocabulary_reviews r
         JOIN vocabulary_words w ON w.id = r.wordId
         WHERE (w.ownerAccount = ''
-               OR NOT EXISTS (SELECT 1 FROM remote_server s WHERE s.kind = 'LISEUR_SYNC')
+               OR NOT EXISTS (SELECT 1 FROM remote_server s WHERE s.id = 1 AND s.kind = 'LISEUR_SYNC')
                OR w.ownerAccount = (
                    SELECT 'liseursync|' || s.base_url || '|' || coalesce(s.liseur_account_id, s.account_id, s.username, 'null')
-                   FROM remote_server s WHERE s.kind = 'LISEUR_SYNC' LIMIT 1
+                   FROM remote_server s WHERE s.id = 1 AND s.kind = 'LISEUR_SYNC' LIMIT 1
                ))
         ORDER BY r.id
         """,
@@ -189,10 +189,10 @@ interface VocabularyDao {
         SELECT * FROM vocabulary_words w
         WHERE w.normalized = :normalized AND w.language = :language
           AND (w.ownerAccount = ''
-               OR NOT EXISTS (SELECT 1 FROM remote_server s WHERE s.kind = 'LISEUR_SYNC')
+               OR NOT EXISTS (SELECT 1 FROM remote_server s WHERE s.id = 1 AND s.kind = 'LISEUR_SYNC')
                OR w.ownerAccount = (
                    SELECT 'liseursync|' || s.base_url || '|' || coalesce(s.liseur_account_id, s.account_id, s.username, 'null')
-                   FROM remote_server s WHERE s.kind = 'LISEUR_SYNC' LIMIT 1
+                   FROM remote_server s WHERE s.id = 1 AND s.kind = 'LISEUR_SYNC' LIMIT 1
                ))
         ORDER BY (w.ownerAccount = '') ASC, w.id DESC LIMIT 1
         """,
@@ -204,10 +204,10 @@ interface VocabularyDao {
         SELECT * FROM vocabulary_words w
         WHERE w.normalized = :normalized AND w.language = :language
           AND (w.ownerAccount = ''
-               OR NOT EXISTS (SELECT 1 FROM remote_server s WHERE s.kind = 'LISEUR_SYNC')
+               OR NOT EXISTS (SELECT 1 FROM remote_server s WHERE s.id = 1 AND s.kind = 'LISEUR_SYNC')
                OR w.ownerAccount = (
                    SELECT 'liseursync|' || s.base_url || '|' || coalesce(s.liseur_account_id, s.account_id, s.username, 'null')
-                   FROM remote_server s WHERE s.kind = 'LISEUR_SYNC' LIMIT 1
+                   FROM remote_server s WHERE s.id = 1 AND s.kind = 'LISEUR_SYNC' LIMIT 1
                ))
         ORDER BY (w.ownerAccount = '') ASC, w.id DESC LIMIT 1
         """,
@@ -237,10 +237,10 @@ interface VocabularyDao {
         SELECT * FROM vocabulary_words w
         WHERE w.id = :id
           AND (w.ownerAccount = ''
-               OR NOT EXISTS (SELECT 1 FROM remote_server s WHERE s.kind = 'LISEUR_SYNC')
+               OR NOT EXISTS (SELECT 1 FROM remote_server s WHERE s.id = 1 AND s.kind = 'LISEUR_SYNC')
                OR w.ownerAccount = (
                    SELECT 'liseursync|' || s.base_url || '|' || coalesce(s.liseur_account_id, s.account_id, s.username, 'null')
-                   FROM remote_server s WHERE s.kind = 'LISEUR_SYNC' LIMIT 1
+                   FROM remote_server s WHERE s.id = 1 AND s.kind = 'LISEUR_SYNC' LIMIT 1
                ))
         """,
     )
@@ -251,10 +251,10 @@ interface VocabularyDao {
         SELECT * FROM vocabulary_words w
         WHERE w.id = :id
           AND (w.ownerAccount = ''
-               OR NOT EXISTS (SELECT 1 FROM remote_server s WHERE s.kind = 'LISEUR_SYNC')
+               OR NOT EXISTS (SELECT 1 FROM remote_server s WHERE s.id = 1 AND s.kind = 'LISEUR_SYNC')
                OR w.ownerAccount = (
                    SELECT 'liseursync|' || s.base_url || '|' || coalesce(s.liseur_account_id, s.account_id, s.username, 'null')
-                   FROM remote_server s WHERE s.kind = 'LISEUR_SYNC' LIMIT 1
+                   FROM remote_server s WHERE s.id = 1 AND s.kind = 'LISEUR_SYNC' LIMIT 1
                ))
         """,
     )
@@ -266,10 +266,10 @@ interface VocabularyDao {
         JOIN vocabulary_words w ON w.id = o.wordId
         WHERE o.id = :occurrenceId
           AND (w.ownerAccount = ''
-               OR NOT EXISTS (SELECT 1 FROM remote_server s WHERE s.kind = 'LISEUR_SYNC')
+               OR NOT EXISTS (SELECT 1 FROM remote_server s WHERE s.id = 1 AND s.kind = 'LISEUR_SYNC')
                OR w.ownerAccount = (
                    SELECT 'liseursync|' || s.base_url || '|' || coalesce(s.liseur_account_id, s.account_id, s.username, 'null')
-                   FROM remote_server s WHERE s.kind = 'LISEUR_SYNC' LIMIT 1
+                   FROM remote_server s WHERE s.id = 1 AND s.kind = 'LISEUR_SYNC' LIMIT 1
                ))
         """,
     )
@@ -301,6 +301,9 @@ interface VocabularyDao {
 
     @Query("SELECT * FROM vocabulary_occurrences WHERE wordId = :id AND bookUrl = :bookUrl AND locationKey = :key LIMIT 1")
     suspend fun occurrence(id: Long, bookUrl: String, key: String): VocabularyOccurrence?
+
+    @Query("SELECT * FROM vocabulary_occurrences WHERE id = :id")
+    suspend fun occurrenceById(id: Long): VocabularyOccurrence?
 
     @Query("SELECT * FROM vocabulary_occurrences WHERE wordId = :id AND occurrenceKey = :occurrenceKey")
     suspend fun occurrenceByKey(id: Long, occurrenceKey: String): VocabularyOccurrence?
@@ -335,10 +338,10 @@ interface VocabularyDao {
         JOIN vocabulary_words w ON w.id = o.wordId
         WHERE o.bookUrl != ''
           AND (w.ownerAccount = ''
-               OR NOT EXISTS (SELECT 1 FROM remote_server s WHERE s.kind = 'LISEUR_SYNC')
+               OR NOT EXISTS (SELECT 1 FROM remote_server s WHERE s.id = 1 AND s.kind = 'LISEUR_SYNC')
                OR w.ownerAccount = (
                    SELECT 'liseursync|' || s.base_url || '|' || coalesce(s.liseur_account_id, s.account_id, s.username, 'null')
-                   FROM remote_server s WHERE s.kind = 'LISEUR_SYNC' LIMIT 1
+                   FROM remote_server s WHERE s.id = 1 AND s.kind = 'LISEUR_SYNC' LIMIT 1
                ))
         GROUP BY o.bookUrl ORDER BY bookTitle COLLATE NOCASE, o.bookUrl
     """)
@@ -349,10 +352,10 @@ interface VocabularyDao {
             count(CASE WHEN streak >= 6 THEN 1 END) AS learned
         FROM vocabulary_words w
         WHERE (w.ownerAccount = ''
-               OR NOT EXISTS (SELECT 1 FROM remote_server s WHERE s.kind = 'LISEUR_SYNC')
+               OR NOT EXISTS (SELECT 1 FROM remote_server s WHERE s.id = 1 AND s.kind = 'LISEUR_SYNC')
                OR w.ownerAccount = (
                    SELECT 'liseursync|' || s.base_url || '|' || coalesce(s.liseur_account_id, s.account_id, s.username, 'null')
-                   FROM remote_server s WHERE s.kind = 'LISEUR_SYNC' LIMIT 1
+                   FROM remote_server s WHERE s.id = 1 AND s.kind = 'LISEUR_SYNC' LIMIT 1
                ))
           AND (:book IS NULL OR EXISTS (
             SELECT 1 FROM vocabulary_occurrences o WHERE o.wordId = w.id AND o.bookUrl = :book
@@ -366,10 +369,10 @@ interface VocabularyDao {
         JOIN vocabulary_words w ON w.id = r.wordId
         WHERE r.reviewedAt >= :start AND r.reviewedAt <= :end
           AND (w.ownerAccount = ''
-               OR NOT EXISTS (SELECT 1 FROM remote_server s WHERE s.kind = 'LISEUR_SYNC')
+               OR NOT EXISTS (SELECT 1 FROM remote_server s WHERE s.id = 1 AND s.kind = 'LISEUR_SYNC')
                OR w.ownerAccount = (
                    SELECT 'liseursync|' || s.base_url || '|' || coalesce(s.liseur_account_id, s.account_id, s.username, 'null')
-                   FROM remote_server s WHERE s.kind = 'LISEUR_SYNC' LIMIT 1
+                   FROM remote_server s WHERE s.id = 1 AND s.kind = 'LISEUR_SYNC' LIMIT 1
                ))
     """)
     suspend fun reviewsBetween(start: Long, end: Long): VocabularyDailyReviews
@@ -379,10 +382,10 @@ interface VocabularyDao {
         JOIN vocabulary_words w ON w.id = r.wordId
         WHERE r.reviewedAt >= :start
           AND (w.ownerAccount = ''
-               OR NOT EXISTS (SELECT 1 FROM remote_server s WHERE s.kind = 'LISEUR_SYNC')
+               OR NOT EXISTS (SELECT 1 FROM remote_server s WHERE s.id = 1 AND s.kind = 'LISEUR_SYNC')
                OR w.ownerAccount = (
                    SELECT 'liseursync|' || s.base_url || '|' || coalesce(s.liseur_account_id, s.account_id, s.username, 'null')
-                   FROM remote_server s WHERE s.kind = 'LISEUR_SYNC' LIMIT 1
+                   FROM remote_server s WHERE s.id = 1 AND s.kind = 'LISEUR_SYNC' LIMIT 1
                ))
           AND (:book IS NULL OR EXISTS (
             SELECT 1 FROM vocabulary_occurrences o WHERE o.wordId = r.wordId AND o.bookUrl = :book
@@ -424,10 +427,10 @@ interface VocabularyDao {
             SELECT w.id, w.repetitions, w.dueAt FROM vocabulary_words w
             WHERE w.dueAt <= :now
               AND (w.ownerAccount = ''
-                   OR NOT EXISTS (SELECT 1 FROM remote_server s WHERE s.kind = 'LISEUR_SYNC')
+                   OR NOT EXISTS (SELECT 1 FROM remote_server s WHERE s.id = 1 AND s.kind = 'LISEUR_SYNC')
                    OR w.ownerAccount = (
                        SELECT 'liseursync|' || s.base_url || '|' || coalesce(s.liseur_account_id, s.account_id, s.username, 'null')
-                       FROM remote_server s WHERE s.kind = 'LISEUR_SYNC' LIMIT 1
+                       FROM remote_server s WHERE s.id = 1 AND s.kind = 'LISEUR_SYNC' LIMIT 1
                    ))
               AND (:book IS NULL OR EXISTS (
                 SELECT 1 FROM vocabulary_occurrences o WHERE o.wordId = w.id AND o.bookUrl = :book
@@ -436,10 +439,10 @@ interface VocabularyDao {
                 SELECT candidate.id FROM vocabulary_words candidate
                 WHERE candidate.repetitions = 0 AND candidate.dueAt <= :now
                   AND (candidate.ownerAccount = ''
-                       OR NOT EXISTS (SELECT 1 FROM remote_server s WHERE s.kind = 'LISEUR_SYNC')
+                       OR NOT EXISTS (SELECT 1 FROM remote_server s WHERE s.id = 1 AND s.kind = 'LISEUR_SYNC')
                        OR candidate.ownerAccount = (
                            SELECT 'liseursync|' || s.base_url || '|' || coalesce(s.liseur_account_id, s.account_id, s.username, 'null')
-                           FROM remote_server s WHERE s.kind = 'LISEUR_SYNC' LIMIT 1
+                           FROM remote_server s WHERE s.id = 1 AND s.kind = 'LISEUR_SYNC' LIMIT 1
                        ))
                   AND (:book IS NULL OR EXISTS (
                     SELECT 1 FROM vocabulary_occurrences o WHERE o.wordId = candidate.id AND o.bookUrl = :book
@@ -462,10 +465,10 @@ interface VocabularyDao {
             CASE WHEN :grouped THEN max(o.bookTitle) END AS groupTitle
         FROM vocabulary_words w LEFT JOIN vocabulary_occurrences o ON o.wordId = w.id
         WHERE (w.ownerAccount = ''
-               OR NOT EXISTS (SELECT 1 FROM remote_server s WHERE s.kind = 'LISEUR_SYNC')
+               OR NOT EXISTS (SELECT 1 FROM remote_server s WHERE s.id = 1 AND s.kind = 'LISEUR_SYNC')
                OR w.ownerAccount = (
                    SELECT 'liseursync|' || s.base_url || '|' || coalesce(s.liseur_account_id, s.account_id, s.username, 'null')
-                   FROM remote_server s WHERE s.kind = 'LISEUR_SYNC' LIMIT 1
+                   FROM remote_server s WHERE s.id = 1 AND s.kind = 'LISEUR_SYNC' LIMIT 1
                ))
           AND (:book IS NULL OR o.bookUrl = :book)
           AND (:search = '' OR instr(w.normalized, :search) > 0 OR instr(w.searchText, :search) > 0

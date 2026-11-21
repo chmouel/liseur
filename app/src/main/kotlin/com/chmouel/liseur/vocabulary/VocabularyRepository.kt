@@ -75,7 +75,7 @@ internal class VocabularyRepository(
                     VocabularyMerge.provisionalOccurrenceKey(source.bookUrl, source.bookTitle, source.locationKey)
                 }
                 val previous = dao.occurrenceByKey(id, occKey)
-                    ?: dao.occurrence(id, source.bookUrl, source.locationKey)
+                    ?: if (source.bookUrl.isNotEmpty()) dao.occurrence(id, source.bookUrl, source.locationKey) else null
                 if (previous == null) {
                     dao.insertOccurrence(
                         source.copy(
@@ -235,7 +235,7 @@ internal class VocabularyRepository(
                     VocabularyMerge.provisionalOccurrenceKey(source.bookUrl, source.bookTitle, source.locationKey)
                 }
                 val saved = dao.occurrenceByKey(id, occKey)
-                    ?: dao.occurrence(id, source.bookUrl, source.locationKey)
+                    ?: if (source.bookUrl.isNotEmpty()) dao.occurrence(id, source.bookUrl, source.locationKey) else null
                 if (saved == null) {
                     dao.insertOccurrence(source.copy(wordId = id, searchSentence = searchSentence, occurrenceKey = occKey))
                 } else {
@@ -257,14 +257,14 @@ internal class VocabularyRepository(
                 val existingSyncIds = existingReviews.mapNotNull { it.syncId }.toMutableSet()
                 val nullSyncIdByContent = existingReviews
                     .filter { it.syncId == null }
-                    .groupBy { it.copy(id = 0, wordId = id, syncId = null) }
+                    .groupBy { it.copy(id = 0, wordId = id, firstReview = false, syncId = null) }
                     .mapValues { it.value.toMutableList() }
                     .toMutableMap()
                 val legacyContentKeys = existingReviews
-                    .map { it.copy(id = 0, wordId = id, syncId = null) }
+                    .map { it.copy(id = 0, wordId = id, firstReview = false, syncId = null) }
                     .toMutableSet()
                 for (review in acceptedReviews) {
-                    val contentKey = review.copy(id = 0, wordId = id, syncId = null)
+                    val contentKey = review.copy(id = 0, wordId = id, firstReview = false, syncId = null)
                     val sid = review.syncId
                     if (sid != null) {
                         if (sid in existingSyncIds) continue
