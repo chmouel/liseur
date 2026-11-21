@@ -198,7 +198,7 @@ class FootnoteLayoutTest {
     fun `a majority-notes document is not restyled either`() {
         // The guard clears both notes and reflinks so a table of contents
         // in a notes chapter keeps its own layout.
-        assertTrue(FootnoteLayout.SCRIPT.contains("reflinks = []"))
+        assertTrue(FootnoteLayout.SCRIPT.contains("MOSTLY_NOTES) { notes = []; reflinks = []"))
     }
 
     @Test
