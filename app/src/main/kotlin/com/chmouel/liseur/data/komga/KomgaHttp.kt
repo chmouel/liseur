@@ -27,6 +27,15 @@ import org.json.JSONObject
  */
 class KomgaHttp(private val http: RemoteHttp = RemoteHttp()) {
 
+    /**
+     * Never follows redirects: Komga authenticates with `X-API-Key`, which
+     * OkHttp does not strip on cross-origin or HTTPS->HTTP redirects.
+     */
+    private val client = http.client.newBuilder()
+        .followRedirects(false)
+        .followSslRedirects(false)
+        .build()
+
     fun getObject(url: String, credentials: RemoteCredentials): JSONObject =
         asObject(body(get(url, credentials)))
 
@@ -38,7 +47,7 @@ class KomgaHttp(private val http: RemoteHttp = RemoteHttp()) {
      * two mean quite different things and only one of them is fine.
      */
     fun getObjectOrNull(url: String, credentials: RemoteCredentials): JSONObject? {
-        http.client.newCall(http.request(url, credentials).build()).execute().use { response ->
+        client.newCall(http.request(url, credentials).build()).execute().use { response ->
             if (!response.isSuccessful) throw RemoteHttpFailure(failureForCode(response.code))
             val body = response.body?.string().orEmpty()
             return if (body.isBlank()) null else asObject(body)
@@ -49,7 +58,7 @@ class KomgaHttp(private val http: RemoteHttp = RemoteHttp()) {
         val request = credentials.signInto(okhttp3.Request.Builder().url(url))
             .post(json.toString().toRequestBody(JSON))
             .build()
-        return asObject(body(http.client.newCall(request).execute()))
+        return asObject(body(client.newCall(request).execute()))
     }
 
     /**
@@ -73,14 +82,14 @@ class KomgaHttp(private val http: RemoteHttp = RemoteHttp()) {
         val request = credentials.signInto(okhttp3.Request.Builder().url(url))
             .method(method, if (method == "DELETE" && json == null) null else body)
             .build()
-        http.client.newCall(request).execute().use { response ->
+        client.newCall(request).execute().use { response ->
             if (response.isSuccessful || response.code in rejected) return response.code
             throw RemoteHttpFailure(failureForCode(response.code))
         }
     }
 
     private fun get(url: String, credentials: RemoteCredentials): Response =
-        http.client.newCall(http.request(url, credentials).build()).execute()
+        client.newCall(http.request(url, credentials).build()).execute()
 
     private fun body(response: Response): String = response.use {
         if (!it.isSuccessful) throw RemoteHttpFailure(failureForCode(it.code))
