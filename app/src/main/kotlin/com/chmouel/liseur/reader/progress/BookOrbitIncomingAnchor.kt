@@ -7,6 +7,7 @@ import com.chmouel.liseur.data.bookorbit.BookOrbitEpubPackage
 import com.chmouel.liseur.data.db.ReadingProgress
 import com.chmouel.liseur.reader.ResourceAddress
 import com.chmouel.liseur.reader.progress.ExactLocatorAnchor.BLOCK_TAGS
+import com.chmouel.liseur.reader.progress.ExactLocatorAnchor.SVG_NON_TEXT_TAGS
 import org.readium.r2.shared.publication.Locator
 import org.w3c.dom.Document
 import org.w3c.dom.Element
@@ -148,23 +149,11 @@ internal object BookOrbitIncomingAnchor {
         return null
     }
 
-    private fun isIgnored(node: Node): Boolean =
-        node is Element && (node.localName?.lowercase() in IGNORED_TAGS || node.hasAttribute("hidden") ||
-            inlineDisplayNone(node.getAttribute("style")))
-
-    private fun inlineDisplayNone(style: String): Boolean {
-        if (!style.contains("display", ignoreCase = true)) return false
-        // Complex CSS is left to the WebView's exact-position check.
-        if (style.any { it in "\"'()\\{}" } || "/*" in style) return false
-        val displays = style.split(';').mapNotNull { declaration ->
-            val parts = declaration.split(':', limit = 2)
-            if (parts.size != 2 || !parts[0].trim().equals("display", ignoreCase = true)) return@mapNotNull null
-            val value = parts[1].trim()
-            val important = IMPORTANT.find(value)
-            value.substring(0, important?.range?.first ?: value.length).trim() to (important != null)
-        }
-        val display = displays.lastOrNull { it.second } ?: displays.lastOrNull()
-        return display?.first.equals("none", ignoreCase = true)
+    // CSS can reveal hidden content, so only intrinsically non-rendering nodes are skipped.
+    private fun isIgnored(node: Node): Boolean = node is Element && when (node.namespaceURI) {
+        "http://www.w3.org/2000/svg" -> node.localName?.lowercase() in SVG_NON_TEXT_TAGS
+        "http://www.w3.org/1999/xhtml", null -> node.localName?.lowercase() in VOID_TAGS
+        else -> false
     }
 
     /** Word boundaries follow blocks; offsets still include every node in WebView's textContent. */
@@ -238,10 +227,5 @@ internal object BookOrbitIncomingAnchor {
     private fun String.takeLastCodePoints(count: Int): String =
         substring(offsetByCodePoints(length, -codePointCount(0, length).coerceAtMost(count)))
 
-    private val IMPORTANT = Regex("!\\s*important\\s*$", RegexOption.IGNORE_CASE)
-
-    private val IGNORED_TAGS = setOf(
-        "script", "style", "noscript", "template", "title", "desc", "defs", "metadata",
-        "br", "hr", "img", "svg", "image",
-    )
+    private val VOID_TAGS = setOf("br", "hr", "img")
 }
