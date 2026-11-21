@@ -1341,13 +1341,15 @@ class LiseurSyncVocabulary(
         occurrences: List<VocabularyMerge.Occurrence>,
     ): String {
         val obj = JSONObject()
-            .put("word", meta.word)
-            .put("notes", meta.notes)
+            .put("word", AnnotationWire.truncate(meta.word, MAX_WIRE_WORD_BYTES))
+            .put("notes", AnnotationWire.truncate(meta.notes, MAX_WIRE_NOTES_BYTES))
             .put("definition_edited", meta.definitionEdited)
             .put("definition_updated_at", meta.definitionUpdatedAt)
             .put("notes_updated_at", meta.notesUpdatedAt)
             .put("added_at", meta.addedAt)
-        if (meta.definition != null) obj.put("definition", meta.definition)
+        if (meta.definition != null) {
+            obj.put("definition", AnnotationWire.truncate(meta.definition, MAX_WIRE_DEFINITION_BYTES))
+        }
         if (meta.translationLanguage != null) obj.put("translation_language", meta.translationLanguage)
         meta.baseline?.let { b ->
             val bObj = JSONObject()
