@@ -25,7 +25,7 @@ sealed interface HardcoverRef {
             RegexOption.IGNORE_CASE,
         )
         private val SLUG = Regex("""[A-Za-z0-9_.-]+""")
-        private val HOST_FIRST = Regex("""^[^\s/]+\.[^\s/]+/""")
+        private val HOST_FIRST = Regex("""^[^\s/?#]+\.[^\s/?#]+[/?#]""")
 
         /**
          * Whether the field changing from [before] to [after] was a paste of
