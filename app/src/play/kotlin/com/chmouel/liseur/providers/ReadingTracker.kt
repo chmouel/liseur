@@ -4,10 +4,12 @@ import android.content.Context
 import android.widget.Toast
 import androidx.annotation.StringRes
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -17,6 +19,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -25,13 +28,19 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
+import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.ContentPaste
+import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.LinkOff
+import androidx.compose.material.icons.outlined.SwapVert
 import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material.icons.outlined.TaskAlt
 import androidx.compose.material3.AlertDialog
@@ -43,9 +52,11 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -68,7 +79,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
@@ -76,6 +89,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.room.withTransaction
@@ -528,20 +542,24 @@ internal class ReadingTracker(context: Context, private val database: LiseurData
         }
     }
 
-    /** One book's standing with Hardcover, on its details page, while an account is connected. */
+    /** One book's standing with Hardcover, on its details page. */
     @OptIn(ExperimentalLayoutApi::class)
     @Composable
-    fun BookDetailsSection(bookUrl: String, modifier: Modifier) {
+    fun BookDetailsSection(
+        bookUrl: String,
+        modifier: Modifier,
+        onOpenSettings: () -> Unit = {},
+    ) {
         if (!remember { used() }) return
         val account by hardcover.account.collectAsState(initial = null)
-        if (account == null) return
         val link by remember(bookUrl) { hardcover.link(bookUrl) }.collectAsState(initial = null)
         val ui = rememberCoroutineScope()
         var busy by remember { mutableStateOf(false) }
-        var message by remember(bookUrl) { mutableStateOf<Int?>(null) }
+        var message by remember(bookUrl) { mutableStateOf<HardcoverNotice?>(null) }
         var choices by remember(bookUrl) { mutableStateOf<PickerSession?>(null) }
         var review by remember(bookUrl) { mutableStateOf<DetailsReviewSession?>(null) }
-        val view = hardcoverBookDetailsView(link)
+        var confirmingUnlink by remember(bookUrl) { mutableStateOf(false) }
+        val view = hardcoverBookDetailsView(link, account)
         fun busyWhile(work: suspend () -> Unit) {
             busy = true
             message = null
@@ -554,7 +572,7 @@ internal class ReadingTracker(context: Context, private val database: LiseurData
             busyWhile {
                 when (val found = hardcover.candidates(bookUrl)) {
                     is RemoteResult.Ok -> choices = PickerSession(found.value, push)
-                    is RemoteResult.Failed -> message = failureMessage(found.reason)
+                    is RemoteResult.Failed -> message = HardcoverNotice(failureMessage(found.reason), isError = true)
                 }
             }
         }
@@ -562,16 +580,16 @@ internal class ReadingTracker(context: Context, private val database: LiseurData
             busyWhile {
                 val (book, local) = localDetails(bookUrl) ?: return@busyWhile
                 when (val fetched = hardcover.editionDetails(bookUrl)) {
-                    is RemoteResult.Failed -> message = failureMessage(fetched.reason)
+                    is RemoteResult.Failed -> message = HardcoverNotice(failureMessage(fetched.reason), isError = true)
                     is RemoteResult.Ok -> {
                         val remote = fetched.value
                         if (remote == null) {
-                            message = R.string.hardcover_error_other
+                            message = HardcoverNotice(R.string.hardcover_error_other, isError = true)
                             return@busyWhile
                         }
                         val proposals = proposeUpdates(local, remote)
                         if (proposals.isEmpty()) {
-                            message = R.string.hardcover_update_details_empty
+                            message = HardcoverNotice(R.string.hardcover_update_details_empty, isError = false)
                         } else {
                             review = DetailsReviewSession(book = book, proposals = proposals)
                         }
@@ -591,85 +609,52 @@ internal class ReadingTracker(context: Context, private val database: LiseurData
                             // A match this device lost is still worth asking for.
                             HardcoverPushOutcome.NeedsMatch -> when (val found = hardcover.candidates(bookUrl)) {
                                 is RemoteResult.Ok -> choices = PickerSession(found.value, push = true)
-                                is RemoteResult.Failed -> message = failureMessage(found.reason)
+                                is RemoteResult.Failed -> message = HardcoverNotice(failureMessage(found.reason), isError = true)
                             }
-                            else -> message = outcomeMessage(outcome)
+                            else -> message = outcomeNotice(outcome)
                         }
                     }
+                }
+                HardcoverAction.UPDATE_DETAILS -> openDetailsUpdate()
+                HardcoverAction.UNLINK -> confirmingUnlink = true
+                HardcoverAction.OPEN_SETTINGS -> {
+                    SettingsFocus.key = PlaySettingsEntries.Hardcover.key
+                    onOpenSettings()
                 }
             }
         }
 
-        Column(modifier) {
-            HorizontalDivider(Modifier.padding(top = 24.dp, bottom = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
-            Text(
-                stringResource(R.string.hardcover_title),
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.semantics { heading() },
-            )
-            Text(
-                text = view.matchedEditionTitle
-                    ?.let { stringResource(R.string.hardcover_book_matched, it) }
-                    ?: stringResource(R.string.hardcover_book_unmatched),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 4.dp),
-            )
-            if (view.showSyncSwitch && view.syncSwitchChecked != null) {
-                // One toggleable row, so TalkBack reads the label with the switch's state.
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .toggleable(
-                            value = view.syncSwitchChecked,
-                            role = Role.Switch,
-                            onValueChange = { on -> ui.launch { hardcover.setExcluded(bookUrl, !on) } },
-                        )
-                        .padding(vertical = 8.dp),
-                ) {
-                    Text(
-                        text = stringResource(R.string.hardcover_book_sync),
-                        style = MaterialTheme.typography.bodyLarge,
-                        modifier = Modifier.weight(1f),
-                    )
-                    Switch(checked = view.syncSwitchChecked, onCheckedChange = null)
-                }
-            }
-            FlowRow(
-                modifier = Modifier.padding(top = if (view.showSyncSwitch) 0.dp else 10.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                itemVerticalAlignment = Alignment.CenterVertically,
-            ) {
-                view.primaryAction?.let { primary ->
-                    FilledTonalButton(
-                        enabled = !busy,
-                        onClick = { performAction(primary) },
-                    ) { Text(stringResource(primary.labelRes)) }
-                }
-                view.secondaryActions.forEach { secondary ->
+        HardcoverBookPanel(
+            view = view,
+            busy = busy,
+            message = message,
+            onToggleSync = { on -> ui.launch { hardcover.setExcluded(bookUrl, !on) } },
+            onAction = ::performAction,
+            modifier = modifier.padding(top = 20.dp),
+        )
+
+        if (confirmingUnlink) {
+            AlertDialog(
+                onDismissRequest = { confirmingUnlink = false },
+                title = { Text(stringResource(R.string.hardcover_book_unlink_title)) },
+                text = { Text(stringResource(R.string.hardcover_book_unlink_body)) },
+                confirmButton = {
                     TextButton(
-                        enabled = !busy,
-                        onClick = { performAction(secondary) },
-                    ) { Text(stringResource(secondary.labelRes)) }
-                }
-                if (view.showUpdateDetails) {
-                    TextButton(
-                        enabled = !busy,
-                        onClick = ::openDetailsUpdate,
-                    ) { Text(stringResource(R.string.hardcover_update_details)) }
-                }
-                if (busy) BusyIndicator()
-            }
-            message?.let {
-                Text(
-                    text = stringResource(it),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 8.dp),
-                )
-            }
+                        onClick = {
+                            confirmingUnlink = false
+                            message = null
+                            ui.launch { hardcover.unlink(bookUrl) }
+                        },
+                    ) {
+                        Text(stringResource(R.string.hardcover_book_unlink))
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { confirmingUnlink = false }) {
+                        Text(stringResource(R.string.cancel))
+                    }
+                },
+            )
         }
 
         choices?.let { session ->
@@ -691,7 +676,7 @@ internal class ReadingTracker(context: Context, private val database: LiseurData
                             )
                         ) {
                             EditionChoice.Chosen -> bookChanged(bookUrl)
-                            else -> message = choiceMessage(chosen)
+                            else -> message = choiceNotice(chosen)
                         }
                     }
                 },
@@ -707,9 +692,15 @@ internal class ReadingTracker(context: Context, private val database: LiseurData
                     review = null
                     busyWhile {
                         // The tracker's scope finishes the save even if Book details closes meanwhile.
-                        message = runCatching {
+                        val outcomeRes = runCatching {
                             scope.async { applyDetailsUpdate(session.book, proposals, selected) }.await()
                         }.getOrElse { R.string.hardcover_error_other }
+                        message = outcomeRes?.let { res ->
+                            HardcoverNotice(
+                                textRes = res,
+                                isError = res != R.string.hardcover_update_details_done,
+                            )
+                        }
                     }
                 },
                 onDismiss = { review = null },
@@ -875,27 +866,37 @@ internal class ReadingTracker(context: Context, private val database: LiseurData
         }
 
         @StringRes
-        fun outcomeMessage(outcome: HardcoverPushOutcome): Int = when (outcome) {
-            HardcoverPushOutcome.Pushed -> R.string.hardcover_pushed
-            HardcoverPushOutcome.UpToDate -> R.string.hardcover_up_to_date
-            HardcoverPushOutcome.NeedsMatch -> R.string.hardcover_needs_match
-            HardcoverPushOutcome.SwitchedOff -> R.string.hardcover_push_off
-            HardcoverPushOutcome.NotConnected -> R.string.hardcover_error_token
-            is HardcoverPushOutcome.Failed -> failureMessage(outcome.reason)
+        fun outcomeMessage(outcome: HardcoverPushOutcome): Int = outcomeNotice(outcome).textRes
+
+        fun outcomeNotice(outcome: HardcoverPushOutcome): HardcoverNotice = when (outcome) {
+            HardcoverPushOutcome.Pushed -> HardcoverNotice(R.string.hardcover_pushed, isError = false)
+            HardcoverPushOutcome.UpToDate -> HardcoverNotice(R.string.hardcover_up_to_date, isError = false)
+            HardcoverPushOutcome.NeedsMatch -> HardcoverNotice(R.string.hardcover_needs_match, isError = false)
+            HardcoverPushOutcome.SwitchedOff -> HardcoverNotice(R.string.hardcover_push_off, isError = false)
+            HardcoverPushOutcome.NotConnected -> HardcoverNotice(R.string.hardcover_error_token, isError = true)
+            is HardcoverPushOutcome.Failed -> HardcoverNotice(failureMessage(outcome.reason), isError = true)
         }
 
         @StringRes
         /** Nothing to say for a choice made only, which the caller follows up itself. */
-        fun choiceMessage(choice: EditionChoice): Int? = when (choice) {
+        fun choiceMessage(choice: EditionChoice): Int? = choiceNotice(choice)?.textRes
+
+        fun choiceNotice(choice: EditionChoice): HardcoverNotice? = when (choice) {
             EditionChoice.Chosen -> null
-            is EditionChoice.Pushed -> outcomeMessage(choice.outcome)
-            EditionChoice.SwitchedOff -> R.string.hardcover_push_off
-            EditionChoice.NotConnected, EditionChoice.OtherAccount -> R.string.hardcover_error_token
+            is EditionChoice.Pushed -> outcomeNotice(choice.outcome)
+            EditionChoice.SwitchedOff -> HardcoverNotice(R.string.hardcover_push_off, isError = false)
+            EditionChoice.NotConnected, EditionChoice.OtherAccount ->
+                HardcoverNotice(R.string.hardcover_error_token, isError = true)
             EditionChoice.AlreadyGone -> null
-            is EditionChoice.Failed -> failureMessage(choice.reason)
+            is EditionChoice.Failed -> HardcoverNotice(failureMessage(choice.reason), isError = true)
         }
     }
 }
+
+internal data class HardcoverNotice(
+    @StringRes val textRes: Int,
+    val isError: Boolean,
+)
 
 /** An unmatched book opens the picker; one kept off Hardcover goes to push, which says so. */
 internal fun opensEditionPicker(matched: Boolean, excluded: Boolean): Boolean = !matched && !excluded
@@ -905,56 +906,462 @@ internal enum class HardcoverAction(@StringRes val labelRes: Int) {
     CHANGE_EDITION(R.string.hardcover_book_change),
     CHOOSE_AND_PUSH(R.string.hardcover_book_choose_and_push),
     PUSH(R.string.hardcover_push),
+    UPDATE_DETAILS(R.string.hardcover_update_details),
     KEEP_OFF(R.string.hardcover_book_keep_off),
+    UNLINK(R.string.hardcover_book_unlink),
+    OPEN_SETTINGS(R.string.hardcover_book_open_settings),
+}
+
+internal enum class HardcoverStatusChip(@StringRes val labelRes: Int, val linked: Boolean) {
+    LINKED(R.string.hardcover_book_linked, linked = true),
+    NOT_LINKED(R.string.hardcover_book_not_linked, linked = false),
 }
 
 internal data class HardcoverBookDetailsView(
+    @StringRes val subtitleRes: Int,
     val matchedEditionTitle: String?,
+    val statusChip: HardcoverStatusChip?,
     val showSyncSwitch: Boolean,
     val syncSwitchChecked: Boolean?,
     val primaryAction: HardcoverAction?,
+    val primaryActionEnabled: Boolean = true,
     val secondaryActions: List<HardcoverAction>,
     val showUpdateDetails: Boolean = false,
 )
 
-internal fun hardcoverBookDetailsView(link: HardcoverBookLink?): HardcoverBookDetailsView {
+internal fun hardcoverBookDetailsView(
+    link: HardcoverBookLink?,
+    account: HardcoverAccount? = HardcoverAccount(
+        userId = 1L,
+        username = "",
+        tokenCipher = "",
+        addedAt = 0L,
+    ),
+): HardcoverBookDetailsView {
+    if (account == null || account.tokenRefused) {
+        return HardcoverBookDetailsView(
+            subtitleRes = if (account?.tokenRefused == true) {
+                R.string.hardcover_book_needs_new_token
+            } else {
+                R.string.hardcover_book_not_connected
+            },
+            matchedEditionTitle = null,
+            statusChip = null,
+            showSyncSwitch = false,
+            syncSwitchChecked = null,
+            primaryAction = null,
+            primaryActionEnabled = false,
+            secondaryActions = listOf(HardcoverAction.OPEN_SETTINGS),
+            showUpdateDetails = false,
+        )
+    }
     val matched = link?.matched == true
     val excluded = link?.excluded == true
     return when {
         !matched && !excluded -> HardcoverBookDetailsView(
+            subtitleRes = R.string.hardcover_book_unmatched,
             matchedEditionTitle = null,
+            statusChip = HardcoverStatusChip.NOT_LINKED,
             showSyncSwitch = false,
             syncSwitchChecked = null,
             primaryAction = HardcoverAction.CHOOSE_EDITION,
+            primaryActionEnabled = true,
             // Auto-sync can still match and report an unlinked book, so it needs a way out.
             secondaryActions = listOf(HardcoverAction.CHOOSE_AND_PUSH, HardcoverAction.KEEP_OFF),
             showUpdateDetails = false,
         )
         !matched && excluded -> HardcoverBookDetailsView(
+            subtitleRes = R.string.hardcover_book_unmatched,
             matchedEditionTitle = null,
+            statusChip = HardcoverStatusChip.NOT_LINKED,
             showSyncSwitch = true,
             syncSwitchChecked = false,
-            primaryAction = null,
-            secondaryActions = listOf(HardcoverAction.CHOOSE_EDITION),
+            primaryAction = HardcoverAction.CHOOSE_EDITION,
+            primaryActionEnabled = true,
+            secondaryActions = emptyList(),
             showUpdateDetails = false,
         )
         matched && !excluded -> HardcoverBookDetailsView(
+            subtitleRes = R.string.hardcover_book_matched,
             matchedEditionTitle = link.editionTitle,
+            statusChip = HardcoverStatusChip.LINKED,
             showSyncSwitch = true,
             syncSwitchChecked = true,
             primaryAction = HardcoverAction.PUSH,
-            secondaryActions = listOf(HardcoverAction.CHANGE_EDITION),
+            primaryActionEnabled = true,
+            secondaryActions = listOf(HardcoverAction.CHANGE_EDITION, HardcoverAction.UNLINK),
             showUpdateDetails = true,
         )
         else -> HardcoverBookDetailsView(
+            subtitleRes = R.string.hardcover_book_matched,
             matchedEditionTitle = link.editionTitle,
+            statusChip = HardcoverStatusChip.LINKED,
             showSyncSwitch = true,
             syncSwitchChecked = false,
-            primaryAction = null,
-            secondaryActions = listOf(HardcoverAction.CHANGE_EDITION),
+            primaryAction = HardcoverAction.PUSH,
+            primaryActionEnabled = false,
+            secondaryActions = listOf(HardcoverAction.CHANGE_EDITION, HardcoverAction.UNLINK),
             showUpdateDetails = true,
         )
     }
+}
+
+/** A button's icon, icon gap and horizontal padding around its label. */
+private val BUTTON_CHROME_WIDTH = 18.dp + 6.dp + 14.dp * 2 + 2.dp
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun HardcoverBookPanel(
+    view: HardcoverBookDetailsView,
+    busy: Boolean,
+    message: HardcoverNotice?,
+    onToggleSync: (Boolean) -> Unit,
+    onAction: (HardcoverAction) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val eInk = LocalEInk.current
+    val colors = MaterialTheme.colorScheme
+    val dividerColor = if (eInk) colors.outline else colors.outlineVariant.copy(alpha = 0.6f)
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        color = if (eInk) colors.surface else colors.surfaceContainerLow,
+        border = BorderStroke(
+            width = 1.dp,
+            color = if (eInk) colors.outline else colors.outlineVariant,
+        ),
+    ) {
+        Column(Modifier.fillMaxWidth()) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+            ) {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(if (eInk) colors.surface else colors.surfaceContainerHigh)
+                        .then(
+                            if (eInk) {
+                                Modifier.border(BorderStroke(1.dp, colors.outline), RoundedCornerShape(10.dp))
+                            } else {
+                                Modifier
+                            },
+                        ),
+                ) {
+                    Image(
+                        painter = painterResource(R.drawable.ic_hardcover_logo),
+                        contentDescription = null,
+                        modifier = Modifier.size(28.dp),
+                    )
+                }
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    Text(
+                        text = stringResource(R.string.hardcover_title),
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.semantics { heading() },
+                    )
+                    Text(
+                        text = view.matchedEditionTitle
+                            ?.let { stringResource(view.subtitleRes, it) }
+                            ?: stringResource(view.subtitleRes),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (view.subtitleRes == R.string.hardcover_book_needs_new_token) {
+                            colors.error
+                        } else {
+                            colors.onSurfaceVariant
+                        },
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                view.statusChip?.let { chip ->
+                    HardcoverStatusPill(chip = chip, eInk = eInk)
+                }
+            }
+
+            if (busy) {
+                LinearProgressIndicator(
+                    modifier = Modifier.fillMaxWidth().height(2.dp),
+                    trackColor = dividerColor,
+                )
+            } else {
+                HorizontalDivider(color = dividerColor)
+            }
+
+            if (view.showSyncSwitch && view.syncSwitchChecked != null) {
+                // One toggleable row, so TalkBack reads the label with the switch's state.
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .toggleable(
+                            value = view.syncSwitchChecked,
+                            enabled = !busy,
+                            role = Role.Switch,
+                            onValueChange = onToggleSync,
+                        )
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Sync,
+                        contentDescription = null,
+                        tint = colors.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.hardcover_book_sync),
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+                        Text(
+                            text = stringResource(R.string.hardcover_book_sync_subtitle),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = colors.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = view.syncSwitchChecked,
+                        onCheckedChange = null,
+                        enabled = !busy,
+                    )
+                }
+                HorizontalDivider(color = dividerColor)
+            }
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                if (view.primaryAction != null || view.showUpdateDetails) {
+                    BoxWithConstraints(Modifier.fillMaxWidth()) {
+                        val primary = view.primaryAction
+                        val measurer = rememberTextMeasurer()
+                        val labelStyle = MaterialTheme.typography.labelLarge
+                        val density = LocalDensity.current
+                        val labels = listOfNotNull(
+                            primary?.let { stringResource(it.labelRes) },
+                            stringResource(R.string.hardcover_update_details),
+                        )
+                        // Side by side only when both labels fit unclipped in half the width, in any language.
+                        val widest = with(density) {
+                            labels.maxOf { measurer.measure(it, labelStyle, maxLines = 1).size.width }.toDp()
+                        }
+                        val stackButtons = widest + BUTTON_CHROME_WIDTH > (maxWidth - 10.dp) / 2
+                        if (primary != null && view.showUpdateDetails) {
+                            if (stackButtons) {
+                                Column(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    HardcoverPrimaryButton(
+                                        action = primary,
+                                        enabled = !busy && view.primaryActionEnabled,
+                                        onClick = { onAction(primary) },
+                                        modifier = Modifier.fillMaxWidth(),
+                                    )
+                                    HardcoverUpdateDetailsButton(
+                                        enabled = !busy,
+                                        onClick = { onAction(HardcoverAction.UPDATE_DETAILS) },
+                                        modifier = Modifier.fillMaxWidth(),
+                                    )
+                                }
+                            } else {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    HardcoverPrimaryButton(
+                                        action = primary,
+                                        enabled = !busy && view.primaryActionEnabled,
+                                        onClick = { onAction(primary) },
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                    HardcoverUpdateDetailsButton(
+                                        enabled = !busy,
+                                        onClick = { onAction(HardcoverAction.UPDATE_DETAILS) },
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                }
+                            }
+                        } else if (primary != null) {
+                            HardcoverPrimaryButton(
+                                action = primary,
+                                enabled = !busy && view.primaryActionEnabled,
+                                onClick = { onAction(primary) },
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        } else if (view.showUpdateDetails) {
+                            HardcoverUpdateDetailsButton(
+                                enabled = !busy,
+                                onClick = { onAction(HardcoverAction.UPDATE_DETAILS) },
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                    }
+                }
+
+                if (view.secondaryActions.isNotEmpty()) {
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                        itemVerticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        view.secondaryActions.forEach { secondary ->
+                            TextButton(
+                                enabled = !busy,
+                                onClick = { onAction(secondary) },
+                                modifier = Modifier.heightIn(min = 48.dp),
+                            ) {
+                                secondaryActionIcon(secondary)?.let { icon ->
+                                    Icon(
+                                        imageVector = icon,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp),
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                }
+                                Text(stringResource(secondary.labelRes))
+                            }
+                        }
+                    }
+                }
+
+                message?.let { notice ->
+                    Text(
+                        text = stringResource(notice.textRes),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (notice.isError) colors.error else colors.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HardcoverStatusPill(
+    chip: HardcoverStatusChip,
+    eInk: Boolean,
+) {
+    val colors = MaterialTheme.colorScheme
+    val containerColor = when {
+        eInk -> colors.surface
+        chip.linked -> colors.primaryContainer
+        else -> colors.surfaceContainerHigh
+    }
+    val contentColor = when {
+        eInk -> colors.onSurface
+        chip.linked -> colors.onPrimaryContainer
+        else -> colors.onSurfaceVariant
+    }
+    val borderColor = when {
+        eInk -> colors.outline
+        chip.linked -> colors.primary.copy(alpha = 0.3f)
+        else -> colors.outlineVariant
+    }
+    Surface(
+        shape = CircleShape,
+        color = containerColor,
+        contentColor = contentColor,
+        border = BorderStroke(1.dp, borderColor),
+        modifier = Modifier.semantics(mergeDescendants = true) {},
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+        ) {
+            if (chip.linked) {
+                Icon(
+                    imageVector = Icons.Outlined.Check,
+                    contentDescription = null,
+                    modifier = Modifier.size(14.dp),
+                )
+            }
+            Text(
+                text = stringResource(chip.labelRes),
+                style = MaterialTheme.typography.labelMedium,
+                maxLines = 1,
+            )
+        }
+    }
+}
+
+@Composable
+private fun HardcoverPrimaryButton(
+    action: HardcoverAction,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    FilledTonalButton(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = modifier.heightIn(min = 48.dp),
+        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
+    ) {
+        if (action == HardcoverAction.PUSH) {
+            Icon(
+                imageVector = Icons.Outlined.SwapVert,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+            )
+            Spacer(Modifier.width(6.dp))
+        }
+        Text(
+            text = stringResource(action.labelRes),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+@Composable
+private fun HardcoverUpdateDetailsButton(
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    OutlinedButton(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = modifier.heightIn(min = 48.dp),
+        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
+    ) {
+        Icon(
+            imageVector = Icons.Outlined.Download,
+            contentDescription = null,
+            modifier = Modifier.size(18.dp),
+        )
+        Spacer(Modifier.width(6.dp))
+        Text(
+            text = stringResource(R.string.hardcover_update_details),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+private fun secondaryActionIcon(action: HardcoverAction) = when (action) {
+    HardcoverAction.CHANGE_EDITION -> Icons.Outlined.Edit
+    HardcoverAction.UNLINK -> Icons.Outlined.LinkOff
+    else -> null
 }
 
 private data class DetailsReviewSession(

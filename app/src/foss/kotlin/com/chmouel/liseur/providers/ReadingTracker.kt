@@ -30,7 +30,7 @@ internal class ReadingTracker(context: Context, database: LiseurDatabase) {
     fun Rows() = Unit
 
     @Composable
-    fun BookDetailsSection(bookUrl: String, modifier: Modifier) = Unit
+    fun BookDetailsSection(bookUrl: String, modifier: Modifier, onOpenSettings: () -> Unit = {}) = Unit
 
     @Composable
     fun ReaderMenuItem(

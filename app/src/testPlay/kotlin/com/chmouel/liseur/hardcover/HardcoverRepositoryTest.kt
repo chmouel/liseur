@@ -733,6 +733,29 @@ class HardcoverRepositoryTest {
         assertEquals(listOf("edition_details"), hardcover.queries)
     }
 
+    @Test
+    fun `unlinking drops the book link and queued push without contacting hardcover`() = runBlocking {
+        signedIn()
+        val repository = repository()
+        dao.links[BOOK] = HardcoverBookLink(
+            bookUrl = BOOK,
+            hardcoverBookId = 9,
+            editionId = 5,
+            editionTitle = "The Hobbit",
+        )
+        assertTrue(repository.queue(BOOK))
+        assertNotNull(dao.links[BOOK])
+        assertNotNull(repository.nextPending())
+
+        repository.unlink(BOOK)
+
+        assertNull(dao.links[BOOK])
+        assertNull(repository.nextPending())
+        assertFalse(repository.remembers(BOOK))
+        assertTrue(hardcover.queries.isEmpty())
+        assertEquals(0, server.requestCount)
+    }
+
     /** Hardcover with one reader's library of at most one book, the way the server answers. */
     private class FakeHardcover : Dispatcher() {
         data class Read(

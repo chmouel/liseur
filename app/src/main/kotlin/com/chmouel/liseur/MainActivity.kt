@@ -718,7 +718,11 @@ private fun LiseurApp(
                                 }
                             },
                             extraSection = { section ->
-                                context.container.readingTracker.BookDetailsSection(target.bookUrl, section)
+                                context.container.readingTracker.BookDetailsSection(
+                                    bookUrl = target.bookUrl,
+                                    modifier = section,
+                                    onOpenSettings = { openPage(Route.Services) },
+                                )
                             },
                         )
                     }
