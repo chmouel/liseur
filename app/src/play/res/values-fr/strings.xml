@@ -102,4 +102,13 @@
     <string name="hardcover_book_sync">Synchroniser ce livre</string>
     <string name="hardcover_book_choose">Choisir l\'édition</string>
     <string name="hardcover_editions_none">Hardcover n\'a aucune édition correspondant à ce livre.</string>
+    <plurals name="hardcover_edition_pages">
+        <item quantity="one">%d page</item>
+        <item quantity="other">%d pages</item>
+    </plurals>
+    <plurals name="hardcover_edition_readers">
+        <item quantity="one">%d lecteur</item>
+        <item quantity="other">%d lecteurs</item>
+    </plurals>
+    <string name="hardcover_edition_current">Actuellement associée</string>
 </resources>

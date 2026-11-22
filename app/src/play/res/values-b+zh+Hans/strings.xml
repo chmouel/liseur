@@ -102,4 +102,11 @@
     <string name="hardcover_book_sync">同步此书</string>
     <string name="hardcover_book_choose">选择版本</string>
     <string name="hardcover_editions_none">Hardcover 中没有与此书匹配的版本。</string>
+    <plurals name="hardcover_edition_pages">
+        <item quantity="other">%d 页</item>
+    </plurals>
+    <plurals name="hardcover_edition_readers">
+        <item quantity="other">%d 位读者</item>
+    </plurals>
+    <string name="hardcover_edition_current">当前已匹配</string>
 </resources>

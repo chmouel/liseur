@@ -102,4 +102,17 @@
     <string name="hardcover_book_sync">Синхронизировать эту книгу</string>
     <string name="hardcover_book_choose">Выбрать издание</string>
     <string name="hardcover_editions_none">В Hardcover нет издания, соответствующего этой книге.</string>
+    <plurals name="hardcover_edition_pages">
+        <item quantity="one">%d страница</item>
+        <item quantity="few">%d страницы</item>
+        <item quantity="many">%d страниц</item>
+        <item quantity="other">%d страницы</item>
+    </plurals>
+    <plurals name="hardcover_edition_readers">
+        <item quantity="one">%d читатель</item>
+        <item quantity="few">%d читателя</item>
+        <item quantity="many">%d читателей</item>
+        <item quantity="other">%d читателя</item>
+    </plurals>
+    <string name="hardcover_edition_current">Сейчас выбрано</string>
 </resources>

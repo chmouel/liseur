@@ -33,6 +33,7 @@ data class HardcoverEdition(
     val isbn10: String?,
     val releaseYear: Int?,
     val publisher: String?,
+    val usersCount: Int = 0,
 )
 
 /** A book the search turned up, before an edition of it is chosen. */
@@ -221,6 +222,7 @@ class HardcoverClient(
         isbn10 = row.text("isbn_10"),
         releaseYear = row.optInt("release_year", 0).takeIf { it > 0 },
         publisher = row.optJSONObject("publisher")?.text("name"),
+        usersCount = row.optInt("users_count", 0).coerceAtLeast(0),
     )
 
     private suspend fun awaitTurn() = pacing.withLock {
@@ -299,7 +301,7 @@ class HardcoverClient(
         }
 
         private const val EDITION_FIELDS =
-            "id book_id title edition_format pages isbn_13 isbn_10 release_year " +
+            "id book_id title edition_format pages isbn_13 isbn_10 release_year users_count " +
                 "book { title } publisher { name }"
 
         private const val ME = "query { me { id username } }"

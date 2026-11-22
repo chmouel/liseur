@@ -109,4 +109,13 @@
     <string name="hardcover_book_sync">Sync this book</string>
     <string name="hardcover_book_choose">Choose edition</string>
     <string name="hardcover_editions_none">Hardcover has no edition matching this book.</string>
+    <plurals name="hardcover_edition_pages">
+        <item quantity="one">%d page</item>
+        <item quantity="other">%d pages</item>
+    </plurals>
+    <plurals name="hardcover_edition_readers">
+        <item quantity="one">%d reader</item>
+        <item quantity="other">%d readers</item>
+    </plurals>
+    <string name="hardcover_edition_current">Currently matched</string>
 </resources>
