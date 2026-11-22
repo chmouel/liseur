@@ -16,9 +16,9 @@ DEVELOPER.md section before touching that area.
 Use the Gradle wrapper (JDK 17), never a system Gradle:
 
 ```bash
-./gradlew testFossDebugUnitTest testPlayDebugUnitTest
-./gradlew lintFossDebug lintPlayDebug
-./gradlew assembleFossDebug assemblePlayDebug
+./gradlew testPlayDebugUnitTest
+./gradlew lintPlayDebug
+./gradlew assemblePlayDebug
 make check   # tests, lint and builds, when a change spans them
 ```
 
@@ -27,6 +27,10 @@ make check   # tests, lint and builds, when a change spans them
   server are in both. Code that calls Gemini or ML Kit goes only in
   `app/src/play/`, because F-Droid builds `foss` and must find none of it
   ([details](DEVELOPER.md#building)).
+- Build, test and lint only `play` day to day. Run the `foss` tasks too
+  (`make test`, `make lint`, `make build-all` or `make check`) before a
+  release, or when a change touches `app/src/foss/`, flavor wiring or
+  anything else that could break that build.
 - Dependencies live in `gradle/libs.versions.toml`. AGP 9 supplies Kotlin;
   adding `org.jetbrains.kotlin.android` breaks the build.
 - Pull request CI runs only policy checks; the full build runs on `main`
