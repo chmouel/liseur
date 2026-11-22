@@ -21,7 +21,7 @@ sealed interface HardcoverRef {
 
     companion object {
         private val BOOK_LINK = Regex(
-            """^(?:https?://)?(?:www\.)?hardcover\.app/books/([^/?#\s]+)(?:[/?#].*)?$""",
+            """^(?:(?:https?:)?//)?(?:www\.)?hardcover\.app/books/([^/?#\s]+)(?:[/?#].*)?$""",
             RegexOption.IGNORE_CASE,
         )
         private val SLUG = Regex("""[A-Za-z0-9_.-]+""")
@@ -29,11 +29,16 @@ sealed interface HardcoverRef {
 
         /**
          * Whether the field changing from [before] to [after] was a paste of
-         * something recognised, which is submitted at once. Typing one
+         * something recognised, whose inserted text is two or more characters, which is submitted at once. Typing one
          * character at a time never is: unfinished text stays on the device.
          */
         fun submitsOnPaste(before: String, after: String): Boolean {
-            if (after.length - before.length < 2) return false
+            val limit = minOf(before.length, after.length)
+            var prefix = 0
+            while (prefix < limit && before[prefix] == after[prefix]) prefix++
+            var suffix = 0
+            while (suffix < limit - prefix && before[before.length - 1 - suffix] == after[after.length - 1 - suffix]) suffix++
+            if (after.length - prefix - suffix < 2) return false
             return when (parse(after)) {
                 is Slug, is Isbn, is BookId, NotHardcover, BadId -> true
                 Blank, is Text -> false
@@ -47,7 +52,7 @@ sealed interface HardcoverRef {
                 val slug = match.groupValues[1]
                 return if (SLUG.matches(slug)) Slug(slug) else NotHardcover
             }
-            if ("://" in text || HOST_FIRST.containsMatchIn(text)) return NotHardcover
+            if (text.startsWith("//") || "://" in text || HOST_FIRST.containsMatchIn(text)) return NotHardcover
             com.chmouel.liseur.hardcover.Isbn.from(text)?.let { return Isbn(it) }
             if (text.all { it in '0'..'9' }) {
                 val id = text.toIntOrNull()

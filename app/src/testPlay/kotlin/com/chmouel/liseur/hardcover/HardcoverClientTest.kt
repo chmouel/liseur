@@ -3,12 +3,18 @@ package com.chmouel.liseur.hardcover
 import com.chmouel.liseur.data.remote.RemoteResult
 import com.chmouel.liseur.data.remote.SyncFailure
 import java.net.InetAddress
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import java.util.concurrent.TimeUnit
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -316,5 +322,28 @@ class HardcoverClientTest {
         assertEquals(9, sent().getJSONObject("variables").getInt("id"))
         assertEquals(emptyList<Long>(), (client().booksByRef("tok", HardcoverRef.Slug("x-1")) as RemoteResult.Ok).value)
         assertEquals("x-1", sent().getJSONObject("variables").getString("slug"))
+    }
+
+    @Test
+    fun `cancelling after the headers arrive stops a slow body read`() = runBlocking {
+        server.enqueue(
+            MockResponse.Builder()
+                .code(200)
+                .body("""{"data":{"me":[{"id":42,"username":"reader"}]}}""")
+                .throttleBody(5, 1, TimeUnit.SECONDS)
+                .build(),
+        )
+        var result: Any? = null
+        val job = launch(Dispatchers.IO) { result = client().me("tok") }
+        while (server.requestCount < 1) delay(10)
+        delay(300)
+
+        val started = System.nanoTime()
+        job.cancelAndJoin()
+
+        assertTrue(TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started) < 2_000)
+        assertEquals(1, server.requestCount)
+        assertTrue(job.isCancelled)
+        assertNull(result)
     }
 }
