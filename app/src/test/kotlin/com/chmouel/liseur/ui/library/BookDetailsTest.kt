@@ -10,9 +10,13 @@ import com.chmouel.liseur.data.library.FieldEdit
 import com.chmouel.liseur.data.remote.BookProvenance
 import com.chmouel.liseur.data.remote.ServerKind
 import com.chmouel.liseur.domain.BookAccessibility
+import com.chmouel.liseur.domain.Contributor
+import com.chmouel.liseur.domain.ContributorRoles
 import com.chmouel.liseur.domain.FinishedOverride
+import com.chmouel.liseur.domain.Identifier
 import com.chmouel.liseur.domain.MetadataSnapshot
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -231,6 +235,68 @@ class BookDetailsTest {
         assertEquals(
             R.string.reading_status_want_to_read,
             effectiveStatusLabel(details(progression = null, override = FinishedOverride.WANT_TO_READ)),
+        )
+    }
+
+    @Test
+    fun publicationSeparatesPrimaryFactsFromCollapsibleMoreDetailsAndIdentifiers() {
+        val empty = publicationView(MetadataSnapshot(), Locale.ENGLISH)
+        assertTrue(empty.isEmpty)
+        assertFalse(empty.hasPrimary)
+        assertFalse(empty.hasMore)
+
+        // Identifiers alone do not show the Publication section, since they live in Technical details.
+        val identifiersOnly = publicationView(
+            MetadataSnapshot(identifiers = listOf(Identifier("uuid", "5cb1ef6d-1eff-4b8a-bc85-cd7bc295d70c"))),
+            Locale.ENGLISH,
+        )
+        assertTrue(identifiersOnly.isEmpty)
+
+        val primaryOnly = publicationView(
+            MetadataSnapshot(publishers = listOf("Albin Michel"), published = "2018"),
+            Locale.ENGLISH,
+        )
+        assertTrue(primaryOnly.hasPrimary)
+        assertFalse(primaryOnly.hasMore)
+        assertEquals("Albin Michel", primaryOnly.publishers)
+        assertEquals("2018", primaryOnly.published)
+
+        val moreOnly = publicationView(
+            MetadataSnapshot(
+                languages = listOf("fr"),
+                pageCount = 320,
+                contributors = listOf(
+                    Contributor(ContributorRoles.AUTHOR, "Author"),
+                    Contributor(ContributorRoles.CONTRIBUTOR, "calibre (6.17.0)"),
+                ),
+            ),
+            Locale.ENGLISH,
+        )
+        assertFalse(moreOnly.hasPrimary)
+        assertTrue(moreOnly.hasMore)
+        assertEquals("French", moreOnly.languages)
+        assertEquals("320", moreOnly.pages)
+        assertEquals("calibre (6.17.0)", moreOnly.contributors)
+    }
+
+    @Test
+    fun technicalIdentifiersFormatNamedAndCustomSchemes() {
+        val formatted = technicalIdentifiers(
+            listOf(
+                Identifier("isbn", "9782226400215"),
+                Identifier("uuid", "5cb1ef6d-1eff-4b8a-bc85-cd7bc295d70c"),
+                Identifier("calibre", "42"),
+                Identifier("", "raw-id"),
+            ),
+        )
+        assertEquals(
+            listOf(
+                TechnicalIdentifier("ISBN", "9782226400215"),
+                TechnicalIdentifier("UUID", "5cb1ef6d-1eff-4b8a-bc85-cd7bc295d70c"),
+                TechnicalIdentifier(null, "calibre:42"),
+                TechnicalIdentifier(null, "raw-id"),
+            ),
+            formatted,
         )
     }
 

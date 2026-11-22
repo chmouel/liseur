@@ -105,9 +105,12 @@
     <string name="hardcover_needs_match">Choose this book\'s Hardcover edition in Book details first</string>
     <string name="hardcover_push_off">This book is kept off Hardcover</string>
     <string name="hardcover_book_matched">Matched to %1$s</string>
-    <string name="hardcover_book_unmatched">Not matched to an edition yet</string>
+    <string name="hardcover_book_unmatched">No edition linked</string>
     <string name="hardcover_book_sync">Sync this book</string>
     <string name="hardcover_book_choose">Choose edition</string>
+    <string name="hardcover_book_change">Change edition</string>
+    <string name="hardcover_book_choose_and_push">Choose and push progress</string>
+    <string name="hardcover_book_keep_off">Keep off Hardcover</string>
     <plurals name="hardcover_edition_pages">
         <item quantity="one">%d page</item>
         <item quantity="other">%d pages</item>

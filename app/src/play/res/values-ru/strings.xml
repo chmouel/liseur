@@ -98,9 +98,12 @@
     <string name="hardcover_needs_match">Сначала выберите издание этой книги в Hardcover на экране «О книге»</string>
     <string name="hardcover_push_off">Эта книга не отправляется в Hardcover</string>
     <string name="hardcover_book_matched">Сопоставлено с %1$s</string>
-    <string name="hardcover_book_unmatched">Издание пока не выбрано</string>
+    <string name="hardcover_book_unmatched">Издание не выбрано</string>
     <string name="hardcover_book_sync">Синхронизировать эту книгу</string>
     <string name="hardcover_book_choose">Выбрать издание</string>
+    <string name="hardcover_book_change">Сменить издание</string>
+    <string name="hardcover_book_choose_and_push">Выбрать и отправить прогресс</string>
+    <string name="hardcover_book_keep_off">Не отправлять в Hardcover</string>
     <plurals name="hardcover_edition_pages">
         <item quantity="one">%d страница</item>
         <item quantity="few">%d страницы</item>

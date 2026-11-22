@@ -25,13 +25,13 @@ import androidx.compose.material.icons.outlined.TaskAlt
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -39,8 +39,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -53,6 +53,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -69,6 +71,7 @@ import com.chmouel.liseur.domain.PersonalEvaluation
 import com.chmouel.liseur.domain.readingStatusFor
 import com.chmouel.liseur.hardcover.EditionChoice
 import com.chmouel.liseur.hardcover.HardcoverAccount
+import com.chmouel.liseur.hardcover.HardcoverBookLink
 import com.chmouel.liseur.hardcover.HardcoverClient
 import com.chmouel.liseur.hardcover.HardcoverConnectOutcome
 import com.chmouel.liseur.hardcover.HardcoverDatabase
@@ -412,7 +415,7 @@ internal class ReadingTracker(context: Context, private val database: LiseurData
         var busy by remember { mutableStateOf(false) }
         var message by remember(bookUrl) { mutableStateOf<Int?>(null) }
         var choices by remember(bookUrl) { mutableStateOf<PickerSession?>(null) }
-        val excluded = link?.excluded == true
+        val view = hardcoverBookDetailsView(link)
         fun busyWhile(work: suspend () -> Unit) {
             busy = true
             message = null
@@ -429,67 +432,81 @@ internal class ReadingTracker(context: Context, private val database: LiseurData
                 }
             }
         }
+        fun performAction(action: HardcoverAction) {
+            when (action) {
+                HardcoverAction.CHOOSE_EDITION -> openChoices(push = false)
+                HardcoverAction.CHANGE_EDITION -> openChoices(push = false)
+                HardcoverAction.CHOOSE_AND_PUSH -> openChoices(push = true)
+                HardcoverAction.KEEP_OFF -> ui.launch { hardcover.setExcluded(bookUrl, true) }
+                HardcoverAction.PUSH -> {
+                    busyWhile {
+                        when (val outcome = hardcover.push(bookUrl, asked = true)) {
+                            // A match this device lost is still worth asking for.
+                            HardcoverPushOutcome.NeedsMatch -> when (val found = hardcover.candidates(bookUrl)) {
+                                is RemoteResult.Ok -> choices = PickerSession(found.value, push = true)
+                                is RemoteResult.Failed -> message = failureMessage(found.reason)
+                            }
+                            else -> message = outcomeMessage(outcome)
+                        }
+                    }
+                }
+            }
+        }
 
         Column(modifier) {
             HorizontalDivider(Modifier.padding(top = 24.dp, bottom = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
-            Text(stringResource(R.string.hardcover_title), style = MaterialTheme.typography.titleMedium)
             Text(
-                text = link?.takeIf { it.matched }?.editionTitle
+                stringResource(R.string.hardcover_title),
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.semantics { heading() },
+            )
+            Text(
+                text = view.matchedEditionTitle
                     ?.let { stringResource(R.string.hardcover_book_matched, it) }
                     ?: stringResource(R.string.hardcover_book_unmatched),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 4.dp),
             )
-            // One toggleable row, so TalkBack reads the label with the switch's state.
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .toggleable(
-                        value = !excluded,
-                        role = Role.Switch,
-                        onValueChange = { on -> ui.launch { hardcover.setExcluded(bookUrl, !on) } },
+            if (view.showSyncSwitch && view.syncSwitchChecked != null) {
+                // One toggleable row, so TalkBack reads the label with the switch's state.
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .toggleable(
+                            value = view.syncSwitchChecked,
+                            role = Role.Switch,
+                            onValueChange = { on -> ui.launch { hardcover.setExcluded(bookUrl, !on) } },
+                        )
+                        .padding(vertical = 8.dp),
+                ) {
+                    Text(
+                        text = stringResource(R.string.hardcover_book_sync),
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier.weight(1f),
                     )
-                    .padding(vertical = 8.dp),
-            ) {
-                Text(
-                    text = stringResource(R.string.hardcover_book_sync),
-                    style = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier.weight(1f),
-                )
-                Switch(checked = !excluded, onCheckedChange = null)
+                    Switch(checked = view.syncSwitchChecked, onCheckedChange = null)
+                }
             }
             FlowRow(
+                modifier = Modifier.padding(top = if (view.showSyncSwitch) 0.dp else 10.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 itemVerticalAlignment = Alignment.CenterVertically,
             ) {
-                OutlinedButton(
-                    enabled = !busy,
-                    onClick = { openChoices(push = false) },
-                ) { Text(stringResource(R.string.hardcover_book_choose)) }
-                OutlinedButton(
-                    enabled = !busy && !excluded,
-                    onClick = {
-                        // Nothing to report against until an edition is picked, and asking
-                        // Hardcover to match it again would only repeat the search.
-                        if (link?.matched != true) {
-                            openChoices(push = true)
-                        } else {
-                            busyWhile {
-                                when (val outcome = hardcover.push(bookUrl, asked = true)) {
-                                    // A match this device lost is still worth asking for.
-                                    HardcoverPushOutcome.NeedsMatch -> when (val found = hardcover.candidates(bookUrl)) {
-                                        is RemoteResult.Ok -> choices = PickerSession(found.value, push = true)
-                                        is RemoteResult.Failed -> message = failureMessage(found.reason)
-                                    }
-                                    else -> message = outcomeMessage(outcome)
-                                }
-                            }
-                        }
-                    },
-                ) { Text(stringResource(R.string.hardcover_push)) }
+                view.primaryAction?.let { primary ->
+                    FilledTonalButton(
+                        enabled = !busy,
+                        onClick = { performAction(primary) },
+                    ) { Text(stringResource(primary.labelRes)) }
+                }
+                view.secondaryActions.forEach { secondary ->
+                    TextButton(
+                        enabled = !busy,
+                        onClick = { performAction(secondary) },
+                    ) { Text(stringResource(secondary.labelRes)) }
+                }
                 if (busy) BusyIndicator()
             }
             message?.let {
@@ -712,3 +729,55 @@ internal class ReadingTracker(context: Context, private val database: LiseurData
 
 /** An unmatched book opens the picker; one kept off Hardcover goes to push, which says so. */
 internal fun opensEditionPicker(matched: Boolean, excluded: Boolean): Boolean = !matched && !excluded
+
+internal enum class HardcoverAction(@StringRes val labelRes: Int) {
+    CHOOSE_EDITION(R.string.hardcover_book_choose),
+    CHANGE_EDITION(R.string.hardcover_book_change),
+    CHOOSE_AND_PUSH(R.string.hardcover_book_choose_and_push),
+    PUSH(R.string.hardcover_push),
+    KEEP_OFF(R.string.hardcover_book_keep_off),
+}
+
+internal data class HardcoverBookDetailsView(
+    val matchedEditionTitle: String?,
+    val showSyncSwitch: Boolean,
+    val syncSwitchChecked: Boolean?,
+    val primaryAction: HardcoverAction?,
+    val secondaryActions: List<HardcoverAction>,
+)
+
+internal fun hardcoverBookDetailsView(link: HardcoverBookLink?): HardcoverBookDetailsView {
+    val matched = link?.matched == true
+    val excluded = link?.excluded == true
+    return when {
+        !matched && !excluded -> HardcoverBookDetailsView(
+            matchedEditionTitle = null,
+            showSyncSwitch = false,
+            syncSwitchChecked = null,
+            primaryAction = HardcoverAction.CHOOSE_EDITION,
+            // Auto-sync can still match and report an unlinked book, so it needs a way out.
+            secondaryActions = listOf(HardcoverAction.CHOOSE_AND_PUSH, HardcoverAction.KEEP_OFF),
+        )
+        !matched && excluded -> HardcoverBookDetailsView(
+            matchedEditionTitle = null,
+            showSyncSwitch = true,
+            syncSwitchChecked = false,
+            primaryAction = null,
+            secondaryActions = listOf(HardcoverAction.CHOOSE_EDITION),
+        )
+        matched && !excluded -> HardcoverBookDetailsView(
+            matchedEditionTitle = link.editionTitle,
+            showSyncSwitch = true,
+            syncSwitchChecked = true,
+            primaryAction = HardcoverAction.PUSH,
+            secondaryActions = listOf(HardcoverAction.CHANGE_EDITION),
+        )
+        else -> HardcoverBookDetailsView(
+            matchedEditionTitle = link.editionTitle,
+            showSyncSwitch = true,
+            syncSwitchChecked = false,
+            primaryAction = null,
+            secondaryActions = listOf(HardcoverAction.CHANGE_EDITION),
+        )
+    }
+}

@@ -2177,7 +2177,7 @@
     <string name="selection_delete_action">Удалить действие</string>
     <string name="book_details">О книге</string>
     <string name="book_details_publication">Издание</string>
-    <string name="book_details_subjects">Темы</string>
+    <string name="book_details_more">Ещё о книге</string>
     <string name="book_details_role_translator">Перевод</string>
     <string name="book_details_role_editor">Редактор</string>
     <string name="book_details_role_illustrator">Иллюстрации</string>
@@ -2234,7 +2234,8 @@
     <string name="book_details_annotations">Выделения и заметки</string>
     <string name="book_details_read">Читать</string>
     <string name="book_details_retry_download">Повторить загрузку</string>
-    <string name="book_details_file_info">О файле</string>
+    <string name="book_details_technical">Технические сведения</string>
+    <string name="book_details_copy_field">Копировать: %1$s</string>
     <string name="book_details_read_more">Читать дальше</string>
     <string name="book_details_show_less">Свернуть</string>
     <string name="library_style">Вид библиотеки</string>
