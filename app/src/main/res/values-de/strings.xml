@@ -2174,6 +2174,16 @@
     <string name="evaluation_rating">Meine Bewertung</string>
     <string name="evaluation_rated">Bewertet</string>
     <string name="evaluation_unrated">Unbewertet</string>
+    <string name="book_details_reading_progress">Lesefortschritt</string>
+    <string name="book_details_description">Beschreibung</string>
+    <string name="evaluation_private_synced">Privat · mit liseur-sync synchronisiert</string>
+    <string name="evaluation_private_local">Privat · auf diesem Gerät</string>
+    <string name="evaluation_private_local_detail">Privat. Wird nur auf diesem Gerät gespeichert.</string>
+    <string name="evaluation_empty_hint">Bewerte dieses Buch oder füge eine private Rezension hinzu.</string>
+    <string name="evaluation_edit_review">Rezension bearbeiten</string>
+    <string name="evaluation_add_review">Rezension hinzufügen</string>
+    <string name="evaluation_rating_compact">%1$s / 5</string>
+    <string name="evaluation_clear_rating">Löschen</string>
     <string name="no_file_picker">Auf diesem Gerät ist keine Dateiauswahl verfügbar</string>
     <string name="vocabulary_title">Vokabeltrainer</string>
     <string name="vocabulary_save">Als Vokabel speichern</string>

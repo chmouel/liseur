@@ -2358,6 +2358,16 @@
     <string name="evaluation_rating">Moje hodnocení</string>
     <string name="evaluation_rated">Ohodnocené</string>
     <string name="evaluation_unrated">Neohodnocené</string>
+    <string name="book_details_reading_progress">Průběh čtení</string>
+    <string name="book_details_description">Popis</string>
+    <string name="evaluation_private_synced">Soukromé · synchronizováno s liseur-sync</string>
+    <string name="evaluation_private_local">Soukromé · v tomto zařízení</string>
+    <string name="evaluation_private_local_detail">Soukromé. Uloženo pouze v tomto zařízení.</string>
+    <string name="evaluation_empty_hint">Ohodnoťte tuto knihu nebo přidejte soukromou recenzi.</string>
+    <string name="evaluation_edit_review">Upravit recenzi</string>
+    <string name="evaluation_add_review">Přidat recenzi</string>
+    <string name="evaluation_rating_compact">%1$s / 5</string>
+    <string name="evaluation_clear_rating">Vymazat</string>
     <string name="no_file_picker">V tomto zařízení není k dispozici žádný výběr souborů</string>
     <string name="vocabulary_title">Slovíčka</string>
     <string name="vocabulary_save">Uložit do slovíček</string>

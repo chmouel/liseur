@@ -199,6 +199,10 @@ enum class ServerKind(
             } else SyncAbility.NONE
         }
 
+    /** Whether this server kind syncs private ratings and reviews. */
+    val syncsEvaluations: Boolean
+        get() = this == LISEUR_SYNC
+
     companion object {
         /**
          * Whether a book URL names a book that came from a server, as

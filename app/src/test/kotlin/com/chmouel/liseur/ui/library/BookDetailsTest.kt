@@ -188,6 +188,52 @@ class BookDetailsTest {
         assertTrue(overWireLimit(FieldEditMode.SET, long, "old", field))
     }
 
+    @Test
+    fun starFillsMapWireRatingsToWholeAndHalfStars() {
+        assertEquals(List(5) { StarFill.EMPTY }, starFills(null))
+        assertEquals(
+            listOf(StarFill.FULL, StarFill.EMPTY, StarFill.EMPTY, StarFill.EMPTY, StarFill.EMPTY),
+            starFills(2),
+        )
+        assertEquals(
+            listOf(StarFill.FULL, StarFill.FULL, StarFill.FULL, StarFill.HALF, StarFill.EMPTY),
+            starFills(7),
+        )
+        assertEquals(List(5) { StarFill.FULL }, starFills(10))
+    }
+
+    @Test
+    fun tappingAStarTogglesBetweenFullAndHalfWithinValidBounds() {
+        // First star is the 1.0-star minimum (wire 2), never 0.5 (wire 1).
+        assertEquals(2, nextStarRating(null, 1))
+        assertEquals(2, nextStarRating(2, 1))
+        // Tapping star 4 picks 4.0 (wire 8), tapping again steps down to 3.5 (wire 7), then back to 4.0.
+        assertEquals(8, nextStarRating(null, 4))
+        assertEquals(7, nextStarRating(8, 4))
+        assertEquals(8, nextStarRating(7, 4))
+        // Tapping a different star jumps directly to that full star.
+        assertEquals(10, nextStarRating(7, 5))
+    }
+
+    @Test
+    fun effectiveStatusLabelResolvesAutomaticToActualShelfState() {
+        assertEquals(R.string.home_tile_to_read, effectiveStatusLabel(details(progression = null)))
+        assertEquals(R.string.reading_status_reading, effectiveStatusLabel(details(progression = 0.25)))
+        assertEquals(
+            R.string.state_finished,
+            effectiveStatusLabel(details(progression = 0.99).let { it.copy(book = it.book.copy(finishedAt = 1_000L)) }),
+        )
+        // Explicit overrides keep their own label.
+        assertEquals(
+            R.string.reading_status_paused,
+            effectiveStatusLabel(details(progression = 0.25, override = FinishedOverride.PAUSED)),
+        )
+        assertEquals(
+            R.string.reading_status_want_to_read,
+            effectiveStatusLabel(details(progression = null, override = FinishedOverride.WANT_TO_READ)),
+        )
+    }
+
     private fun details(
         progression: Double?,
         override: FinishedOverride = FinishedOverride.NONE,

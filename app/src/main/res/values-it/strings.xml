@@ -2162,6 +2162,16 @@
     <string name="evaluation_rating">La mia valutazione</string>
     <string name="evaluation_rated">Con valutazione</string>
     <string name="evaluation_unrated">Senza valutazione</string>
+    <string name="book_details_reading_progress">Avanzamento lettura</string>
+    <string name="book_details_description">Descrizione</string>
+    <string name="evaluation_private_synced">Privato · sincronizzato con liseur-sync</string>
+    <string name="evaluation_private_local">Privato · su questo dispositivo</string>
+    <string name="evaluation_private_local_detail">Privato. Salvato solo su questo dispositivo.</string>
+    <string name="evaluation_empty_hint">Valuta questo libro o aggiungi una recensione privata.</string>
+    <string name="evaluation_edit_review">Modifica recensione</string>
+    <string name="evaluation_add_review">Aggiungi recensione</string>
+    <string name="evaluation_rating_compact">%1$s / 5</string>
+    <string name="evaluation_clear_rating">Cancella</string>
     <string name="no_file_picker">Nessun selettore di file disponibile su questo dispositivo</string>
     <string name="vocabulary_title">Vocabolario</string>
     <string name="vocabulary_save">Salva nel vocabolario</string>
