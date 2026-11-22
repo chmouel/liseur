@@ -121,4 +121,13 @@
     <string name="hardcover_edition_selected">已选中</string>
     <string name="hardcover_ref_not_hardcover">这不是 Hardcover 链接</string>
     <string name="hardcover_ref_bad_id">这不是 Hardcover 书籍 ID</string>
+    <string name="hardcover_update_details">从 Hardcover 更新</string>
+    <string name="hardcover_update_details_intro">选择要用 Hardcover 信息替换的项。</string>
+    <string name="hardcover_update_details_now">当前：%1$s</string>
+    <string name="hardcover_update_details_remote">Hardcover：%1$s</string>
+    <string name="hardcover_update_details_now_label">当前</string>
+    <string name="hardcover_update_details_apply">应用</string>
+    <string name="hardcover_update_details_empty">Hardcover 上没有与此书不同的信息。</string>
+    <string name="hardcover_update_details_done">已从 Hardcover 更新详情。</string>
+    <string name="hardcover_update_details_cover_failed">已更新详情，但无法下载封面。</string>
 </resources>

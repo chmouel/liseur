@@ -561,8 +561,8 @@ paused or did not finish), the page you reached in the chosen edition,
 the days you started and finished it, and your rating. Nothing is sent
 for a book you have not opened, rated or given a status. No book text,
 file, highlight, note or review is sent, and nothing from your Hardcover
-library is brought back into Liseur; the edition picker shows public
-catalogue details only.
+library is brought back into Liseur; the edition picker and "Update from
+Hardcover" use public catalogue details only.
 
 When you choose an edition by hand, the picker asks `api.hardcover.app`,
 with your token, for the catalogue entries matching what you submit: the
@@ -571,8 +571,13 @@ the slug of a pasted Hardcover book link, or a pasted book ID or ISBN. A
 pasted link to any other site is not sent anywhere. The picker also loads
 cover images from `assets.hardcover.app` over HTTPS, without your token;
 that host sees the image requested and the usual connection details such
-as your IP address. Cover images are kept in memory only and never
-written to disk.
+as your IP address. Picker cover previews are kept in memory only. When
+you tap "Update from Hardcover" in Book details, Liseur asks
+`api.hardcover.app` with your token for the matched edition's public
+catalogue details, downloads the cover from `assets.hardcover.app`
+without your token if you tick it, and saves only the fields you tick on
+this device as your own metadata edits (synced like any other edit if
+`liseur-sync` is configured).
 
 You can turn off automatic updates and push a book by hand from the
 reader menu or Book details, keep a single book off Hardcover from Book

@@ -1,10 +1,12 @@
 package com.chmouel.liseur.hardcover
 
 import java.net.InetAddress
+import kotlinx.coroutines.runBlocking
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
 import okhttp3.Request
 import org.junit.After
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -71,5 +73,18 @@ class HardcoverImagesTest {
         assertEquals(okhttp3.CookieJar.NO_COOKIES, client.cookieJar)
         assertNull(client.cache)
         assertTrue(!client.followRedirects && !client.followSslRedirects)
+    }
+
+    @Test
+    fun `cover download reads valid responses and rejects non-2xx or oversized bodies`() = runBlocking {
+        server.enqueue(MockResponse(code = 200, body = "jpeg-bytes"))
+        server.enqueue(MockResponse(code = 404, body = "missing"))
+        server.enqueue(MockResponse(code = 200, body = "too-many-bytes"))
+
+        val url = "http://127.0.0.1:${server.port}/cover.jpg"
+        assertArrayEquals("jpeg-bytes".toByteArray(), HardcoverImages.fetchBytes(url, maxBytes = 32))
+        assertNull(HardcoverImages.fetchBytes(url, maxBytes = 32))
+        assertNull(HardcoverImages.fetchBytes(url, maxBytes = 5))
+        assertNull(HardcoverImages.downloadCover("https://evil.example/cover.jpg"))
     }
 }

@@ -1,6 +1,7 @@
 package com.chmouel.liseur.hardcover
 
 import com.chmouel.liseur.data.db.Book
+import com.chmouel.liseur.data.remote.RemoteResult
 import com.chmouel.liseur.data.remote.SyncFailure
 import com.chmouel.liseur.domain.ReadingStatus
 import java.net.InetAddress
@@ -704,6 +705,34 @@ class HardcoverRepositoryTest {
         assertTrue(job.isCancelled)
     }
 
+    @Test
+    fun `edition details ask for the matched edition and answer null when unmatched`() = runBlocking {
+        signedIn()
+        val repository = repository()
+
+        assertEquals(RemoteResult.Ok(null), repository.editionDetails(BOOK))
+        assertTrue(hardcover.queries.isEmpty())
+
+        dao.links[BOOK] = HardcoverBookLink(bookUrl = BOOK, hardcoverBookId = 9, editionId = 5)
+        val result = repository.editionDetails(BOOK)
+
+        assertEquals(
+            RemoteResult.Ok(
+                HardcoverEditionDetails(
+                    editionId = 5,
+                    title = "The Hobbit",
+                    author = "J.R.R. Tolkien",
+                    description = "In a hole in the ground there lived a hobbit.",
+                    coverUrl = "https://assets.hardcover.app/books/9/cover.jpg",
+                    seriesName = "Middle-earth",
+                    seriesPosition = 1.0,
+                ),
+            ),
+            result,
+        )
+        assertEquals(listOf("edition_details"), hardcover.queries)
+    }
+
     /** Hardcover with one reader's library of at most one book, the way the server answers. */
     private class FakeHardcover : Dispatcher() {
         data class Read(
@@ -791,6 +820,38 @@ class HardcoverRepositoryTest {
                                 .put("editions", JSONArray()),
                         ),
                     )
+                }
+                "featured_book_series" in query -> {
+                    queries += "edition_details"
+                    val id = variables.getLong("id")
+                    val rows = JSONArray()
+                    if (id == 5L) {
+                        rows.put(
+                            JSONObject()
+                                .put("id", 5)
+                                .put("title", "The Hobbit")
+                                .put("image", JSONObject().put("url", "https://assets.hardcover.app/books/9/cover.jpg"))
+                                .put(
+                                    "book",
+                                    JSONObject()
+                                        .put("title", "The Hobbit")
+                                        .put("description", "In a hole in the ground there lived a hobbit.")
+                                        .put(
+                                            "cached_contributors",
+                                            JSONArray().put(
+                                                JSONObject().put("author", JSONObject().put("name", "J.R.R. Tolkien"))
+                                                    .put("contribution", "Author"),
+                                            ),
+                                        )
+                                        .put(
+                                            "featured_book_series",
+                                            JSONObject().put("position", 1.0)
+                                                .put("series", JSONObject().put("name", "Middle-earth")),
+                                        ),
+                                ),
+                        )
+                    }
+                    data.put("editions", rows)
                 }
                 "insert_user_book" in query -> {
                     queries += "insert"

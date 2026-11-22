@@ -7,9 +7,14 @@ import coil3.memory.MemoryCache
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import coil3.request.ErrorResult
 import coil3.request.ImageResult
+import com.chmouel.liseur.data.library.BookMetadataOverrideRepository.Companion.MAX_COVER_SOURCE_BYTES
+import java.io.ByteArrayOutputStream
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
+import okhttp3.Request
 
 /**
  * Cover images for the edition picker.
@@ -38,6 +43,48 @@ object HardcoverImages {
         .build()
 
     @Volatile
+    private var sharedClient: OkHttpClient? = null
+
+    private fun client(): OkHttpClient = sharedClient ?: synchronized(this) {
+        sharedClient ?: newClient().also { sharedClient = it }
+    }
+
+    /** Downloads a validated cover URL over [newClient], capped at [MAX_COVER_SOURCE_BYTES]. */
+    suspend fun downloadCover(url: String): ByteArray? {
+        val validated = validCoverUrl(url) ?: return null
+        return fetchBytes(validated, client())
+    }
+
+    internal suspend fun fetchBytes(
+        url: String,
+        client: OkHttpClient = newClient(),
+        maxBytes: Int = MAX_COVER_SOURCE_BYTES,
+    ): ByteArray? = withContext(Dispatchers.IO) {
+        runCatching {
+            val request = Request.Builder().url(url).get().build()
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return@use null
+                val body = response.body
+                val contentLength = body.contentLength()
+                if (contentLength > maxBytes) return@use null
+                body.byteStream().use { input ->
+                    val out = ByteArrayOutputStream()
+                    val buffer = ByteArray(8 * 1024)
+                    var total = 0
+                    while (true) {
+                        val read = input.read(buffer)
+                        if (read < 0) break
+                        total += read
+                        if (total > maxBytes) return@use null
+                        out.write(buffer, 0, read)
+                    }
+                    out.toByteArray().takeIf { it.isNotEmpty() }
+                }
+            }
+        }.getOrNull()
+    }
+
+    @Volatile
     private var shared: ImageLoader? = null
 
     /**
@@ -50,7 +97,7 @@ object HardcoverImages {
     }
 
     private fun build(context: Context): ImageLoader {
-        val client = newClient()
+        val client = client()
         return ImageLoader.Builder(context)
             .components {
                 add(CoverOnly)

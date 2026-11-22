@@ -50,6 +50,17 @@ data class HardcoverBook(
     val releaseYear: Int?,
 )
 
+/** Public catalogue details of one matched edition and its book, for updating local details. */
+data class HardcoverEditionDetails(
+    val editionId: Long,
+    val title: String?,
+    val author: String?,
+    val description: String?,
+    val coverUrl: String?,
+    val seriesName: String?,
+    val seriesPosition: Double?,
+)
+
 /**
  * Hardcover's GraphQL API: one endpoint, a bearer token, and the handful
  * of queries reporting reading needs.
@@ -129,6 +140,12 @@ class HardcoverClient(
                 physical = book?.optJSONObject("default_physical_edition")?.let(::edition),
                 mostRead = book?.optJSONArray("editions")?.optJSONObject(0)?.let(::edition),
             )
+        }
+
+    /** The public catalogue details of one edition and its book, or null when the edition is gone. */
+    suspend fun editionDetails(token: String, editionId: Long): RemoteResult<HardcoverEditionDetails?> =
+        call(token, EDITION_DETAILS, JSONObject().put("id", editionId)) { data ->
+            data.optJSONArray("editions")?.optJSONObject(0)?.let(::editionDetails)
         }
 
     /** Books matching a title and author, best match first. */
@@ -243,10 +260,56 @@ class HardcoverClient(
         publisher = row.optJSONObject("publisher")?.text("name"),
         usersCount = row.optInt("users_count", 0).coerceAtLeast(0),
         coverUrl = HardcoverImages.validCoverUrl(
-            row.optJSONObject("image")?.text("url") ?: row.optJSONObject("book")?.optJSONObject("cached_image")?.text("url"),
+            row.optJSONObject("image")?.text("url") ?: cachedImageUrl(row.optJSONObject("book")?.opt("cached_image")),
         ),
         authors = authorsOf(row.optJSONObject("book")?.opt("cached_contributors")),
     )
+
+    private fun editionDetails(row: JSONObject): HardcoverEditionDetails {
+        val book = row.optJSONObject("book")
+        val authors = authorsOf(book?.opt("cached_contributors")).joinToString(", ").takeIf { it.isNotBlank() }
+        val series = seriesOf(book?.opt("featured_book_series"))
+            ?: book?.optJSONArray("book_series")?.let { list ->
+                (0 until list.length()).firstNotNullOfOrNull { seriesOf(list.opt(it)) }
+            }
+        return HardcoverEditionDetails(
+            editionId = row.getLong("id"),
+            title = row.text("title") ?: book?.text("title"),
+            author = authors,
+            description = book?.text("description"),
+            coverUrl = HardcoverImages.validCoverUrl(
+                row.optJSONObject("image")?.text("url")
+                    ?: cachedImageUrl(row.opt("cached_image"))
+                    ?: cachedImageUrl(book?.opt("cached_image")),
+            ),
+            seriesName = series?.first,
+            seriesPosition = series?.second,
+        )
+    }
+
+    private fun cachedImageUrl(cachedImage: Any?): String? {
+        val obj = when (cachedImage) {
+            is JSONObject -> cachedImage
+            is String -> runCatching { JSONObject(cachedImage) }.getOrNull()
+            else -> null
+        }
+        return obj?.text("url")
+    }
+
+    private fun seriesOf(entry: Any?): Pair<String, Double?>? {
+        val obj = when (entry) {
+            is JSONObject -> entry
+            is JSONArray -> entry.optJSONObject(0)
+            else -> null
+        } ?: return null
+        val name = obj.optJSONObject("series")?.text("name") ?: return null
+        val position = if (obj.isNull("position")) {
+            null
+        } else {
+            obj.optDouble("position").takeIf { it.isFinite() }
+        }
+        return name to position
+    }
 
     /** Contributors credited as authors, or every contributor when none is. */
     private fun authorsOf(contributors: Any?): List<String> {
@@ -372,6 +435,13 @@ class HardcoverClient(
                 "default_ebook_edition { $EDITION_FIELDS } " +
                 "default_physical_edition { $EDITION_FIELDS } " +
                 "editions(order_by: {users_count: desc}, limit: 1) { $EDITION_FIELDS } } }"
+
+        private const val EDITION_DETAILS =
+            "query (\$id: Int!) { editions(where: {id: {_eq: \$id}}, limit: 1) { " +
+                "id title subtitle image { url } cached_image " +
+                "book { title subtitle description cached_image cached_contributors " +
+                "featured_book_series { position series { name } } " +
+                "book_series(limit: 1) { position series { name } } } } }"
 
         private const val BOOK_BY_ID =
             "query (\$id: Int!) { books(where: {id: {_eq: \$id}}, limit: 1) { id } }"
