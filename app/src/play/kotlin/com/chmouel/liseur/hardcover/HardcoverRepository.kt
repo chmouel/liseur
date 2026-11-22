@@ -737,7 +737,7 @@ class HardcoverRepository(
                     val remoteEncoded = HardcoverEvaluationPlan.encodeRemoteRating(shelf.rating)
                     val pulledLocal = HardcoverEvaluationPlan.ratingToLocal(shelf.rating)
                     val base = HardcoverEvaluationBase(local = pulledLocal, remote = remoteEncoded)
-                    if (local.ratingRaw == pulledLocal || pullLocal(bookUrl, field, local.ratingRaw, pulledLocal, generation)) {
+                    if (pullLocal(bookUrl, field, local.ratingRaw, pulledLocal, generation)) {
                         saveBase(bookUrl, field, base)
                     } else {
                         return staleConflict(bookUrl, field)
@@ -762,7 +762,7 @@ class HardcoverRepository(
                         return HardcoverConflictResolution.Resolved
                     }
                     val base = HardcoverEvaluationBase(local = remoteReview, remote = remoteReview)
-                    if (local.review == remoteReview || pullLocal(bookUrl, field, local.review, remoteReview, generation)) {
+                    if (pullLocal(bookUrl, field, local.review, remoteReview, generation)) {
                         saveBase(bookUrl, field, base)
                     } else {
                         return staleConflict(bookUrl, field)
@@ -852,7 +852,7 @@ class HardcoverRepository(
             }
             is HardcoverEvaluationDecision.PushToRemote -> Unit
             is HardcoverEvaluationDecision.PullToLocal -> {
-                if (expectedLocal == decision.value || pullLocal(bookUrl, field, expectedLocal, decision.value, generation)) {
+                if (pullLocal(bookUrl, field, expectedLocal, decision.value, generation)) {
                     saveBase(bookUrl, field, decision.base)
                 }
             }

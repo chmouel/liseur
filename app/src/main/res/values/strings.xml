@@ -2388,4 +2388,5 @@
     <string name="book_metadata_reset_all">Reset all overrides</string>
     <string name="book_metadata_edit_series">Edit series</string>
     <string name="book_metadata_no_series">None</string>
+    <string name="evaluation_review_public">Review</string>
 </resources>

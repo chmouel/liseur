@@ -2228,4 +2228,5 @@
     <string name="book_metadata_reset_all">还原所有修改</string>
     <string name="book_metadata_edit_series">编辑丛书</string>
     <string name="book_metadata_no_series">无</string>
+    <string name="evaluation_review_public">书评</string>
 </resources>

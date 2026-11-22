@@ -30,6 +30,9 @@ internal class ReadingTracker(context: Context, database: LiseurDatabase) {
     fun Rows() = Unit
 
     @Composable
+    fun reviewPublicNote(bookUrl: String): String? = null
+
+    @Composable
     fun BookDetailsSection(bookUrl: String, modifier: Modifier) = Unit
 
     @Composable

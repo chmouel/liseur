@@ -144,4 +144,5 @@
     <string name="hardcover_conflict_resolved">Aggiornato</string>
     <string name="hardcover_conflict_review_too_long">Questa recensione di Hardcover è troppo lunga per essere importata in Liseur.</string>
     <string name="hardcover_conflict_stale">Il valore di Liseur è cambiato nel frattempo. Controllalo e scegli di nuovo.</string>
+    <string name="hardcover_review_public_note">Pubblica. Pubblicata anche come tua recensione su Hardcover.</string>
 </resources>

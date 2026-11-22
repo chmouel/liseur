@@ -301,12 +301,15 @@ internal class ReadingTracker(context: Context, private val database: LiseurData
         value: String?,
         generation: BookGeneration,
     ): Boolean {
+        var changed = false
         val written = database.withTransaction {
             val book = database.bookDao().getByUrl(bookUrl) ?: return@withTransaction false
             // A file replaced at the same URL while Hardcover answered is another book.
             if (BookGeneration(book) != generation) return@withTransaction false
             val current = database.bookEvaluationDao().get(bookUrl, field)?.value
             if (current != expected) return@withTransaction false
+            if (current == value) return@withTransaction true
+            changed = true
             database.bookEvaluationDao().edit(
                 bookUrl = bookUrl,
                 field = field,
@@ -317,7 +320,7 @@ internal class ReadingTracker(context: Context, private val database: LiseurData
             )
             true
         }
-        if (written) context.container.requestBookSync(bookUrl)
+        if (changed) context.container.requestBookSync(bookUrl)
         return written
     }
 
@@ -588,6 +591,17 @@ internal class ReadingTracker(context: Context, private val database: LiseurData
                 }
             }
         }
+    }
+
+    /** The review editor's note while this book's review is published on Hardcover, else null. */
+    @Composable
+    fun reviewPublicNote(bookUrl: String): String? {
+        if (!remember { used() }) return null
+        val account by hardcover.account.collectAsState(initial = null)
+        val link by remember(bookUrl) { hardcover.link(bookUrl) }.collectAsState(initial = null)
+        // An unmatched book can still be matched and reported automatically, so only an exclusion keeps it off.
+        if (account == null || link?.excluded == true) return null
+        return stringResource(R.string.hardcover_review_public_note)
     }
 
     /** One book's standing with Hardcover, on its details page, while an account is connected. */

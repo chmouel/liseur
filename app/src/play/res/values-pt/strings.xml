@@ -144,4 +144,5 @@
     <string name="hardcover_conflict_resolved">Atualizado</string>
     <string name="hardcover_conflict_review_too_long">Esta resenha do Hardcover é longa demais para ser trazida ao Liseur.</string>
     <string name="hardcover_conflict_stale">O valor do Liseur mudou nesse meio-tempo. Confira e escolha de novo.</string>
+    <string name="hardcover_review_public_note">Pública. Também é publicada como sua resenha no Hardcover.</string>
 </resources>

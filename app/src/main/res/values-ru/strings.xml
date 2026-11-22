@@ -2482,4 +2482,5 @@
     <string name="book_metadata_reset_all">Сбросить все изменения</string>
     <string name="book_metadata_edit_series">Изменить серию</string>
     <string name="book_metadata_no_series">Нет</string>
+    <string name="evaluation_review_public">Отзыв</string>
 </resources>

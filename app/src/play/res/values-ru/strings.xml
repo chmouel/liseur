@@ -148,4 +148,5 @@
     <string name="hardcover_conflict_resolved">Обновлено</string>
     <string name="hardcover_conflict_review_too_long">Этот отзыв в Hardcover слишком длинный для импорта в Liseur.</string>
     <string name="hardcover_conflict_stale">Значение в Liseur тем временем изменилось. Проверьте его и выберите снова.</string>
+    <string name="hardcover_review_public_note">Публично. Также публикуется как ваш отзыв на Hardcover.</string>
 </resources>

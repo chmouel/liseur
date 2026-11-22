@@ -2382,4 +2382,5 @@
     <string name="book_metadata_reset_all">Redefinir todas as alterações</string>
     <string name="book_metadata_edit_series">Editar série</string>
     <string name="book_metadata_no_series">Nenhuma</string>
+    <string name="evaluation_review_public">Resenha</string>
 </resources>
