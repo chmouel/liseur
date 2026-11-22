@@ -6,10 +6,7 @@ import androidx.room.Room
 import androidx.room.withTransaction
 import androidx.test.core.app.ApplicationProvider
 import com.chmouel.liseur.data.calibre.CredentialCipher
-import com.chmouel.liseur.data.db.HardcoverAccount
-import com.chmouel.liseur.data.db.HardcoverBookLink
 import com.chmouel.liseur.data.db.KosyncPeer
-import com.chmouel.liseur.data.hardcover.HardcoverRepository
 import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.data.db.RemoteServer
 import com.chmouel.liseur.data.db.SyncPeerState
@@ -60,8 +57,15 @@ class ConnectionBackupRepositoryTest {
                 inTransaction = { work -> db.withTransaction { work() } },
             )
             var stopped = 0
+            val trackerEvents = mutableListOf<String>()
             val repository = ConnectionBackupRepository(account, kosync, app, services,
-                ServiceAccounts(context, services), beforeReplace = { stopped++ })
+                ServiceAccounts(context, services), beforeReplace = { stopped++; trackerEvents += "replace" },
+                exportTrackers = { it.put("tracker", "kept") },
+                prepareTrackers = { payload ->
+                    trackerEvents += "read:" + payload.getString("tracker")
+                    val restore: suspend () -> Unit = { trackerEvents += "restored" }
+                    restore
+                })
             val source = RemoteServer(kind = ServerKind.LISEUR_SYNC, baseUrl = "https://library.example",
                 username = "reader", passwordCipher = null, apiKeyCipher = null, accountId = "device",
                 userId = null, koboTokenCipher = null, canDownload = true, addedAt = 10,
@@ -91,7 +95,11 @@ class ConnectionBackupRepositoryTest {
             keys.set("https://voice.example:443", "replaced-key")
             val owners = mutableListOf<String>()
             services.addListener { owners += it }
-            repository.prepareRestore(payload, values)()
+            val restore = repository.prepareRestore(payload, values)
+            // The tracker reads its part before anything is replaced, and puts it back with the rest.
+            assertEquals(listOf("read:kept"), trackerEvents)
+            restore()
+            assertEquals(listOf("read:kept", "replace", "restored"), trackerEvents)
             val restored = account.current()!!
             assertNull(restored.accountId)
             assertNull(restored.credentials)
@@ -117,77 +125,6 @@ class ConnectionBackupRepositoryTest {
             assertNull(account.current())
             assertNull(kosync.current())
             assertNull(keys.get("https://voice.example:443"))
-        } finally {
-            db.close()
-            CredentialCipher.keyForTesting = null
-        }
-    }
-
-    @Test
-    fun `the hardcover account travels with the connections, and older backups leave it alone`() = runTest {
-        val context = ApplicationProvider.getApplicationContext<Context>()
-        val db = Room.inMemoryDatabaseBuilder(context, LiseurDatabase::class.java).build()
-        fun newKey() = KeyGenerator.getInstance("AES").apply { init(256) }.generateKey()
-        CredentialCipher.keyForTesting = newKey()
-        try {
-            val app = AppSettingsRepository(PreferenceDataStoreFactory.create(scope = backgroundScope) {
-                File(folder.root, "app.preferences_pb")
-            })
-            val cipher = SecretCipher("test-services").apply { keyForTesting = newKey() }
-            val services = ServerConnections(app, ServerKeys(folder.root, cipher), scope = backgroundScope)
-            val account = RemoteAccountRepository(
-                dao = db.remoteServerDao(), bookDao = db.bookDao(), progressDao = db.readingProgressDao(),
-                bookRemoval = BookRemoval(db.bookDao(), db.readingSessionDao(), db.syncPeerStateDao(),
-                    db.workIdentityDao(), db.readingProgressDao(), db.annotationDao(), db.annotationSyncDao()),
-                seriesExtraDao = db.seriesExtraDao(), peerStateDao = db.syncPeerStateDao(), setups = emptyMap(),
-                inTransaction = { work -> db.withTransaction { work() } },
-            )
-            val hardcover = HardcoverRepository(
-                dao = db.hardcoverDao(), bookFor = { null }, progressFor = { null },
-                inTransaction = { work -> db.withTransaction { work() } },
-            )
-            val repository = ConnectionBackupRepository(account,
-                KosyncAccountRepository(db.kosyncPeerDao(), db.syncPeerStateDao()), app, services,
-                ServiceAccounts(context, services), hardcover, beforeReplace = {})
-            val original = HardcoverAccount(userId = 42, username = "reader",
-                tokenCipher = HardcoverAccount.seal("hc-token"), addedAt = 1, autoSync = false)
-            db.hardcoverDao().upsertAccount(original)
-            db.hardcoverDao().upsertLink(HardcoverBookLink("book", hardcoverBookId = 9, editionId = 5))
-            // A real export always carries the server list; an untouched store has none yet.
-            val values = app.backupValues().apply {
-                if (!has(com.chmouel.liseur.data.settings.ServerSettings.SERVERS_NAME)) {
-                    put(com.chmouel.liseur.data.settings.ServerSettings.SERVERS_NAME, "[]")
-                }
-            }
-
-            val payload = repository.export()
-
-            assertEquals("hc-token", payload.getJSONObject("hardcover").getString("token"))
-            ConnectionBackupRepository.validate(payload, values)
-
-            // A new phone: another Keystore key, no account yet.
-            CredentialCipher.keyForTesting = newKey()
-            db.hardcoverDao().deleteAccount()
-            repository.prepareRestore(payload, values)()
-            val restored = hardcover.current()!!
-            assertEquals("hc-token", restored.token)
-            assertNotEquals(original.tokenCipher, restored.tokenCipher)
-            assertEquals(42L, restored.userId)
-            assertFalse(restored.autoSync)
-            // Same user: the matches stay.
-            assertNotNull(db.hardcoverDao().link("book"))
-
-            // A backup from before Hardcover existed says nothing about it.
-            payload.remove("hardcover")
-            ConnectionBackupRepository.validate(payload, values)
-            repository.prepareRestore(payload, values)()
-            assertNotNull(hardcover.current())
-
-            // One made while signed out signs this phone out too.
-            payload.put("hardcover", org.json.JSONObject.NULL)
-            repository.prepareRestore(payload, values)()
-            assertNull(hardcover.current())
-            assertNull(db.hardcoverDao().link("book"))
         } finally {
             db.close()
             CredentialCipher.keyForTesting = null

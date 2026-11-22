@@ -71,6 +71,7 @@ import com.chmouel.liseur.data.settings.SettingsSyncRepository
 import com.chmouel.liseur.data.settings.UserFontRepository
 import com.chmouel.liseur.data.settings.syncableSettings
 import com.chmouel.liseur.providers.ServerConnections
+import com.chmouel.liseur.providers.ReadingTracker
 import com.chmouel.liseur.providers.ServiceAccounts
 import com.chmouel.liseur.readaloud.ListeningCheckpoints
 import com.chmouel.liseur.readaloud.ReadAloudFeature
@@ -188,7 +189,9 @@ class AppContainer(
             aiPreferencesDao = database.bookAiPreferencesDao(),
             metadataDao = database.bookMetadataDao(),
             glossaryDao = database.glossaryDao(),
-            hardcoverDao = database.hardcoverDao(),
+            onBooksForgetting = { readingTracker.forgettingBooks(it) },
+            onBooksForgotten = { urls, committed -> readingTracker.forgotBooks(urls, committed) },
+            trackerKeeps = { readingTracker.keeps(it) },
         )
 
     private val savedTranslationsFile = context.getDatabasePath(TranslationCacheDatabase.NAME)
@@ -470,6 +473,7 @@ class AppContainer(
             // tap is ordered after the choice instead of under it.
             inWriteOrder = { action -> readingPositions.inOrder(action) },
             hasPendingStatus = { database.syncPeerStateDao().hasPendingStatusForBook(it) },
+            onStatusChosen = { readingTracker.bookChanged(it) },
         )
 
     val readerPreferences = ReaderPreferencesRepository(context.applicationContext)
@@ -553,8 +557,9 @@ class AppContainer(
             appSettings,
             serverConnections,
             serviceAccounts,
-            hardcover = hardcover,
             beforeReplace = { bookDownloads.cancelAll(com.chmouel.liseur.data.calibre.BulkStopReason.ACCOUNT_CHANGED) },
+            exportTrackers = { readingTracker.backup(it) },
+            prepareTrackers = { readingTracker.prepareRestore(it) },
         )
     }
 
@@ -700,7 +705,7 @@ class AppContainer(
             bookOrbitPositionTraversalDao = database.bookOrbitPositionTraversalDao(),
             bookOrbitStatusAgreementDao = database.bookOrbitStatusAgreementDao(),
             setups = serverSetups,
-            inTransaction = { work -> database.withTransaction { work() } },
+            inTransaction = { work -> bookRemoval.together(work) },
         )
 
     val bookDownloads =
@@ -713,7 +718,7 @@ class AppContainer(
             accountKey = { database.remoteServerDao().get()?.accountKey },
             mainServer = { database.remoteServerDao().get() },
             browseServer = { id -> database.remoteServerDao().get(id) },
-            inTransaction = { work -> database.withTransaction { work() } },
+            inTransaction = { work -> bookRemoval.together(work) },
         )
 
     val bookUploads = BookUploadRepository(context.applicationContext)
@@ -768,15 +773,6 @@ class AppContainer(
         WorkResolver(
             dao = database.workIdentityDao(),
             fingerprints = bookFingerprints,
-        )
-
-    /** The Hardcover account reading is reported to, beside any server. */
-    val hardcover =
-        com.chmouel.liseur.data.hardcover.HardcoverRepository(
-            dao = database.hardcoverDao(),
-            bookFor = { database.bookDao().getByUrl(it) },
-            progressFor = { database.readingProgressDao().get(it) },
-            inTransaction = { work -> database.withTransaction { work() } },
         )
 
     /** The KOReader kosync partner paired alongside a Custom catalog. */
@@ -1128,14 +1124,9 @@ class AppContainer(
             refreshFinished = finishedState::refreshFromProgress,
             markFinished = { finishedState.recordFinished(it) },
             latestSync = latestPositionSync,
-            scheduleClose = { bookUrl ->
-                PositionSyncWorker.pushBook(context.applicationContext, bookUrl)
-                applicationScope.launch {
-                    if (hardcover.pushesOnClose(bookUrl)) {
-                        com.chmouel.liseur.sync.HardcoverPushWorker
-                            .enqueue(context.applicationContext, bookUrl)
-                    }
-                }
+            scheduleClose = {
+                PositionSyncWorker.pushBook(context.applicationContext, it)
+                readingTracker.bookChanged(it)
             },
             onError = { message, error -> Log.e("reading-position", message, error) },
         )
@@ -1172,6 +1163,11 @@ class AppContainer(
     /** The build's own accounts on the Services page, such as the Play build's Gemini key. */
     internal val serviceAccounts: ServiceAccounts by lazy {
         ServiceAccounts(context.applicationContext, serverConnections)
+    }
+
+    /** Where reading is reported beyond the library's own servers: Hardcover in the Play build, nowhere in the F-Droid one. */
+    internal val readingTracker: ReadingTracker by lazy {
+        ReadingTracker(context.applicationContext, database)
     }
 
     /** Reading aloud: a Gemini voice in the Play build, nothing in the F-Droid one. */
@@ -1238,7 +1234,7 @@ class AppContainer(
             serverDao = database.remoteServerDao(),
             bookDao = database.bookDao(),
             bookRemoval = bookRemoval,
-            inTransaction = { work -> database.withTransaction { work() } },
+            inTransaction = { work -> bookRemoval.together(work) },
             networkAvailability = networkAvailability,
             localNetwork = localNetwork,
             metadataDao = database.bookMetadataDao(),
@@ -1289,7 +1285,7 @@ class AppContainer(
                     synchronized(browseOrbitSessions) { browseOrbitSessions.remove(server.id) }
                 }
             },
-            inTransaction = { work -> database.withTransaction { work() } },
+            inTransaction = { work -> bookRemoval.together(work) },
             metadata = database.bookMetadataDao(),
         )
 

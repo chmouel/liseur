@@ -1,4 +1,4 @@
-package com.chmouel.liseur.domain
+package com.chmouel.liseur.hardcover
 
 /**
  * An ISBN a catalogue can be asked about.

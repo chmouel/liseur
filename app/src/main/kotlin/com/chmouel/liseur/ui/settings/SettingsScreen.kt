@@ -24,7 +24,6 @@ import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.SpaceDashboard
-import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material.icons.outlined.TextFormat
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.AlertDialog
@@ -106,8 +105,6 @@ fun SettingsScreen(
     onOpenReadingNavigation: () -> Unit,
     onOpenWatchedFolders: () -> Unit = {},
     onOpenHiddenBooks: () -> Unit,
-    onOpenHardcover: () -> Unit = {},
-    hardcoverAccount: Flow<com.chmouel.liseur.data.db.HardcoverAccount?> = emptyFlow(),
     libraryFolders: Flow<List<LibraryFolder>>,
     hiddenBooks: Flow<List<Book>> = emptyFlow(),
     onOpenSettingsBackup: () -> Unit,
@@ -124,6 +121,8 @@ fun SettingsScreen(
     flavorReadingRows: @Composable () -> Unit = {},
     /** Rows for the AI features and the services they use: translation, the reading companion, servers and keys. */
     intelligenceRows: @Composable () -> Unit = {},
+    /** Rows a build flavor adds to Library, after the book servers. */
+    flavorLibraryRows: @Composable () -> Unit = {},
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val folders by libraryFolders.collectAsStateWithLifecycle(emptyList())
@@ -335,17 +334,7 @@ fun SettingsScreen(
                         onClick = onOpenAccount,
                         modifier = Modifier.settingsAnchor(SettingsEntries.ServerAccount),
                     )
-                    RowDivider()
-                    val hardcover by hardcoverAccount.collectAsStateWithLifecycle(null)
-                    ConnectionRow(
-                        icon = { Icon(Icons.Outlined.Sync, contentDescription = null) },
-                        title = stringResource(R.string.hardcover_title),
-                        subtitle = hardcover?.let {
-                            stringResource(R.string.hardcover_connected_as, it.username)
-                        } ?: stringResource(R.string.hardcover_settings_summary),
-                        onClick = onOpenHardcover,
-                        modifier = Modifier.settingsAnchor(SettingsEntries.Hardcover),
-                    )
+                    flavorLibraryRows()
                     RowDivider()
                     ConnectionRow(
                         icon = {

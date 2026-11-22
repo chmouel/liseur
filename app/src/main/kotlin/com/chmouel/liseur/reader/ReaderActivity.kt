@@ -40,7 +40,6 @@ import com.chmouel.liseur.reader.chrome.rememberReaderFoldPosture
 import androidx.lifecycle.lifecycleScope
 import com.chmouel.liseur.R
 import com.chmouel.liseur.container
-import com.chmouel.liseur.ui.settings.hardcoverMessageRes
 import com.chmouel.liseur.data.db.Book
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -537,8 +536,6 @@ class ReaderActivity : FragmentActivity() {
                                     viewModel.peek.map { it?.origin }.distinctUntilChanged()
                                         .collect(companionViewModel::peeking)
                                 }
-                                val hardcoverAccount by container.hardcover.account
-                                    .collectAsStateWithLifecycle(initialValue = null)
                                 ReaderScreen(
                                     publication = s.publication,
                                     displayAuthors = s.displayAuthors,
@@ -689,21 +686,6 @@ class ReaderActivity : FragmentActivity() {
                                         )
                                     },
                                     syncableFlow = viewModel.syncable,
-                                    onPushToHardcover = hardcoverAccount?.let {
-                                        {
-                                            val pushed = target?.id
-                                            if (pushed != null) {
-                                                lifecycleScope.launch {
-                                                    val outcome = container.hardcover.push(pushed, asked = true)
-                                                    Toast.makeText(
-                                                        this@ReaderActivity,
-                                                        outcome.hardcoverMessageRes(),
-                                                        Toast.LENGTH_SHORT,
-                                                    ).show()
-                                                }
-                                            }
-                                        }
-                                    },
                                     dictionaryFlow = viewModel.dictionary,
                                     onEnableDictionary = viewModel::enableDictionary,
                                     footnoteFlow = viewModel.footnote,
@@ -715,6 +697,13 @@ class ReaderActivity : FragmentActivity() {
                                         ReaderBookSyncActions(
                                             start = viewModel::syncThisBook,
                                             registerCapture = { viewModel.preparePositionAction = it },
+                                            tracker = { close ->
+                                                container.readingTracker.ReaderMenuItem(
+                                                    bookUrl = checkNotNull(target).id,
+                                                    savePlace = viewModel::savePlaceNow,
+                                                    close = close,
+                                                )
+                                            },
                                         )
                                     },
                                     onBack = ::finish,

@@ -230,21 +230,21 @@ class BookUploadWorker(
         // Looking and linking are one transaction: a pass landing
         // between the two would otherwise insert the row just after it
         // was looked for and leave the duplicate this is here to stop.
-        container.database.withTransaction {
+        container.bookRemoval.together {
             // Everything below writes, so everything below is
             // conditional: an answer for an account the reader has left
             // must not delete its rows, link its books or turn its
             // capabilities on and off.
-            if (container.remoteAccount.current()?.accountKey != account) return@withTransaction
+            if (container.remoteAccount.current()?.accountKey != account) return@together
             // A row the library replaced, re-read or rehomed while the
             // bytes were in the air is not the one they were read from.
             // A watched-folder row has no local_uri and opens through its
             // folder, so the whole opened address has to match.
-            val current = dao.getByUrl(book.url) ?: return@withTransaction
+            val current = dao.getByUrl(book.url) ?: return@together
             if (current.id != book.id || current.localUri != book.localUri ||
                 current.openableUri() != book.openableUri() ||
                 current.fileModifiedAt != book.fileModifiedAt
-            ) return@withTransaction
+            ) return@together
             val duplicates = dao.byRemoteUuids(listOf(result.remoteUuid))
                 .map { it.url }
                 .filter { it != book.url }
@@ -257,7 +257,7 @@ class BookUploadWorker(
             }
             if (!clear) {
                 blocked = true
-                return@withTransaction
+                return@together
             }
             dao.linkToRemote(
                 url = book.url,

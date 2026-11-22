@@ -1,9 +1,7 @@
-package com.chmouel.liseur.data.hardcover
+package com.chmouel.liseur.hardcover
 
 import com.chmouel.liseur.data.remote.RemoteResult
 import com.chmouel.liseur.data.remote.SyncFailure
-import com.chmouel.liseur.domain.HardcoverShelfState
-import com.chmouel.liseur.domain.Isbn
 import java.net.InetAddress
 import kotlinx.coroutines.runBlocking
 import mockwebserver3.MockResponse
@@ -15,14 +13,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
-/**
- * The Hardcover client against answers shaped as its documentation
- * shows them.
- *
- * These bodies were written from docs.hardcover.app, not captured from
- * the live API: the search result shape and `insert_user_book` in
- * particular still want checking against a real account.
- */
 class HardcoverClientTest {
 
     private lateinit var server: MockWebServer
@@ -38,7 +28,7 @@ class HardcoverClientTest {
         server.close()
     }
 
-    private fun client() = HardcoverClient(endpoint = "http://127.0.0.1:${server.port}/v1/graphql")
+    private fun client() = HardcoverClient(endpoint = "http://127.0.0.1:${server.port}/v1/graphql", spacingMillis = 0)
 
     private fun answer(data: String) = server.enqueue(MockResponse(code = 200, body = """{"data":$data}"""))
 
@@ -65,6 +55,13 @@ class HardcoverClientTest {
         client().me("  Bearer tok\n")
 
         assertEquals("Bearer tok", server.takeRequest().headers["Authorization"])
+    }
+
+    @Test
+    fun `a pasted token no header can carry is refused without a request`() = runBlocking {
+        assertEquals(RemoteResult.Failed(SyncFailure.Unauthorised), client().me("to\nk"))
+        assertEquals(RemoteResult.Failed(SyncFailure.Unauthorised), client().me("tök"))
+        assertEquals(0, server.requestCount)
     }
 
     @Test
@@ -156,59 +153,95 @@ class HardcoverClientTest {
     }
 
     @Test
-    fun `the read in progress is reported with its pages`() = runBlocking {
-        answer("""{"user_books":[{"id":7,"status_id":2,"user_book_reads":[{"id":3,"progress_pages":120}]}]}""")
+    fun `the latest read comes back with its pages, dates and edition`() = runBlocking {
+        answer(
+            """{"user_books":[{"id":7,"status_id":2,"rating":3.5,"edition_id":5,"user_book_reads":[
+            {"id":3,"progress_pages":120,"started_at":"2026-03-01","finished_at":null,
+            "edition_id":8,"edition":{"pages":600}}]}]}""",
+        )
 
         val result = client().shelfState("tok", userId = 42, bookId = 9)
 
-        assertEquals(HardcoverShelfState(7, 2, 3, 120), (result as RemoteResult.Ok).value)
+        assertEquals(
+            HardcoverShelfState(7, 2, 3.5, HardcoverRead(3, 120, "2026-03-01", null, 8, 600), editionId = 5),
+            (result as RemoteResult.Ok).value,
+        )
+        val variables = sent().getJSONObject("variables")
+        assertEquals(42, variables.getInt("userId"))
+        assertEquals(9, variables.getInt("bookId"))
     }
 
     @Test
-    fun `a started read with no pages logged has none`() = runBlocking {
-        answer("""{"user_books":[{"id":7,"status_id":2,"user_book_reads":[{"id":3,"progress_pages":null}]}]}""")
+    fun `adding a book sends one object and answers the new entry`() = runBlocking {
+        answer("""{"insert_user_book":{"error":null,"user_book":{"id":7}}}""")
 
-        val result = client().shelfState("tok", userId = 42, bookId = 9)
-
-        assertEquals(HardcoverShelfState(7, 2, 3, null), (result as RemoteResult.Ok).value)
-    }
-
-    @Test
-    fun `adding a book answers the new library entry`() = runBlocking {
-        answer("""{"insert_user_book":{"error":null,"user_book":{"id":7,"status_id":2}}}""")
-
-        val result = client().addToLibrary("tok", bookId = 9, editionId = 5, statusId = 2)
+        val result = client().addToLibrary("tok", bookId = 9, editionId = 5, statusId = 3, rating = 4.5)
 
         assertEquals(7L, (result as RemoteResult.Ok).value)
-        val variables = sent().getJSONObject("variables")
-        assertEquals(9, variables.getInt("bookId"))
-        assertEquals(5, variables.getInt("editionId"))
-        assertEquals(2, variables.getInt("statusId"))
+        val entry = sent().getJSONObject("variables").getJSONObject("object")
+        assertEquals(9, entry.getInt("book_id"))
+        assertEquals(5, entry.getInt("edition_id"))
+        assertEquals(3, entry.getInt("status_id"))
+        assertEquals(4.5, entry.getDouble("rating"), 0.0)
     }
 
     @Test
-    fun `progress and status go out as their own mutations`() = runBlocking {
-        answer("""{"update_user_book_read":{"error":null,"user_book_read":{"id":3,"progress_pages":150}}}""")
-        answer("""{"update_user_book":{"error":null,"user_book":{"id":7,"status_id":3}}}""")
+    fun `an entry update sends only what changes, and a cleared rating as null`() = runBlocking {
+        answer("""{"update_user_book":{"error":null,"user_book":{"id":7}}}""")
+        answer("""{"update_user_book":{"error":null,"user_book":{"id":7}}}""")
 
-        assertTrue(client().setProgress("tok", readId = 3, pages = 150) is RemoteResult.Ok)
-        assertTrue(client().setStatus("tok", userBookId = 7, statusId = 3) is RemoteResult.Ok)
+        client().updateEntry("tok", 7, HardcoverEntryStep.Update(statusId = 3, rating = null))
+        client().updateEntry("tok", 7, HardcoverEntryStep.Update(null, null, clearRating = true))
 
-        val progress = sent()
-        assertTrue(progress.getString("query").contains("update_user_book_read"))
-        assertEquals(150, progress.getJSONObject("variables").getInt("pages"))
-        val status = sent()
-        assertTrue(status.getString("query").contains("update_user_book("))
-        assertEquals(3, status.getJSONObject("variables").getInt("statusId"))
+        val status = sent().getJSONObject("variables")
+        assertEquals(7, status.getInt("id"))
+        assertEquals("""{"status_id":3}""", status.getJSONObject("object").toString())
+        val cleared = sent().getJSONObject("variables").getJSONObject("object")
+        assertEquals(listOf("rating"), cleared.keys().asSequence().toList())
+        assertTrue(cleared.isNull("rating"))
+    }
+
+    @Test
+    fun `a read update sends only the fields given`() = runBlocking {
+        answer("""{"update_user_book_read":{"error":null,"user_book_read":{"id":3}}}""")
+
+        val result = client().updateRead("tok", 3, HardcoverReadStep(pages = 150, finishedAt = "2026-04-18"))
+
+        assertTrue(result is RemoteResult.Ok)
+        val body = sent()
+        assertTrue(body.getString("query").contains("update_user_book_read"))
+        val read = body.getJSONObject("variables").getJSONObject("object")
+        assertEquals(setOf("progress_pages", "finished_at"), read.keys().asSequence().toSet())
+        assertEquals(150, read.getInt("progress_pages"))
+        assertEquals("2026-04-18", read.getString("finished_at"))
     }
 
     @Test
     fun `a mutation that answers with an error did not happen`() = runBlocking {
         answer("""{"update_user_book":{"error":"Not allowed","user_book":null}}""")
 
-        val result = client().setStatus("tok", userBookId = 7, statusId = 3)
+        val result = client().updateEntry("tok", 7, HardcoverEntryStep.Update(3, null))
 
         assertEquals(SyncFailure.Malformed, result.failure)
+    }
+
+    @Test
+    fun `an expired token inside a graphql error asks for a new token`() = runBlocking {
+        server.enqueue(
+            MockResponse(
+                code = 200,
+                body = """{"errors":[{"message":"Could not verify JWT","extensions":{"code":"invalid-jwt"}}]}""",
+            ),
+        )
+
+        assertEquals(SyncFailure.Unauthorised, client().me("tok").failure)
+    }
+
+    @Test
+    fun `a token missing a scope is told apart`() = runBlocking {
+        server.enqueue(MockResponse(code = 403, body = "{}"))
+
+        assertEquals(SyncFailure.Forbidden, client().me("tok").failure)
     }
 
     @Test

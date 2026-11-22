@@ -2265,26 +2265,4 @@
     <string name="book_metadata_reset_all">Ripristina tutte le modifiche</string>
     <string name="book_metadata_edit_series">Modifica serie</string>
     <string name="book_metadata_no_series">Nessuna</string>
-    <string name="hardcover_settings_summary">Segnala le tue letture al tuo account Hardcover</string>
-    <string name="hardcover_intro">Liseur può comunicare a Hardcover quale libro stai leggendo, a che punto sei e quando lo finisci. Nulla viene letto da Hardcover.</string>
-    <string name="hardcover_token_label">Token API</string>
-    <string name="hardcover_token_help">Nelle impostazioni del tuo account Hardcover apri Hardcover API, crea un token e incollalo qui.</string>
-    <string name="hardcover_connect">Connetti</string>
-    <string name="hardcover_disconnect">Disconnetti</string>
-    <string name="hardcover_connected_as">Accesso effettuato come %1$s</string>
-    <string name="hardcover_auto_sync">Sincronizza automaticamente</string>
-    <string name="hardcover_auto_sync_detail">Segnala i progressi ogni volta che chiudi un libro. Se disattivato, usa Invia a Hardcover nel menu del lettore.</string>
-    <string name="hardcover_error_token">Hardcover non ha accettato questo token.</string>
-    <string name="hardcover_error_offline">Impossibile raggiungere Hardcover. Controlla la connessione e riprova.</string>
-    <string name="hardcover_error_other">Impossibile aggiornare Hardcover in questo momento. Riprova più tardi.</string>
-    <string name="hardcover_push">Invia a Hardcover</string>
-    <string name="hardcover_pushed">Inviato a Hardcover</string>
-    <string name="hardcover_up_to_date">Hardcover è già aggiornato</string>
-    <string name="hardcover_needs_match">Scegli prima l\'edizione Hardcover di questo libro in Dettagli del libro</string>
-    <string name="hardcover_push_off">Questo libro non viene inviato a Hardcover</string>
-    <string name="hardcover_book_matched">Associato a %1$s</string>
-    <string name="hardcover_book_unmatched">Non ancora associato a un\'edizione</string>
-    <string name="hardcover_book_sync">Sincronizza questo libro</string>
-    <string name="hardcover_book_choose">Scegli edizione</string>
-    <string name="hardcover_editions_none">Hardcover non ha edizioni corrispondenti a questo libro.</string>
 </resources>

@@ -98,7 +98,6 @@ import com.chmouel.liseur.ui.settings.VocabularySettingsScreen
 import com.chmouel.liseur.ui.settings.NestedPage
 import com.chmouel.liseur.ui.settings.PageTapsScreen
 import com.chmouel.liseur.ui.settings.ReadingAppearanceScreen
-import com.chmouel.liseur.ui.settings.HardcoverScreen
 import com.chmouel.liseur.ui.settings.HiddenBooksScreen
 import com.chmouel.liseur.ui.settings.ReadingNavigationScreen
 import com.chmouel.liseur.ui.settings.RowDivider
@@ -719,11 +718,7 @@ private fun LiseurApp(
                                 }
                             },
                             extraSection = { section ->
-                                com.chmouel.liseur.ui.library.HardcoverBookSection(
-                                    bookUrl = target.bookUrl,
-                                    hardcover = context.container.hardcover,
-                                    modifier = section,
-                                )
+                                context.container.readingTracker.BookDetailsSection(target.bookUrl, section)
                             },
                         )
                     }
@@ -750,8 +745,6 @@ private fun LiseurApp(
                             onOpenWatchedFolders = { openPage(Route.WatchedFolders) },
                             onOpenSettingsBackup = { openPage(Route.SettingsBackup) },
                             onOpenHiddenBooks = { openPage(Route.HiddenBooks) },
-                            onOpenHardcover = { openPage(Route.Hardcover) },
-                            hardcoverAccount = context.container.hardcover.account,
                             libraryFolders = library.libraryFolders,
                             hiddenBooks = library.hidden,
                             server = context.container.remoteAccount.server,
@@ -765,6 +758,9 @@ private fun LiseurApp(
                                 Column(Modifier.settingsAnchor(SettingsEntries.ReadAloud)) {
                                     context.container.readAloud.SettingsEntry(onClick = { openPage(Route.ReadAloud) })
                                 }
+                            },
+                            flavorLibraryRows = {
+                                context.container.readingTracker.SettingsEntry(onOpen = { openPage(Route.Services) })
                             },
                             intelligenceRows = {
                                 Column(Modifier.settingsAnchor(SettingsEntries.Translation)) {
@@ -845,7 +841,12 @@ private fun LiseurApp(
                             store = context.container.companionStore,
                             onBack = back,
                             servicesPage = { leave ->
-                                ServicesScreen(context.container.serverConnections, context.container.serviceAccounts, leave)
+                                ServicesScreen(
+                                    context.container.serverConnections,
+                                    context.container.serviceAccounts,
+                                    leave,
+                                    trackers = { context.container.readingTracker.Rows() },
+                                )
                             },
                         )
                     }
@@ -855,41 +856,13 @@ private fun LiseurApp(
                             connections = context.container.serverConnections,
                             accounts = context.container.serviceAccounts,
                             onBack = back,
+                            trackers = { context.container.readingTracker.Rows() },
                         )
                     }
 
                     Route.SettingsBackup -> {
                         SettingsBackupScreen(
                             backup = settingsZipBackup,
-                            onBack = back,
-                        )
-                    }
-
-                    Route.Hardcover -> {
-                        val hardcover = context.container.hardcover
-                        val account by hardcover.account.collectAsStateWithLifecycle(null)
-                        var connecting by remember { mutableStateOf(false) }
-                        var failure by remember {
-                            mutableStateOf<com.chmouel.liseur.data.remote.SyncFailure?>(null)
-                        }
-                        HardcoverScreen(
-                            account = account,
-                            connecting = connecting,
-                            error = failure,
-                            onConnect = { token ->
-                                connecting = true
-                                failure = null
-                                scope.launch {
-                                    val outcome = hardcover.connect(token)
-                                    failure = (
-                                        outcome as? com.chmouel.liseur.data.hardcover
-                                            .HardcoverConnectOutcome.Failed
-                                        )?.reason
-                                    connecting = false
-                                }
-                            },
-                            onDisconnect = { scope.launch { hardcover.disconnect() } },
-                            onAutoSync = { scope.launch { hardcover.setAutoSync(it) } },
                             onBack = back,
                         )
                     }

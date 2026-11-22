@@ -52,6 +52,10 @@ class BookRemovalTest {
     private lateinit var removal: BookRemoval
     private lateinit var library: LocalLibraryRepository
     private var historyRefreshRequests = 0
+    private val forgotten = mutableListOf<List<String>>()
+    private val forgetting = mutableListOf<List<String>>()
+    private val keptAfterRollback = mutableListOf<List<String>>()
+    private val trackerKept = mutableSetOf<String>()
 
     @Before
     fun open() {
@@ -76,7 +80,9 @@ class BookRemovalTest {
             aiPreferencesDao = db.bookAiPreferencesDao(),
             glossaryDao = db.glossaryDao(),
             evaluationDao = db.bookEvaluationDao(),
-            hardcoverDao = db.hardcoverDao(),
+            onBooksForgetting = { forgetting += it },
+            onBooksForgotten = { urls, committed -> if (committed) forgotten += urls else keptAfterRollback += urls },
+            trackerKeeps = { it in trackerKept },
         )
         val context = ApplicationProvider.getApplicationContext<Context>()
         val httpClient = DefaultHttpClient()
@@ -123,20 +129,33 @@ class BookRemovalTest {
     }
 
     @Test
-    fun `deleting a book forgets its hardcover match and keeps the others`() = runTest {
+    fun `books deleted or replaced are reported once each`() = runTest {
         db.bookDao().upsert(book("gone"))
-        db.bookDao().upsert(book("kept"))
-        db.hardcoverDao().upsertLink(
-            com.chmouel.liseur.data.db.HardcoverBookLink("gone", hardcoverBookId = 1, editionId = 2),
-        )
-        db.hardcoverDao().upsertLink(
-            com.chmouel.liseur.data.db.HardcoverBookLink("kept", hardcoverBookId = 3, editionId = 4),
-        )
+        db.bookDao().upsert(book("swapped"))
 
-        removal.deleteByUrls(listOf("gone"))
+        removal.deleteByUrls(listOf("gone", "gone"))
+        removal.contentReplaced("swapped")
 
-        assertNull(db.hardcoverDao().link("gone"))
-        assertEquals(4L, db.hardcoverDao().link("kept")?.editionId)
+        assertEquals(listOf(listOf("gone"), listOf("swapped")), forgotten)
+    }
+
+    @Test
+    fun `a book is reported forgotten only once the outer transaction commits`() = runTest {
+        db.bookDao().upsert(book("swapped"))
+
+        runCatching {
+            removal.together {
+                removal.contentReplaced("swapped")
+                assertEquals(listOf(listOf("swapped")), forgetting)
+                assertTrue(forgotten.isEmpty())
+                error("reindex failed")
+            }
+        }
+        assertTrue(forgotten.isEmpty())
+        assertEquals(listOf(listOf("swapped")), keptAfterRollback)
+
+        removal.together { removal.contentReplaced("swapped") }
+        assertEquals(listOf(listOf("swapped")), forgotten)
     }
 
     @Test
@@ -709,6 +728,15 @@ class BookRemovalTest {
         urls.forEach { assertNotNull(db.bookDao().getByUrl(it)) }
         assertEquals("Keep this review", dao.get("reviewed", "review")!!.value)
         assertTrue(dao.retained().isEmpty())
+    }
+
+    @Test
+    fun `a duplicate a reading tracker keeps is left alone`() = runTest {
+        db.bookDao().upsert(book("tracked"))
+        trackerKept += "tracked"
+
+        assertTrue(removal.dropUntouchedDuplicates(listOf("tracked")).isEmpty())
+        assertNotNull(db.bookDao().getByUrl("tracked"))
     }
 
     @Test

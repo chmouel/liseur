@@ -2461,26 +2461,4 @@
     <string name="book_metadata_reset_all">Obnovit vše</string>
     <string name="book_metadata_edit_series">Upravit sérii</string>
     <string name="book_metadata_no_series">Žádná</string>
-    <string name="hardcover_settings_summary">Hlásit čtení na váš účet Hardcover</string>
-    <string name="hardcover_intro">Liseur může službě Hardcover sdělit, kterou knihu čtete, jak jste daleko a kdy ji dočtete. Ze služby Hardcover se nic nenačítá.</string>
-    <string name="hardcover_token_label">Token API</string>
-    <string name="hardcover_token_help">V nastavení účtu Hardcover otevřete Hardcover API, vytvořte token a vložte ho sem.</string>
-    <string name="hardcover_connect">Připojit</string>
-    <string name="hardcover_disconnect">Odpojit</string>
-    <string name="hardcover_connected_as">Přihlášeno jako %1$s</string>
-    <string name="hardcover_auto_sync">Synchronizovat automaticky</string>
-    <string name="hardcover_auto_sync_detail">Hlásí postup při každém zavření knihy. Když je vypnuto, použijte Odeslat na Hardcover v nabídce čtečky.</string>
-    <string name="hardcover_error_token">Hardcover tento token nepřijal.</string>
-    <string name="hardcover_error_offline">Hardcover není dostupný. Zkontrolujte připojení a zkuste to znovu.</string>
-    <string name="hardcover_error_other">Hardcover se teď nepodařilo aktualizovat. Zkuste to později.</string>
-    <string name="hardcover_push">Odeslat na Hardcover</string>
-    <string name="hardcover_pushed">Odesláno na Hardcover</string>
-    <string name="hardcover_up_to_date">Hardcover je už aktuální</string>
-    <string name="hardcover_needs_match">Nejdřív v Podrobnostech o knize vyberte vydání této knihy na Hardcover</string>
-    <string name="hardcover_push_off">Tato kniha se na Hardcover neodesílá</string>
-    <string name="hardcover_book_matched">Spárováno s %1$s</string>
-    <string name="hardcover_book_unmatched">Zatím nespárováno s žádným vydáním</string>
-    <string name="hardcover_book_sync">Synchronizovat tuto knihu</string>
-    <string name="hardcover_book_choose">Vybrat vydání</string>
-    <string name="hardcover_editions_none">Hardcover nemá žádné vydání odpovídající této knize.</string>
 </resources>

@@ -6,7 +6,7 @@ title: Liseur Privacy Policy
 
 **App:** Liseur (`com.chmouel.liseur`)
 **Developer:** Chmouel Boudjnah
-**Last updated:** 20 November 2026
+**Last updated:** 22 November 2026
 
 Liseur is an open-source ebook reader with no advertising or Liseur account.
 The F-Droid build has no analytics or crash reporting. Google Play releases
@@ -102,11 +102,6 @@ All of this stays in the app's own private storage:
   build the narration direction you saved for reading it aloud. Removing
   the book keeps them for when it comes back; they are not synced, and
   the ZIP backups you export from Settings do not carry them.
-- If you connect Hardcover, the API token you pasted, encrypted the same
-  way as server credentials, your Hardcover username and user id, and for
-  each book the Hardcover edition it was matched with and whether you
-  keep it off Hardcover. Deleting a book removes its match; disconnecting
-  removes the token and every match.
 
 Uninstalling the app removes all of it.
 
@@ -147,20 +142,6 @@ cleared on your other devices as well. Vocabulary stays scoped to the
 account you signed in with and is never sent to other providers. You
 operate that server, or someone you trust does. This policy does not
 cover what the server does with the data it receives.
-
-### Hardcover, if you connect it
-
-If you paste a Hardcover API token in Settings, Liseur talks to
-`https://api.hardcover.app/v1/graphql`, sending that token with every
-request. To find which Hardcover book you are reading it sends the
-book's ISBN when the file has one, and otherwise its title and author.
-It then sends whether you are reading or have finished that book and how
-many pages in you are, after you close the book or when you tap Push to
-Hardcover. It reads back only what it needs to avoid repeating itself:
-your Hardcover user id, and that book's status and logged page. Books you
-switch off in Book details are never sent. Hardcover publishes what it
-does with this under its own privacy policy, which this policy does not
-cover.
 
 ### Free book catalogs
 
@@ -557,6 +538,37 @@ address over HTTPS, together with your key and the model you picked.
 Requests are billed to your key under Google's terms, and Google's
 retention policy for the Gemini API applies to them.
 
+### Hardcover, for tracking your reading (Google Play build only)
+
+The Google Play build can tell [Hardcover](https://hardcover.app), a
+reading tracker, what you are reading. The F-Droid and GitHub builds do
+not contain this at all.
+
+It does nothing until you paste a Hardcover API token of your own under
+Reading services, on the External services and API keys page (Settings,
+Library, Reading services leads there too). Connecting sends the token to
+`api.hardcover.app` to learn your Hardcover user name. "Get a token"
+opens Hardcover's token page in your browser; Liseur itself sends
+nothing there.
+
+Once connected, closing a book, changing its reading status or rating it
+sends that book to `api.hardcover.app` over HTTPS with your token. To
+find the book on Hardcover, Liseur sends the ISBN the file carries, or
+its title and author when it has none; this happens once per book. It
+then reads what your Hardcover library holds for that book and sends
+only what differs: its status (want to read, currently reading, read,
+paused or did not finish), the page you reached in the chosen edition,
+the days you started and finished it, and your rating. Nothing is sent
+for a book you have not opened, rated or given a status. No book text,
+file, highlight, note or review is sent, and nothing Hardcover holds is
+brought back into Liseur.
+
+You can turn off automatic updates and push a book by hand from the
+reader menu or Book details, keep a single book off Hardcover from Book
+details, or disconnect in Settings, after which no more requests are
+made. What Hardcover keeps is under
+[Hardcover's own terms](https://hardcover.app/pages/privacy-policy).
+
 Liseur never contacts any other host. It requests the `INTERNET` and
 `ACCESS_NETWORK_STATE` permissions for the purposes above and for nothing
 else. It requests `POST_NOTIFICATIONS`, `WAKE_LOCK` and
@@ -573,14 +585,14 @@ also carries your reading sessions, and if you tick “Include book files” it
 carries the offline EPUBs you select. Both travel unencrypted, even when a
 backup password is set: only the connection payload is encrypted. They exclude passwords, tokens and API keys by
 default. If you check “Include accounts, services and passwords”, Liseur also
-includes your library account, KOReader pairing, Hardcover token, service API
-keys and, in the Google Play build, your Gemini key. These credentials are encrypted with a
+includes your library account, KOReader pairing, service API keys and, in the
+Google Play build, your Gemini key and Hardcover token. These credentials are encrypted with a
 backup password you choose, using AES-256-GCM and PBKDF2-HMAC-SHA256 with a
 random salt and 600,000 iterations. Only this connection payload is encrypted;
 the other ZIP contents remain readable. Keep the password to restore the
 credentials; Liseur does not save or send it anywhere.
 
-Restoring such a backup replaces saved library, KOReader and Hardcover accounts, service
+Restoring such a backup replaces saved library and KOReader accounts, service
 configuration and credentials without contacting the servers to sign in.
 Credentials are encrypted again with the new device’s Keystore. Sync cursors,
 acknowledgements and queued work are not transferred. Backups without
@@ -599,7 +611,9 @@ are deliberately excluded.
 Server credentials are included but arrive unreadable on a new device,
 because the key that encrypts them never leaves the old one. Liseur notices
 this and asks you to sign in again. A server or Gemini API key
-is not backed up at all; you paste it again on a new device. The servers'
+and, in the Google Play build, the Hardcover token and which Hardcover
+book each file was matched to are not backed up at all; you paste the
+key or token again on a new device. The servers'
 addresses, and the models, voices and languages you chose for reading
 aloud, translation and character profiles, are backed up with your
 other settings.

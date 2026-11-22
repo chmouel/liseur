@@ -1,4 +1,4 @@
-package com.chmouel.liseur.domain
+package com.chmouel.liseur.hardcover
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull

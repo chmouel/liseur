@@ -148,7 +148,7 @@ fun BookDetailsScreen(
     onResetSharedSeries: (Book) -> Unit = {},
     onSaveMetadataEdits: (Book, FieldEdit, FieldEdit, FieldEdit, CoverEdit) -> Unit = { _, _, _, _, _ -> },
     onResetAllMetadataOverrides: (Book) -> Unit = {},
-    /** One more section under the file details, given the width the others use. */
+    /** A section the build adds under the file details, such as a reading tracker's. */
     extraSection: (@Composable (Modifier) -> Unit)? = null,
 ) {
     if (state is BookDetailsUiState.Gone) {

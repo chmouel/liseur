@@ -2341,27 +2341,4 @@
     <string name="book_metadata_reset_all">Reset all overrides</string>
     <string name="book_metadata_edit_series">Edit series</string>
     <string name="book_metadata_no_series">None</string>
-    <string name="hardcover_title" translatable="false">Hardcover</string>
-    <string name="hardcover_settings_summary">Report your reading to your Hardcover account</string>
-    <string name="hardcover_intro">Liseur can tell Hardcover which book you are reading, how far along you are, and when you finish it. Nothing is read back from Hardcover.</string>
-    <string name="hardcover_token_label">API token</string>
-    <string name="hardcover_token_help">In your Hardcover account settings, open Hardcover API, create a token and paste it here.</string>
-    <string name="hardcover_connect">Connect</string>
-    <string name="hardcover_disconnect">Disconnect</string>
-    <string name="hardcover_connected_as">Signed in as %1$s</string>
-    <string name="hardcover_auto_sync">Sync automatically</string>
-    <string name="hardcover_auto_sync_detail">Report progress each time you close a book. When off, use Push to Hardcover in the reader menu.</string>
-    <string name="hardcover_error_token">Hardcover did not accept this token.</string>
-    <string name="hardcover_error_offline">Could not reach Hardcover. Check your connection and try again.</string>
-    <string name="hardcover_error_other">Hardcover could not be updated right now. Try again later.</string>
-    <string name="hardcover_push">Push to Hardcover</string>
-    <string name="hardcover_pushed">Sent to Hardcover</string>
-    <string name="hardcover_up_to_date">Hardcover is already up to date</string>
-    <string name="hardcover_needs_match">Choose this book\'s Hardcover edition in Book details first</string>
-    <string name="hardcover_push_off">This book is kept off Hardcover</string>
-    <string name="hardcover_book_matched">Matched to %1$s</string>
-    <string name="hardcover_book_unmatched">Not matched to an edition yet</string>
-    <string name="hardcover_book_sync">Sync this book</string>
-    <string name="hardcover_book_choose">Choose edition</string>
-    <string name="hardcover_editions_none">Hardcover has no edition matching this book.</string>
 </resources>
