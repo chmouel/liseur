@@ -1646,6 +1646,44 @@
     <string name="companion_settings_story_auto">自动补全前情</string>
     <string name="companion_settings_story_auto_summary">在阅读伴侣中打开“前情”时，回顾上一章并让前情摘要保持最新。</string>
     <string name="companion_settings_privacy">所选段落之前的书籍文本会发送到所选服务器；开启后台摘要后会发送整章内容。服务提供方可能对这些请求收费。</string>
+    <string name="restore_summary_intro">此备份将替换部分数据，并将其余内容合并到你的书库中。</string>
+    <string name="restore_summary_intro_replace_only">此备份将替换以下项目的当前数据。</string>
+    <string name="restore_summary_intro_preserve_only">此备份将添加或合并以下项目，不会覆盖现有数据。</string>
+    <string name="restore_item_summary" formatted="true">%1$s — %2$s</string>
+    <string name="restore_category_metadata">已编辑的图书详情</string>
+    <string name="restore_metadata_detail">替换匹配图书的已保存编辑。</string>
+    <string name="restore_category_settings">设置</string>
+    <string name="restore_category_accounts">账号和服务</string>
+    <string name="restore_category_fonts">自定义字体</string>
+    <string name="restore_category_books">图书文件</string>
+    <string name="restore_category_marks">标记</string>
+    <string name="restore_category_positions">阅读位置</string>
+    <string name="restore_category_sessions">阅读记录</string>
+    <string name="restore_category_recaps">章节摘要</string>
+    <string name="restore_category_translations">翻译</string>
+    <string name="restore_settings_detail">替换当前设置。</string>
+    <string name="restore_fonts_detail">添加缺少的字体；保留已安装的字体。</string>
+    <string name="restore_books_existing_kept">已存在的图书将被保留。</string>
+    <string name="restore_books_all_present">均已在你的书库中。</string>
+    <string name="restore_marks_detail">添加缺少的标记；保留现有标记。</string>
+    <string name="restore_marks_unmatched_wait">未匹配的标记将等待对应图书导入。</string>
+    <string name="restore_positions_detail">替换匹配图书的当前阅读位置。</string>
+    <string name="restore_sessions_detail">与现有阅读记录合并，不会丢弃已有记录。</string>
+    <string name="restore_recaps_detail">为书库中的图书添加缺少的摘要；保留现有摘要。</string>
+    <string name="restore_translations_detail">为书库中的图书添加缺少的翻译；保留现有翻译。</string>
+    <string name="restore_operation_replace">替换</string>
+    <string name="restore_operation_add">添加</string>
+    <string name="restore_operation_merge">合并</string>
+    <string name="restore_operation_keep">保留</string>
+    <plurals name="restore_position_count">
+        <item quantity="other">%1$d 个位置</item>
+    </plurals>
+    <plurals name="restore_session_count">
+        <item quantity="other">%1$d 条记录</item>
+    </plurals>
+    <plurals name="restore_recap_count">
+        <item quantity="other">%1$d 条摘要</item>
+    </plurals>
     <string name="settings_backup_other_exports">其他导出</string>
     <string name="settings_backup_accounts_password_hint">使用备份密码保护</string>
     <string name="server_pair_again">重新配对</string>
@@ -2079,6 +2117,10 @@
     <string name="evaluation_export">导出评分与书评</string>
     <string name="evaluation_exported">评分与书评已导出</string>
     <string name="evaluation_export_failed">无法导出评分与书评</string>
+    <string name="library_csv_export">导出书单 (CSV)</string>
+    <string name="library_csv_export_detail">兼容 Goodreads 的 CSV，包含书架、评分、书评和阅读进度。</string>
+    <string name="library_csv_exported">书单已导出</string>
+    <string name="library_csv_export_failed">无法导出书单</string>
     <string name="evaluation_rating">我的评分</string>
     <string name="evaluation_rated">已评分</string>
     <string name="evaluation_unrated">未评分</string>

@@ -1,36 +1,58 @@
 package com.chmouel.liseur.ui.settings
 
 import android.text.format.Formatter
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.Article
+import androidx.compose.material.icons.automirrored.outlined.LibraryBooks
+import androidx.compose.material.icons.automirrored.outlined.MenuBook
+import androidx.compose.material.icons.outlined.AccountCircle
+import androidx.compose.material.icons.outlined.BarChart
+import androidx.compose.material.icons.outlined.BookmarkBorder
+import androidx.compose.material.icons.outlined.EditNote
 import androidx.compose.material.icons.outlined.FileOpen
 import androidx.compose.material.icons.outlined.FileUpload
 import androidx.compose.material.icons.outlined.FolderOpen
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Storage
+import androidx.compose.material.icons.outlined.TextFields
+import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
@@ -42,6 +64,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
@@ -53,10 +76,13 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.library.BookBackupCandidate
 import com.chmouel.liseur.data.library.BookExportResult
 import com.chmouel.liseur.data.library.SettingsBackupFailure
+import com.chmouel.liseur.data.library.SettingsBackupPreview
 import com.chmouel.liseur.data.library.SettingsBackupProgress
 import com.chmouel.liseur.data.library.SettingsBackupRepository
 import com.chmouel.liseur.ui.contentWidthCap
@@ -305,86 +331,16 @@ fun SettingsBackupScreen(
         }
 
     backup.preview?.takeIf { passwordMode == null }?.let { ready ->
-        val preview = ready.preview
-        AlertDialog(
-            onDismissRequest = { if (!backup.busy) backup.dismissPreview() },
-            title = { Text(stringResource(R.string.settings_backup_preview_title)) },
-            text = {
-                Column(
-                    Modifier.verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Text(
-                        stringResource(
-                            if (preview.includesConnections) R.string.settings_backup_connections_replace
-                            else R.string.settings_backup_no_connections,
-                        ),
-                    )
-                    if (preview.settingCount > 0) {
-                        Text(pluralStringResource(R.plurals.settings_backup_setting_count, preview.settingCount, preview.settingCount))
-                    }
-                    if (preview.fontCount > 0) {
-                        Text(pluralStringResource(R.plurals.settings_backup_font_count, preview.fontCount, preview.fontCount))
-                    }
-                    if (preview.bookCount > 0) {
-                        val books = pluralStringResource(R.plurals.settings_backup_books_preview, preview.bookCount, preview.bookCount)
-                        val toAdd = if (preview.booksToImport > 0) {
-                            pluralStringResource(
-                                R.plurals.settings_backup_books_to_add,
-                                preview.booksToImport,
-                                preview.booksToImport,
-                                Formatter.formatShortFileSize(context, preview.bookImportBytes),
-                            )
-                        } else {
-                            null
-                        }
-                        Text(listOfNotNull(books, toAdd).joinToString(" "))
-                    }
-                    if (preview.annotationCount > 0) {
-                        val marks = stringResource(
-                            R.string.annotations_backup_summary,
-                            pluralStringResource(R.plurals.annotations_backup_mark_count, preview.annotationCount, preview.annotationCount),
-                            pluralStringResource(R.plurals.annotations_backup_book_count, preview.annotationBookCount, preview.annotationBookCount),
-                        )
-                        if (preview.matchedAnnotationBooks == preview.annotationBookCount) {
-                            Text(marks)
-                        } else {
-                            Text(
-                                stringResource(
-                                    R.string.import_preview_body,
-                                    marks,
-                                    pluralStringResource(R.plurals.annotations_backup_matched_books, preview.matchedAnnotationBooks, preview.matchedAnnotationBooks),
-                                ),
-                            )
-                        }
-                    }
-                    if (preview.positionCount > 0) {
-                        Text(pluralStringResource(R.plurals.settings_backup_positions_preview, preview.positionCount, preview.positionCount))
-                    }
-                    if (preview.sessionCount > 0) {
-                        Text(pluralStringResource(R.plurals.settings_backup_sessions_preview, preview.sessionCount, preview.sessionCount))
-                    }
-                    if (preview.companionRecapCount > 0) {
-                        Text(stringResource(R.string.settings_backup_companion_preview, preview.companionRecapCount))
-                    }
-                    if (preview.translationBookCount > 0) {
-                        Text(stringResource(R.string.whole_book_backup_preview, preview.translationBookCount))
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    if (preview.includesConnections) {
-                        restoreAttempted = false
-                        passwordMode = "restore"
-                    } else backup.confirmRestore(null)
-                }, enabled = !backup.busy) {
-                    Text(stringResource(R.string.settings_backup_restore_action))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = backup.dismissPreview, enabled = !backup.busy) {
-                    Text(stringResource(R.string.cancel))
+        RestoreBackupDialog(
+            preview = ready.preview,
+            busy = backup.busy,
+            onDismiss = backup.dismissPreview,
+            onConfirm = {
+                if (ready.preview.includesConnections) {
+                    restoreAttempted = false
+                    passwordMode = "restore"
+                } else {
+                    backup.confirmRestore(null)
                 }
             },
         )
@@ -486,6 +442,8 @@ fun SettingsBackupScreen(
                     )
                     RowDivider()
                     EvaluationExportButton(enabled = !backup.busy)
+                    RowDivider()
+                    LibraryCsvExportButton(enabled = !backup.busy)
                     backup.bookProgress?.let { progress ->
                         RowDivider()
                         Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
@@ -656,6 +614,437 @@ fun SettingsBackupScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+internal enum class RestoreOperation {
+    REPLACE,
+    ADD,
+    MERGE,
+    KEEP,
+}
+
+internal enum class RestoreCategory {
+    SETTINGS,
+    ACCOUNTS,
+    FONTS,
+    BOOKS,
+    METADATA,
+    MARKS,
+    POSITIONS,
+    SESSIONS,
+    RECAPS,
+    TRANSLATIONS,
+}
+
+internal enum class RestoreIntroKind {
+    MIXED,
+    REPLACE_ONLY,
+    PRESERVE_ONLY,
+}
+
+internal data class RestoreSummaryEntry(
+    val category: RestoreCategory,
+    val operation: RestoreOperation,
+)
+
+internal fun buildRestoreSummaryEntries(preview: SettingsBackupPreview): List<RestoreSummaryEntry> =
+    buildList {
+        if (preview.settingCount > 0) {
+            add(RestoreSummaryEntry(RestoreCategory.SETTINGS, RestoreOperation.REPLACE))
+        }
+        if (preview.includesConnections) {
+            add(RestoreSummaryEntry(RestoreCategory.ACCOUNTS, RestoreOperation.REPLACE))
+        }
+        if (preview.fontCount > 0) {
+            add(RestoreSummaryEntry(RestoreCategory.FONTS, RestoreOperation.ADD))
+        }
+        if (preview.bookCount > 0) {
+            val op = if (preview.booksToImport > 0) RestoreOperation.ADD else RestoreOperation.KEEP
+            add(RestoreSummaryEntry(RestoreCategory.BOOKS, op))
+        }
+        if (preview.metadataBookCount > 0) {
+            add(RestoreSummaryEntry(RestoreCategory.METADATA, RestoreOperation.REPLACE))
+        }
+        if (preview.annotationCount > 0) {
+            add(RestoreSummaryEntry(RestoreCategory.MARKS, RestoreOperation.MERGE))
+        }
+        if (preview.positionCount > 0) {
+            add(RestoreSummaryEntry(RestoreCategory.POSITIONS, RestoreOperation.REPLACE))
+        }
+        if (preview.sessionCount > 0) {
+            add(RestoreSummaryEntry(RestoreCategory.SESSIONS, RestoreOperation.MERGE))
+        }
+        if (preview.companionRecapCount > 0) {
+            add(RestoreSummaryEntry(RestoreCategory.RECAPS, RestoreOperation.ADD))
+        }
+        if (preview.translationBookCount > 0) {
+            add(RestoreSummaryEntry(RestoreCategory.TRANSLATIONS, RestoreOperation.ADD))
+        }
+    }
+
+internal fun restoreIntroKind(entries: List<RestoreSummaryEntry>): RestoreIntroKind {
+    val hasReplace = entries.any { it.operation == RestoreOperation.REPLACE }
+    val hasNonReplace = entries.any { it.operation != RestoreOperation.REPLACE }
+    return when {
+        hasReplace && hasNonReplace -> RestoreIntroKind.MIXED
+        hasReplace -> RestoreIntroKind.REPLACE_ONLY
+        else -> RestoreIntroKind.PRESERVE_ONLY
+    }
+}
+
+@Composable
+private fun RestoreBackupDialog(
+    preview: SettingsBackupPreview,
+    busy: Boolean,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    val context = LocalContext.current
+    val entries = remember(preview) { buildRestoreSummaryEntries(preview) }
+    val introRes = when (restoreIntroKind(entries)) {
+        RestoreIntroKind.MIXED -> R.string.restore_summary_intro
+        RestoreIntroKind.REPLACE_ONLY -> R.string.restore_summary_intro_replace_only
+        RestoreIntroKind.PRESERVE_ONLY -> R.string.restore_summary_intro_preserve_only
+    }
+
+    Dialog(
+        onDismissRequest = { if (!busy) onDismiss() },
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            dismissOnBackPress = !busy,
+            dismissOnClickOutside = !busy,
+        ),
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 24.dp)
+                .widthIn(max = 460.dp),
+            shape = RoundedCornerShape(28.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            tonalElevation = 6.dp,
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 20.dp),
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                    verticalAlignment = Alignment.Top,
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .background(
+                                MaterialTheme.colorScheme.primaryContainer,
+                                RoundedCornerShape(14.dp),
+                            ),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            Icons.Outlined.Storage,
+                            contentDescription = null,
+                            modifier = Modifier.size(22.dp),
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                        )
+                    }
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            stringResource(R.string.settings_backup_preview_title),
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            stringResource(introRes),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 4.dp),
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(16.dp))
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f, fill = false)
+                        .verticalScroll(rememberScrollState()),
+                ) {
+                    entries.forEachIndexed { index, entry ->
+                        if (index > 0) {
+                            HorizontalDivider(
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f),
+                            )
+                        }
+                        val (icon, title, summary) = restoreEntryContent(entry.category, preview, context)
+                        RestoreSummaryRow(
+                            icon = icon,
+                            title = title,
+                            summary = summary,
+                            operation = entry.operation,
+                        )
+                    }
+                }
+
+                if (!preview.includesConnections) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 12.dp)
+                            .background(
+                                MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.7f),
+                                RoundedCornerShape(14.dp),
+                            )
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            Icons.Outlined.Info,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            stringResource(R.string.settings_backup_no_connections),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(18.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    OutlinedButton(
+                        onClick = onDismiss,
+                        enabled = !busy,
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text(stringResource(R.string.cancel))
+                    }
+                    Button(
+                        onClick = onConfirm,
+                        enabled = !busy,
+                        modifier = Modifier.weight(1.35f),
+                    ) {
+                        if (busy) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp,
+                            )
+                        } else {
+                            Text(stringResource(R.string.settings_backup_restore))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun restoreEntryContent(
+    category: RestoreCategory,
+    preview: SettingsBackupPreview,
+    context: android.content.Context,
+): Triple<ImageVector, String, String> = when (category) {
+    RestoreCategory.SETTINGS -> Triple(
+        Icons.Outlined.Settings,
+        stringResource(R.string.restore_category_settings),
+        stringResource(
+            R.string.restore_item_summary,
+            pluralStringResource(R.plurals.settings_backup_setting_count, preview.settingCount, preview.settingCount),
+            stringResource(R.string.restore_settings_detail),
+        ),
+    )
+    RestoreCategory.ACCOUNTS -> Triple(
+        Icons.Outlined.AccountCircle,
+        stringResource(R.string.restore_category_accounts),
+        stringResource(R.string.settings_backup_connections_replace),
+    )
+    RestoreCategory.FONTS -> Triple(
+        Icons.Outlined.TextFields,
+        stringResource(R.string.restore_category_fonts),
+        stringResource(
+            R.string.restore_item_summary,
+            pluralStringResource(R.plurals.settings_backup_font_count, preview.fontCount, preview.fontCount),
+            stringResource(R.string.restore_fonts_detail),
+        ),
+    )
+    RestoreCategory.BOOKS -> {
+        val count = pluralStringResource(R.plurals.annotations_backup_book_count, preview.bookCount, preview.bookCount)
+        val detail = if (preview.booksToImport > 0) {
+            listOf(
+                pluralStringResource(
+                    R.plurals.settings_backup_books_to_add,
+                    preview.booksToImport,
+                    preview.booksToImport,
+                    Formatter.formatShortFileSize(context, preview.bookImportBytes),
+                ),
+                stringResource(R.string.restore_books_existing_kept),
+            ).joinToString(" ")
+        } else {
+            stringResource(R.string.restore_books_all_present)
+        }
+        Triple(
+            Icons.AutoMirrored.Outlined.LibraryBooks,
+            stringResource(R.string.restore_category_books),
+            stringResource(R.string.restore_item_summary, count, detail),
+        )
+    }
+    RestoreCategory.METADATA -> Triple(
+        Icons.Outlined.EditNote,
+        stringResource(R.string.restore_category_metadata),
+        stringResource(
+            R.string.restore_item_summary,
+            pluralStringResource(R.plurals.annotations_backup_book_count, preview.metadataBookCount, preview.metadataBookCount),
+            stringResource(R.string.restore_metadata_detail),
+        ),
+    )
+    RestoreCategory.MARKS -> {
+        val count = stringResource(
+            R.string.annotations_backup_summary,
+            pluralStringResource(R.plurals.annotations_backup_mark_count, preview.annotationCount, preview.annotationCount),
+            pluralStringResource(R.plurals.annotations_backup_book_count, preview.annotationBookCount, preview.annotationBookCount),
+        )
+        val detail = if (preview.matchedAnnotationBooks < preview.annotationBookCount) {
+            listOf(
+                pluralStringResource(
+                    R.plurals.annotations_backup_matched_books,
+                    preview.matchedAnnotationBooks,
+                    preview.matchedAnnotationBooks,
+                ),
+                stringResource(R.string.restore_marks_unmatched_wait),
+            ).joinToString(" ")
+        } else {
+            stringResource(R.string.restore_marks_detail)
+        }
+        Triple(
+            Icons.Outlined.BookmarkBorder,
+            stringResource(R.string.restore_category_marks),
+            stringResource(R.string.restore_item_summary, count, detail),
+        )
+    }
+    RestoreCategory.POSITIONS -> Triple(
+        Icons.AutoMirrored.Outlined.MenuBook,
+        stringResource(R.string.restore_category_positions),
+        stringResource(
+            R.string.restore_item_summary,
+            pluralStringResource(R.plurals.restore_position_count, preview.positionCount, preview.positionCount),
+            stringResource(R.string.restore_positions_detail),
+        ),
+    )
+    RestoreCategory.SESSIONS -> Triple(
+        Icons.Outlined.BarChart,
+        stringResource(R.string.restore_category_sessions),
+        stringResource(
+            R.string.restore_item_summary,
+            pluralStringResource(R.plurals.restore_session_count, preview.sessionCount, preview.sessionCount),
+            stringResource(R.string.restore_sessions_detail),
+        ),
+    )
+    RestoreCategory.RECAPS -> Triple(
+        Icons.AutoMirrored.Outlined.Article,
+        stringResource(R.string.restore_category_recaps),
+        stringResource(
+            R.string.restore_item_summary,
+            pluralStringResource(R.plurals.restore_recap_count, preview.companionRecapCount, preview.companionRecapCount),
+            stringResource(R.string.restore_recaps_detail),
+        ),
+    )
+    RestoreCategory.TRANSLATIONS -> Triple(
+        Icons.Outlined.Translate,
+        stringResource(R.string.restore_category_translations),
+        stringResource(
+            R.string.restore_item_summary,
+            pluralStringResource(R.plurals.annotations_backup_book_count, preview.translationBookCount, preview.translationBookCount),
+            stringResource(R.string.restore_translations_detail),
+        ),
+    )
+}
+
+@Composable
+private fun RestoreSummaryRow(
+    icon: ImageVector,
+    title: String,
+    summary: String,
+    operation: RestoreOperation,
+) {
+    val (badgeText, badgeContainer, badgeContent) = when (operation) {
+        RestoreOperation.REPLACE -> Triple(
+            stringResource(R.string.restore_operation_replace),
+            MaterialTheme.colorScheme.error.copy(alpha = 0.14f),
+            MaterialTheme.colorScheme.error,
+        )
+        RestoreOperation.MERGE -> Triple(
+            stringResource(R.string.restore_operation_merge),
+            MaterialTheme.colorScheme.secondaryContainer,
+            MaterialTheme.colorScheme.onSecondaryContainer,
+        )
+        RestoreOperation.ADD -> Triple(
+            stringResource(R.string.restore_operation_add),
+            MaterialTheme.colorScheme.tertiaryContainer,
+            MaterialTheme.colorScheme.onTertiaryContainer,
+        )
+        RestoreOperation.KEEP -> Triple(
+            stringResource(R.string.restore_operation_keep),
+            MaterialTheme.colorScheme.surfaceContainerHighest,
+            MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Icon(
+            icon,
+            contentDescription = null,
+            modifier = Modifier
+                .padding(top = 2.dp)
+                .size(20.dp),
+            tint = MaterialTheme.colorScheme.primary,
+        )
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    title,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    badgeText,
+                    modifier = Modifier
+                        .background(badgeContainer, RoundedCornerShape(50))
+                        .padding(horizontal = 9.dp, vertical = 2.dp),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = badgeContent,
+                )
+            }
+            Text(
+                summary,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

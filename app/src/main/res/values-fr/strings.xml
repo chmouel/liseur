@@ -1716,6 +1716,47 @@
     <string name="companion_settings_story_auto">Compléter l’histoire automatiquement</string>
     <string name="companion_settings_story_auto_summary">Quand le Compagnon s\'ouvre sur Histoire, récapitule le chapitre précédent et tient l\'histoire jusqu\'ici à jour.</string>
     <string name="companion_settings_privacy">Le texte du livre avant le paragraphe sélectionné est envoyé au serveur choisi, et des chapitres entiers si les résumés en arrière-plan sont activés. Son fournisseur peut facturer ces requêtes.</string>
+    <string name="restore_summary_intro">Cette sauvegarde remplacera certaines données et fusionnera les autres dans votre bibliothèque.</string>
+    <string name="restore_summary_intro_replace_only">Cette sauvegarde remplacera vos données actuelles pour les éléments ci-dessous.</string>
+    <string name="restore_summary_intro_preserve_only">Cette sauvegarde ajoutera ou fusionnera les éléments ci-dessous sans écraser vos données existantes.</string>
+    <string name="restore_item_summary" formatted="true">%1$s — %2$s</string>
+    <string name="restore_category_metadata">Détails de livres modifiés</string>
+    <string name="restore_metadata_detail">remplace les modifications enregistrées pour les livres correspondants.</string>
+    <string name="restore_category_settings">Paramètres</string>
+    <string name="restore_category_accounts">Comptes et services</string>
+    <string name="restore_category_fonts">Polices personnalisées</string>
+    <string name="restore_category_books">Fichiers de livres</string>
+    <string name="restore_category_marks">Marques</string>
+    <string name="restore_category_positions">Positions de lecture</string>
+    <string name="restore_category_sessions">Sessions de lecture</string>
+    <string name="restore_category_recaps">Résumés de chapitres</string>
+    <string name="restore_category_translations">Traductions</string>
+    <string name="restore_settings_detail">remplace les paramètres actuels.</string>
+    <string name="restore_fonts_detail">ajoute les polices manquantes ; les polices installées sont conservées.</string>
+    <string name="restore_books_existing_kept">Les livres déjà présents sont conservés.</string>
+    <string name="restore_books_all_present">tous déjà dans votre bibliothèque.</string>
+    <string name="restore_marks_detail">ajoute les marques manquantes ; les marques existantes sont conservées.</string>
+    <string name="restore_marks_unmatched_wait">Les marques non associées attendront leurs livres.</string>
+    <string name="restore_positions_detail">remplace les positions actuelles pour les livres correspondants.</string>
+    <string name="restore_sessions_detail">fusionne avec les sessions existantes sans les effacer.</string>
+    <string name="restore_recaps_detail">ajoute les résumés manquants pour les livres de cette bibliothèque ; les existants sont conservés.</string>
+    <string name="restore_translations_detail">ajoute les traductions manquantes pour les livres de cette bibliothèque ; les existantes sont conservées.</string>
+    <string name="restore_operation_replace">Remplacer</string>
+    <string name="restore_operation_add">Ajouter</string>
+    <string name="restore_operation_merge">Fusionner</string>
+    <string name="restore_operation_keep">Conserver</string>
+    <plurals name="restore_position_count">
+        <item quantity="one">%1$d position</item>
+        <item quantity="other">%1$d positions</item>
+    </plurals>
+    <plurals name="restore_session_count">
+        <item quantity="one">%1$d session</item>
+        <item quantity="other">%1$d sessions</item>
+    </plurals>
+    <plurals name="restore_recap_count">
+        <item quantity="one">%1$d résumé</item>
+        <item quantity="other">%1$d résumés</item>
+    </plurals>
     <string name="settings_backup_other_exports">Autres exports</string>
     <string name="settings_backup_accounts_password_hint">Protégés par un mot de passe de sauvegarde</string>
     <string name="server_pair_again">Associer à nouveau</string>
@@ -2160,6 +2201,10 @@
     <string name="evaluation_export">Exporter les notes et les avis</string>
     <string name="evaluation_exported">Notes et avis exportés</string>
     <string name="evaluation_export_failed">Impossible d’exporter les notes et les avis</string>
+    <string name="library_csv_export">Exporter la liste de livres (CSV)</string>
+    <string name="library_csv_export_detail">CSV compatible Goodreads avec étagères, notes, avis et progression de lecture.</string>
+    <string name="library_csv_exported">Liste de livres exportée</string>
+    <string name="library_csv_export_failed">Impossible d’exporter la liste de livres</string>
     <string name="evaluation_rating">Ma note</string>
     <string name="evaluation_rated">Avec une note</string>
     <string name="evaluation_unrated">Sans note</string>

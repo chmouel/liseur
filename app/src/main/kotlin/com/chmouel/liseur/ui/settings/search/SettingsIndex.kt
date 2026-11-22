@@ -286,6 +286,10 @@ object SettingsEntries {
         R.string.settings_backup_export_detail,
     )
     val EvaluationExport = entry("evaluation_export", Route.SettingsBackup, R.string.evaluation_export)
+    val LibraryCsvExport = entry(
+        "library_csv_export", Route.SettingsBackup, R.string.library_csv_export,
+        R.string.library_csv_export_detail,
+    )
     val BackupRestore = entry(
         "backup_restore", Route.SettingsBackup, R.string.settings_backup_restore,
         R.string.settings_backup_restore_detail,

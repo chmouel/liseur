@@ -1890,6 +1890,53 @@
     <string name="companion_settings_story_auto">Automaticky doplňovat příběh</string>
     <string name="companion_settings_story_auto_summary">Při otevření záložky Příběh v Průvodci shrne předchozí kapitolu a aktualizuje dosavadní děj.</string>
     <string name="companion_settings_privacy">Text knihy před vybraným odstavcem se odesílá na vybraný server; při zapnutém shrnování na pozadí se odesílají celé kapitoly. Poskytovatel může za požadavky účtovat poplatky.</string>
+    <string name="restore_summary_intro">Tato záloha nahradí některá data a ostatní položky sloučí s vaší knihovnou.</string>
+    <string name="restore_summary_intro_replace_only">Tato záloha nahradí vaše současná data u položek níže.</string>
+    <string name="restore_summary_intro_preserve_only">Tato záloha přidá nebo sloučí položky níže bez přepsání stávajících dat.</string>
+    <string name="restore_item_summary" formatted="true">%1$s — %2$s</string>
+    <string name="restore_category_metadata">Upravené údaje knih</string>
+    <string name="restore_metadata_detail">nahradí uložené úpravy u odpovídajících knih.</string>
+    <string name="restore_category_settings">Nastavení</string>
+    <string name="restore_category_accounts">Účty a služby</string>
+    <string name="restore_category_fonts">Vlastní písma</string>
+    <string name="restore_category_books">Soubory knih</string>
+    <string name="restore_category_marks">Značky</string>
+    <string name="restore_category_positions">Pozice čtení</string>
+    <string name="restore_category_sessions">Relace čtení</string>
+    <string name="restore_category_recaps">Shrnutí kapitol</string>
+    <string name="restore_category_translations">Překlady</string>
+    <string name="restore_settings_detail">nahradí současná nastavení.</string>
+    <string name="restore_fonts_detail">přidá chybějící písma; nainstalovaná zůstanou.</string>
+    <string name="restore_books_existing_kept">Knihy, které už tu jsou, zůstanou.</string>
+    <string name="restore_books_all_present">všechny už jsou ve vaší knihovně.</string>
+    <string name="restore_marks_detail">přidá chybějící značky; stávající zůstanou.</string>
+    <string name="restore_marks_unmatched_wait">Nepřiřazené značky počkají na své knihy.</string>
+    <string name="restore_positions_detail">nahradí současné pozice u odpovídajících knih.</string>
+    <string name="restore_sessions_detail">sloučí se stávajícími relacemi bez jejich smazání.</string>
+    <string name="restore_recaps_detail">přidá chybějící shrnutí pro knihy v této knihovně; stávající zůstanou.</string>
+    <string name="restore_translations_detail">přidá chybějící překlady pro knihy v této knihovně; stávající zůstanou.</string>
+    <string name="restore_operation_replace">Nahradit</string>
+    <string name="restore_operation_add">Přidat</string>
+    <string name="restore_operation_merge">Sloučit</string>
+    <string name="restore_operation_keep">Ponechat</string>
+    <plurals name="restore_position_count">
+        <item quantity="one">%1$d pozice</item>
+        <item quantity="few">%1$d pozice</item>
+        <item quantity="many">%1$d pozice</item>
+        <item quantity="other">%1$d pozic</item>
+    </plurals>
+    <plurals name="restore_session_count">
+        <item quantity="one">%1$d relace</item>
+        <item quantity="few">%1$d relace</item>
+        <item quantity="many">%1$d relace</item>
+        <item quantity="other">%1$d relací</item>
+    </plurals>
+    <plurals name="restore_recap_count">
+        <item quantity="one">%1$d shrnutí</item>
+        <item quantity="few">%1$d shrnutí</item>
+        <item quantity="many">%1$d shrnutí</item>
+        <item quantity="other">%1$d shrnutí</item>
+    </plurals>
     <string name="settings_backup_other_exports">Další exporty</string>
     <string name="settings_backup_accounts_password_hint">Chráněno heslem zálohy</string>
     <string name="server_pair_again">Znovu spárovat</string>
@@ -2356,6 +2403,10 @@
     <string name="evaluation_export">Exportovat hodnocení a recenze</string>
     <string name="evaluation_exported">Hodnocení a recenze exportovány</string>
     <string name="evaluation_export_failed">Hodnocení a recenze se nepodařilo exportovat</string>
+    <string name="library_csv_export">Exportovat seznam knih (CSV)</string>
+    <string name="library_csv_export_detail">CSV kompatibilní s Goodreads včetně poliček, hodnocení, recenzí a postupu čtení.</string>
+    <string name="library_csv_exported">Seznam knih exportován</string>
+    <string name="library_csv_export_failed">Seznam knih se nepodařilo exportovat</string>
     <string name="evaluation_rating">Moje hodnocení</string>
     <string name="evaluation_rated">Ohodnocené</string>
     <string name="evaluation_unrated">Neohodnocené</string>

@@ -108,6 +108,7 @@ data class SettingsBackupPreview(
     val booksToImport: Int = 0,
     val bookImportBytes: Long = 0,
     val sessionCount: Int = 0,
+    val metadataBookCount: Int = 0,
 )
 
 sealed interface SettingsBackupInspection {
@@ -762,6 +763,20 @@ class SettingsBackupRepository internal constructor(
                                 booksToImport = distinctMissingStaged.size,
                                 bookImportBytes = distinctMissingStaged.sumOf { it.size },
                                 sessionCount = sessionContents.sumOf { it.sessions.size },
+                                metadataBookCount = result.entries[METADATA_OVERRIDES_PATH]?.let { entry ->
+                                    runCatching {
+                                        val bytes = readStagedBytes(
+                                            entry.file,
+                                            BookMetadataOverrideBackupRepository.MAX_JSON_BYTES,
+                                        )
+                                        val root = JSONObject(bytes.toString(Charsets.UTF_8))
+                                        if (root.optString("application") == "liseur") {
+                                            root.optJSONArray("overrides")?.length() ?: 0
+                                        } else {
+                                            0
+                                        }
+                                    }.getOrDefault(0)
+                                } ?: 0,
                             ),
                             result.stagingDirectory.name.removePrefix(PROCESS_STAGING_PREFIX),
                         )
