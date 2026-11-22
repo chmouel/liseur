@@ -1,0 +1,214 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 2,
+    "identityHash": "3a8267dac7a41dabe540e7d02a33a31e",
+    "entities": [
+      {
+        "tableName": "hardcover_account",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER NOT NULL, `user_id` INTEGER NOT NULL, `username` TEXT NOT NULL, `token_cipher` TEXT NOT NULL, `added_at` INTEGER NOT NULL, `auto_sync` INTEGER NOT NULL DEFAULT 1, `token_refused` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "userId",
+            "columnName": "user_id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "username",
+            "columnName": "username",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "tokenCipher",
+            "columnName": "token_cipher",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "addedAt",
+            "columnName": "added_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "autoSync",
+            "columnName": "auto_sync",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "1"
+          },
+          {
+            "fieldPath": "tokenRefused",
+            "columnName": "token_refused",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "hardcover_book",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`book_url` TEXT NOT NULL, `hardcover_book_id` INTEGER, `edition_id` INTEGER, `edition_title` TEXT, `edition_pages` INTEGER, `excluded` INTEGER NOT NULL DEFAULT 0, `pushed_at` INTEGER, `pushed_rating` REAL, `dates_pending` INTEGER NOT NULL DEFAULT 0, `edition_chosen` INTEGER NOT NULL DEFAULT 0, `imported_cover_url` TEXT, `imported_cover_sha256` TEXT, PRIMARY KEY(`book_url`))",
+        "fields": [
+          {
+            "fieldPath": "bookUrl",
+            "columnName": "book_url",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "hardcoverBookId",
+            "columnName": "hardcover_book_id",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "editionId",
+            "columnName": "edition_id",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "editionTitle",
+            "columnName": "edition_title",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "editionPages",
+            "columnName": "edition_pages",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "excluded",
+            "columnName": "excluded",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "pushedAt",
+            "columnName": "pushed_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "pushedRating",
+            "columnName": "pushed_rating",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "datesPending",
+            "columnName": "dates_pending",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "editionChosen",
+            "columnName": "edition_chosen",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "importedCoverUrl",
+            "columnName": "imported_cover_url",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "importedCoverSha256",
+            "columnName": "imported_cover_sha256",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "book_url"
+          ]
+        }
+      },
+      {
+        "tableName": "hardcover_links_owner",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER NOT NULL, `user_id` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "userId",
+            "columnName": "user_id",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "hardcover_pending",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`book_url` TEXT NOT NULL, `queued_at` INTEGER NOT NULL, PRIMARY KEY(`book_url`))",
+        "fields": [
+          {
+            "fieldPath": "bookUrl",
+            "columnName": "book_url",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "queuedAt",
+            "columnName": "queued_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "book_url"
+          ]
+        }
+      },
+      {
+        "tableName": "hardcover_forgetting",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`book_url` TEXT NOT NULL, PRIMARY KEY(`book_url`))",
+        "fields": [
+          {
+            "fieldPath": "bookUrl",
+            "columnName": "book_url",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "book_url"
+          ]
+        }
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '3a8267dac7a41dabe540e7d02a33a31e')"
+    ]
+  }
+}

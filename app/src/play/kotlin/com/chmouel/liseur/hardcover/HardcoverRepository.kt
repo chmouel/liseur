@@ -291,6 +291,13 @@ class HardcoverRepository(
         return client.editionDetails(token, editionId)
     }
 
+    /** The book's match as stored now, without watching it. */
+    suspend fun currentLink(bookUrl: String): HardcoverBookLink? = dao.link(bookUrl)
+
+    /** Notes that [url] became the book's cover override with digest [sha256]. */
+    suspend fun rememberImportedCover(bookUrl: String, url: String, sha256: String) =
+        dao.setImportedCover(bookUrl, url, sha256)
+
     /**
      * Remembers which edition a book is, if the account and book generation
      * still match [candidates], and pushes when [push] is true.

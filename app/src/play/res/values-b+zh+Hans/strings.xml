@@ -130,4 +130,6 @@
     <string name="hardcover_update_details_empty">Hardcover 上没有与此书不同的信息。</string>
     <string name="hardcover_update_details_done">已从 Hardcover 更新详情。</string>
     <string name="hardcover_update_details_cover_failed">已更新详情，但无法下载封面。</string>
+    <string name="hardcover_update_details_cover_only_failed">无法下载封面。</string>
+    <string name="hardcover_update_details_stale">这本书在此期间已更改。请重新更新。</string>
 </resources>

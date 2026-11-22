@@ -382,6 +382,20 @@ class HardcoverClientTest {
     }
 
     @Test
+    fun `a rejected edition image still lets a valid fallback cover through`() = runBlocking {
+        answer(
+            """{"editions":[{"id":5,"title":"T","image":{"url":"https://elsewhere.example/c.jpg"},
+              "cached_image":null,
+              "book":{"title":"T","cached_image":{"url":"https://assets.hardcover.app/bc.jpg"},
+              "cached_contributors":[]}}]}""",
+        )
+
+        val details = (client().editionDetails("tok", 5) as RemoteResult.Ok).value
+
+        assertEquals("https://assets.hardcover.app/bc.jpg", details?.coverUrl)
+    }
+
+    @Test
     fun `edition details answer null when the edition is missing`() = runBlocking {
         answer("""{"editions":[]}""")
 

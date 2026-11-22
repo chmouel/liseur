@@ -130,6 +130,7 @@ import java.time.ZoneId
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
@@ -292,57 +293,80 @@ internal class ReadingTracker(context: Context, private val database: LiseurData
                 .let(::resolveMetadata)
                 ?.description
         }
+        val link = hardcover.currentLink(bookUrl)
         val details = LocalDetails(
             title = book.title,
             author = book.author,
             description = description,
             seriesName = book.seriesName,
             seriesIndex = book.seriesIndex,
-            hasCover = book.effectiveCover != null,
+            importedCoverUrl = link?.importedCoverUrl?.takeIf {
+                book.coverOverridden && book.userCoverSha256 != null && book.userCoverSha256 == link.importedCoverSha256
+            },
         )
         return book to details
     }
 
+    /**
+     * Saves the ticked proposals, each only while the book is still the
+     * [reviewed] generation, so a file replaced meanwhile keeps its own details.
+     */
     private suspend fun applyDetailsUpdate(
-        bookUrl: String,
+        reviewed: Book,
         proposals: List<DetailProposal>,
         selected: Set<DetailField>,
     ): Int? {
-        val book = database.bookDao().getByUrl(bookUrl) ?: return null
+        val bookUrl = reviewed.url
         val byField = proposals.filter { it.field in selected }.associateBy { it.field }
         if (byField.isEmpty()) return null
         val appContainer = context.container
+        val stillReviewed: suspend () -> Boolean = {
+            database.bookDao().getByUrl(bookUrl)?.sameGeneration(reviewed) == true
+        }
+        var applied = false
         val titleEdit = byField[DetailField.TITLE]?.newText?.let(FieldEdit::Set) ?: FieldEdit.Unchanged
         val authorEdit = byField[DetailField.AUTHOR]?.newText?.let(FieldEdit::Set) ?: FieldEdit.Unchanged
         val descriptionEdit = byField[DetailField.DESCRIPTION]?.newText?.let(FieldEdit::Set) ?: FieldEdit.Unchanged
         if (titleEdit is FieldEdit.Set || authorEdit is FieldEdit.Set || descriptionEdit is FieldEdit.Set) {
-            appContainer.metadataOverrides.applyTextEdits(
+            val current = appContainer.metadataOverrides.applyTextEdits(
                 bookUrl = bookUrl,
                 title = titleEdit,
                 author = authorEdit,
                 description = descriptionEdit,
+                expected = reviewed,
             )
+            if (!current) return R.string.hardcover_update_details_stale
+            applied = true
         }
         byField[DetailField.SERIES]?.let { series ->
-            fileBookInSeries(
+            val filed = fileBookInSeries(
                 bookDao = database.bookDao(),
                 catalog = appContainer.remoteCatalog,
-                book = book,
+                book = reviewed,
                 name = series.newText,
                 index = series.newSeriesIndex,
+                expected = reviewed,
+                inTransaction = { work -> database.withTransaction { work() } },
             )
+            if (!filed) return R.string.hardcover_update_details_stale
+            applied = true
         }
-        var coverFailed = false
         byField[DetailField.COVER]?.newCoverUrl?.let { url ->
-            val bytes = HardcoverImages.downloadCover(url)
-            val saved = bytes != null && appContainer.metadataOverrides.setCoverFromBytes(bookUrl, bytes)
-            if (!saved) coverFailed = true
+            val sha256 = HardcoverImages.downloadCover(url)?.let { bytes ->
+                appContainer.metadataOverrides.coverFromBytes(bookUrl, bytes, expected = reviewed)
+            }
+            if (sha256 != null) {
+                hardcover.rememberImportedCover(bookUrl, url, sha256)
+            } else {
+                if (!stillReviewed()) return R.string.hardcover_update_details_stale
+                return if (applied) {
+                    R.string.hardcover_update_details_cover_failed
+                } else {
+                    R.string.hardcover_update_details_cover_only_failed
+                }
+            }
         }
-        return if (coverFailed) {
-            R.string.hardcover_update_details_cover_failed
-        } else {
-            R.string.hardcover_update_details_done
-        }
+        return R.string.hardcover_update_details_done
     }
 
     /**
@@ -682,7 +706,10 @@ internal class ReadingTracker(context: Context, private val database: LiseurData
                     val proposals = session.proposals
                     review = null
                     busyWhile {
-                        message = applyDetailsUpdate(bookUrl, proposals, selected)
+                        // The tracker's scope finishes the save even if Book details closes meanwhile.
+                        message = runCatching {
+                            scope.async { applyDetailsUpdate(session.book, proposals, selected) }.await()
+                        }.getOrElse { R.string.hardcover_error_other }
                     }
                 },
                 onDismiss = { review = null },
