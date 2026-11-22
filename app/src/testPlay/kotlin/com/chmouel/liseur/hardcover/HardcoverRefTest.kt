@@ -22,6 +22,8 @@ class HardcoverRefTest {
         assertEquals(HardcoverRef.NotHardcover, HardcoverRef.parse("example.com/path"))
         assertEquals(HardcoverRef.NotHardcover, HardcoverRef.parse("https://hardcover.app/authors/x"))
         assertEquals(HardcoverRef.NotHardcover, HardcoverRef.parse("ftp://x"))
+        assertEquals(HardcoverRef.NotHardcover, HardcoverRef.parse("//example.com/books/x?token=secret"))
+        assertEquals(HardcoverRef.Slug("qumran-1996"), HardcoverRef.parse("//hardcover.app/books/qumran-1996"))
         assertEquals(HardcoverRef.NotHardcover, HardcoverRef.parse("https://hardcover.app/books/a%20b"))
     }
 
@@ -66,5 +68,14 @@ class HardcoverRefTest {
         assertEquals(false, HardcoverRef.submitsOnPaste("1234", "12345"))
         assertEquals(false, HardcoverRef.submitsOnPaste("hardcover.app/books/qumran-199", "hardcover.app/books/qumran-1996"))
         assertEquals(false, HardcoverRef.submitsOnPaste(link, ""))
+    }
+
+    @Test
+    fun `a shorter paste over a longer prefilled query still submits`() {
+        val prefilled = "Le Maitre du Talmud Rabbi Aryeh"
+        assertEquals(true, HardcoverRef.submitsOnPaste(prefilled, "hardcover.app/books/qumran"))
+        assertEquals(true, HardcoverRef.submitsOnPaste(prefilled, "12345"))
+        assertEquals(false, HardcoverRef.submitsOnPaste(prefilled, "Le Maitre du Talmud Rabbi Aryeh X"))
+        assertEquals(false, HardcoverRef.submitsOnPaste("Qumran", "Qumran 1996"))
     }
 }

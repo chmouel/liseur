@@ -547,7 +547,7 @@ internal class ReadingTracker(context: Context, private val database: LiseurData
             leadingIcon = { Icon(Icons.Outlined.Sync, contentDescription = null) },
             onClick = {
                 close()
-                if (link?.matched != true && requestEdition != null) {
+                if (requestEdition != null && opensEditionPicker(link?.matched == true, link?.excluded == true)) {
                     requestEdition(bookUrl, true)
                     return@DropdownMenuItem
                 }
@@ -709,3 +709,6 @@ internal class ReadingTracker(context: Context, private val database: LiseurData
         }
     }
 }
+
+/** An unmatched book opens the picker; one kept off Hardcover goes to push, which says so. */
+internal fun opensEditionPicker(matched: Boolean, excluded: Boolean): Boolean = !matched && !excluded

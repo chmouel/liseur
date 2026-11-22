@@ -7,22 +7,16 @@ import com.chmouel.liseur.data.remote.SyncFailure
 import com.chmouel.liseur.data.remote.failureForCode
 import com.chmouel.liseur.data.remote.remoteCall
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import java.io.IOException
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
-import okhttp3.Call
-import okhttp3.Callback
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
-import okhttp3.Response
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -286,43 +280,39 @@ class HardcoverClient(
         if (bare.isEmpty() || bare.any { it !in '!'..'~' }) return RemoteResult.Failed(SyncFailure.Unauthorised)
         awaitTurn()
         return withContext(Dispatchers.IO) {
-            remoteCall {
-                val body = JSONObject().put("query", query).put("variables", variables)
-                    .toString()
-                    .toRequestBody(JSON)
+            coroutineScope {
                 val request = Request.Builder()
                     .url(endpoint)
                     .header("Authorization", "Bearer $bare")
                     .header("User-Agent", USER_AGENT)
-                    .post(body)
+                    .post(JSONObject().put("query", query).put("variables", variables).toString().toRequestBody(JSON))
                     .build()
-                http.client.newCall(request).await().use { response ->
-                    currentCoroutineContext().ensureActive()
-                    if (!response.isSuccessful) throw RemoteHttpFailure(failureFor(response.code))
-                    val answer = JSONObject(response.body.string())
-                    answer.optJSONArray("errors")?.takeIf { it.length() > 0 }?.let {
-                        throw RemoteHttpFailure(graphQlFailure(it))
+                val call = http.client.newCall(request)
+                // Cancelling the coroutine cancels the HTTP call through the body read too,
+                // so a lookup nobody waits for stops.
+                val watcher = launch {
+                    try {
+                        awaitCancellation()
+                    } finally {
+                        call.cancel()
                     }
-                    read(answer.optJSONObject("data") ?: throw RemoteHttpFailure(SyncFailure.Malformed))
+                }
+                try {
+                    remoteCall {
+                        call.execute().use { response ->
+                            if (!response.isSuccessful) throw RemoteHttpFailure(failureFor(response.code))
+                            val answer = JSONObject(response.body.string())
+                            answer.optJSONArray("errors")?.takeIf { it.length() > 0 }?.let {
+                                throw RemoteHttpFailure(graphQlFailure(it))
+                            }
+                            read(answer.optJSONObject("data") ?: throw RemoteHttpFailure(SyncFailure.Malformed))
+                        }
+                    }
+                } finally {
+                    watcher.cancel()
                 }
             }
         }
-    }
-
-    /** Cancelling the coroutine cancels the HTTP call, so a lookup nobody waits for stops. */
-    private suspend fun Call.await(): Response = suspendCancellableCoroutine { continuation ->
-        continuation.invokeOnCancellation { cancel() }
-        enqueue(
-            object : Callback {
-                override fun onFailure(call: Call, e: IOException) {
-                    if (continuation.isActive) continuation.resumeWithException(e)
-                }
-
-                override fun onResponse(call: Call, response: Response) {
-                    continuation.resume(response) { response.close() }
-                }
-            },
-        )
     }
 
     private fun JSONObject.text(name: String): String? =
