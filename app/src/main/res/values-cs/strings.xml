@@ -2514,4 +2514,5 @@
     <string name="book_metadata_reset_all">Obnovit vše</string>
     <string name="book_metadata_edit_series">Upravit sérii</string>
     <string name="book_metadata_no_series">Žádná</string>
+    <string name="evaluation_review_public">Recenze</string>
 </resources>

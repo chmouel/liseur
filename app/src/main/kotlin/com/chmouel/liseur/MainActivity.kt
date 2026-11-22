@@ -717,6 +717,7 @@ private fun LiseurApp(
                                     library.resetBookSeries(book)
                                 }
                             },
+                            reviewPublicNote = { context.container.readingTracker.reviewPublicNote(target.bookUrl) },
                             extraSection = { section ->
                                 context.container.readingTracker.BookDetailsSection(target.bookUrl, section)
                             },

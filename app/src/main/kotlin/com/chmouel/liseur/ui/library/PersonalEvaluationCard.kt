@@ -25,6 +25,7 @@ import androidx.compose.material.icons.automirrored.rounded.StarHalf
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material3.Button
@@ -95,6 +96,8 @@ internal fun PersonalEvaluationCard(
     details: BookDetails,
     onSet: (String, String?) -> Unit,
     modifier: Modifier = Modifier,
+    /** Set when the review also goes somewhere public, which then replaces the privacy promise. */
+    publicNote: String? = null,
 ) {
     val book = details.book
     key(book.url, book.id, book.workId, book.fileModifiedAt, book.linkGeneration) {
@@ -128,13 +131,13 @@ internal fun PersonalEvaluationCard(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Icon(
-                            Icons.Outlined.Lock,
+                            if (publicNote != null) Icons.Outlined.Public else Icons.Outlined.Lock,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(12.dp),
                         )
                         Text(
-                            stringResource(
+                            publicNote ?: stringResource(
                                 if (details.liseurSyncConfigured) {
                                     R.string.evaluation_private_synced
                                 } else {
@@ -226,6 +229,7 @@ internal fun PersonalEvaluationCard(
                 bookUrl = book.url,
                 initialReview = review,
                 liseurSyncConfigured = details.liseurSyncConfigured,
+                publicNote = publicNote,
                 onDismiss = { editingReview = false },
                 onSave = { normalized ->
                     onSet(PersonalEvaluation.REVIEW, normalized)
@@ -316,6 +320,7 @@ private fun ReviewEditorSheet(
     bookUrl: String,
     initialReview: String?,
     liseurSyncConfigured: Boolean,
+    publicNote: String?,
     onDismiss: () -> Unit,
     onSave: (String?) -> Unit,
 ) {
@@ -347,7 +352,7 @@ private fun ReviewEditorSheet(
             OutlinedTextField(
                 value = review,
                 onValueChange = { review = it },
-                label = { Text(stringResource(R.string.evaluation_review)) },
+                label = { Text(stringResource(if (publicNote != null) R.string.evaluation_review_public else R.string.evaluation_review)) },
                 trailingIcon =
                     if (review.isNotEmpty()) {
                         {
@@ -370,7 +375,7 @@ private fun ReviewEditorSheet(
                         Text(stringResource(R.string.evaluation_review_limit))
                     } else {
                         Text(
-                            stringResource(
+                            publicNote ?: stringResource(
                                 if (liseurSyncConfigured) {
                                     R.string.evaluation_private
                                 } else {

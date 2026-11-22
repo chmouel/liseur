@@ -159,6 +159,8 @@ fun BookDetailsScreen(
     onResetAllMetadataOverrides: (Book) -> Unit = {},
     /** A section the build adds under the file details, such as a reading tracker's. */
     extraSection: (@Composable (Modifier) -> Unit)? = null,
+    /** Where else the review is published, when that makes it public. */
+    reviewPublicNote: @Composable () -> String? = { null },
 ) {
     if (state is BookDetailsUiState.Gone) {
         LaunchedEffect(Unit) { onBack() }
@@ -258,7 +260,7 @@ fun BookDetailsScreen(
                     }
                 }
                 item(key = "evaluation") {
-                    PersonalEvaluationCard(details, onSetEvaluation, section.padding(top = 16.dp))
+                    PersonalEvaluationCard(details, onSetEvaluation, section.padding(top = 16.dp), publicNote = reviewPublicNote())
                 }
                 details.metadata.description?.let { description ->
                     item(key = "about") { Description(details.book.url, description, section.padding(top = 20.dp)) }
