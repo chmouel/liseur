@@ -2259,7 +2259,9 @@ class SettingsBackupRepositoryTest {
         )
         val uri = Uri.fromFile(File(folder.root, "metadata-restore.zip"))
         assertTrue(repository.exportTo(uri) is SettingsBackupExportResult.Exported)
-        assertTrue(restore(repository, uri) is SettingsBackupRestoreResult.Restored)
+        val inspection = repository.inspect(uri) as SettingsBackupInspection.Ready
+        assertEquals(1, inspection.preview.metadataBookCount)
+        assertTrue(repository.restore(inspection.archiveId) is SettingsBackupRestoreResult.Restored)
     }
 
     @Test

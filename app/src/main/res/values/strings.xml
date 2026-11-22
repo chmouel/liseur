@@ -1783,6 +1783,47 @@
     <string name="companion_settings_story_auto">Fill in the story on its own</string>
     <string name="companion_settings_story_auto_summary">When Companion opens on Story, recap the previous chapter and keep the story so far up to date.</string>
     <string name="companion_settings_privacy">Book text before your selected paragraph is sent to the chosen server, and whole chapters once background recaps are on. Its provider may charge for these requests.</string>
+    <string name="restore_summary_intro">This backup will replace some data and merge other items into your library.</string>
+    <string name="restore_summary_intro_replace_only">This backup will replace your current data for the items below.</string>
+    <string name="restore_summary_intro_preserve_only">This backup will add or merge the items below without overwriting existing data.</string>
+    <string name="restore_item_summary" formatted="true">%1$s — %2$s</string>
+    <string name="restore_category_metadata">Edited book details</string>
+    <string name="restore_metadata_detail">replaces saved edits for matching books.</string>
+    <string name="restore_category_settings">Settings</string>
+    <string name="restore_category_accounts">Accounts and services</string>
+    <string name="restore_category_fonts">Custom fonts</string>
+    <string name="restore_category_books">Book files</string>
+    <string name="restore_category_marks">Marks</string>
+    <string name="restore_category_positions">Reading positions</string>
+    <string name="restore_category_sessions">Reading sessions</string>
+    <string name="restore_category_recaps">Chapter recaps</string>
+    <string name="restore_category_translations">Translations</string>
+    <string name="restore_settings_detail">replaces current settings.</string>
+    <string name="restore_fonts_detail">adds missing fonts; installed fonts are kept.</string>
+    <string name="restore_books_existing_kept">Books already here are kept.</string>
+    <string name="restore_books_all_present">all already in your library.</string>
+    <string name="restore_marks_detail">adds missing marks; existing marks are kept.</string>
+    <string name="restore_marks_unmatched_wait">Unmatched marks wait for their books.</string>
+    <string name="restore_positions_detail">replaces current positions for matching books.</string>
+    <string name="restore_sessions_detail">merges with existing sessions without discarding them.</string>
+    <string name="restore_recaps_detail">adds missing recaps for books in this library; existing ones are kept.</string>
+    <string name="restore_translations_detail">adds missing translations for books in this library; existing ones are kept.</string>
+    <string name="restore_operation_replace">Replace</string>
+    <string name="restore_operation_add">Add</string>
+    <string name="restore_operation_merge">Merge</string>
+    <string name="restore_operation_keep">Keep</string>
+    <plurals name="restore_position_count">
+        <item quantity="one">%1$d position</item>
+        <item quantity="other">%1$d positions</item>
+    </plurals>
+    <plurals name="restore_session_count">
+        <item quantity="one">%1$d session</item>
+        <item quantity="other">%1$d sessions</item>
+    </plurals>
+    <plurals name="restore_recap_count">
+        <item quantity="one">%1$d recap</item>
+        <item quantity="other">%1$d recaps</item>
+    </plurals>
     <string name="settings_backup_other_exports">Other exports</string>
     <string name="settings_backup_accounts_password_hint">Protected with a backup password</string>
     <string name="server_pair_again">Pair again</string>
@@ -2236,6 +2277,10 @@
     <string name="evaluation_export">Export ratings and reviews</string>
     <string name="evaluation_exported">Ratings and reviews exported</string>
     <string name="evaluation_export_failed">Could not export ratings and reviews</string>
+    <string name="library_csv_export">Export book list (CSV)</string>
+    <string name="library_csv_export_detail">Goodreads-compatible CSV with shelves, ratings, reviews and reading progress.</string>
+    <string name="library_csv_exported">Book list exported</string>
+    <string name="library_csv_export_failed">Could not export book list</string>
     <string name="evaluation_rating">My rating</string>
     <string name="evaluation_rated">Rated</string>
     <string name="evaluation_unrated">Unrated</string>

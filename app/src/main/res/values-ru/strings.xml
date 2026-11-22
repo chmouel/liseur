@@ -1858,6 +1858,53 @@
     <string name="companion_settings_story_auto">Дополнять сюжет самостоятельно</string>
     <string name="companion_settings_story_auto_summary">Когда Помощник открывается на вкладке «Сюжет», пересказывает предыдущую главу и обновляет краткое содержание сюжета.</string>
     <string name="companion_settings_privacy">Текст книги до выделенного абзаца отправляется на выбранный сервер, а при включённых фоновых пересказах — целые главы. Его поставщик может брать плату за эти запросы.</string>
+    <string name="restore_summary_intro">Эта резервная копия заменит часть данных, а остальные объединит с вашей библиотекой.</string>
+    <string name="restore_summary_intro_replace_only">Эта резервная копия заменит ваши текущие данные для перечисленных пунктов.</string>
+    <string name="restore_summary_intro_preserve_only">Эта резервная копия добавит или объединит перечисленные пункты без перезаписи существующих данных.</string>
+    <string name="restore_item_summary" formatted="true">%1$s — %2$s</string>
+    <string name="restore_category_metadata">Изменённые сведения о книгах</string>
+    <string name="restore_metadata_detail">заменяет сохранённые правки для соответствующих книг.</string>
+    <string name="restore_category_settings">Настройки</string>
+    <string name="restore_category_accounts">Аккаунты и сервисы</string>
+    <string name="restore_category_fonts">Свои шрифты</string>
+    <string name="restore_category_books">Файлы книг</string>
+    <string name="restore_category_marks">Отметки</string>
+    <string name="restore_category_positions">Позиции чтения</string>
+    <string name="restore_category_sessions">Сеансы чтения</string>
+    <string name="restore_category_recaps">Пересказы глав</string>
+    <string name="restore_category_translations">Переводы</string>
+    <string name="restore_settings_detail">заменяет текущие настройки.</string>
+    <string name="restore_fonts_detail">добавляет недостающие шрифты; установленные сохраняются.</string>
+    <string name="restore_books_existing_kept">Книги, которые уже есть, сохраняются.</string>
+    <string name="restore_books_all_present">все уже в вашей библиотеке.</string>
+    <string name="restore_marks_detail">добавляет недостающие отметки; существующие сохраняются.</string>
+    <string name="restore_marks_unmatched_wait">Отметки без книг будут ждать свои книги.</string>
+    <string name="restore_positions_detail">заменяет текущие позиции для соответствующих книг.</string>
+    <string name="restore_sessions_detail">объединяется с существующими сеансами без их удаления.</string>
+    <string name="restore_recaps_detail">добавляет недостающие пересказы для книг в библиотеке; существующие сохраняются.</string>
+    <string name="restore_translations_detail">добавляет недостающие переводы для книг в библиотеке; существующие сохраняются.</string>
+    <string name="restore_operation_replace">Заменить</string>
+    <string name="restore_operation_add">Добавить</string>
+    <string name="restore_operation_merge">Объединить</string>
+    <string name="restore_operation_keep">Сохранить</string>
+    <plurals name="restore_position_count">
+        <item quantity="one">%1$d позиция</item>
+        <item quantity="few">%1$d позиции</item>
+        <item quantity="many">%1$d позиций</item>
+        <item quantity="other">%1$d позиции</item>
+    </plurals>
+    <plurals name="restore_session_count">
+        <item quantity="one">%1$d сеанс</item>
+        <item quantity="few">%1$d сеанса</item>
+        <item quantity="many">%1$d сеансов</item>
+        <item quantity="other">%1$d сеанса</item>
+    </plurals>
+    <plurals name="restore_recap_count">
+        <item quantity="one">%1$d пересказ</item>
+        <item quantity="few">%1$d пересказа</item>
+        <item quantity="many">%1$d пересказов</item>
+        <item quantity="other">%1$d пересказа</item>
+    </plurals>
     <string name="settings_backup_other_exports">Другой экспорт</string>
     <string name="settings_backup_accounts_password_hint">Защищены паролем резервной копии</string>
     <string name="server_pair_again">Подключить снова</string>
@@ -2324,6 +2371,10 @@
     <string name="evaluation_export">Экспортировать оценки и отзывы</string>
     <string name="evaluation_exported">Оценки и отзывы экспортированы</string>
     <string name="evaluation_export_failed">Не удалось экспортировать оценки и отзывы</string>
+    <string name="library_csv_export">Экспортировать список книг (CSV)</string>
+    <string name="library_csv_export_detail">CSV в формате Goodreads с полками, оценками, отзывами и прогрессом чтения.</string>
+    <string name="library_csv_exported">Список книг экспортирован</string>
+    <string name="library_csv_export_failed">Не удалось экспортировать список книг</string>
     <string name="evaluation_rating">Моя оценка</string>
     <string name="evaluation_rated">С оценкой</string>
     <string name="evaluation_unrated">Без оценки</string>
