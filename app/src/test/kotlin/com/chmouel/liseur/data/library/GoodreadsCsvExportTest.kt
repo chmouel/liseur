@@ -5,6 +5,8 @@ import com.chmouel.liseur.data.db.BookEvaluation
 import com.chmouel.liseur.data.db.BookMetadata
 import com.chmouel.liseur.data.db.DownloadState
 import com.chmouel.liseur.data.db.ReadingProgress
+import com.chmouel.liseur.domain.Contributor
+import com.chmouel.liseur.domain.ContributorRoles
 import com.chmouel.liseur.domain.FinishedOverride
 import com.chmouel.liseur.domain.Identifier
 import com.chmouel.liseur.domain.MetadataSnapshot
@@ -208,10 +210,104 @@ class GoodreadsCsvExportTest {
         assertEquals("0", a["My Rating"])
     }
 
+    @Test
+    fun `prefers structured author contributors for mononyms and handles delimiter only authors`() {
+        val mononyms = sampleBook(
+            url = "file:///dialogues.epub",
+            title = "Dialogues",
+            author = "Plato, Aristotle",
+        )
+        val overridden = sampleBook(
+            url = "file:///overridden.epub",
+            title = "Overridden",
+            author = "Custom Author",
+            authorOverridden = true,
+        )
+        val delimiterOnly = sampleBook(
+            url = "file:///broken.epub",
+            title = "Broken Author",
+            author = "; ;",
+        )
+        val metadata = listOf(
+            BookMetadata.of(
+                mononyms.url,
+                MetadataSource.FILE,
+                MetadataSnapshot(
+                    contributors = listOf(
+                        Contributor(ContributorRoles.AUTHOR, "Plato"),
+                        Contributor(ContributorRoles.AUTHOR, "Aristotle"),
+                    ),
+                ),
+            ),
+            BookMetadata.of(
+                overridden.url,
+                MetadataSource.FILE,
+                MetadataSnapshot(
+                    contributors = listOf(
+                        Contributor(ContributorRoles.AUTHOR, "Plato"),
+                        Contributor(ContributorRoles.AUTHOR, "Aristotle"),
+                    ),
+                ),
+            ),
+        )
+
+        val rows = parseCsv(goodreadsCsvExport(listOf(mononyms, overridden, delimiterOnly), emptyList(), emptyList(), metadata, ZoneOffset.UTC))
+        val byTitle = rows.drop(1).associate { row ->
+            val map = rows[0].zip(row).toMap()
+            map.getValue("Title") to map
+        }
+
+        val m = byTitle.getValue("Dialogues")
+        assertEquals("Plato", m["Author"])
+        assertEquals("Plato", m["Author l-f"])
+        assertEquals("Aristotle", m["Additional Authors"])
+
+        val o = byTitle.getValue("Overridden")
+        assertEquals("Custom Author", o["Author"])
+        assertEquals("", o["Additional Authors"])
+
+        val b = byTitle.getValue("Broken Author")
+        assertEquals("", b["Author"])
+        assertEquals("", b["Author l-f"])
+        assertEquals("", b["Additional Authors"])
+    }
+
+    @Test
+    fun `neutralizes spreadsheet formulas in untrusted text while keeping isbn formulas`() {
+        val book = sampleBook(
+            url = "file:///formula.epub",
+            title = "=HYPERLINK(\"https://example.invalid\",\"book\")",
+            author = "@evil",
+        )
+        val evaluations = listOf(
+            BookEvaluation(book.url, PersonalEvaluation.REVIEW, "+1+1", book.title, book.author.orEmpty(), updatedAt = addedAt),
+        )
+        val metadata = listOf(
+            BookMetadata.of(
+                book.url,
+                MetadataSource.FILE,
+                MetadataSnapshot(
+                    publishers = listOf("-badpub"),
+                    identifiers = listOf(Identifier("isbn", "0441172717")),
+                ),
+            ),
+        )
+
+        val rows = parseCsv(goodreadsCsvExport(listOf(book), emptyList(), evaluations, metadata, ZoneOffset.UTC))
+        val r = rows[0].zip(rows[1]).toMap()
+
+        assertEquals("'=HYPERLINK(\"https://example.invalid\",\"book\")", r["Title"])
+        assertEquals("'@evil", r["Author"])
+        assertEquals("'-badpub", r["Publisher"])
+        assertEquals("'+1+1", r["My Review"])
+        assertEquals("=\"0441172717\"", r["ISBN"])
+    }
+
     private fun sampleBook(
         url: String,
         title: String,
         author: String? = "Author",
+        authorOverridden: Boolean = false,
         addedAt: Long = this.addedAt,
         finishedAt: Long? = null,
         archivedAt: Long? = null,
@@ -237,6 +333,7 @@ class GoodreadsCsvExportTest {
         remotePageCount = remotePageCount,
         seriesName = seriesName,
         seriesIndex = seriesIndex,
+        authorOverridden = authorOverridden,
     )
 
     /** Minimal RFC 4180 parser for verifying exported CSV structure and escaping. */
