@@ -15,6 +15,11 @@ import com.chmouel.liseur.data.liseursync.workSourceOf
 import com.chmouel.liseur.domain.MetadataSource
 import com.chmouel.liseur.domain.PersonalEvaluation
 import com.chmouel.liseur.domain.WorkIdentifiers
+import java.util.Collections
+import kotlin.coroutines.AbstractCoroutineContextElement
+import kotlin.coroutines.CoroutineContext
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -44,12 +49,17 @@ class BookRemoval(
     private val glossaryDao: com.chmouel.liseur.data.db.GlossaryDao? = null,
     private val metadataDao: com.chmouel.liseur.data.db.BookMetadataDao? = null,
     private val evaluationDao: com.chmouel.liseur.data.db.BookEvaluationDao? = null,
-    private val hardcoverDao: com.chmouel.liseur.data.db.HardcoverDao? = null,
+    /** Told inside the transaction of books going, or whose file now holds another book. */
+    private val onBooksForgetting: suspend (List<String>) -> Unit = {},
+    /** Told the same books again once the outermost transaction committed or rolled back. */
+    private val onBooksForgotten: (bookUrls: List<String>, committed: Boolean) -> Unit = { _, _ -> },
+    /** Whether a reading tracker holds a choice about the book, which keeps a duplicate. */
+    private val trackerKeeps: suspend (String) -> Boolean = { false },
 ) {
     suspend fun deleteByUrls(bookUrls: List<String>) {
         if (bookUrls.isEmpty()) return
         var removedSessions = false
-        inTransaction {
+        transaction {
             removedSessions = forget(bookUrls)
         }
         if (removedSessions) onReadingHistoryRemoved()
@@ -62,7 +72,7 @@ class BookRemoval(
         rehomedSources: Map<String, String?> = emptyMap(),
     ) {
         var removedSessions = false
-        inTransaction {
+        transaction {
             val books = bookDao.booksForSource(folderUrl)
             val bookUrls = books.map { it.url }
             // The source lookup can involve SAF and therefore happens before
@@ -116,9 +126,9 @@ class BookRemoval(
 
     suspend fun deleteRemoteNotDownloaded() {
         var removedSessions = false
-        inTransaction {
+        transaction {
             val bookUrls = bookDao.remoteNotDownloadedUrls()
-            if (bookUrls.isEmpty()) return@inTransaction
+            if (bookUrls.isEmpty()) return@transaction
             removedSessions = forget(bookUrls)
         }
         if (removedSessions) onReadingHistoryRemoved()
@@ -133,7 +143,7 @@ class BookRemoval(
      * old hash for whatever is downloaded next.
      */
     suspend fun downloadRemoved(bookUrl: String) {
-        inTransaction {
+        transaction {
             bookDao.setDownloadState(bookUrl, DownloadState.REMOTE, null)
             forgetFile(bookUrl)
         }
@@ -160,9 +170,9 @@ class BookRemoval(
         alongside: suspend () -> Unit = {},
     ): Boolean {
         var stored = false
-        inTransaction {
-            val book = bookDao.getByUrl(bookUrl) ?: return@inTransaction
-            if (book.openableUrl == null || book.downloadedAt != downloadedAt) return@inTransaction
+        transaction {
+            val book = bookDao.getByUrl(bookUrl) ?: return@transaction
+            if (book.openableUrl == null || book.downloadedAt != downloadedAt) return@transaction
             alongside()
             metadataDao?.let { dao ->
                 if (row == null) dao.delete(bookUrl, MetadataSource.FILE.key) else dao.upsert(row)
@@ -173,9 +183,13 @@ class BookRemoval(
         return stored
     }
 
-    /** Runs [block] in one transaction, for a reindex that has nothing to clear first. */
+    /**
+     * Runs [block] in one library transaction. A caller wrapping removals
+     * in its own transaction goes through here, so trackers hear of
+     * forgotten books only once it commits.
+     */
     suspend fun together(block: suspend () -> Unit) {
-        inTransaction(block)
+        transaction(block)
     }
 
     private suspend fun forgetFile(bookUrl: String) {
@@ -191,7 +205,7 @@ class BookRemoval(
      * never finishes.
      */
     suspend fun downloadArrived(bookUrl: String, localUri: String, downloadedAt: Long, fileModifiedAt: Long?) {
-        inTransaction {
+        transaction {
             bookDao.markDownloaded(bookUrl, localUri, downloadedAt, fileModifiedAt?.takeIf { it > 0 })
             forgetFile(bookUrl)
         }
@@ -230,8 +244,9 @@ class BookRemoval(
      */
     suspend fun contentReplaced(bookUrl: String, then: suspend () -> Unit = {}) {
         var removedSessions = false
-        inTransaction {
+        transaction {
             retainEvaluation(bookUrl)
+            booksForgotten(listOf(bookUrl))
             progressDao.forget(bookUrl)
             annotationDao.deleteForBook(bookUrl)
             annotationSyncDao.forgetBook(bookUrl)
@@ -248,8 +263,6 @@ class BookRemoval(
             identityDao.forgetAliases(listOf(bookUrl))
             identityDao.forgetAmbiguities(listOf(bookUrl))
             peerStateDao.forgetBooks(listOf(bookUrl))
-            // So is the Hardcover edition it was matched with.
-            hardcoverDao?.forgetBooks(listOf(bookUrl))
             // The remote link named the old contents too. Kept, position
             // sync and catalog lookups would address the server's copy of
             // the book that used to be here as if it were the new one.
@@ -296,7 +309,7 @@ class BookRemoval(
         if (bookUrls.isEmpty()) return emptyList()
         val removable = mutableListOf<String>()
         var removedSessions = false
-        inTransaction {
+        transaction {
             for (url in bookUrls.distinct()) {
                 val book = bookDao.getByUrl(url) ?: continue
                 if (blank(book) && untouched(url)) removable += url
@@ -331,7 +344,7 @@ class BookRemoval(
         if (bookUrls.isEmpty()) return true
         var clear = false
         var removedSessions = false
-        inTransaction {
+        transaction {
             val rows = bookUrls.distinct().mapNotNull { bookDao.getByUrl(it) }
             val removable = rows.all { row ->
                 row.remoteUuid == remoteUuid &&
@@ -340,7 +353,7 @@ class BookRemoval(
                     blank(row.copy(remoteUuid = null, remoteBookId = null)) &&
                     untouched(row.url)
             }
-            if (!removable) return@inTransaction
+            if (!removable) return@transaction
             val urls = rows.map { it.url }
             if (urls.isNotEmpty()) {
                 forgetExtra(urls)
@@ -394,7 +407,9 @@ class BookRemoval(
             // So is what a server was persuaded to call it. A rejected
             // low-confidence match is a decision the reader made, and
             // nothing here could work it out again.
-            identityDao.namingCountForBook(bookUrl) == 0
+            identityDao.namingCountForBook(bookUrl) == 0 &&
+            // A tracker edition picked or a book kept off it by hand.
+            !trackerKeeps(bookUrl)
 
     /**
      * Everything keyed by a book URL, in one place.
@@ -418,14 +433,44 @@ class BookRemoval(
             sessionDao.deleteForBooks(batch)
             peerStateDao.forgetBooks(batch)
             if (evaluationDao != null) batch.forEach { retainEvaluation(it) }
-            hardcoverDao?.forgetBooks(batch)
             identityDao.forgetFingerprints(batch)
             identityDao.forgetAliases(batch)
             identityDao.forgetAmbiguities(batch)
             bookDao.deleteByUrls(batch)
         }
+        booksForgotten(bookUrls.distinct())
         if (removedSessions) remoteStatsDao?.clearAll()
         return removedSessions
+    }
+
+    /**
+     * Runs [block] in a library transaction. Books forgotten inside it,
+     * however deeply nested, are announced to [onBooksForgetting] at once
+     * and settled through [onBooksForgotten] when the outermost one ends,
+     * so a rollback leaves trackers holding what they held.
+     */
+    private suspend fun transaction(block: suspend () -> Unit) {
+        if (currentCoroutineContext()[ForgottenBooks] != null) return inTransaction(block)
+        val forgotten = ForgottenBooks()
+        var committed = false
+        try {
+            withContext(forgotten) { inTransaction(block) }
+            committed = true
+        } finally {
+            if (forgotten.urls.isNotEmpty()) onBooksForgotten(forgotten.urls.distinct(), committed)
+        }
+    }
+
+    private suspend fun booksForgotten(bookUrls: List<String>) {
+        onBooksForgetting(bookUrls)
+        val outer = currentCoroutineContext()[ForgottenBooks]
+        if (outer != null) outer.urls.addAll(bookUrls) else onBooksForgotten(bookUrls, true)
+    }
+
+    private class ForgottenBooks : AbstractCoroutineContextElement(ForgottenBooks) {
+        companion object Key : CoroutineContext.Key<ForgottenBooks>
+
+        val urls: MutableList<String> = Collections.synchronizedList(mutableListOf())
     }
 
     private suspend fun retainEvaluation(bookUrl: String) {

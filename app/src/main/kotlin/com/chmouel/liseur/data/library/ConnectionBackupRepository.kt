@@ -1,9 +1,7 @@
 package com.chmouel.liseur.data.library
 
 import com.chmouel.liseur.data.calibre.CredentialCipher
-import com.chmouel.liseur.data.db.HardcoverAccount
 import com.chmouel.liseur.data.db.KosyncPeer
-import com.chmouel.liseur.data.hardcover.HardcoverRepository
 import com.chmouel.liseur.data.kosync.KosyncAccountRepository
 import com.chmouel.liseur.data.remote.AccountBackup
 import com.chmouel.liseur.data.remote.RemoteAccountRepository
@@ -21,8 +19,11 @@ internal class ConnectionBackupRepository(
     private val settings: AppSettingsRepository,
     private val services: ServerConnections,
     private val serviceAccounts: ServiceAccounts,
-    private val hardcover: HardcoverRepository? = null,
     private val beforeReplace: suspend () -> Unit,
+    /** Adds what the build's reading trackers keep to an export. */
+    private val exportTrackers: suspend (JSONObject) -> Unit = {},
+    /** Reads the trackers' part of a backup up front, and returns what puts it back. */
+    private val prepareTrackers: (JSONObject) -> (suspend () -> Unit) = { {} },
 ) {
     suspend fun export(): JSONObject {
         val keys = JSONObject()
@@ -30,7 +31,7 @@ internal class ConnectionBackupRepository(
         servers.mapNotNull { ServerConnections.originOf(it.url) }.distinct().forEach { origin ->
             services.key(origin)?.let { keys.put(origin, it) }
         }
-        return JSONObject().put("version", 1)
+        val backup = JSONObject().put("version", 1)
             .put("account", accounts.current()?.let(AccountBackup::encode) ?: JSONObject.NULL)
             .put("kosync", kosync.current()?.let { peer ->
                 JSONObject().put("baseUrl", peer.baseUrl).put("username", peer.username)
@@ -38,11 +39,8 @@ internal class ConnectionBackupRepository(
             } ?: JSONObject.NULL)
             .put("keys", keys)
             .put("gemini", serviceAccounts.backupKey() ?: JSONObject.NULL)
-            .put("hardcover", hardcover?.current()?.let { account ->
-                JSONObject().put("userId", account.userId).put("username", account.username)
-                    .put("token", account.token ?: throw UnreadableCredentialException())
-                    .put("autoSync", account.autoSync)
-            } ?: JSONObject.NULL)
+        exportTrackers(backup)
+        return backup
     }
 
     fun prepareRestore(payload: JSONObject, app: JSONObject): suspend () -> Unit {
@@ -52,17 +50,10 @@ internal class ConnectionBackupRepository(
             KosyncPeer(baseUrl = it.getString("baseUrl"), username = it.getString("username"),
                 keyCipher = KosyncPeer.seal(it.getString("key")), addedAt = System.currentTimeMillis())
         }
-        // Absent from backups made before Hardcover existed: those leave the
-        // account here alone, where an explicit null signs it out.
-        val restoresHardcover = payload.has("hardcover")
-        val hardcoverAccount = payload.optNullableObject("hardcover")?.let {
-            HardcoverAccount(userId = it.getLong("userId"), username = it.getString("username"),
-                tokenCipher = HardcoverAccount.seal(it.getString("token")),
-                addedAt = System.currentTimeMillis(), autoSync = it.optBoolean("autoSync", true))
-        }
         val keys = payload.getJSONObject("keys").let { json ->
             json.keys().asSequence().associateWith { json.getString(it) }
         }
+        val trackers = prepareTrackers(payload)
         return {
             beforeReplace()
             services.restoreCredentials(app, keys) {
@@ -70,7 +61,7 @@ internal class ConnectionBackupRepository(
                 serviceAccounts.restoreKey(payload.nullableText("gemini"))
                 accounts.restoreBackup(account)
                 kosync.restoreBackup(peer)
-                if (restoresHardcover) hardcover?.restoreBackup(hardcoverAccount)
+                trackers()
             }
         }
     }
@@ -91,11 +82,6 @@ internal class ConnectionBackupRepository(
                 require(origin in origins && (keys.get(origin) as? String)?.isNotBlank() == true)
             }
             payload.nullableText("gemini")?.let { require(it.isNotBlank()) }
-            payload.optNullableObject("hardcover")?.let {
-                require(it.getLong("userId") > 0)
-                require((it.get("username") as? String) != null)
-                require((it.get("token") as? String)?.isNotBlank() == true)
-            }
         }
     }
 }
@@ -105,6 +91,3 @@ private fun JSONObject.nullableObject(key: String): JSONObject? =
 
 private fun JSONObject.nullableText(key: String): String? =
     if (get(key) == JSONObject.NULL) null else get(key) as? String ?: error("Invalid credential")
-
-private fun JSONObject.optNullableObject(key: String): JSONObject? =
-    if (!has(key)) null else nullableObject(key)

@@ -729,6 +729,9 @@ class ReaderViewModel(
         onPlaceShown(place, movement)
     }
 
+    /** Puts the place on screen on disk, for an action that reads it back; false when it could not be. */
+    suspend fun savePlaceNow(): Boolean = preparePositionAction() && positionPublisher.flush(bookId)
+
     fun syncThisBook() {
         // A choice already on screen is the question being asked; a
         // second press behind it must not start a second one.

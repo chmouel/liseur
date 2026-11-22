@@ -126,7 +126,12 @@ private const val NEW_SERVER = ""
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun ServicesScreen(connections: ServerConnections, accounts: ServiceAccounts, onBack: () -> Unit) {
+internal fun ServicesScreen(
+    connections: ServerConnections,
+    accounts: ServiceAccounts,
+    onBack: () -> Unit,
+    trackers: @Composable () -> Unit = {},
+) {
     val servers by connections.servers.collectAsState(initial = ServerList.Empty)
     val readAloud by connections.readAloudServer.collectAsState(initial = null)
     val translation by connections.translationServer.collectAsState(initial = null)
@@ -208,6 +213,7 @@ internal fun ServicesScreen(connections: ServerConnections, accounts: ServiceAcc
                 }
             }
         }
+        trackers()
     }
 }
 

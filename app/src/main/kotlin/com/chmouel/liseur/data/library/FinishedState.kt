@@ -31,6 +31,8 @@ class FinishedState(
     /** Runs a status choice in the same line as queued position writes. */
     private val inWriteOrder: suspend (suspend () -> Unit) -> Unit = { it() },
     private val hasPendingStatus: suspend (String) -> Boolean = { false },
+    /** Told of every status written here by choice or by reaching the end, never of one a partner sent. */
+    private val onStatusChosen: suspend (String) -> Unit = {},
 ) {
 
     /**
@@ -46,11 +48,13 @@ class FinishedState(
         val override = if (finished) FinishedOverride.FINISHED else FinishedOverride.UNREAD
         inWriteOrder { writeStatus(bookUrl, override, null) }
         if (finished) onFinished(bookUrl)
+        onStatusChosen(bookUrl)
     }
 
     suspend fun setReadingChoice(bookUrl: String, choice: ReadingStatusChoice) {
         inWriteOrder { writeStatus(bookUrl, choice.override, null, keepUnreadReset = choice != ReadingStatusChoice.UNREAD) }
         if (choice == ReadingStatusChoice.FINISHED) onFinished(bookUrl)
+        onStatusChosen(bookUrl)
     }
 
     /**
@@ -70,7 +74,10 @@ class FinishedState(
             writeStatus(bookUrl, FinishedOverride.FINISHED, null)
             written = true
         }
-        if (written) onFinished(bookUrl)
+        if (written) {
+            onFinished(bookUrl)
+            onStatusChosen(bookUrl)
+        }
     }
 
     /**

@@ -1,4 +1,4 @@
-package com.chmouel.liseur.data.hardcover
+package com.chmouel.liseur.hardcover
 
 import java.text.Normalizer
 
@@ -31,13 +31,22 @@ object HardcoverMatch {
         val wanted = Title.of(title) ?: return null
         // A title alone names a shelf of books ("Poems", "Collected
         // Stories"); without an author to check against, the reader picks.
-        val names = nameTokens(listOfNotNull(author))
+        val names = nameTokens(author)
         if (names.isEmpty()) return null
         return hits.firstOrNull { hit ->
             val found = Title.of(hit.title) ?: return@firstOrNull false
-            wanted.agreesWith(found) && nameTokens(hit.authors).any { it in names }
+            wanted.agreesWith(found) && hit.authors.any { sameAuthor(names, nameTokens(it)) }
         }
     }
+
+    /**
+     * Every kept word of one name appears in the other, so `Mary Shelley`
+     * is `Shelley, Mary Wollstonecraft`, and one of several authors on the
+     * file still counts. A shared first name alone does not: `William
+     * Blake` is not `William Wordsworth`.
+     */
+    private fun sameAuthor(file: Set<String>, hit: Set<String>): Boolean =
+        hit.isNotEmpty() && (file.containsAll(hit) || hit.containsAll(file))
 
     /**
      * The edition to report against: an ebook edition when Hardcover has
@@ -52,9 +61,15 @@ object HardcoverMatch {
 
     /** A title and its main part, the words before a subtitle or a bracket. */
     private data class Title(val whole: String, val main: String) {
+        /**
+         * The same title, or the same title with a subtitle only one side
+         * gives. Two different subtitles are two different books:
+         * "Dune: Messiah" is not "Dune: The Graphic Novel".
+         */
         fun agreesWith(other: Title): Boolean =
-            whole == other.whole || main == other.main ||
-                whole == other.main || main == other.whole
+            whole == other.whole ||
+                (whole == main && whole == other.main) ||
+                (other.whole == other.main && other.whole == main)
 
         companion object {
             fun of(text: String?): Title? {
@@ -68,13 +83,11 @@ object HardcoverMatch {
     }
 
     /**
-     * The words in a list of names that are worth comparing. Initials are
-     * dropped: two authors sharing a "J" share nothing.
+     * The words in a name that are worth comparing. Initials are dropped:
+     * two authors sharing a "J" share nothing.
      */
-    private fun nameTokens(names: List<String>): Set<String> =
-        names.flatMap { fold(it)?.split(' ').orEmpty() }
-            .filter { it.length >= 3 }
-            .toSet()
+    private fun nameTokens(name: String?): Set<String> =
+        fold(name)?.split(' ').orEmpty().filter { it.length >= 3 }.toSet()
 
     private fun fold(text: String?): String? {
         if (text.isNullOrBlank()) return null

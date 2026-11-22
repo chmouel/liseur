@@ -1,4 +1,4 @@
-package com.chmouel.liseur.data.hardcover
+package com.chmouel.liseur.hardcover
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -79,11 +79,25 @@ class HardcoverMatchTest {
     }
 
     @Test
+    fun `a shared first name is not a shared author`() {
+        val hits = listOf(hit(13, "Poems", "William Wordsworth"))
+        assertNull(HardcoverMatch.confident("Poems", "William Blake", hits))
+        val coauthored = listOf(hit(14, "Good Omens", "Neil Gaiman"))
+        assertEquals(14L, HardcoverMatch.confident("Good Omens", "Terry Pratchett, Neil Gaiman", coauthored)?.id)
+    }
+
+    @Test
     fun `a book with no author or no title is left to the reader`() {
         val hits = listOf(hit(8, "Poems", "Anonymous"))
         assertNull(HardcoverMatch.confident("Poems", null, hits))
         assertNull(HardcoverMatch.confident(null, "Anonymous", hits))
         assertNull(HardcoverMatch.confident("Poems", "Anonymous", emptyList()))
+    }
+
+    @Test
+    fun `two different subtitles are two different books`() {
+        val hits = listOf(hit(12, "Dune: The Graphic Novel", "Frank Herbert"))
+        assertNull(HardcoverMatch.confident("Dune: Messiah", "Frank Herbert", hits))
     }
 
     @Test

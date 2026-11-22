@@ -80,4 +80,33 @@
     <string name="companion_gemini_key_missing">Add your Gemini API key on the External services and API keys page for the reading companion to use Gemini.</string>
     <string name="companion_gemini_model_recommended">Recommended for the reading companion</string>
     <string name="companion_gemini_privacy">Book text before your selected paragraph is sent to Google on your Gemini key, and whole chapters once background recaps are on. Google may charge for these requests.</string>
+    <string name="hardcover_title" translatable="false">Hardcover</string>
+    <string name="hardcover_settings_summary">Report your reading to your Hardcover account</string>
+    <string name="reading_services_title">Reading services</string>
+    <string name="hardcover_intro">Liseur can tell Hardcover what you are reading, how far along you are, when you started and finished, and how you rated it. Nothing is read back from Hardcover.</string>
+    <string name="hardcover_token_label">API token</string>
+    <string name="hardcover_token_help">Create a token on Hardcover and paste it here.</string>
+    <string name="hardcover_token_hint">Paste your token</string>
+    <string name="hardcover_token_get">Get a token</string>
+    <string name="hardcover_connect">Connect</string>
+    <string name="hardcover_disconnect">Disconnect</string>
+    <string name="hardcover_connected_as">Signed in as %1$s</string>
+    <string name="hardcover_token_refused">Hardcover refused the token. Paste a new one below.</string>
+    <string name="hardcover_auto_sync">Sync automatically</string>
+    <string name="hardcover_auto_sync_detail">Report a book when you close it, change its status or rate it. When off, use Push to Hardcover in the reader menu.</string>
+    <string name="hardcover_error_token">Hardcover did not accept this token.</string>
+    <string name="hardcover_error_scope">This token cannot update your Hardcover library. Create a new one with Get a token.</string>
+    <string name="hardcover_error_offline">Could not reach Hardcover. Check your connection and try again.</string>
+    <string name="hardcover_error_other">Hardcover could not be updated right now. Try again later.</string>
+    <string name="hardcover_privacy">To find each book, Liseur sends Hardcover its title, author and ISBN. It then sends the status, pages read, reading dates and your rating.</string>
+    <string name="hardcover_push">Push to Hardcover</string>
+    <string name="hardcover_pushed">Sent to Hardcover</string>
+    <string name="hardcover_up_to_date">Hardcover is already up to date</string>
+    <string name="hardcover_needs_match">Choose this book\'s Hardcover edition in Book details first</string>
+    <string name="hardcover_push_off">This book is kept off Hardcover</string>
+    <string name="hardcover_book_matched">Matched to %1$s</string>
+    <string name="hardcover_book_unmatched">Not matched to an edition yet</string>
+    <string name="hardcover_book_sync">Sync this book</string>
+    <string name="hardcover_book_choose">Choose edition</string>
+    <string name="hardcover_editions_none">Hardcover has no edition matching this book.</string>
 </resources>

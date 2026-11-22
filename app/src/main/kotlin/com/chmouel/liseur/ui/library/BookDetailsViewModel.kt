@@ -242,7 +242,10 @@ class BookDetailsViewModel(
                         inTransaction = { block -> database.withTransaction { block() } },
                         evaluationDao = database.bookEvaluationDao(),
                         metadataOverrides = application.container.metadataOverrides,
-                        requestSync = application.container::requestBookSync,
+                        requestSync = { url ->
+                            application.container.requestBookSync(url)
+                            application.container.readingTracker.bookChanged(url)
+                        },
                     )
                 }
             }

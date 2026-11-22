@@ -2184,26 +2184,4 @@
     <string name="book_metadata_reset_all">还原所有修改</string>
     <string name="book_metadata_edit_series">编辑丛书</string>
     <string name="book_metadata_no_series">无</string>
-    <string name="hardcover_settings_summary">将阅读情况同步到你的 Hardcover 账户</string>
-    <string name="hardcover_intro">Liseur 可以告诉 Hardcover 你正在读哪本书、读到哪里以及何时读完。不会从 Hardcover 读取任何内容。</string>
-    <string name="hardcover_token_label">API 令牌</string>
-    <string name="hardcover_token_help">在 Hardcover 账户设置中打开 Hardcover API，创建令牌并粘贴到这里。</string>
-    <string name="hardcover_connect">连接</string>
-    <string name="hardcover_disconnect">断开连接</string>
-    <string name="hardcover_connected_as">已登录为 %1$s</string>
-    <string name="hardcover_auto_sync">自动同步</string>
-    <string name="hardcover_auto_sync_detail">每次合上书时上报进度。关闭后，请使用阅读菜单中的“推送到 Hardcover”。</string>
-    <string name="hardcover_error_token">Hardcover 未接受此令牌。</string>
-    <string name="hardcover_error_offline">无法连接 Hardcover。请检查网络后重试。</string>
-    <string name="hardcover_error_other">暂时无法更新 Hardcover。请稍后重试。</string>
-    <string name="hardcover_push">推送到 Hardcover</string>
-    <string name="hardcover_pushed">已发送到 Hardcover</string>
-    <string name="hardcover_up_to_date">Hardcover 已是最新</string>
-    <string name="hardcover_needs_match">请先在图书详情中选择此书的 Hardcover 版本</string>
-    <string name="hardcover_push_off">此书不会同步到 Hardcover</string>
-    <string name="hardcover_book_matched">已匹配到 %1$s</string>
-    <string name="hardcover_book_unmatched">尚未匹配版本</string>
-    <string name="hardcover_book_sync">同步此书</string>
-    <string name="hardcover_book_choose">选择版本</string>
-    <string name="hardcover_editions_none">Hardcover 中没有与此书匹配的版本。</string>
 </resources>

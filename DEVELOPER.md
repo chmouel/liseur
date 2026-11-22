@@ -116,6 +116,19 @@ requests persist their bytes before sending; account rekeying and cleanup
 include `evaluation_sync`. See [ADR 0073](docs/adr/0073-private-ratings-and-reviews.md)
 for conflict, removal and export semantics.
 
+## Hardcover (Google Play build only)
+
+Hardcover reporting lives entirely in `app/src/play/` (`hardcover/` and
+`providers/ReadingTracker.kt`); `foss` has a no-op `ReadingTracker` and
+`main` reaches it only through callbacks and composable slots. Keep it
+push-only: it never feeds `ReadingStateMerge`, `RemoteRouter` or a
+position peer. Its state is the separate `hardcover.db`, keyed by local
+`books.url`. Every push runs under the repository's single lock and the
+client's request spacing; queue books with `bookChanged`, never by
+starting a push per book. Statuses adopted from a sync partner must not
+queue a push. Status, date and rating rules belong in `HardcoverPlan`.
+See [ADR 0075](docs/adr/0075-hardcover-reading-tracker.md).
+
 ## Settings backup archive
 
 A backup is a ZIP with a versioned `manifest.json`, `settings.json`,
@@ -1019,13 +1032,6 @@ changing reader behavior.
   reading. Komga has no status of its own, so a richer choice only pushes
   the saved position and Komga derives progress from it. Either way the
   peer loses the original choice. kosync exchanges positions only.
-- Hardcover is a one-way reading tracker, not a position peer: it never
-  feeds `ReadingStateMerge`. A push reads Hardcover's side and sends only
-  what `domain/HardcoverProgress.kt` plans; never write `started_at` or
-  `finished_at` by hand, since status changes date reads and write
-  journal entries on the server. Book matches live in `hardcover_book`
-  and are cleared by `BookRemoval` with the book
-  ([ADR 0073](docs/adr/0073-hardcover-reading-progress.md)).
 - A renewable credential belongs to one published connection.
   `BookOrbitSession` serialises renewal and writes it only if the row still
   has the epoch and refresh token it started from; otherwise drops it.
@@ -2615,6 +2621,9 @@ it can sync a book that came off an SD card.
   user picks it, and the app works without them. Before changing that
   boundary, check the `foss` release dex for `generativelanguage` and
   `Gemini` strings.
+- Hardcover reporting is `play` only for the same reason: `foss` has none
+  of its code, strings, endpoint or database. Check the `foss` release
+  dex for `hardcover` before changing that boundary.
 - No non-free assets: bundled fonts (Literata, Vollkorn, Atkinson
   Hyperlegible, Inter) are OFL; the icon is in-repo vector drawables.
 - `fonts.googleapis.com` in the release dex is unreachable: a

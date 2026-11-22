@@ -20,6 +20,20 @@ internal object PlaySettingsEntries {
         title = R.string.services_gemini_key,
         section = R.string.read_aloud_provider_gemini,
     )
+    val Hardcover = SettingsEntry(
+        key = "hardcover",
+        page = Route.Services,
+        title = R.string.hardcover_title,
+        summary = R.string.hardcover_settings_summary,
+        section = R.string.reading_services_title,
+    )
+    val ReadingServices = SettingsEntry(
+        key = "reading_services",
+        page = Route.Settings,
+        title = R.string.reading_services_title,
+        summary = R.string.hardcover_settings_summary,
+        section = R.string.settings_library,
+    )
 }
 
-internal val flavorSettingsEntries: List<SettingsEntry> = listOf(PlaySettingsEntries.GeminiKey, PlaySettingsEntries.Reporting)
+internal val flavorSettingsEntries: List<SettingsEntry> = listOf(PlaySettingsEntries.GeminiKey, PlaySettingsEntries.ReadingServices, PlaySettingsEntries.Hardcover, PlaySettingsEntries.Reporting)

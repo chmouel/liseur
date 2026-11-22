@@ -87,6 +87,26 @@ class FinishedStateTest {
     }
 
     @Test
+    fun `statuses written here are reported, and a partner's is not`() = runTest {
+        db.bookDao().upsert(
+            Book(url = BOOK, title = "Book", author = null, coverPath = null, source = null, addedAt = 0, lastOpenedAt = null),
+        )
+        val chosen = mutableListOf<String>()
+        val progress = db.readingProgressDao()
+        val state = FinishedState(db.bookDao(), progress, onStatusChosen = { chosen += it })
+
+        state.setReadingChoice(BOOK, ReadingStatusChoice.PAUSED)
+        state.setFinished(BOOK, false)
+        val row = progress.get(BOOK)!!
+        assertTrue(state.adoptRemoteStatus(BOOK, row.statusRevision, "peer", FinishedOverride.DID_NOT_FINISH, ReadingStatus.READING))
+        assertEquals(listOf(BOOK, BOOK), chosen)
+
+        assertTrue(state.adoptRemoteStatus(BOOK, progress.get(BOOK)!!.statusRevision, "peer", FinishedOverride.NONE, ReadingStatus.READING))
+        state.recordFinished(BOOK)
+        assertEquals(listOf(BOOK, BOOK, BOOK), chosen)
+    }
+
+    @Test
     fun `choosing automatic records a withdrawal even when already automatic`() = runTest {
         db.bookDao().upsert(
             Book(url = BOOK, title = "Book", author = null, coverPath = null, source = null, addedAt = 0, lastOpenedAt = null),
