@@ -23,7 +23,10 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
+import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.ContentPaste
+import androidx.compose.material.icons.outlined.Headphones
+import androidx.compose.material.icons.outlined.MenuBook
 import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material.icons.outlined.TaskAlt
 import androidx.compose.material3.AlertDialog
@@ -41,9 +44,10 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -53,6 +57,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.ImeAction
@@ -68,7 +73,10 @@ import com.chmouel.liseur.data.remote.UnreadableCredentialException
 import com.chmouel.liseur.domain.FinishedOverride
 import com.chmouel.liseur.domain.PersonalEvaluation
 import com.chmouel.liseur.domain.readingStatusFor
+import com.chmouel.liseur.hardcover.EditionChoice
+import com.chmouel.liseur.hardcover.EditionIcon
 import com.chmouel.liseur.hardcover.HardcoverAccount
+import com.chmouel.liseur.hardcover.HardcoverCandidates
 import com.chmouel.liseur.hardcover.HardcoverClient
 import com.chmouel.liseur.hardcover.HardcoverConnectOutcome
 import com.chmouel.liseur.hardcover.HardcoverDatabase
@@ -78,6 +86,7 @@ import com.chmouel.liseur.hardcover.HardcoverPushOutcome
 import com.chmouel.liseur.hardcover.HardcoverPushWorker
 import com.chmouel.liseur.hardcover.HardcoverRepository
 import com.chmouel.liseur.hardcover.LocalReading
+import com.chmouel.liseur.hardcover.editionRow
 import com.chmouel.liseur.ui.BusyIndicator
 import com.chmouel.liseur.ui.settings.ConnectionRow
 import com.chmouel.liseur.ui.settings.RowDivider
@@ -411,7 +420,7 @@ internal class ReadingTracker(context: Context, private val database: LiseurData
         val ui = rememberCoroutineScope()
         var busy by remember { mutableStateOf(false) }
         var message by remember(bookUrl) { mutableStateOf<Int?>(null) }
-        var choices by remember(bookUrl) { mutableStateOf<List<HardcoverEdition>?>(null) }
+        var choices by remember(bookUrl) { mutableStateOf<PickerSession?>(null) }
         val excluded = link?.excluded == true
         fun busyWhile(work: suspend () -> Unit) {
             busy = true
@@ -419,6 +428,14 @@ internal class ReadingTracker(context: Context, private val database: LiseurData
             ui.launch {
                 work()
                 busy = false
+            }
+        }
+        fun openChoices(push: Boolean) {
+            busyWhile {
+                when (val found = hardcover.candidates(bookUrl)) {
+                    is RemoteResult.Ok -> choices = PickerSession(found.value, push)
+                    is RemoteResult.Failed -> message = failureMessage(found.reason)
+                }
             }
         }
 
@@ -459,18 +476,28 @@ internal class ReadingTracker(context: Context, private val database: LiseurData
             ) {
                 OutlinedButton(
                     enabled = !busy,
-                    onClick = {
-                        busyWhile {
-                            when (val found = hardcover.candidates(bookUrl)) {
-                                is RemoteResult.Ok -> choices = found.value
-                                is RemoteResult.Failed -> message = failureMessage(found.reason)
-                            }
-                        }
-                    },
+                    onClick = { openChoices(push = false) },
                 ) { Text(stringResource(R.string.hardcover_book_choose)) }
                 OutlinedButton(
                     enabled = !busy && !excluded,
-                    onClick = { busyWhile { message = outcomeMessage(hardcover.push(bookUrl, asked = true)) } },
+                    onClick = {
+                        // Nothing to report against until an edition is picked, and asking
+                        // Hardcover to match it again would only repeat the search.
+                        if (link?.matched != true) {
+                            openChoices(push = true)
+                        } else {
+                            busyWhile {
+                                when (val outcome = hardcover.push(bookUrl, asked = true)) {
+                                    // A match this device lost is still worth asking for.
+                                    HardcoverPushOutcome.NeedsMatch -> when (val found = hardcover.candidates(bookUrl)) {
+                                        is RemoteResult.Ok -> choices = PickerSession(found.value, push = true)
+                                        is RemoteResult.Failed -> message = failureMessage(found.reason)
+                                    }
+                                    else -> message = outcomeMessage(outcome)
+                                }
+                            }
+                        }
+                    },
                 ) { Text(stringResource(R.string.hardcover_push)) }
                 if (busy) BusyIndicator()
             }
@@ -484,71 +511,218 @@ internal class ReadingTracker(context: Context, private val database: LiseurData
             }
         }
 
-        choices?.let { editions ->
-            AlertDialog(
-                onDismissRequest = { choices = null },
-                title = { Text(stringResource(R.string.hardcover_book_choose)) },
-                text = {
-                    if (editions.isEmpty()) {
-                        Text(stringResource(R.string.hardcover_editions_none))
-                    } else {
-                        Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
-                            editions.forEach { edition ->
-                                ListItem(
-                                    headlineContent = { Text(edition.title.ifBlank { edition.bookTitle.orEmpty() }) },
-                                    supportingContent = {
-                                        Text(
-                                            listOfNotNull(
-                                                edition.format,
-                                                edition.releaseYear?.toString(),
-                                                edition.publisher,
-                                                edition.isbn13,
-                                            ).joinToString(" · "),
-                                        )
-                                    },
-                                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                                    modifier = Modifier.fillMaxWidth().clickable {
-                                        choices = null
-                                        ui.launch {
-                                            hardcover.choose(bookUrl, edition)
-                                            bookChanged(bookUrl)
-                                        }
-                                    },
-                                )
-                            }
+        choices?.let { session ->
+            EditionPicker(
+                session = session,
+                currentEditionId = link?.editionId,
+                onChoose = { edition ->
+                    val push = session.push
+                    choices = null
+                    busyWhile {
+                        when (
+                            val chosen = hardcover.chooseThenPush(
+                                candidates = session.context,
+                                bookUrl = bookUrl,
+                                edition = edition,
+                                push = push,
+                                asked = push,
+                            )
+                        ) {
+                            EditionChoice.Chosen -> bookChanged(bookUrl)
+                            else -> message = choiceMessage(chosen)
                         }
                     }
                 },
-                confirmButton = {
-                    TextButton(onClick = { choices = null }) { Text(stringResource(R.string.cancel)) }
-                },
+                onDismiss = { choices = null },
             )
         }
     }
 
     /** "Send to Hardcover" in the reader's menu, while an account is connected. */
     @Composable
-    fun ReaderMenuItem(bookUrl: String, savePlace: suspend () -> Boolean, close: () -> Unit) {
+    fun ReaderMenuItem(
+        bookUrl: String,
+        savePlace: suspend () -> Boolean,
+        close: () -> Unit,
+        requestEdition: ((bookUrl: String, push: Boolean) -> Unit)? = null,
+    ) {
         if (!remember { used() }) return
         val account by hardcover.account.collectAsState(initial = null)
         if (account == null) return
+        val link by remember(bookUrl) { hardcover.link(bookUrl) }.collectAsState(initial = null)
         DropdownMenuItem(
             text = { Text(stringResource(R.string.hardcover_push)) },
             leadingIcon = { Icon(Icons.Outlined.Sync, contentDescription = null) },
             onClick = {
                 close()
+                if (link?.matched != true && requestEdition != null) {
+                    requestEdition(bookUrl, true)
+                    return@DropdownMenuItem
+                }
                 scope.launch {
                     // The place on screen can be ahead of the stored one until it is saved.
                     val saved = withContext(Dispatchers.Main.immediate) { savePlace() }
-                    val text = if (saved) {
-                        outcomeMessage(hardcover.push(bookUrl, asked = true))
-                    } else {
-                        R.string.reader_position_not_saved
+                    if (!saved) {
+                        withContext(Dispatchers.Main) {
+                            Toast.makeText(context, R.string.reader_position_not_saved, Toast.LENGTH_SHORT).show()
+                        }
+                        return@launch
                     }
-                    withContext(Dispatchers.Main) {
-                        Toast.makeText(context, text, Toast.LENGTH_SHORT).show()
+                    when (val outcome = hardcover.push(bookUrl, asked = true)) {
+                        HardcoverPushOutcome.NeedsMatch if requestEdition != null -> {
+                            withContext(Dispatchers.Main) { requestEdition(bookUrl, true) }
+                        }
+                        else -> {
+                            val text = outcomeMessage(outcome)
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(context, text, Toast.LENGTH_SHORT).show()
+                            }
+                        }
                     }
                 }
+            },
+        )
+    }
+
+    @Composable
+    fun ReaderEditionPicker(
+        ask: String?,
+        pushes: Boolean,
+        onDone: () -> Unit,
+        savePlace: suspend () -> Boolean,
+    ) {
+        if (ask == null || !remember { used() }) return
+        val link by remember(ask) { hardcover.link(ask) }.collectAsState(initial = null)
+        var loadedFor by remember { mutableStateOf<String?>(null) }
+        var loaded by remember { mutableStateOf<PickerSession?>(null) }
+        LaunchedEffect(ask) {
+            if (loadedFor == ask) return@LaunchedEffect
+            loaded = null
+            when (val found = hardcover.candidates(ask)) {
+                is RemoteResult.Ok -> {
+                    loadedFor = ask
+                    loaded = PickerSession(found.value, pushes)
+                }
+                is RemoteResult.Failed -> {
+                    onDone()
+                    Toast.makeText(context, failureMessage(found.reason), Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+        if (loadedFor != ask) {
+            AlertDialog(
+                onDismissRequest = onDone,
+                title = { Text(stringResource(R.string.hardcover_book_choose)) },
+                text = {
+                    Row(
+                        horizontalArrangement = Arrangement.Center,
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                    ) { BusyIndicator() }
+                },
+                confirmButton = {
+                    TextButton(onClick = onDone) { Text(stringResource(R.string.cancel)) }
+                },
+            )
+            return
+        }
+        val session = loaded ?: return
+        EditionPicker(
+            session = session,
+            currentEditionId = link?.editionId,
+            onChoose = { edition ->
+                onDone()
+                scope.launch {
+                    if (pushes) {
+                        val saved = withContext(Dispatchers.Main.immediate) { savePlace() }
+                        if (!saved) {
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(context, R.string.reader_position_not_saved, Toast.LENGTH_SHORT).show()
+                            }
+                            return@launch
+                        }
+                    }
+                    val chosen = hardcover.chooseThenPush(
+                        candidates = session.context,
+                        bookUrl = ask,
+                        edition = edition,
+                        push = pushes,
+                        asked = pushes,
+                    )
+                    if (chosen == EditionChoice.Chosen && !pushes) {
+                        bookChanged(ask)
+                        return@launch
+                    }
+                    choiceMessage(chosen)?.let { text ->
+                        withContext(Dispatchers.Main) {
+                            Toast.makeText(context, text, Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+            },
+            onDismiss = onDone,
+        )
+    }
+
+    @Composable
+    private fun EditionPicker(
+        session: PickerSession,
+        currentEditionId: Long?,
+        onChoose: (HardcoverEdition) -> Unit,
+        onDismiss: () -> Unit,
+    ) {
+        val editions = session.context.editions
+        AlertDialog(
+            onDismissRequest = onDismiss,
+            title = { Text(stringResource(R.string.hardcover_book_choose)) },
+            text = {
+                if (editions.isEmpty()) {
+                    Text(stringResource(R.string.hardcover_editions_none))
+                } else {
+                    Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+                        editions.forEach { edition ->
+                            val row = editionRow(edition, currentEditionId)
+                            ListItem(
+                                leadingContent = {
+                                    Icon(
+                                        imageVector = if (row.icon == EditionIcon.AUDIOBOOK) {
+                                            Icons.Outlined.Headphones
+                                        } else {
+                                            Icons.Outlined.MenuBook
+                                        },
+                                        contentDescription = row.formatLabel,
+                                    )
+                                },
+                                headlineContent = { Text(row.headline) },
+                                supportingContent = {
+                                    Column {
+                                        if (row.supporting.isNotEmpty()) Text(row.supporting)
+                                        row.pages?.let {
+                                            Text(pluralStringResource(R.plurals.hardcover_edition_pages, it, it))
+                                        }
+                                        row.readers?.let {
+                                            Text(pluralStringResource(R.plurals.hardcover_edition_readers, it, it))
+                                        }
+                                    }
+                                },
+                                trailingContent = if (row.current) {
+                                    {
+                                        Icon(
+                                            Icons.Outlined.Check,
+                                            contentDescription = stringResource(R.string.hardcover_edition_current),
+                                        )
+                                    }
+                                } else {
+                                    null
+                                },
+                                colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                                modifier = Modifier.fillMaxWidth().clickable { onChoose(edition) },
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
             },
         )
     }
@@ -573,5 +747,19 @@ internal class ReadingTracker(context: Context, private val database: LiseurData
             HardcoverPushOutcome.NotConnected -> R.string.hardcover_error_token
             is HardcoverPushOutcome.Failed -> failureMessage(outcome.reason)
         }
+
+        @StringRes
+        /** Nothing to say for a choice made only, which the caller follows up itself. */
+        fun choiceMessage(choice: EditionChoice): Int? = when (choice) {
+            EditionChoice.Chosen -> null
+            is EditionChoice.Pushed -> outcomeMessage(choice.outcome)
+            EditionChoice.SwitchedOff -> R.string.hardcover_push_off
+            EditionChoice.NotConnected, EditionChoice.OtherAccount -> R.string.hardcover_error_token
+            EditionChoice.AlreadyGone -> null
+            is EditionChoice.Failed -> failureMessage(choice.reason)
+        }
     }
 }
+
+/** What an open picker was asked for: the lookup's validation context and whether choosing also pushes. */
+private data class PickerSession(val context: HardcoverCandidates, val push: Boolean)

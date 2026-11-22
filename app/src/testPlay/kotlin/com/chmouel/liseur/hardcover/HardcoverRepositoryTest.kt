@@ -326,11 +326,15 @@ class HardcoverRepositoryTest {
         assertEquals(8L, hardcover.entry?.editionId)
         assertEquals(300, hardcover.entry?.read?.pages)
 
+        val candidates = (repository().candidates(BOOK) as com.chmouel.liseur.data.remote.RemoteResult.Ok).value
         val chosen = HardcoverEdition(
             id = 5, bookId = 9, title = "The Hobbit", bookTitle = null, format = "ebook", pages = 300,
             isbn13 = null, isbn10 = null, releaseYear = null, publisher = null,
         )
-        repository().choose(BOOK, chosen)
+        assertEquals(
+            EditionChoice.Chosen,
+            repository().chooseThenPush(candidates, BOOK, chosen, push = false, asked = false),
+        )
         assertEquals(HardcoverPushOutcome.Pushed, repository().push(BOOK, asked = false))
         assertEquals(5L, hardcover.entry?.editionId)
         assertEquals(5L, hardcover.entry?.read?.editionId)
@@ -340,18 +344,27 @@ class HardcoverRepositoryTest {
 
     @Test
     fun `another edition of the same book keeps the rating sent and the dates owed`() = runBlocking {
+        signedIn()
+        shelve()
         dao.links[BOOK] = HardcoverBookLink(
             bookUrl = BOOK, hardcoverBookId = 9, editionId = 8, pushedRating = 4.5, datesPending = true,
         )
+        val candidates = (repository().candidates(BOOK) as com.chmouel.liseur.data.remote.RemoteResult.Ok).value
         val edition = HardcoverEdition(
             id = 5, bookId = 9, title = "The Hobbit", bookTitle = null, format = "ebook", pages = 300,
             isbn13 = null, isbn10 = null, releaseYear = null, publisher = null,
         )
-        repository().choose(BOOK, edition)
+        assertEquals(
+            EditionChoice.Chosen,
+            repository().chooseThenPush(candidates, BOOK, edition, push = false, asked = false),
+        )
         assertEquals(4.5, dao.links[BOOK]?.pushedRating)
         assertTrue(dao.links[BOOK]!!.datesPending)
 
-        repository().choose(BOOK, edition.copy(id = 6, bookId = 10))
+        assertEquals(
+            EditionChoice.Chosen,
+            repository().chooseThenPush(candidates, BOOK, edition.copy(id = 6, bookId = 10), push = false, asked = false),
+        )
         assertNull(dao.links[BOOK]?.pushedRating)
         assertFalse(dao.links[BOOK]!!.datesPending)
     }
@@ -420,7 +433,136 @@ class HardcoverRepositoryTest {
         hardcover.hits = listOf(Triple(9L, "The Hobbit", "J.R.R. Tolkien"), Triple(11L, "Bilbo's Last Song", "J.R.R. Tolkien"))
 
         val offered = (repository().candidates(BOOK) as com.chmouel.liseur.data.remote.RemoteResult.Ok).value
-        assertEquals(listOf(9L, 11L), offered.map { it.bookId })
+        assertEquals(listOf(9L, 11L), offered.editions.map { it.bookId })
+    }
+
+    @Test
+    fun `choosing with push and asked reports even when automatic sync is off`() = runBlocking {
+        signedIn(autoSync = false)
+        shelve(identifier = null, title = "Bilbo")
+        hardcover.hits = listOf(Triple(9L, "The Hobbit", "J.R.R. Tolkien"))
+        reading(ReadingStatus.READING, progression = 0.5, startedOn = "2026-03-01")
+
+        val candidates = (repository().candidates(BOOK) as com.chmouel.liseur.data.remote.RemoteResult.Ok).value
+        val edition = candidates.editions.single()
+        assertEquals(
+            EditionChoice.Pushed(HardcoverPushOutcome.Pushed),
+            repository().chooseThenPush(candidates, BOOK, edition, push = true, asked = true),
+        )
+        assertEquals(HardcoverStatus.CURRENTLY_READING, hardcover.entry?.status)
+        assertEquals(edition.id, dao.links[BOOK]?.editionId)
+    }
+
+    @Test
+    fun `choosing without push writes the link and queues nothing when automatic sync is off`() = runBlocking {
+        signedIn(autoSync = false)
+        shelve()
+        reading(ReadingStatus.READING, progression = 0.5)
+
+        val candidates = (repository().candidates(BOOK) as com.chmouel.liseur.data.remote.RemoteResult.Ok).value
+        val edition = candidates.editions.single()
+        hardcover.queries.clear()
+        assertEquals(
+            EditionChoice.Chosen,
+            repository().chooseThenPush(candidates, BOOK, edition, push = false, asked = false),
+        )
+        assertEquals(edition.id, dao.links[BOOK]?.editionId)
+        assertTrue(dao.pending.isEmpty())
+        assertTrue(hardcover.queries.isEmpty())
+    }
+
+    @Test
+    fun `choosing without push on an excluded book updates the link and keeps it excluded`() = runBlocking {
+        signedIn()
+        shelve()
+        reading(ReadingStatus.READING, progression = 0.5)
+        repository().setExcluded(BOOK, true)
+
+        val candidates = (repository().candidates(BOOK) as com.chmouel.liseur.data.remote.RemoteResult.Ok).value
+        val edition = candidates.editions.single()
+        hardcover.queries.clear()
+        assertEquals(
+            EditionChoice.Chosen,
+            repository().chooseThenPush(candidates, BOOK, edition, push = false, asked = false),
+        )
+        assertEquals(edition.id, dao.links[BOOK]?.editionId)
+        assertTrue(dao.links[BOOK]!!.excluded)
+        assertTrue(hardcover.queries.isEmpty())
+    }
+
+    @Test
+    fun `choosing with push on an excluded book returns switched off without calling hardcover`() = runBlocking {
+        signedIn()
+        shelve()
+        reading(ReadingStatus.READING, progression = 0.5)
+        repository().setExcluded(BOOK, true)
+
+        val candidates = (repository().candidates(BOOK) as com.chmouel.liseur.data.remote.RemoteResult.Ok).value
+        val edition = candidates.editions.single()
+        hardcover.queries.clear()
+        assertEquals(
+            EditionChoice.SwitchedOff,
+            repository().chooseThenPush(candidates, BOOK, edition, push = true, asked = true),
+        )
+        assertEquals(edition.id, dao.links[BOOK]?.editionId)
+        assertTrue(dao.links[BOOK]!!.excluded)
+        assertTrue(hardcover.queries.isEmpty())
+    }
+
+    @Test
+    fun `choosing after the account changed writes no link`() = runBlocking {
+        signedIn(userId = 42)
+        shelve()
+        val candidates = (repository().candidates(BOOK) as com.chmouel.liseur.data.remote.RemoteResult.Ok).value
+        val edition = candidates.editions.single()
+
+        signedIn(userId = 7)
+        assertEquals(
+            EditionChoice.OtherAccount,
+            repository().chooseThenPush(candidates, BOOK, edition, push = true, asked = true),
+        )
+        assertNull(dao.links[BOOK])
+    }
+
+    @Test
+    fun `choosing after the book is removed writes no link`() = runBlocking {
+        signedIn()
+        shelve()
+        val candidates = (repository().candidates(BOOK) as com.chmouel.liseur.data.remote.RemoteResult.Ok).value
+        val edition = candidates.editions.single()
+
+        repository().willForget(listOf(BOOK))
+        assertEquals(
+            EditionChoice.AlreadyGone,
+            repository().chooseThenPush(candidates, BOOK, edition, push = true, asked = true),
+        )
+        assertNull(dao.links[BOOK])
+
+        repository().forgetBooks(listOf(BOOK))
+        books.remove(BOOK)
+        assertEquals(
+            EditionChoice.AlreadyGone,
+            repository().chooseThenPush(candidates, BOOK, edition, push = false, asked = false),
+        )
+        assertNull(dao.links[BOOK])
+    }
+
+    @Test
+    fun `choosing after a replacement file settled at the same url writes no link`() = runBlocking {
+        signedIn()
+        shelve()
+        val candidates = (repository().candidates(BOOK) as com.chmouel.liseur.data.remote.RemoteResult.Ok).value
+        val edition = candidates.editions.single()
+
+        repository().willForget(listOf(BOOK))
+        repository().forgetBooks(listOf(BOOK))
+        books[BOOK] = checkNotNull(books[BOOK]).copy(workId = "urn:isbn:9780261102217", fileModifiedAt = 99L)
+
+        assertEquals(
+            EditionChoice.AlreadyGone,
+            repository().chooseThenPush(candidates, BOOK, edition, push = true, asked = true),
+        )
+        assertNull(dao.links[BOOK])
     }
 
     /** Hardcover with one reader's library of at most one book, the way the server answers. */
@@ -667,6 +809,6 @@ class HardcoverRepositoryTest {
     private companion object {
         const val BOOK = "file:///books/hobbit.epub"
         const val TODAY = "2026-05-01"
-        val PAGES = mapOf(5L to 300, 8L to 600)
+        val PAGES = mapOf(5L to 300, 8L to 600, 90L to 300)
     }
 }

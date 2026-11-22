@@ -18,6 +18,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import com.chmouel.liseur.companion.CharacterPane
 import com.chmouel.liseur.companion.CompanionSettingsScreen
 import com.chmouel.liseur.companion.CompanionViewModel
@@ -286,6 +287,17 @@ class ReaderActivity : FragmentActivity() {
                         onDismiss = viewModel::dismissBookSync,
                         onFurthest = viewModel::resolveFurthest,
                         onForgetFurthest = viewModel::forgetFurthest,
+                    )
+                    var editionAsk by rememberSaveable { mutableStateOf<String?>(null) }
+                    var editionAskPushes by rememberSaveable { mutableStateOf(false) }
+                    container.readingTracker.ReaderEditionPicker(
+                        ask = editionAsk,
+                        pushes = editionAskPushes,
+                        onDone = {
+                            editionAsk = null
+                            editionAskPushes = false
+                        },
+                        savePlace = viewModel::savePlaceNow,
                     )
                     // Only over a book that is actually on screen. Asked
                     // during the spinner it would be a question about a
@@ -694,14 +706,20 @@ class ReaderActivity : FragmentActivity() {
                                     bookOrbitGoTo = viewModel.bookOrbitGoTo,
                                     onBookOrbitCatchUpArrived = viewModel::onBookOrbitCatchUpArrived,
                                     onBookSyncAction = remember {
+                                        val requestEdition: (String, Boolean) -> Unit = { bookUrl, push ->
+                                            editionAsk = bookUrl
+                                            editionAskPushes = push
+                                        }
                                         ReaderBookSyncActions(
                                             start = viewModel::syncThisBook,
                                             registerCapture = { viewModel.preparePositionAction = it },
+                                            requestEdition = requestEdition,
                                             tracker = { close ->
                                                 container.readingTracker.ReaderMenuItem(
                                                     bookUrl = checkNotNull(target).id,
                                                     savePlace = viewModel::savePlaceNow,
                                                     close = close,
+                                                    requestEdition = requestEdition,
                                                 )
                                             },
                                         )

@@ -6561,6 +6561,7 @@ class ReaderProgressActions(
 class ReaderBookSyncActions(
     val start: () -> Unit,
     val registerCapture: (suspend () -> Boolean) -> Unit = {},
+    val requestEdition: ((bookUrl: String, push: Boolean) -> Unit)? = null,
     /** The build's reading tracker entry for the overflow menu; it is given what closes the menu. */
     val tracker: (@Composable (close: () -> Unit) -> Unit)? = null,
 )

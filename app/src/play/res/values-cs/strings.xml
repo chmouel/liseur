@@ -104,4 +104,17 @@
     <string name="hardcover_book_sync">Synchronizovat tuto knihu</string>
     <string name="hardcover_book_choose">Vybrat vydání</string>
     <string name="hardcover_editions_none">Hardcover nemá žádné vydání odpovídající této knize.</string>
+    <plurals name="hardcover_edition_pages">
+        <item quantity="one">%d strana</item>
+        <item quantity="few">%d strany</item>
+        <item quantity="many">%d strany</item>
+        <item quantity="other">%d stran</item>
+    </plurals>
+    <plurals name="hardcover_edition_readers">
+        <item quantity="one">%d čtenář</item>
+        <item quantity="few">%d čtenáři</item>
+        <item quantity="many">%d čtenáře</item>
+        <item quantity="other">%d čtenářů</item>
+    </plurals>
+    <string name="hardcover_edition_current">Aktuálně spárováno</string>
 </resources>

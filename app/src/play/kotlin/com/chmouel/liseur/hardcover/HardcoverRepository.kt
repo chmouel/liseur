@@ -33,6 +33,34 @@ sealed interface HardcoverPushOutcome {
     data class Failed(val reason: SyncFailure) : HardcoverPushOutcome
 }
 
+data class BookGeneration(
+    val id: Long,
+    val url: String,
+    val workId: String?,
+    val fileModifiedAt: Long?,
+    val linkGeneration: Long,
+) {
+    constructor(book: Book) : this(book.id, book.url, book.workId, book.fileModifiedAt, book.linkGeneration)
+}
+
+/** The editions found for a book, with the account and book generation they were looked up for. */
+data class HardcoverCandidates(
+    val accountUserId: Long,
+    val generation: BookGeneration?,
+    val editions: List<HardcoverEdition>,
+)
+
+/** What came of choosing an edition, and pushing when asked. */
+sealed interface EditionChoice {
+    data object Chosen : EditionChoice
+    data class Pushed(val outcome: HardcoverPushOutcome) : EditionChoice
+    data object NotConnected : EditionChoice
+    data object OtherAccount : EditionChoice
+    data object AlreadyGone : EditionChoice
+    data object SwitchedOff : EditionChoice
+    data class Failed(val reason: SyncFailure) : EditionChoice
+}
+
 /**
  * The Hardcover account, which edition each book is, and the push that
  * reports reading.
@@ -193,12 +221,17 @@ class HardcoverRepository(
      * the file's ISBN when it has one, else the editions of the best
      * title-and-author match.
      */
-    suspend fun candidates(bookUrl: String): RemoteResult<List<HardcoverEdition>> {
-        val token = dao.account()?.let(open) ?: return RemoteResult.Failed(SyncFailure.Unauthorised)
-        val book = bookFor(bookUrl) ?: return RemoteResult.Ok(emptyList())
+    suspend fun candidates(bookUrl: String): RemoteResult<HardcoverCandidates> {
+        val account = dao.account() ?: return RemoteResult.Failed(SyncFailure.Unauthorised)
+        val token = open(account) ?: return RemoteResult.Failed(SyncFailure.Unauthorised)
+        val book = bookFor(bookUrl)
+            ?: return RemoteResult.Ok(HardcoverCandidates(account.userId, null, emptyList()))
+        val generation = BookGeneration(book)
         when (val byIsbn = editionsByIsbn(token, book)) {
             is RemoteResult.Failed -> return byIsbn
-            is RemoteResult.Ok -> if (byIsbn.value.isNotEmpty()) return byIsbn
+            is RemoteResult.Ok -> if (byIsbn.value.isNotEmpty()) {
+                return RemoteResult.Ok(HardcoverCandidates(account.userId, generation, byIsbn.value))
+            }
         }
         val found = when (val searched = search(token, book)) {
             is RemoteResult.Failed -> return searched
@@ -206,23 +239,52 @@ class HardcoverRepository(
                 HardcoverMatch.confident(book.matchTitle, book.matchAuthor, searched.value)?.let(::listOf)
                     ?: searched.value.take(PICKER_HITS)
         }
-        if (found.isEmpty()) return RemoteResult.Ok(emptyList())
-        return client.editionsOfBooks(token, found.map { it.id })
+        if (found.isEmpty()) return RemoteResult.Ok(HardcoverCandidates(account.userId, generation, emptyList()))
+        return when (val editions = client.editionsOfBooks(token, found.map { it.id })) {
+            is RemoteResult.Failed -> editions
+            is RemoteResult.Ok ->
+                RemoteResult.Ok(HardcoverCandidates(account.userId, generation, editions.value))
+        }
     }
 
-    /** Remembers which edition a book is. */
-    suspend fun choose(bookUrl: String, edition: HardcoverEdition) = lock.withLock {
+    /**
+     * Remembers which edition a book is, if the account and book generation
+     * still match [candidates], and pushes when [push] is true.
+     */
+    suspend fun chooseThenPush(
+        candidates: HardcoverCandidates,
+        bookUrl: String,
+        edition: HardcoverEdition,
+        push: Boolean,
+        asked: Boolean,
+    ): EditionChoice = lock.withLock {
+        val account = dao.account() ?: return@withLock EditionChoice.NotConnected
+        if (account.userId != candidates.accountUserId) return@withLock EditionChoice.OtherAccount
+        val expected = candidates.generation ?: return@withLock EditionChoice.AlreadyGone
+        val current = bookFor(bookUrl) ?: return@withLock EditionChoice.AlreadyGone
+        if (!current.sameGeneration(expected) || dao.isForgetting(bookUrl)) {
+            return@withLock EditionChoice.AlreadyGone
+        }
+        val link = chooseLocked(bookUrl, edition)
+        if (!push) return@withLock EditionChoice.Chosen
+        if (link.excluded) return@withLock EditionChoice.SwitchedOff
+        if (!asked && !account.autoSync) return@withLock EditionChoice.Chosen
+        if (!asked && account.tokenRefused) return@withLock EditionChoice.Failed(SyncFailure.Unauthorised)
+        EditionChoice.Pushed(pushNoting(bookUrl, asked))
+    }
+
+    private suspend fun chooseLocked(bookUrl: String, edition: HardcoverEdition): HardcoverBookLink {
         val link = dao.link(bookUrl) ?: HardcoverBookLink(bookUrl = bookUrl)
         // The same Hardcover book keeps the rating this device set there and a finish still owed.
         val sameBook = link.hardcoverBookId == edition.bookId
-        dao.upsertLink(
-            link.matchedWith(edition).copy(
-                pushedAt = null,
-                pushedRating = link.pushedRating.takeIf { sameBook },
-                datesPending = link.datesPending && sameBook,
-                editionChosen = true,
-            ),
+        val updated = link.matchedWith(edition).copy(
+            pushedAt = null,
+            pushedRating = link.pushedRating.takeIf { sameBook },
+            datesPending = link.datesPending && sameBook,
+            editionChosen = true,
         )
+        dao.upsertLink(updated)
+        return updated
     }
 
     /**
@@ -383,3 +445,7 @@ class HardcoverRepository(
 // them: a renamed book must not be matched to whatever its new name finds.
 private val Book.matchTitle: String? get() = stableTitle ?: title
 private val Book.matchAuthor: String? get() = stableAuthor ?: author
+
+private fun Book.sameGeneration(other: BookGeneration): Boolean =
+    id == other.id && url == other.url && workId == other.workId &&
+        fileModifiedAt == other.fileModifiedAt && linkGeneration == other.linkGeneration

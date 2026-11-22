@@ -68,7 +68,7 @@ class HardcoverClientTest {
     fun `an edition is looked up by either spelling of its isbn`() = runBlocking {
         answer(
             """{"editions":[{"id":5,"book_id":9,"title":"The Hobbit","edition_format":"ebook",
-            "pages":300,"isbn_13":"9780547928227","isbn_10":null,"release_year":2012,
+            "pages":300,"isbn_13":"9780547928227","isbn_10":null,"release_year":2012,"users_count":48,
             "book":{"title":"The Hobbit"},"publisher":{"name":"Mariner"}}]}""",
         )
 
@@ -79,11 +79,13 @@ class HardcoverClientTest {
             HardcoverEdition(
                 id = 5, bookId = 9, title = "The Hobbit", bookTitle = "The Hobbit",
                 format = "ebook", pages = 300, isbn13 = "9780547928227", isbn10 = null,
-                releaseYear = 2012, publisher = "Mariner",
+                releaseYear = 2012, publisher = "Mariner", usersCount = 48,
             ),
             edition,
         )
-        val variables = sent().getJSONObject("variables")
+        val sent = sent()
+        assertTrue(sent.getString("query").contains("users_count"))
+        val variables = sent.getJSONObject("variables")
         assertEquals("9780547928227", variables.getString("isbn13"))
         assertEquals("054792822X", variables.getString("isbn10"))
     }
