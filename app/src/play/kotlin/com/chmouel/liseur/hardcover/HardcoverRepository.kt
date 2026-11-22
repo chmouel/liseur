@@ -201,6 +201,16 @@ class HardcoverRepository(
         dao.upsertLink(link.copy(excluded = excluded))
     }
 
+    /** Forgets which Hardcover edition one book is, with its queued push and rating and review bases. */
+    suspend fun unlink(bookUrl: String) = lock.withLock {
+        inTransaction {
+            val urls = listOf(bookUrl)
+            dao.forgetLinks(urls)
+            dao.forgetPending(urls)
+            dao.forgetEvaluations(urls)
+        }
+    }
+
     /**
      * Queues a book for the next drain, when an automatic push is wanted.
      * Answers whether anything was queued.
