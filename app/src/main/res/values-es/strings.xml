@@ -2164,7 +2164,7 @@
     <string name="evaluation_unrated">Sin valoración</string>
     <string name="book_details_reading_progress">Progreso de lectura</string>
     <string name="book_details_description">Descripción</string>
-    <string name="evaluation_private_synced">Privado · sincronizado con liseur-sync</string>
+    <string name="evaluation_private_synced">Privado · liseur-sync</string>
     <string name="evaluation_private_local">Privado · en este dispositivo</string>
     <string name="evaluation_private_local_detail">Privado. Guardado solo en este dispositivo.</string>
     <string name="evaluation_empty_hint">Valora este libro o añade una reseña privada.</string>

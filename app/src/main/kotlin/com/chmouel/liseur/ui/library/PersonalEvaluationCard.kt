@@ -5,6 +5,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -87,6 +89,7 @@ internal fun nextStarRating(current: Int?, tappedStar: Int): Int {
     return if (star > 1 && current == full) half else full
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun PersonalEvaluationCard(
     details: BookDetails,
@@ -132,7 +135,7 @@ internal fun PersonalEvaluationCard(
                         )
                         Text(
                             stringResource(
-                                if (details.syncedWithLiseurSync) {
+                                if (details.liseurSyncConfigured) {
                                     R.string.evaluation_private_synced
                                 } else {
                                     R.string.evaluation_private_local
@@ -144,9 +147,11 @@ internal fun PersonalEvaluationCard(
                     }
                 }
 
-                Row(
+                FlowRow(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    itemVerticalAlignment = Alignment.CenterVertically,
                 ) {
                     StarRow(
                         rating = rating,
@@ -156,19 +161,22 @@ internal fun PersonalEvaluationCard(
                         },
                     )
                     if (rating != null) {
-                        Spacer(Modifier.width(8.dp))
-                        RatingReadout(rating)
-                        Spacer(Modifier.weight(1f))
-                        IconButton(
-                            onClick = { onSet(PersonalEvaluation.RATING, null) },
-                            modifier = Modifier.size(36.dp),
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
-                            Icon(
-                                Icons.Outlined.Close,
-                                contentDescription = stringResource(R.string.evaluation_clear_rating),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(18.dp),
-                            )
+                            RatingReadout(rating)
+                            IconButton(
+                                onClick = { onSet(PersonalEvaluation.RATING, null) },
+                                modifier = Modifier.size(36.dp),
+                            ) {
+                                Icon(
+                                    Icons.Outlined.Close,
+                                    contentDescription = stringResource(R.string.evaluation_clear_rating),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                            }
                         }
                     }
                 }
@@ -217,12 +225,10 @@ internal fun PersonalEvaluationCard(
             ReviewEditorSheet(
                 bookUrl = book.url,
                 initialReview = review,
-                syncedWithLiseurSync = details.syncedWithLiseurSync,
+                liseurSyncConfigured = details.liseurSyncConfigured,
                 onDismiss = { editingReview = false },
                 onSave = { normalized ->
-                    if (normalized != review) {
-                        onSet(PersonalEvaluation.REVIEW, normalized)
-                    }
+                    onSet(PersonalEvaluation.REVIEW, normalized)
                     editingReview = false
                 },
             )
@@ -309,10 +315,11 @@ private fun StarRow(
 private fun ReviewEditorSheet(
     bookUrl: String,
     initialReview: String?,
-    syncedWithLiseurSync: Boolean,
+    liseurSyncConfigured: Boolean,
     onDismiss: () -> Unit,
     onSave: (String?) -> Unit,
 ) {
+    val originalReview by rememberSaveable(bookUrl) { mutableStateOf(initialReview) }
     var review by rememberSaveable(bookUrl) { mutableStateOf(initialReview.orEmpty()) }
     val normalized = review.takeIf { it.isNotBlank() }
     val valid = PersonalEvaluation.valid(PersonalEvaluation.REVIEW, normalized)
@@ -364,7 +371,7 @@ private fun ReviewEditorSheet(
                     } else {
                         Text(
                             stringResource(
-                                if (syncedWithLiseurSync) {
+                                if (liseurSyncConfigured) {
                                     R.string.evaluation_private
                                 } else {
                                     R.string.evaluation_private_local_detail
@@ -383,7 +390,13 @@ private fun ReviewEditorSheet(
                     Text(stringResource(R.string.cancel))
                 }
                 Button(
-                    onClick = { onSave(normalized) },
+                    onClick = {
+                        if (normalized != originalReview) {
+                            onSave(normalized)
+                        } else {
+                            onDismiss()
+                        }
+                    },
                     enabled = valid,
                     shape = CircleShape,
                 ) {
