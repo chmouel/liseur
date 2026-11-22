@@ -26,7 +26,16 @@ class DetailsHeuristicsTest {
     @Test
     fun `scripts decide russian and chinese`() {
         assertEquals("ru", TextLanguage.guess("Розмари присоединяется к экипажу корабля и узнаёт много нового о галактике."))
+        assertEquals("uk", TextLanguage.guess("Розмарі приєднується до екіпажу корабля і дізнається багато нового про галактику."))
+        assertNull(TextLanguage.guess("Розмари на борту корабля в галактике"))
         assertEquals("zh", TextLanguage.guess("罗斯玛丽加入了旅行者号的船员队伍，她并没有抱太大的期望，但这艘船给了她一切。"))
+    }
+
+    @Test
+    fun `a ukrainian description is offered for a ukrainian book`() {
+        assertFalse(
+            TextLanguage.differs("Розмарі приєднується до екіпажу корабля і дізнається багато нового про галактику.", null, "uk"),
+        )
     }
 
     @Test

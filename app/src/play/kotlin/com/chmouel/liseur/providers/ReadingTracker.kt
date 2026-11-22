@@ -420,12 +420,12 @@ internal class ReadingTracker(context: Context, private val database: LiseurData
      * Hardcover's cover, downloaded once for both the preview and the save,
      * or null when it cannot be had or looks like the cover the book has.
      */
-    private suspend fun newCoverBytes(url: String, book: Book): ByteArray? = withContext(Dispatchers.IO) {
-        val bytes = HardcoverImages.downloadCover(url) ?: return@withContext null
-        val theirs = HardcoverImages.coverHash(bytes) ?: return@withContext null
+    private suspend fun newCover(url: String, book: Book): CoverFetch = withContext(Dispatchers.IO) {
+        val bytes = HardcoverImages.downloadCover(url) ?: return@withContext CoverFetch.Failed
+        val theirs = HardcoverImages.coverHash(bytes) ?: return@withContext CoverFetch.Failed
         val current = book.effectiveCoverPath?.let(::File)?.takeIf { it.isFile && it.length() <= MAX_COVER_SOURCE_BYTES }
         val ours = current?.let { runCatching { HardcoverImages.coverHash(it.readBytes()) }.getOrNull() }
-        bytes.takeUnless { ours != null && CoverSimilarity.looksSame(ours, theirs) }
+        if (ours != null && CoverSimilarity.looksSame(ours, theirs)) CoverFetch.Unchanged else CoverFetch.Downloaded(bytes)
     }
 
     /**
@@ -670,11 +670,13 @@ internal class ReadingTracker(context: Context, private val database: LiseurData
                             return@busyWhile
                         }
                         var proposals = proposeUpdates(local, remote)
-                        val coverBytes = proposals.firstOrNull { it.field == DetailField.COVER }?.newCoverUrl
-                            ?.let { url -> newCoverBytes(url, book) }
+                        val cover = proposals.firstOrNull { it.field == DetailField.COVER }?.newCoverUrl
+                            ?.let { url -> newCover(url, book) }
+                        val coverBytes = (cover as? CoverFetch.Downloaded)?.bytes
                         if (coverBytes == null) proposals = proposals.filter { it.field != DetailField.COVER }
+                        if (cover == CoverFetch.Failed) message = R.string.hardcover_update_details_cover_only_failed
                         if (proposals.isEmpty()) {
-                            message = R.string.hardcover_update_details_empty
+                            if (cover != CoverFetch.Failed) message = R.string.hardcover_update_details_empty
                         } else {
                             review = DetailsReviewSession(book = book, proposals = proposals, coverBytes = coverBytes)
                         }
@@ -1077,6 +1079,13 @@ internal fun hardcoverBookDetailsView(link: HardcoverBookLink?): HardcoverBookDe
             showUpdateDetails = true,
         )
     }
+}
+
+/** What came of fetching Hardcover's cover for the details update. */
+private sealed interface CoverFetch {
+    data class Downloaded(val bytes: ByteArray) : CoverFetch
+    data object Unchanged : CoverFetch
+    data object Failed : CoverFetch
 }
 
 private data class DetailsReviewSession(

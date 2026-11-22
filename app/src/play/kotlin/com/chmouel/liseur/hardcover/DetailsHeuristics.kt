@@ -23,7 +23,7 @@ object TextLanguage {
 
     private val THREE_LETTER = mapOf(
         "eng" to "en", "fre" to "fr", "fra" to "fr", "spa" to "es", "ger" to "de", "deu" to "de",
-        "ita" to "it", "por" to "pt", "cze" to "cs", "ces" to "cs", "rus" to "ru", "chi" to "zh", "zho" to "zh",
+        "ita" to "it", "por" to "pt", "cze" to "cs", "ces" to "cs", "rus" to "ru", "ukr" to "uk", "chi" to "zh", "zho" to "zh", "jpn" to "ja",
     )
 
     private const val MIN_WORDS = 12
@@ -37,8 +37,22 @@ object TextLanguage {
         if (letters.length >= MIN_WORDS) {
             val cyrillic = letters.count { Character.UnicodeScript.of(it.code) == Character.UnicodeScript.CYRILLIC }
             val han = letters.count { Character.UnicodeScript.of(it.code) == Character.UnicodeScript.HAN }
-            if (cyrillic * 2 > letters.length) return "ru"
-            if (han * 2 > letters.length) return "zh"
+            if (cyrillic * 2 > letters.length) {
+                // The script alone does not tell Russian from Ukrainian and the rest; their own letters do.
+                val lower = letters.lowercase(Locale.ROOT)
+                return when {
+                    lower.any { it in UKRAINIAN_ONLY } -> "uk"
+                    lower.any { it in RUSSIAN_ONLY } -> "ru"
+                    else -> null
+                }
+            }
+            if (han * 2 > letters.length) {
+                val kana = letters.any {
+                    val script = Character.UnicodeScript.of(it.code)
+                    script == Character.UnicodeScript.HIRAGANA || script == Character.UnicodeScript.KATAKANA
+                }
+                return if (kana) "ja" else "zh"
+            }
         }
         val words = WORD.findAll(plain.lowercase(Locale.ROOT)).map { it.value }.toList()
         if (words.size < MIN_WORDS) return null
@@ -70,6 +84,9 @@ object TextLanguage {
         val ours = guess(currentDescription) ?: codeOf(bookLanguage) ?: return false
         return ours != theirs
     }
+
+    private const val UKRAINIAN_ONLY = "іїєґ"
+    private const val RUSSIAN_ONLY = "ыэъё"
 
     private val TAG = Regex("<[^>]+>")
     private val WORD = Regex("\\p{L}+")
