@@ -158,6 +158,11 @@ class BookOrbitSetupClient(
             Probe.Failed(
                 SetupFailure.Unreachable("No answer", httpMayWork = baseUrl.startsWith("https://")),
             )
+        } catch (_: IllegalArgumentException) {
+            // What a reader typed survives normalisation but not OkHttp's
+            // parser: an address with a space in it, or a port that is
+            // not one. The scheme is ours, so the address is at fault.
+            Probe.Failed(SetupFailure.WrongServer)
         }
     }
 

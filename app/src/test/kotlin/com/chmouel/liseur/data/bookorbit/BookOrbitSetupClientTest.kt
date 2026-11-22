@@ -149,6 +149,18 @@ class BookOrbitSetupClientTest {
     }
 
     @Test
+    fun `an address that cannot be a URL is the reader's typo, not a crash`() = runBlocking {
+        // Both survive normalisation and are refused by OkHttp while the
+        // request is built.
+        for (typed in listOf("127.0.0.1:99999", "orbit example.com")) {
+            val result = BookOrbitSetupClient().connect(typed, password)
+
+            assertEquals(typed, SetupFailure.WrongServer, (result as SetupResult.Failure).reason)
+        }
+        assertEquals(0, server.requestCount)
+    }
+
+    @Test
     fun `a reconnect without the live session cannot spend a refresh token`() = runBlocking {
         // The real composition root gives SetupClient the shared
         // BookOrbitSession. A standalone setup client must refuse rather
