@@ -33,6 +33,8 @@ data class HardcoverShelfState(
     /** The latest read, open or finished. */
     val read: HardcoverRead?,
     val editionId: Long? = null,
+    /** Public review text (`review_markdown` falling back to `review_raw`), or null when blank. */
+    val review: String? = null,
 )
 
 /** What this device knows about the book, from stored state only. */
@@ -47,18 +49,28 @@ data class LocalReading(
     val finishedOn: String?,
     /** Hardcover's scale: 1 to 5 in halves, or null when unrated here. */
     val rating: Double?,
+    /** Liseur wire rating `"2"`..`"10"`, or null when unrated here. */
+    val ratingRaw: String? = rating?.let(HardcoverEvaluationPlan::ratingToLocal),
+    /** Local review text, or null when absent. */
+    val review: String? = null,
 )
 
 /** The one write to the library entry a push may need. */
 sealed interface HardcoverEntryStep {
-    data class Add(val statusId: Int, val rating: Double?) : HardcoverEntryStep
+    data class Add(
+        val statusId: Int,
+        val rating: Double?,
+        val review: String? = null,
+    ) : HardcoverEntryStep
 
-    /** Null fields are left as they are; [clearRating] sends an explicit null. */
+    /** Null fields are left as they are; [clearRating] and [clearReview] send explicit nulls. */
     data class Update(
         val statusId: Int?,
         val rating: Double?,
         val clearRating: Boolean = false,
         val editionId: Long? = null,
+        val review: String? = null,
+        val clearReview: Boolean = false,
     ) : HardcoverEntryStep
 }
 
@@ -107,26 +119,34 @@ object HardcoverPlan {
 
     /**
      * The entry write, or null when the entry already says it.
-     * [pushedRating] is the rating this device last sent, if any, and
-     * [chosenEdition] the edition the reader picked here and not yet sent.
+     * [ratingDecision] and [reviewDecision] come from [HardcoverEvaluationPlan],
+     * and [chosenEdition] is the edition the reader picked here and not yet sent.
      */
     fun entryStep(
         remote: HardcoverShelfState,
         local: LocalReading,
-        pushedRating: Double?,
         chosenEdition: Long? = null,
+        ratingDecision: HardcoverEvaluationDecision = HardcoverEvaluationDecision.NoChange(),
+        reviewDecision: HardcoverEvaluationDecision = HardcoverEvaluationDecision.NoChange(),
     ): HardcoverEntryStep? {
         val target = targetStatus(local)
+        val pushRating = (ratingDecision as? HardcoverEvaluationDecision.PushToRemote)
+        val pushReview = (reviewDecision as? HardcoverEvaluationDecision.PushToRemote)
+        val ratingToSet = pushRating?.value?.let(::ratingFromLocal)
+        val clearRating = pushRating != null && pushRating.value == null && remote.rating != null
+        val reviewToSet = pushReview?.value
+        val clearReview = pushReview != null && pushReview.value == null && remote.review != null
         if (remote.userBookId == null) {
-            return target?.let { HardcoverEntryStep.Add(it, local.rating) }
+            return target?.let { HardcoverEntryStep.Add(it, ratingToSet, reviewToSet) }
         }
         val status = target?.takeIf { it != remote.statusId && mayMove(remote.statusId, it, local.chosen) }
-        val rating = local.rating?.takeIf { it != remote.rating }
-        val clearRating = local.rating == null && remote.rating != null && pushedRating != null &&
-            remote.rating == pushedRating
+        val rating = ratingToSet?.takeIf { it != remote.rating }
         val edition = chosenEdition?.takeIf { it != remote.editionId }
-        if (status == null && rating == null && !clearRating && edition == null) return null
-        return HardcoverEntryStep.Update(status, rating, clearRating, edition)
+        val review = reviewToSet?.takeIf { !HardcoverEvaluationPlan.reviewsEquivalent(it, remote.review) }
+        if (status == null && rating == null && !clearRating && edition == null && review == null && !clearReview) {
+            return null
+        }
+        return HardcoverEntryStep.Update(status, rating, clearRating, edition, review, clearReview)
     }
 
     private fun mayMove(from: Int?, to: Int, chosen: Boolean): Boolean = when (from) {

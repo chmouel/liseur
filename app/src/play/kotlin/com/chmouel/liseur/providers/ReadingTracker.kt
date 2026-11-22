@@ -1,9 +1,11 @@
 package com.chmouel.liseur.providers
 
 import android.content.Context
+import android.graphics.BitmapFactory
 import android.widget.Toast
 import androidx.annotation.StringRes
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -65,6 +67,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
@@ -79,11 +83,11 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.room.withTransaction
-import coil3.compose.AsyncImage
 import com.chmouel.liseur.R
 import com.chmouel.liseur.container
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.LiseurDatabase
+import com.chmouel.liseur.data.library.BookMetadataOverrideRepository.Companion.MAX_COVER_SOURCE_BYTES
 import com.chmouel.liseur.data.library.FieldEdit
 import com.chmouel.liseur.data.library.fileBookInSeries
 import com.chmouel.liseur.data.remote.RemoteResult
@@ -96,15 +100,19 @@ import com.chmouel.liseur.domain.readingStatusFor
 import com.chmouel.liseur.domain.resolveMetadata
 import com.chmouel.liseur.domain.seriesIndexLabel
 import com.chmouel.liseur.domain.validSeriesPosition
+import com.chmouel.liseur.hardcover.CoverSimilarity
 import com.chmouel.liseur.hardcover.DetailField
 import com.chmouel.liseur.hardcover.DetailProposal
 import com.chmouel.liseur.hardcover.EditionChoice
 import com.chmouel.liseur.hardcover.HardcoverAccount
 import com.chmouel.liseur.hardcover.HardcoverBookLink
 import com.chmouel.liseur.hardcover.HardcoverClient
+import com.chmouel.liseur.hardcover.HardcoverConflictResolution
 import com.chmouel.liseur.hardcover.HardcoverConnectOutcome
 import com.chmouel.liseur.hardcover.HardcoverDatabase
 import com.chmouel.liseur.hardcover.HardcoverEdition
+import com.chmouel.liseur.hardcover.HardcoverEvaluation
+import com.chmouel.liseur.hardcover.HardcoverEvaluationPlan
 import com.chmouel.liseur.hardcover.HardcoverImages
 import com.chmouel.liseur.hardcover.HardcoverPlan
 import com.chmouel.liseur.hardcover.HardcoverPushOutcome
@@ -125,6 +133,8 @@ import com.chmouel.liseur.ui.settings.SwitchRow
 import com.chmouel.liseur.ui.settings.search.SettingsFocus
 import com.chmouel.liseur.ui.settings.search.settingsAnchor
 import com.chmouel.liseur.ui.windowWidth
+import java.io.File
+import java.text.NumberFormat
 import java.time.Instant
 import java.time.ZoneId
 import kotlinx.coroutines.CoroutineScope
@@ -154,6 +164,7 @@ internal class ReadingTracker(context: Context, private val database: LiseurData
             dao = store.hardcover(),
             bookFor = { database.bookDao().getByUrl(it) },
             localFor = ::localReading,
+            writeLocalEvaluation = ::writeLocalEvaluation,
             inTransaction = { work -> store.withTransaction { work() } },
         )
     }
@@ -269,6 +280,7 @@ internal class ReadingTracker(context: Context, private val database: LiseurData
         val override = progress?.override ?: FinishedOverride.NONE
         val status = readingStatusFor(progress?.totalProgression, override, progress?.partialCoverage == true)
         val rating = database.bookEvaluationDao().get(bookUrl, PersonalEvaluation.RATING)?.value
+        val review = database.bookEvaluationDao().get(bookUrl, PersonalEvaluation.REVIEW)?.value
         return LocalReading(
             status = status,
             chosen = override != FinishedOverride.NONE && override != FinishedOverride.UNREAD,
@@ -276,7 +288,33 @@ internal class ReadingTracker(context: Context, private val database: LiseurData
             startedOn = database.readingSessionDao().startedAtFor(bookUrl).minOrNull()?.let(::day),
             finishedOn = book.finishedAt?.let(::day),
             rating = HardcoverPlan.ratingFromLocal(rating),
+            ratingRaw = rating,
+            review = review,
         )
+    }
+
+    private suspend fun writeLocalEvaluation(
+        bookUrl: String,
+        field: String,
+        expected: String?,
+        value: String?,
+    ): Boolean {
+        val written = database.withTransaction {
+            val book = database.bookDao().getByUrl(bookUrl) ?: return@withTransaction false
+            val current = database.bookEvaluationDao().get(bookUrl, field)?.value
+            if (current != expected) return@withTransaction false
+            database.bookEvaluationDao().edit(
+                bookUrl = bookUrl,
+                field = field,
+                value = value,
+                title = book.title,
+                author = book.author.orEmpty(),
+                now = System.currentTimeMillis(),
+            )
+            true
+        }
+        if (written) context.container.requestBookSync(bookUrl)
+        return written
     }
 
     private fun day(millis: Long): String =
@@ -284,14 +322,14 @@ internal class ReadingTracker(context: Context, private val database: LiseurData
 
     private suspend fun localDetails(bookUrl: String): Pair<Book, LocalDetails>? {
         val book = database.bookDao().getByUrl(bookUrl) ?: return null
+        val resolved = database.bookMetadataDao().forBook(bookUrl)
+            .mapNotNull { row -> MetadataSource.of(row.source)?.let { it to row.toSnapshot() } }
+            .toMap()
+            .let(::resolveMetadata)
         val description = if (book.descriptionOverridden) {
             book.userDescription?.takeIf { it.isNotEmpty() }
         } else {
-            database.bookMetadataDao().forBook(bookUrl)
-                .mapNotNull { row -> MetadataSource.of(row.source)?.let { it to row.toSnapshot() } }
-                .toMap()
-                .let(::resolveMetadata)
-                ?.description
+            resolved?.description
         }
         val link = hardcover.currentLink(bookUrl)
         val details = LocalDetails(
@@ -303,6 +341,7 @@ internal class ReadingTracker(context: Context, private val database: LiseurData
             importedCoverUrl = link?.importedCoverUrl?.takeIf {
                 book.coverOverridden && book.userCoverSha256 != null && book.userCoverSha256 == link.importedCoverSha256
             },
+            language = resolved?.languages?.firstOrNull(),
         )
         return book to details
     }
@@ -315,6 +354,7 @@ internal class ReadingTracker(context: Context, private val database: LiseurData
         reviewed: Book,
         proposals: List<DetailProposal>,
         selected: Set<DetailField>,
+        coverBytes: ByteArray?,
     ): Int? {
         val bookUrl = reviewed.url
         val byField = proposals.filter { it.field in selected }.associateBy { it.field }
@@ -352,7 +392,7 @@ internal class ReadingTracker(context: Context, private val database: LiseurData
             applied = true
         }
         byField[DetailField.COVER]?.newCoverUrl?.let { url ->
-            val sha256 = HardcoverImages.downloadCover(url)?.let { bytes ->
+            val sha256 = coverBytes?.let { bytes ->
                 appContainer.metadataOverrides.coverFromBytes(bookUrl, bytes, expected = reviewed)
             }
             if (sha256 != null) {
@@ -367,6 +407,18 @@ internal class ReadingTracker(context: Context, private val database: LiseurData
             }
         }
         return R.string.hardcover_update_details_done
+    }
+
+    /**
+     * Hardcover's cover, downloaded once for both the preview and the save,
+     * or null when it cannot be had or looks like the cover the book has.
+     */
+    private suspend fun newCoverBytes(url: String, book: Book): ByteArray? = withContext(Dispatchers.IO) {
+        val bytes = HardcoverImages.downloadCover(url) ?: return@withContext null
+        val theirs = HardcoverImages.coverHash(bytes) ?: return@withContext null
+        val current = book.effectiveCoverPath?.let(::File)?.takeIf { it.isFile && it.length() <= MAX_COVER_SOURCE_BYTES }
+        val ours = current?.let { runCatching { HardcoverImages.coverHash(it.readBytes()) }.getOrNull() }
+        bytes.takeUnless { ours != null && CoverSimilarity.looksSame(ours, theirs) }
     }
 
     /**
@@ -406,6 +458,12 @@ internal class ReadingTracker(context: Context, private val database: LiseurData
                 Text(
                     text = stringResource(R.string.hardcover_intro),
                     style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 4.dp),
+                )
+                Text(
+                    text = stringResource(R.string.hardcover_intro_evaluations),
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 12.dp),
                 )
@@ -534,20 +592,48 @@ internal class ReadingTracker(context: Context, private val database: LiseurData
     fun BookDetailsSection(bookUrl: String, modifier: Modifier) {
         if (!remember { used() }) return
         val account by hardcover.account.collectAsState(initial = null)
-        if (account == null) return
+        val currentAccount = account ?: return
         val link by remember(bookUrl) { hardcover.link(bookUrl) }.collectAsState(initial = null)
+        val evaluations by remember(bookUrl) { hardcover.evaluations(bookUrl) }.collectAsState(initial = emptyList())
+        val conflicts = remember(evaluations) { evaluations.filter { it.conflict } }
         val ui = rememberCoroutineScope()
         var busy by remember { mutableStateOf(false) }
         var message by remember(bookUrl) { mutableStateOf<Int?>(null) }
         var choices by remember(bookUrl) { mutableStateOf<PickerSession?>(null) }
         var review by remember(bookUrl) { mutableStateOf<DetailsReviewSession?>(null) }
         val view = hardcoverBookDetailsView(link)
+        var autoChecked by remember(bookUrl) { mutableStateOf(false) }
+        LaunchedEffect(bookUrl, currentAccount.userId, currentAccount.autoSync, link?.matched, link?.excluded) {
+            if (autoChecked) return@LaunchedEffect
+            val currentLink = link ?: return@LaunchedEffect
+            if (!currentAccount.autoSync || !currentLink.matched || currentLink.excluded) return@LaunchedEffect
+            autoChecked = true
+            val pushedAt = currentLink.pushedAt
+            if (pushedAt != null && System.currentTimeMillis() - pushedAt < DETAILS_CHECK_THROTTLE_MILLIS) {
+                return@LaunchedEffect
+            }
+            scope.launch { runCatching { hardcover.push(bookUrl, asked = false) } }
+        }
         fun busyWhile(work: suspend () -> Unit) {
             busy = true
             message = null
             ui.launch {
                 work()
                 busy = false
+            }
+        }
+        fun resolveConflict(field: String, keepLocal: Boolean) {
+            busyWhile {
+                message = runCatching {
+                    val outcome = scope.async {
+                        if (keepLocal) {
+                            hardcover.resolveConflictKeepLocal(bookUrl, field)
+                        } else {
+                            hardcover.resolveConflictUseRemote(bookUrl, field)
+                        }
+                    }.await()
+                    resolutionMessage(outcome)
+                }.getOrElse { R.string.hardcover_error_other }
             }
         }
         fun openChoices(push: Boolean) {
@@ -569,11 +655,14 @@ internal class ReadingTracker(context: Context, private val database: LiseurData
                             message = R.string.hardcover_error_other
                             return@busyWhile
                         }
-                        val proposals = proposeUpdates(local, remote)
+                        var proposals = proposeUpdates(local, remote)
+                        val coverBytes = proposals.firstOrNull { it.field == DetailField.COVER }?.newCoverUrl
+                            ?.let { url -> newCoverBytes(url, book) }
+                        if (coverBytes == null) proposals = proposals.filter { it.field != DetailField.COVER }
                         if (proposals.isEmpty()) {
                             message = R.string.hardcover_update_details_empty
                         } else {
-                            review = DetailsReviewSession(book = book, proposals = proposals)
+                            review = DetailsReviewSession(book = book, proposals = proposals, coverBytes = coverBytes)
                         }
                     }
                 }
@@ -662,6 +751,15 @@ internal class ReadingTracker(context: Context, private val database: LiseurData
                 }
                 if (busy) BusyIndicator()
             }
+            if (conflicts.isNotEmpty() && link?.excluded != true) {
+                EvaluationConflictsCard(
+                    conflicts = conflicts,
+                    busy = busy,
+                    onKeepLocal = { field -> resolveConflict(field, keepLocal = true) },
+                    onUseRemote = { field -> resolveConflict(field, keepLocal = false) },
+                    modifier = Modifier.padding(top = 12.dp),
+                )
+            }
             message?.let {
                 Text(
                     text = stringResource(it),
@@ -708,7 +806,7 @@ internal class ReadingTracker(context: Context, private val database: LiseurData
                     busyWhile {
                         // The tracker's scope finishes the save even if Book details closes meanwhile.
                         message = runCatching {
-                            scope.async { applyDetailsUpdate(session.book, proposals, selected) }.await()
+                            scope.async { applyDetailsUpdate(session.book, proposals, selected, session.coverBytes) }.await()
                         }.getOrElse { R.string.hardcover_error_other }
                     }
                 },
@@ -865,6 +963,7 @@ internal class ReadingTracker(context: Context, private val database: LiseurData
 
     private companion object {
         const val BACKUP_KEY = "hardcover"
+        const val DETAILS_CHECK_THROTTLE_MILLIS = 10 * 60 * 1_000L
 
         @StringRes
         fun failureMessage(reason: SyncFailure): Int = when (reason) {
@@ -882,6 +981,15 @@ internal class ReadingTracker(context: Context, private val database: LiseurData
             HardcoverPushOutcome.SwitchedOff -> R.string.hardcover_push_off
             HardcoverPushOutcome.NotConnected -> R.string.hardcover_error_token
             is HardcoverPushOutcome.Failed -> failureMessage(outcome.reason)
+        }
+
+        @StringRes
+        fun resolutionMessage(outcome: HardcoverConflictResolution): Int = when (outcome) {
+            HardcoverConflictResolution.Resolved -> R.string.hardcover_conflict_resolved
+            HardcoverConflictResolution.NeedsMatch -> R.string.hardcover_needs_match
+            HardcoverConflictResolution.SwitchedOff -> R.string.hardcover_push_off
+            HardcoverConflictResolution.NotConnected -> R.string.hardcover_error_token
+            is HardcoverConflictResolution.Failed -> failureMessage(outcome.reason)
         }
 
         @StringRes
@@ -960,6 +1068,7 @@ internal fun hardcoverBookDetailsView(link: HardcoverBookLink?): HardcoverBookDe
 private data class DetailsReviewSession(
     val book: Book,
     val proposals: List<DetailProposal>,
+    val coverBytes: ByteArray? = null,
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -973,7 +1082,7 @@ private fun DetailsUpdateSheet(
         mutableStateOf(session.proposals.filter { it.defaultChecked }.map { it.field }.toSet())
     }
     val eInk = LocalEInk.current
-    val loader = HardcoverImages.loader(LocalContext.current)
+    val preview = remember(session.coverBytes) { session.coverBytes?.let(::previewBitmap) }
     LiseurModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
@@ -1016,7 +1125,7 @@ private fun DetailsUpdateSheet(
                         book = session.book,
                         checked = checked,
                         eInk = eInk,
-                        loader = loader,
+                        preview = preview,
                         onToggle = { on ->
                             selected = if (on) selected + proposal.field else selected - proposal.field
                         },
@@ -1056,7 +1165,7 @@ private fun ProposalRow(
     book: Book,
     checked: Boolean,
     eInk: Boolean,
-    loader: coil3.ImageLoader,
+    preview: ImageBitmap?,
     onToggle: (Boolean) -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
@@ -1102,8 +1211,7 @@ private fun ProposalRow(
                 if (proposal.field == DetailField.COVER) {
                     CoverComparison(
                         book = book,
-                        remoteCoverUrl = proposal.newCoverUrl,
-                        loader = loader,
+                        preview = preview,
                     )
                 } else {
                     val nowValue = formatProposalValue(proposal, current = true)
@@ -1132,8 +1240,7 @@ private fun ProposalRow(
 @Composable
 private fun CoverComparison(
     book: Book,
-    remoteCoverUrl: String?,
-    loader: coil3.ImageLoader,
+    preview: ImageBitmap?,
 ) {
     val colors = MaterialTheme.colorScheme
     val coverShape = RoundedCornerShape(8.dp)
@@ -1172,11 +1279,10 @@ private fun CoverComparison(
                     .background(colors.surfaceContainerHighest)
                     .border(BorderStroke(1.dp, colors.outlineVariant.copy(alpha = 0.35f)), coverShape),
             ) {
-                if (remoteCoverUrl != null) {
-                    AsyncImage(
-                        model = remoteCoverUrl,
+                if (preview != null) {
+                    Image(
+                        bitmap = preview,
                         contentDescription = null,
-                        imageLoader = loader,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize(),
                     )
@@ -1211,3 +1317,112 @@ private fun formatProposalValue(proposal: DetailProposal, current: Boolean): Str
     }
     return text?.takeIf { it.isNotBlank() } ?: stringResource(R.string.book_metadata_no_series)
 }
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun EvaluationConflictsCard(
+    conflicts: List<HardcoverEvaluation>,
+    busy: Boolean,
+    onKeepLocal: (String) -> Unit,
+    onUseRemote: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val eInk = LocalEInk.current
+    val colors = MaterialTheme.colorScheme
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        color = if (eInk) colors.surface else colors.surfaceContainerLow,
+        border = BorderStroke(1.dp, if (eInk) colors.outline else colors.outlineVariant),
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            conflicts.forEachIndexed { index, conflict ->
+                if (index > 0) {
+                    HorizontalDivider(color = colors.outlineVariant)
+                }
+                val isRating = conflict.field == PersonalEvaluation.RATING
+                val titleRes = if (isRating) {
+                    R.string.hardcover_conflict_rating_title
+                } else {
+                    R.string.hardcover_conflict_review_title
+                }
+                val noneLabel = stringResource(R.string.book_metadata_no_series)
+                val localDisplay = if (isRating) {
+                    HardcoverEvaluationPlan.ratingFromLocal(conflict.conflictLocal)?.let(::formatStarRating) ?: noneLabel
+                } else {
+                    conflict.conflictLocal?.takeIf { it.isNotBlank() } ?: noneLabel
+                }
+                val remoteDisplay = if (isRating) {
+                    HardcoverEvaluationPlan.decodeRemoteRating(conflict.conflictRemote)?.let(::formatStarRating) ?: noneLabel
+                } else {
+                    conflict.conflictRemote?.takeIf { it.isNotBlank() } ?: noneLabel
+                }
+                val maxLines = if (isRating) 1 else 3
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = stringResource(titleRes),
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    Text(
+                        text = stringResource(R.string.hardcover_conflict_local, localDisplay),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = colors.onSurface,
+                        maxLines = maxLines,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = stringResource(R.string.hardcover_conflict_remote, remoteDisplay),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = colors.onSurfaceVariant,
+                        maxLines = maxLines,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    if (conflict.remoteTooLong) {
+                        Text(
+                            text = stringResource(R.string.hardcover_conflict_review_too_long),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = colors.onSurfaceVariant,
+                        )
+                    }
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                        itemVerticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        FilledTonalButton(
+                            enabled = !busy,
+                            onClick = { onKeepLocal(conflict.field) },
+                        ) {
+                            Text(stringResource(R.string.hardcover_conflict_keep_local))
+                        }
+                        if (!conflict.remoteTooLong) {
+                            TextButton(
+                                enabled = !busy,
+                                onClick = { onUseRemote(conflict.field) },
+                            ) {
+                                Text(stringResource(R.string.hardcover_conflict_use_remote))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun formatStarRating(stars: Double): String = "${NumberFormat.getNumberInstance().format(stars)} ★"
+
+/** A small bitmap of a downloaded cover for the review sheet. */
+private fun previewBitmap(bytes: ByteArray): ImageBitmap? = runCatching {
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+    var sample = 1
+    while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= PREVIEW_SIZE) sample *= 2
+    BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample })
+        ?.asImageBitmap()
+}.getOrNull()
+
+private const val PREVIEW_SIZE = 320

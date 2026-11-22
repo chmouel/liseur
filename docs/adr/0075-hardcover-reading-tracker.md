@@ -27,8 +27,9 @@ the same reason Gemini lives only in `play`
 implements as no-ops, and reaches it only through callbacks and
 composable slots.
 
-Liseur reports to Hardcover and brings nothing from the reader's library
-back. The edition picker reads the public catalogue to show candidates:
+Liseur reports reading status and progress to Hardcover and brings no
+reading state back; ratings and reviews sync both ways per
+[ADR 0077](0077-hardcover-rating-review-sync.md). The edition picker reads the public catalogue to show candidates:
 search text only on an explicit submission, the slug of a pasted
 Hardcover book link, or a pasted ID or ISBN, with the token, to
 `api.hardcover.app`. Its cover images come from `assets.hardcover.app`
@@ -77,8 +78,8 @@ read Hardcover made:
   lower than Hardcover has;
 - the read's start is the first local reading session and its finish
   `books.finished_at`, replacing the dates Hardcover stamped;
-- the rating is the local one halved; removing it clears Hardcover's only
-  when this device set the value there.
+- the rating and review follow the two-way base rules in
+  [ADR 0077](0077-hardcover-rating-review-sync.md).
 
 Closing a book, choosing a status and rating it queue the book. A single
 unique `WorkManager` job drains the queue one book at a time, and the

@@ -3,6 +3,7 @@ package com.chmouel.liseur.hardcover
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.remote.RemoteResult
 import com.chmouel.liseur.data.remote.SyncFailure
+import com.chmouel.liseur.domain.PersonalEvaluation
 import com.chmouel.liseur.domain.ReadingStatus
 import java.net.InetAddress
 import kotlinx.coroutines.Dispatchers
@@ -38,6 +39,8 @@ class HardcoverRepositoryTest {
     private val dao = FakeDao()
     private val books = mutableMapOf<String, Book>()
     private val local = mutableMapOf<String, LocalReading>()
+    private val pulledEvaluations = mutableListOf<Triple<String, String, String?>>()
+    private var casAccept = true
 
     @Before
     fun start() {
@@ -55,8 +58,30 @@ class HardcoverRepositoryTest {
         dao = dao,
         bookFor = { books[it] },
         localFor = { local[it] },
+        writeLocalEvaluation = { url, field, expected, value ->
+            if (!casAccept) return@HardcoverRepository false
+            val current = when (field) {
+                PersonalEvaluation.RATING -> local[url]?.ratingRaw
+                PersonalEvaluation.REVIEW -> local[url]?.review
+                else -> null
+            }
+            if (current != expected) return@HardcoverRepository false
+            pulledEvaluations += Triple(url, field, value)
+            local[url]?.let { existing ->
+                local[url] = when (field) {
+                    PersonalEvaluation.RATING -> existing.copy(
+                        rating = HardcoverPlan.ratingFromLocal(value),
+                        ratingRaw = value,
+                    )
+                    PersonalEvaluation.REVIEW -> existing.copy(review = value)
+                    else -> existing
+                }
+            }
+            true
+        },
         client = HardcoverClient(endpoint = "http://127.0.0.1:${server.port}/v1/graphql", spacingMillis = 0),
         now = { 1_000L },
+        today = { TODAY },
         seal = { "sealed:$it" },
         open = { it.tokenCipher.removePrefix("sealed:") },
     )
@@ -82,8 +107,18 @@ class HardcoverRepositoryTest {
         startedOn: String? = null,
         finishedOn: String? = null,
         rating: Double? = null,
+        review: String? = null,
     ) {
-        local[BOOK] = LocalReading(status, chosen, progression, startedOn, finishedOn, rating)
+        local[BOOK] = LocalReading(
+            status = status,
+            chosen = chosen,
+            progression = progression,
+            startedOn = startedOn,
+            finishedOn = finishedOn,
+            rating = rating,
+            ratingRaw = rating?.let(HardcoverEvaluationPlan::ratingToLocal),
+            review = review,
+        )
     }
 
     @Test
@@ -733,6 +768,149 @@ class HardcoverRepositoryTest {
         assertEquals(listOf("edition_details"), hardcover.queries)
     }
 
+    @Test
+    fun `a push pulls a remote rating and review when local has none and sets the base`() = runBlocking {
+        signedIn()
+        shelve()
+        dao.links[BOOK] = HardcoverBookLink(bookUrl = BOOK, hardcoverBookId = 9, editionId = 5)
+        hardcover.entry = FakeHardcover.Entry(
+            id = 7,
+            status = HardcoverStatus.CURRENTLY_READING,
+            rating = 4.5,
+            read = null,
+            editionId = 5,
+            review = "Wonderful read",
+        )
+        reading(ReadingStatus.READING)
+
+        assertEquals(HardcoverPushOutcome.UpToDate, repository().push(BOOK, asked = false))
+        assertEquals(
+            listOf(
+                Triple(BOOK, PersonalEvaluation.RATING, "9"),
+                Triple(BOOK, PersonalEvaluation.REVIEW, "Wonderful read"),
+            ),
+            pulledEvaluations,
+        )
+        assertEquals(
+            HardcoverEvaluationBase("9", "4.5"),
+            dao.evaluations[BOOK to PersonalEvaluation.RATING]?.base,
+        )
+        assertEquals(
+            HardcoverEvaluationBase("Wonderful read", "Wonderful read"),
+            dao.evaluations[BOOK to PersonalEvaluation.REVIEW]?.base,
+        )
+    }
+
+    @Test
+    fun `a cas failure when pulling leaves the base untouched so the next run decides`() = runBlocking {
+        signedIn()
+        shelve()
+        dao.links[BOOK] = HardcoverBookLink(bookUrl = BOOK, hardcoverBookId = 9, editionId = 5)
+        hardcover.entry = FakeHardcover.Entry(
+            id = 7,
+            status = HardcoverStatus.CURRENTLY_READING,
+            rating = 4.5,
+            read = null,
+            editionId = 5,
+        )
+        reading(ReadingStatus.READING)
+        casAccept = false
+
+        assertEquals(HardcoverPushOutcome.UpToDate, repository().push(BOOK, asked = false))
+        assertTrue(pulledEvaluations.isEmpty())
+        assertNull(dao.evaluations[BOOK to PersonalEvaluation.RATING]?.base)
+    }
+
+    @Test
+    fun `a conflict writes nothing for that field, stores the conflict and can be resolved either way`() = runBlocking {
+        signedIn()
+        shelve()
+        dao.links[BOOK] = HardcoverBookLink(bookUrl = BOOK, hardcoverBookId = 9, editionId = 5)
+        hardcover.entry = FakeHardcover.Entry(
+            id = 7,
+            status = HardcoverStatus.CURRENTLY_READING,
+            rating = 3.0,
+            read = null,
+            editionId = 5,
+            review = "Hardcover review",
+        )
+        reading(ReadingStatus.READING, rating = 4.5, review = "Liseur review")
+
+        assertEquals(HardcoverPushOutcome.UpToDate, repository().push(BOOK, asked = false))
+        assertEquals(3.0, hardcover.entry?.rating)
+        assertEquals("Hardcover review", hardcover.entry?.review)
+        assertTrue(pulledEvaluations.isEmpty())
+
+        val ratingConflict = checkNotNull(dao.evaluations[BOOK to PersonalEvaluation.RATING])
+        assertTrue(ratingConflict.conflict)
+        assertEquals("9", ratingConflict.conflictLocal)
+        assertEquals("3.0", ratingConflict.conflictRemote)
+
+        val reviewConflict = checkNotNull(dao.evaluations[BOOK to PersonalEvaluation.REVIEW])
+        assertTrue(reviewConflict.conflict)
+        assertEquals("Liseur review", reviewConflict.conflictLocal)
+        assertEquals("Hardcover review", reviewConflict.conflictRemote)
+
+        // Resolve rating by keeping Liseur's value.
+        assertEquals(
+            HardcoverConflictResolution.Resolved,
+            repository().resolveConflictKeepLocal(BOOK, PersonalEvaluation.RATING),
+        )
+        assertEquals(4.5, hardcover.entry?.rating)
+        val ratingResolved = checkNotNull(dao.evaluations[BOOK to PersonalEvaluation.RATING])
+        assertFalse(ratingResolved.conflict)
+        assertEquals(HardcoverEvaluationBase("9", "4.5"), ratingResolved.base)
+
+        // Resolve review by using Hardcover's value.
+        assertEquals(
+            HardcoverConflictResolution.Resolved,
+            repository().resolveConflictUseRemote(BOOK, PersonalEvaluation.REVIEW),
+        )
+        assertEquals(listOf(Triple(BOOK, PersonalEvaluation.REVIEW, "Hardcover review")), pulledEvaluations)
+        val reviewResolved = checkNotNull(dao.evaluations[BOOK to PersonalEvaluation.REVIEW])
+        assertFalse(reviewResolved.conflict)
+        assertEquals(HardcoverEvaluationBase("Hardcover review", "Hardcover review"), reviewResolved.base)
+    }
+
+    @Test
+    fun `forgetting books or moving to another hardcover book deletes evaluation rows`() = runBlocking {
+        signedIn()
+        shelve()
+        dao.links[BOOK] = HardcoverBookLink(bookUrl = BOOK, hardcoverBookId = 9, editionId = 5)
+        dao.upsertEvaluation(
+            HardcoverEvaluation(
+                bookUrl = BOOK,
+                field = PersonalEvaluation.RATING,
+                baseLocal = "8",
+                baseRemote = "4.0",
+                hasBase = true,
+            ),
+        )
+
+        val candidates = (repository().candidates(BOOK) as RemoteResult.Ok).value
+        val otherBookEdition = HardcoverEdition(
+            id = 6, bookId = 10, title = "Other", bookTitle = null, format = "ebook", pages = 300,
+            isbn13 = null, isbn10 = null, releaseYear = null, publisher = null,
+        )
+        assertEquals(
+            EditionChoice.Chosen,
+            repository().chooseThenPush(candidates, BOOK, otherBookEdition, push = false, asked = false),
+        )
+        assertNull(dao.evaluations[BOOK to PersonalEvaluation.RATING])
+
+        dao.upsertEvaluation(
+            HardcoverEvaluation(
+                bookUrl = BOOK,
+                field = PersonalEvaluation.REVIEW,
+                baseLocal = "Text",
+                baseRemote = "Text",
+                hasBase = true,
+            ),
+        )
+        repository().forgetBooks(listOf(BOOK))
+        assertTrue(dao.evaluations.isEmpty())
+    }
+
     /** Hardcover with one reader's library of at most one book, the way the server answers. */
     private class FakeHardcover : Dispatcher() {
         data class Read(
@@ -742,7 +920,14 @@ class HardcoverRepositoryTest {
             var finishedAt: String?,
             var editionId: Long? = null,
         )
-        data class Entry(val id: Long, var status: Int, var rating: Double?, var read: Read?, var editionId: Long? = null)
+        data class Entry(
+            val id: Long,
+            var status: Int,
+            var rating: Double?,
+            var read: Read?,
+            var editionId: Long? = null,
+            var review: String? = null,
+        )
 
         @Volatile var refuse = false
         @Volatile var delayMillis = 0L
@@ -857,9 +1042,15 @@ class HardcoverRepositoryTest {
                     queries += "insert"
                     inserts++
                     val o = variables.getJSONObject("object")
-                    entry = Entry(7, o.getInt("status_id"), o.optDouble("rating").takeUnless { it.isNaN() }, null)
-                        .also { it.editionId = o.getLong("edition_id") }
-                        .also { applyStatus(it) }
+                    val rev = if (o.has("review_markdown") && !o.isNull("review_markdown")) o.getString("review_markdown") else null
+                    entry = Entry(
+                        7,
+                        o.getInt("status_id"),
+                        o.optDouble("rating").takeUnless { it.isNaN() },
+                        null,
+                        editionId = o.getLong("edition_id"),
+                        review = rev,
+                    ).also { applyStatus(it) }
                     data.put("insert_user_book", JSONObject().put("error", JSONObject.NULL).put("user_book", JSONObject().put("id", 7)))
                 }
                 "update_user_book_read" in query -> {
@@ -879,6 +1070,9 @@ class HardcoverRepositoryTest {
                     val o = variables.getJSONObject("object")
                     val current = checkNotNull(entry)
                     if (o.has("rating")) current.rating = if (o.isNull("rating")) null else o.getDouble("rating")
+                    if (o.has("review_markdown")) {
+                        current.review = if (o.isNull("review_markdown")) null else o.getString("review_markdown")
+                    }
                     if (o.has("edition_id")) current.editionId = o.getLong("edition_id")
                     if (o.has("status_id")) {
                         current.status = o.getInt("status_id")
@@ -907,7 +1101,9 @@ class HardcoverRepositoryTest {
                         rows.put(
                             JSONObject().put("id", e.id).put("status_id", e.status)
                                 .put("rating", e.rating ?: JSONObject.NULL).put("user_book_reads", reads)
-                                .put("edition_id", e.editionId ?: JSONObject.NULL),
+                                .put("edition_id", e.editionId ?: JSONObject.NULL)
+                                .put("review_markdown", e.review ?: JSONObject.NULL)
+                                .put("review_raw", e.review ?: JSONObject.NULL),
                         )
                     }
                     data.put("user_books", rows)
@@ -1013,6 +1209,9 @@ class HardcoverRepositoryTest {
         override suspend fun clearPending() = pending.clear()
 
         val forgetting = mutableSetOf<String>()
+        val evaluations = mutableMapOf<Pair<String, String>, HardcoverEvaluation>()
+        private val evalChanges = MutableStateFlow(0)
+
         override suspend fun markForgetting(rows: List<HardcoverForgetting>) {
             rows.forEach { forgetting += it.bookUrl }
         }
@@ -1023,6 +1222,30 @@ class HardcoverRepositoryTest {
 
         override suspend fun isForgetting(bookUrl: String) = bookUrl in forgetting
         override suspend fun forgetting() = forgetting.toList()
+
+        override fun observeEvaluations(bookUrl: String): Flow<List<HardcoverEvaluation>> =
+            evalChanges.map {
+                evaluations.values.filter { it.bookUrl == bookUrl }.sortedBy { it.field }
+            }
+
+        override suspend fun evaluation(bookUrl: String, field: String): HardcoverEvaluation? =
+            evaluations[bookUrl to field]
+
+        override suspend fun upsertEvaluation(evaluation: HardcoverEvaluation) {
+            evaluations[evaluation.bookUrl to evaluation.field] = evaluation
+            evalChanges.value++
+        }
+
+        override suspend fun forgetEvaluations(bookUrls: List<String>) {
+            val urls = bookUrls.toSet()
+            evaluations.keys.removeAll { it.first in urls }
+            evalChanges.value++
+        }
+
+        override suspend fun deleteEvaluations() {
+            evaluations.clear()
+            evalChanges.value++
+        }
     }
 
     private companion object {

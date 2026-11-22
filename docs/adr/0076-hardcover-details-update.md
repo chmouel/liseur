@@ -45,5 +45,13 @@ future change.
 - `hardcover.db` (version 2) remembers the imported cover URL and the
   digest of the override it became, so an unchanged cover is not offered
   again. `liseur.db` and the sync protocol are unchanged.
-- Pulling the reader's personal Hardcover library state remains left for
-  later.
+- Ratings and reviews from the reader's Hardcover library sync in
+  [ADR 0077](0077-hardcover-rating-review-sync.md); the rest of that
+  library state is not pulled.
+- Hardcover keeps one description per book, often in English for a
+  translated edition. A description whose common words read as another
+  language than the book's current description (or its declared
+  language) is not offered.
+- The Hardcover cover is downloaded when the sheet opens, once, for both
+  the preview and the save. It is not offered when its difference hash
+  is within a few bits of the book's current cover file.

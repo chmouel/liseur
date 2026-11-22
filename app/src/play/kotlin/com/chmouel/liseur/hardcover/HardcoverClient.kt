@@ -189,6 +189,7 @@ class HardcoverClient(
                     )
                 },
                 editionId = entry?.takeUnless { it.isNull("edition_id") }?.optLong("edition_id"),
+                review = entry?.let { it.text("review_markdown") ?: it.text("review_raw") },
             )
         }
     }
@@ -200,9 +201,15 @@ class HardcoverClient(
         editionId: Long,
         statusId: Int,
         rating: Double?,
+        review: String? = null,
+        reviewedAt: String? = null,
     ): RemoteResult<Long> {
         val entry = JSONObject().put("book_id", bookId).put("edition_id", editionId).put("status_id", statusId)
         rating?.let { entry.put("rating", it) }
+        review?.let {
+            entry.put("review_markdown", it)
+            reviewedAt?.let { date -> entry.put("reviewed_at", date) }
+        }
         return call(token, INSERT_USER_BOOK, JSONObject().put("object", entry)) { data ->
             payload(data, "insert_user_book").optJSONObject("user_book")?.getLong("id")
                 ?: throw RemoteHttpFailure(SyncFailure.Malformed)
@@ -210,12 +217,27 @@ class HardcoverClient(
     }
 
     /** Changes a library entry; the server starts or finishes the read a status implies. */
-    suspend fun updateEntry(token: String, userBookId: Long, step: HardcoverEntryStep.Update): RemoteResult<Unit> {
+    suspend fun updateEntry(
+        token: String,
+        userBookId: Long,
+        step: HardcoverEntryStep.Update,
+        reviewedAt: String? = null,
+    ): RemoteResult<Unit> {
         val entry = JSONObject()
         step.statusId?.let { entry.put("status_id", it) }
         when {
             step.rating != null -> entry.put("rating", step.rating)
             step.clearRating -> entry.put("rating", JSONObject.NULL)
+        }
+        when {
+            step.review != null -> {
+                entry.put("review_markdown", step.review)
+                reviewedAt?.let { entry.put("reviewed_at", it) }
+            }
+            step.clearReview -> {
+                entry.put("review_markdown", JSONObject.NULL)
+                entry.put("reviewed_at", JSONObject.NULL)
+            }
         }
         step.editionId?.let { entry.put("edition_id", it) }
         val variables = JSONObject().put("id", userBookId).put("object", entry)
@@ -460,7 +482,7 @@ class HardcoverClient(
         private const val SHELF_STATE =
             "query (\$userId: Int!, \$bookId: Int!) { " +
                 "user_books(where: {user_id: {_eq: \$userId}, book_id: {_eq: \$bookId}}) { " +
-                "id status_id rating edition_id " +
+                "id status_id rating edition_id review_markdown review_raw " +
                 "user_book_reads(order_by: {id: desc}, limit: 1) { " +
                 "id progress_pages started_at finished_at edition_id edition { pages } } } }"
 
