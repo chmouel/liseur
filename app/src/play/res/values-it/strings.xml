@@ -143,4 +143,5 @@
     <string name="hardcover_conflict_use_remote">Usa quello di Hardcover</string>
     <string name="hardcover_conflict_resolved">Aggiornato</string>
     <string name="hardcover_conflict_review_too_long">Questa recensione di Hardcover è troppo lunga per essere importata in Liseur.</string>
+    <string name="hardcover_conflict_stale">Il valore di Liseur è cambiato nel frattempo. Controllalo e scegli di nuovo.</string>
 </resources>

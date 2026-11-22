@@ -100,6 +100,7 @@ import com.chmouel.liseur.domain.readingStatusFor
 import com.chmouel.liseur.domain.resolveMetadata
 import com.chmouel.liseur.domain.seriesIndexLabel
 import com.chmouel.liseur.domain.validSeriesPosition
+import com.chmouel.liseur.hardcover.BookGeneration
 import com.chmouel.liseur.hardcover.CoverSimilarity
 import com.chmouel.liseur.hardcover.DetailField
 import com.chmouel.liseur.hardcover.DetailProposal
@@ -298,9 +299,12 @@ internal class ReadingTracker(context: Context, private val database: LiseurData
         field: String,
         expected: String?,
         value: String?,
+        generation: BookGeneration,
     ): Boolean {
         val written = database.withTransaction {
             val book = database.bookDao().getByUrl(bookUrl) ?: return@withTransaction false
+            // A file replaced at the same URL while Hardcover answered is another book.
+            if (BookGeneration(book) != generation) return@withTransaction false
             val current = database.bookEvaluationDao().get(bookUrl, field)?.value
             if (current != expected) return@withTransaction false
             database.bookEvaluationDao().edit(
@@ -608,11 +612,7 @@ internal class ReadingTracker(context: Context, private val database: LiseurData
             val currentLink = link ?: return@LaunchedEffect
             if (!currentAccount.autoSync || !currentLink.matched || currentLink.excluded) return@LaunchedEffect
             autoChecked = true
-            val pushedAt = currentLink.pushedAt
-            if (pushedAt != null && System.currentTimeMillis() - pushedAt < DETAILS_CHECK_THROTTLE_MILLIS) {
-                return@LaunchedEffect
-            }
-            scope.launch { runCatching { hardcover.push(bookUrl, asked = false) } }
+            scope.launch { runCatching { hardcover.checkFromDetails(bookUrl) } }
         }
         fun busyWhile(work: suspend () -> Unit) {
             busy = true
@@ -963,7 +963,6 @@ internal class ReadingTracker(context: Context, private val database: LiseurData
 
     private companion object {
         const val BACKUP_KEY = "hardcover"
-        const val DETAILS_CHECK_THROTTLE_MILLIS = 10 * 60 * 1_000L
 
         @StringRes
         fun failureMessage(reason: SyncFailure): Int = when (reason) {
@@ -986,6 +985,7 @@ internal class ReadingTracker(context: Context, private val database: LiseurData
         @StringRes
         fun resolutionMessage(outcome: HardcoverConflictResolution): Int = when (outcome) {
             HardcoverConflictResolution.Resolved -> R.string.hardcover_conflict_resolved
+            HardcoverConflictResolution.Stale -> R.string.hardcover_conflict_stale
             HardcoverConflictResolution.NeedsMatch -> R.string.hardcover_needs_match
             HardcoverConflictResolution.SwitchedOff -> R.string.hardcover_push_off
             HardcoverConflictResolution.NotConnected -> R.string.hardcover_error_token
@@ -1360,7 +1360,12 @@ private fun EvaluationConflictsCard(
                 } else {
                     conflict.conflictRemote?.takeIf { it.isNotBlank() } ?: noneLabel
                 }
-                val maxLines = if (isRating) 1 else 3
+                var expanded by remember(conflict.field) { mutableStateOf(false) }
+                val maxLines = when {
+                    isRating -> 1
+                    expanded -> Int.MAX_VALUE
+                    else -> 3
+                }
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
                         text = stringResource(titleRes),
@@ -1380,6 +1385,18 @@ private fun EvaluationConflictsCard(
                         maxLines = maxLines,
                         overflow = TextOverflow.Ellipsis,
                     )
+                    if (!isRating) {
+                        TextButton(
+                            onClick = { expanded = !expanded },
+                            contentPadding = PaddingValues(horizontal = 0.dp),
+                        ) {
+                            Text(
+                                stringResource(
+                                    if (expanded) R.string.book_details_show_less else R.string.book_details_read_more,
+                                ),
+                            )
+                        }
+                    }
                     if (conflict.remoteTooLong) {
                         Text(
                             text = stringResource(R.string.hardcover_conflict_review_too_long),

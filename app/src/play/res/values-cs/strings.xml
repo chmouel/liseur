@@ -149,4 +149,5 @@
     <string name="hardcover_conflict_use_remote">Použít z Hardcoveru</string>
     <string name="hardcover_conflict_resolved">Aktualizováno</string>
     <string name="hardcover_conflict_review_too_long">Tato recenze z Hardcoveru je příliš dlouhá na to, aby ji šlo přenést do Liseuru.</string>
+    <string name="hardcover_conflict_stale">Hodnota v Liseuru se mezitím změnila. Zkontrolujte ji a vyberte znovu.</string>
 </resources>
