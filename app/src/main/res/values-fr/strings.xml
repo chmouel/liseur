@@ -2162,6 +2162,16 @@
     <string name="evaluation_rating">Ma note</string>
     <string name="evaluation_rated">Avec une note</string>
     <string name="evaluation_unrated">Sans note</string>
+    <string name="book_details_reading_progress">Progression de lecture</string>
+    <string name="book_details_description">Description</string>
+    <string name="evaluation_private_synced">Privé · synchronisé avec liseur-sync</string>
+    <string name="evaluation_private_local">Privé · sur cet appareil</string>
+    <string name="evaluation_private_local_detail">Privé. Enregistré uniquement sur cet appareil.</string>
+    <string name="evaluation_empty_hint">Notez ce livre ou ajoutez un avis privé.</string>
+    <string name="evaluation_edit_review">Modifier l’avis</string>
+    <string name="evaluation_add_review">Ajouter un avis</string>
+    <string name="evaluation_rating_compact">%1$s / 5</string>
+    <string name="evaluation_clear_rating">Effacer</string>
     <string name="no_file_picker">Aucun sélecteur de fichiers n\'est disponible sur cet appareil</string>
     <string name="vocabulary_title">Vocabulaire</string>
     <string name="vocabulary_save">Ajouter au vocabulaire</string>

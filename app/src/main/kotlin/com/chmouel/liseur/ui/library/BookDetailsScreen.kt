@@ -3,17 +3,20 @@ package com.chmouel.liseur.ui.library
 import android.text.format.DateFormat
 import android.text.format.Formatter
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -24,16 +27,23 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
+import androidx.compose.material.icons.outlined.Archive
+import androidx.compose.material.icons.outlined.BookmarkBorder
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.CloudDownload
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Insights
+import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
@@ -48,8 +58,8 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -61,6 +71,7 @@ import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLocale
@@ -165,7 +176,7 @@ fun BookDetailsScreen(
                         stringResource(R.string.book_details),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        style = MaterialTheme.typography.titleMedium,
+                        style = MaterialTheme.typography.titleLarge,
                     )
                 },
                 navigationIcon = {
@@ -235,10 +246,10 @@ fun BookDetailsScreen(
                     }
                 }
                 item(key = "evaluation") {
-                    PersonalEvaluationCard(details, onSetEvaluation, section.padding(top = 24.dp))
+                    PersonalEvaluationCard(details, onSetEvaluation, section.padding(top = 16.dp))
                 }
                 details.metadata.description?.let { description ->
-                    item(key = "about") { Description(details.book.url, description, section.padding(top = 24.dp)) }
+                    item(key = "about") { Description(details.book.url, description, section.padding(top = 20.dp)) }
                 }
                 if (details.metadata.subjects.isNotEmpty()) {
                     item(key = "subjects") {
@@ -371,6 +382,16 @@ private fun Header(
                     modifier = Modifier.padding(top = 8.dp),
                 )
             }
+            if (!LocalEInk.current) {
+                Box(
+                    Modifier
+                        .padding(top = 12.dp)
+                        .width(36.dp)
+                        .height(3.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary),
+                )
+            }
             trailing()
         }
     }
@@ -393,33 +414,51 @@ private fun BookActions(
     onSetReadingChoice: (ReadingStatusChoice) -> Unit,
 ) {
     val book = details.book
-    val tall = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+    val primaryModifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)
     val state = book.downloadState
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         when {
             book.openableUrl != null -> {
-                Button(onClick = onRead, modifier = tall) {
-                    ButtonIcon(Icons.AutoMirrored.Outlined.MenuBook)
-                    Text(
-                        stringResource(
-                            // A book the shelf calls started opens where it
-                            // was left, so it is not offered as a fresh
-                            // start. A finished one is, and so is one put
-                            // back on the pile by hand.
-                            if (shelfStateFor(book, details.progression, details.override) ==
-                                LibraryFilterOption.IN_PROGRESS
-                            ) {
-                                R.string.continue_reading
-                            } else {
-                                R.string.book_details_read
-                            },
-                        ),
-                    )
+                Button(
+                    onClick = onRead,
+                    modifier = primaryModifier,
+                    shape = CircleShape,
+                    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
+                ) {
+                    Box(Modifier.fillMaxWidth()) {
+                        Row(
+                            modifier = Modifier.align(Alignment.Center),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            ButtonIcon(Icons.AutoMirrored.Outlined.MenuBook)
+                            Text(
+                                stringResource(
+                                    // A book the shelf calls started opens where it
+                                    // was left, so it is not offered as a fresh
+                                    // start. A finished one is, and so is one put
+                                    // back on the pile by hand.
+                                    if (shelfStateFor(book, details.progression, details.override) ==
+                                        LibraryFilterOption.IN_PROGRESS
+                                    ) {
+                                        R.string.continue_reading
+                                    } else {
+                                        R.string.book_details_read
+                                    },
+                                ),
+                                style = MaterialTheme.typography.titleSmall,
+                            )
+                        }
+                        Icon(
+                            Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+                            contentDescription = null,
+                            modifier = Modifier.align(Alignment.CenterEnd).size(20.dp),
+                        )
+                    }
                 }
             }
 
             download != null || state == DownloadState.QUEUED || state == DownloadState.DOWNLOADING -> {
-                FilledTonalButton(onClick = {}, enabled = false, modifier = tall) {
+                FilledTonalButton(onClick = {}, enabled = false, modifier = primaryModifier, shape = CircleShape) {
                     BusyIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                     Spacer(Modifier.width(8.dp))
                     Text(
@@ -430,23 +469,25 @@ private fun BookActions(
                                 R.string.download_in_progress
                             },
                         ),
+                        style = MaterialTheme.typography.titleSmall,
                     )
                 }
             }
 
             canDownload && book.downloadHref != null -> {
-                Button(onClick = onDownload, modifier = tall) {
+                Button(onClick = onDownload, modifier = primaryModifier, shape = CircleShape) {
                     ButtonIcon(Icons.Outlined.CloudDownload)
                     Text(
                         stringResource(
                             if (state == DownloadState.FAILED) R.string.book_details_retry_download else R.string.download_book,
                         ),
+                        style = MaterialTheme.typography.titleSmall,
                     )
                 }
             }
 
             !canDownload -> {
-                OutlinedButton(onClick = {}, enabled = false, modifier = tall) {
+                OutlinedButton(onClick = {}, enabled = false, modifier = primaryModifier, shape = CircleShape) {
                     Text(stringResource(R.string.download_book))
                 }
                 Text(
@@ -457,7 +498,7 @@ private fun BookActions(
             }
 
             else -> {
-                OutlinedButton(onClick = {}, enabled = false, modifier = tall) {
+                OutlinedButton(onClick = {}, enabled = false, modifier = primaryModifier, shape = CircleShape) {
                     Text(stringResource(R.string.endpaper_unavailable))
                 }
             }
@@ -473,22 +514,59 @@ private fun BookActions(
             )
         }
         var choosingStatus by remember { mutableStateOf(false) }
-        Box {
-            OutlinedButton(onClick = { choosingStatus = true }, modifier = tall) {
-                Text(stringResource(R.string.reading_status_label, stringResource(details.override.statusLabel())))
-            }
-            DropdownMenu(expanded = choosingStatus, onDismissRequest = { choosingStatus = false }) {
-                ReadingStatusChoice.entries.forEach { choice ->
-                    DropdownMenuItem(
-                        text = { Text(stringResource(choice.override.statusLabel())) },
-                        onClick = { choosingStatus = false; onSetReadingChoice(choice) },
+        val secondaryPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Box(Modifier.weight(1f)) {
+                OutlinedButton(
+                    onClick = { choosingStatus = true },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp),
+                    shape = CircleShape,
+                    contentPadding = secondaryPadding,
+                ) {
+                    Icon(Icons.Outlined.BookmarkBorder, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        stringResource(effectiveStatusLabel(details)),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.labelLarge,
                     )
+                    Spacer(Modifier.width(2.dp))
+                    Icon(Icons.Outlined.ExpandMore, contentDescription = null, modifier = Modifier.size(16.dp))
+                }
+                DropdownMenu(expanded = choosingStatus, onDismissRequest = { choosingStatus = false }) {
+                    ReadingStatusChoice.entries.forEach { choice ->
+                        DropdownMenuItem(
+                            text = { Text(stringResource(choice.override.statusLabel())) },
+                            trailingIcon =
+                                if (choice.override == details.override) {
+                                    { Icon(Icons.Outlined.Check, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                                } else {
+                                    null
+                                },
+                            onClick = { choosingStatus = false; onSetReadingChoice(choice) },
+                        )
+                    }
                 }
             }
-        }
-        OutlinedButton(onClick = onOpenStats, modifier = tall) {
-            ButtonIcon(Icons.Outlined.Insights)
-            Text(stringResource(R.string.reading_stats))
+            OutlinedButton(
+                onClick = onOpenStats,
+                modifier = Modifier.weight(1f).heightIn(min = 44.dp),
+                shape = CircleShape,
+                contentPadding = secondaryPadding,
+            ) {
+                Icon(Icons.Outlined.Insights, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    stringResource(R.string.reading_stats),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.labelLarge,
+                )
+            }
         }
     }
 }
@@ -502,6 +580,21 @@ internal fun com.chmouel.liseur.domain.FinishedOverride.statusLabel(): Int = whe
     com.chmouel.liseur.domain.FinishedOverride.PAUSED -> R.string.reading_status_paused
     com.chmouel.liseur.domain.FinishedOverride.DID_NOT_FINISH -> R.string.reading_status_did_not_finish
 }
+
+/**
+ * Label shown on the reading-status control: resolves automatic tracking to
+ * the book's actual shelf state while keeping Automatic selectable in the menu.
+ */
+internal fun effectiveStatusLabel(details: BookDetails): Int =
+    when (details.override) {
+        com.chmouel.liseur.domain.FinishedOverride.NONE ->
+            when (shelfStateFor(details.book, details.progression, details.override)) {
+                LibraryFilterOption.IN_PROGRESS -> R.string.reading_status_reading
+                LibraryFilterOption.FINISHED -> R.string.state_finished
+                else -> R.string.home_tile_to_read
+            }
+        else -> details.override.statusLabel()
+    }
 
 @Composable
 private fun ButtonIcon(icon: androidx.compose.ui.graphics.vector.ImageVector) {
@@ -572,9 +665,13 @@ private fun ReadingStatusCard(
 ) {
     val eInk = LocalEInk.current
     val locale = currentLocale()
+    val progress = lines.filterIsInstance<StatusLine.Progress>().firstOrNull()
+    val timeLeft = lines.filterIsInstance<StatusLine.TimeLeft>().firstOrNull()
+    val annotations = lines.filterIsInstance<StatusLine.Annotations>().firstOrNull()
+    val notes = lines.filter { it !is StatusLine.Progress && it !is StatusLine.TimeLeft && it !is StatusLine.Annotations }
     Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(14.dp),
         color = if (eInk) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceContainerLow,
         border =
             BorderStroke(
@@ -582,72 +679,159 @@ private fun ReadingStatusCard(
                 if (eInk) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.outlineVariant,
             ),
     ) {
-        Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            lines.forEach { line ->
-                when (line) {
-                    is StatusLine.Progress -> {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text(
-                                stringResource(R.string.reading_stats_progress, (line.fraction * 100).toInt()),
-                                style = MaterialTheme.typography.titleSmall,
-                            )
-                            LinearProgressIndicator(
-                                progress = { line.fraction.toFloat() },
-                                modifier = Modifier.fillMaxWidth().height(6.dp),
-                                trackColor = if (eInk) Color.Transparent else MaterialTheme.colorScheme.surfaceContainerHighest,
-                                gapSize = 0.dp,
-                                drawStopIndicator = {},
-                            )
-                        }
-                    }
-
-                    is StatusLine.UnreadWithPlace -> {
+        Column(
+            Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            if (progress != null) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
                         Text(
-                            stringResource(R.string.book_details_unread_with_place, (line.fraction * 100).toInt()),
-                            style = MaterialTheme.typography.bodyMedium,
+                            stringResource(R.string.book_details_reading_progress),
+                            style = MaterialTheme.typography.titleSmall,
+                        )
+                        Text(
+                            stringResource(R.string.reading_stats_progress, (progress.fraction * 100).toInt()),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
+                    LinearProgressIndicator(
+                        progress = { progress.fraction.toFloat() },
+                        modifier = Modifier.fillMaxWidth().height(6.dp).clip(CircleShape),
+                        trackColor = if (eInk) Color.Transparent else MaterialTheme.colorScheme.surfaceContainerHighest,
+                        gapSize = 0.dp,
+                        drawStopIndicator = {},
+                    )
+                }
+            }
 
-                    is StatusLine.TimeLeft -> {
-                        Field(
-                            stringResource(R.string.reading_stats_time_left_label),
-                            stringResource(
-                                R.string.reading_stats_time_left_value,
-                                readingDuration(TimeUnit.SECONDS.toMillis(line.seconds.toLong())),
-                            ),
-                            padded = false,
+            if (timeLeft != null || annotations != null) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (timeLeft != null) {
+                        StatusMetricCell(
+                            icon = Icons.Outlined.Schedule,
+                            label = stringResource(R.string.reading_stats_time_left_label),
+                            value =
+                                stringResource(
+                                    R.string.reading_stats_time_left_value,
+                                    readingDuration(TimeUnit.SECONDS.toMillis(timeLeft.seconds.toLong())),
+                                ),
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                    if (timeLeft != null && annotations != null) {
+                        VerticalDivider(
+                            modifier = Modifier.fillMaxHeight().padding(horizontal = 12.dp, vertical = 2.dp),
+                            color = if (eInk) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.outlineVariant,
+                        )
+                    }
+                    if (annotations != null) {
+                        StatusMetricCell(
+                            icon = Icons.Outlined.BookmarkBorder,
+                            label = stringResource(R.string.book_details_annotations),
+                            value = String.format(locale, "%d", annotations.count),
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+            }
+
+            notes.forEach { line ->
+                when (line) {
+                    is StatusLine.UnreadWithPlace -> {
+                        StatusNoteRow(
+                            icon = Icons.Outlined.BookmarkBorder,
+                            text = stringResource(R.string.book_details_unread_with_place, (line.fraction * 100).toInt()),
                         )
                     }
 
                     is StatusLine.Finished -> {
-                        Text(
-                            line.at?.let { stringResource(R.string.book_details_finished_on, day(it, locale)) }
-                                ?: stringResource(R.string.state_finished),
-                            style = MaterialTheme.typography.bodyMedium,
+                        StatusNoteRow(
+                            icon = Icons.Outlined.CheckCircle,
+                            text =
+                                line.at?.let { stringResource(R.string.book_details_finished_on, day(it, locale)) }
+                                    ?: stringResource(R.string.state_finished),
                         )
                     }
 
                     is StatusLine.Archived -> {
-                        Text(
-                            stringResource(R.string.book_details_archived_on, day(line.at, locale)),
-                            style = MaterialTheme.typography.bodyMedium,
+                        StatusNoteRow(
+                            icon = Icons.Outlined.Archive,
+                            text = stringResource(R.string.book_details_archived_on, day(line.at, locale)),
                         )
                     }
 
-                    is StatusLine.Annotations -> {
-                        Field(
-                            stringResource(R.string.book_details_annotations),
-                            String.format(locale, "%d", line.count),
-                            padded = false,
-                        )
-                    }
+                    else -> Unit
                 }
             }
         }
     }
 }
 
-/** The blurb, folded to a few lines when long; it speaks for itself without a heading. */
+@Composable
+private fun StatusMetricCell(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier.semantics(mergeDescendants = true) {},
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            icon,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(20.dp),
+        )
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                label,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                value,
+                style = MaterialTheme.typography.titleSmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+@Composable
+private fun StatusNoteRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    text: String,
+) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.semantics(mergeDescendants = true) {},
+    ) {
+        Icon(
+            icon,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(18.dp),
+        )
+        Text(text, style = MaterialTheme.typography.bodyMedium)
+    }
+}
+
 @Composable
 private fun Description(
     bookUrl: String,
@@ -659,7 +843,12 @@ private fun Description(
     // Folded, a blank line between paragraphs could be the last line shown,
     // leaving an ellipsis alone on it.
     val folded = remember(text) { text.replace(BLANK_LINES, "\n") }
-    Column(modifier) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(
+            stringResource(R.string.book_details_description),
+            style = MaterialTheme.typography.titleLarge,
+            modifier = Modifier.semantics { heading() },
+        )
         Text(
             if (expanded) text else folded,
             style = MaterialTheme.typography.bodyLarge,
@@ -668,12 +857,22 @@ private fun Description(
             onTextLayout = { if (!expanded) overflows = it.hasVisualOverflow },
         )
         if (overflows || expanded) {
-            TextButton(
+            OutlinedButton(
                 onClick = { expanded = !expanded },
-                contentPadding = PaddingValues(horizontal = 0.dp, vertical = 4.dp),
-                modifier = Modifier.heightIn(min = 48.dp),
+                shape = CircleShape,
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                modifier = Modifier.heightIn(min = 40.dp),
             ) {
-                Text(stringResource(if (expanded) R.string.book_details_show_less else R.string.book_details_read_more))
+                Text(
+                    stringResource(if (expanded) R.string.book_details_show_less else R.string.book_details_read_more),
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                Spacer(Modifier.width(4.dp))
+                Icon(
+                    if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                )
             }
         }
     }

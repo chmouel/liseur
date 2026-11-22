@@ -2081,6 +2081,16 @@
     <string name="evaluation_rating">我的评分</string>
     <string name="evaluation_rated">已评分</string>
     <string name="evaluation_unrated">未评分</string>
+    <string name="book_details_reading_progress">阅读进度</string>
+    <string name="book_details_description">简介</string>
+    <string name="evaluation_private_synced">私密 · 已与 liseur-sync 同步</string>
+    <string name="evaluation_private_local">私密 · 仅保存在此设备</string>
+    <string name="evaluation_private_local_detail">私密，仅保存在此设备上。</string>
+    <string name="evaluation_empty_hint">为这本书评分或添加私密书评。</string>
+    <string name="evaluation_edit_review">编辑书评</string>
+    <string name="evaluation_add_review">添加书评</string>
+    <string name="evaluation_rating_compact">%1$s / 5</string>
+    <string name="evaluation_clear_rating">清除</string>
     <string name="no_file_picker">此设备上没有可用的文件选择器</string>
     <string name="vocabulary_title">生词本</string>
     <string name="vocabulary_save">加入生词本</string>

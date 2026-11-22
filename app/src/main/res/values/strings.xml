@@ -2238,6 +2238,16 @@
     <string name="evaluation_rating">My rating</string>
     <string name="evaluation_rated">Rated</string>
     <string name="evaluation_unrated">Unrated</string>
+    <string name="book_details_reading_progress">Reading progress</string>
+    <string name="book_details_description">Description</string>
+    <string name="evaluation_private_synced">Private · synced with liseur-sync</string>
+    <string name="evaluation_private_local">Private · on this device</string>
+    <string name="evaluation_private_local_detail">Private. Stored only on this device.</string>
+    <string name="evaluation_empty_hint">Rate this book or add a private review.</string>
+    <string name="evaluation_edit_review">Edit review</string>
+    <string name="evaluation_add_review">Add review</string>
+    <string name="evaluation_rating_compact">%1$s / 5</string>
+    <string name="evaluation_clear_rating">Clear</string>
     <string name="no_file_picker">No file picker is available on this device</string>
     <string name="vocabulary_title">Vocabulary Builder</string>
     <string name="vocabulary_save">Save to vocabulary</string>
