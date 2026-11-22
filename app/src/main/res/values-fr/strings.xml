@@ -892,14 +892,13 @@
     <string name="books_export_error_folder">Impossible d’exporter dans ce dossier. Choisissez un dossier accessible en écriture.</string>
     <string name="settings_backup_title">Sauvegarde et restauration</string>
     <string name="settings_backup_detail">Enregistrez réglages, polices, positions de lecture, annotations et résumés du compagnon dans une sauvegarde ZIP.</string>
-    <string name="settings_backup_export">Exporter la sauvegarde</string>
+    <string name="settings_backup_export">Créer une sauvegarde</string>
     <string name="settings_backup_export_detail">Créez un fichier ZIP daté.</string>
     <string name="settings_backup_restore">Restaurer une sauvegarde</string>
     <string name="settings_backup_restore_detail">Prévisualisez une sauvegarde avant de l’appliquer.</string>
     <string name="settings_backup_companion_preview">Résumés de chapitres : %1$d. Les résumés manquants du compagnon seront ajoutés pour les livres de cette bibliothèque ; les résumés existants sont conservés.</string>
     <string name="settings_backup_companion_restored">Résumés de chapitres du compagnon ajoutés : %1$d.</string>
     <string name="settings_backup_preview_title">Restaurer cette sauvegarde ?</string>
-    <string name="settings_backup_preview_body">Cette sauvegarde contient %1$s, %2$s et %3$s. Les paramètres enregistrés seront appliqués ; les annotations seront ajoutées sans remplacer les marques existantes.</string>
     <string name="settings_backup_restore_action">Restaurer</string>
     <plurals name="settings_backup_setting_count">
         <item quantity="one">%1$d paramètre</item>
@@ -935,7 +934,6 @@
     <string name="settings_backup_error_restore">Impossible de restaurer la sauvegarde.</string>
     <string name="settings_backup_error_partial">Seule une partie de la sauvegarde a pu être restaurée.</string>
     <string name="settings_backup_include_stats">Inclure les statistiques de lecture</string>
-    <string name="settings_backup_include_stats_detail">Sessions de lecture derrière l’écran des statistiques. Les sessions restaurées restent sur l’appareil et ne sont jamais envoyées à un serveur de synchronisation.</string>
     <string name="settings_backup_include_books">Inclure les fichiers des livres</string>
     <string name="settings_backup_include_books_detail">Les EPUB hors ligne sont ajoutés à la sauvegarde, non chiffrés.</string>
     <string name="settings_backup_books_choose">Choisir les livres</string>
@@ -1718,14 +1716,17 @@
     <string name="companion_settings_story_auto">Compléter l’histoire automatiquement</string>
     <string name="companion_settings_story_auto_summary">Quand le Compagnon s\'ouvre sur Histoire, récapitule le chapitre précédent et tient l\'histoire jusqu\'ici à jour.</string>
     <string name="companion_settings_privacy">Le texte du livre avant le paragraphe sélectionné est envoyé au serveur choisi, et des chapitres entiers si les résumés en arrière-plan sont activés. Son fournisseur peut facturer ces requêtes.</string>
-    <string name="settings_backup_include_connections">Inclure les comptes, services et mots de passe</string>
-    <string name="settings_backup_connections_replace">Les comptes de bibliothèque et KOReader, les paramètres des services et les identifiants enregistrés seront remplacés automatiquement.</string>
+    <string name="settings_backup_other_exports">Autres exports</string>
+    <string name="settings_backup_accounts_password_hint">Protégés par un mot de passe de sauvegarde</string>
+    <string name="server_pair_again">Associer à nouveau</string>
+    <string name="settings_backup_include_connections">Inclure les comptes et les mots de passe</string>
+    <string name="settings_backup_connections_replace">Cette sauvegarde remplacera les comptes, les paramètres de service et les clés enregistrés.</string>
+    <string name="settings_backup_no_connections">Cette sauvegarde ne contient aucun compte ni mot de passe.</string>
     <string name="settings_backup_liseur_sync_exported_notice">Cette sauvegarde contient un compte %1$s. Associez-le à nouveau après la restauration.</string>
     <string name="settings_backup_liseur_sync_restored_notice">Associez à nouveau le compte %1$s pour reprendre la synchronisation.</string>
     <string name="settings_backup_password_title">Mot de passe de sauvegarde</string>
     <string name="settings_backup_password_confirm">Confirmer le mot de passe</string>
     <string name="settings_backup_password_export">Choisissez un mot de passe pour chiffrer les comptes et les identifiants. Il sera nécessaire à la restauration. Les données de lecture, les réglages, les adresses des services et les polices restent non chiffrés.</string>
-    <string name="settings_backup_password_restore">Saisissez le mot de passe de cette sauvegarde. Les comptes et les identifiants seront remplacés sans nouvelle connexion.</string>
     <string name="settings_backup_password_error">Mot de passe incorrect ou données chiffrées endommagées. Réessayez.</string>
     <string name="settings_backup_error_credential">Un identifiant de compte ou de KOReader enregistré ne peut pas être lu sur cet appareil. Reconnectez-vous, ou exportez sans les comptes et mots de passe.</string>
 

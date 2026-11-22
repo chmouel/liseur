@@ -929,14 +929,13 @@
     <string name="books_export_error_folder">Could not open this folder for export. Choose a writable folder.</string>
     <string name="settings_backup_title">Backup and restore</string>
     <string name="settings_backup_detail">Save settings, fonts, reading positions, annotations and companion recaps in a ZIP backup.</string>
-    <string name="settings_backup_export">Export backup</string>
+    <string name="settings_backup_export">Create backup</string>
     <string name="settings_backup_export_detail">Create a dated ZIP file.</string>
     <string name="settings_backup_restore">Restore backup</string>
     <string name="settings_backup_restore_detail">Preview a backup before applying it.</string>
     <string name="settings_backup_companion_preview">Chapter recaps: %1$d. Missing companion recaps will be added for books in this library; existing recaps are kept.</string>
     <string name="settings_backup_companion_restored">Companion chapter recaps added: %1$d.</string>
     <string name="settings_backup_preview_title">Restore this backup?</string>
-    <string name="settings_backup_preview_body">This backup contains %1$s, %2$s, and %3$s. Saved settings will be applied; annotations will be added without replacing existing marks.</string>
     <string name="settings_backup_restore_action">Restore</string>
     <plurals name="settings_backup_setting_count">
         <item quantity="one">%1$d setting</item>
@@ -972,7 +971,6 @@
     <string name="settings_backup_error_restore">The backup could not be restored.</string>
     <string name="settings_backup_error_partial">Only part of the backup could be restored.</string>
     <string name="settings_backup_include_stats">Include reading stats</string>
-    <string name="settings_backup_include_stats_detail">Reading sessions behind the statistics screen. Restored sessions stay on the device and are never sent to a sync server.</string>
     <string name="settings_backup_include_books">Include book files</string>
     <string name="settings_backup_include_books_detail">Offline EPUBs go inside the backup, unencrypted.</string>
     <string name="settings_backup_books_choose">Choose books</string>
@@ -1785,14 +1783,17 @@
     <string name="companion_settings_story_auto">Fill in the story on its own</string>
     <string name="companion_settings_story_auto_summary">When Companion opens on Story, recap the previous chapter and keep the story so far up to date.</string>
     <string name="companion_settings_privacy">Book text before your selected paragraph is sent to the chosen server, and whole chapters once background recaps are on. Its provider may charge for these requests.</string>
-    <string name="settings_backup_include_connections">Include accounts, services and passwords</string>
-    <string name="settings_backup_connections_replace">Saved library and KOReader accounts, service settings and credentials will be replaced automatically.</string>
+    <string name="settings_backup_other_exports">Other exports</string>
+    <string name="settings_backup_accounts_password_hint">Protected with a backup password</string>
+    <string name="server_pair_again">Pair again</string>
+    <string name="settings_backup_include_connections">Include accounts and passwords</string>
+    <string name="settings_backup_connections_replace">This backup will replace saved accounts, service settings and keys.</string>
+    <string name="settings_backup_no_connections">This backup contains no accounts or passwords.</string>
     <string name="settings_backup_liseur_sync_exported_notice">This backup contains a %1$s account. Pair it again after restoring.</string>
     <string name="settings_backup_liseur_sync_restored_notice">Pair the %1$s account again to resume syncing.</string>
     <string name="settings_backup_password_title">Backup password</string>
     <string name="settings_backup_password_confirm">Confirm backup password</string>
     <string name="settings_backup_password_export">Choose a password to encrypt accounts and credentials. You will need it to restore them. Reading data, settings, service addresses and fonts remain unencrypted.</string>
-    <string name="settings_backup_password_restore">Enter the password used to encrypt this backup. Accounts and credentials will be replaced without signing in.</string>
     <string name="settings_backup_password_error">Incorrect password or damaged encrypted data. Try again.</string>
     <string name="settings_backup_error_credential">A saved account or KOReader credential cannot be read on this device. Sign in again, or export without accounts and passwords.</string>
 

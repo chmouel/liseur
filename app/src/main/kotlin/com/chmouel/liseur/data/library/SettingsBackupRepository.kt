@@ -1084,7 +1084,8 @@ class SettingsBackupRepository internal constructor(
                     TRANSLATIONS_PATH,
                     SESSIONS_PATH,
                     BOOKS_PATH,
-                ) && !it.startsWith("fonts/") && !BOOK_ENTRY_PATH.matches(it)
+                    METADATA_OVERRIDES_PATH,
+                ) && !it.startsWith("fonts/") && !BOOK_ENTRY_PATH.matches(it) && !METADATA_COVER_ENTRY_PATH.matches(it)
             }
         ) {
             return null

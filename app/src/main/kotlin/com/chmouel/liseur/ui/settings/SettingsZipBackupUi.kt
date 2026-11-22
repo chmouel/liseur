@@ -74,6 +74,7 @@ data class SettingsZipBackupUi(
     val selectAllBooks: (Boolean) -> Unit = {},
     val archiveProgress: SettingsBackupProgress? = null,
     val cancelArchive: () -> Unit = {},
+    val dismissStatus: () -> Unit = {},
 )
 
 sealed interface SettingsBackupUiStatus {
@@ -445,6 +446,10 @@ internal class SettingsBackupViewModel(
         }
     }
 
+    fun dismissStatus() {
+        _state.update { it.copy(status = null) }
+    }
+
     fun dismissPreview() {
         val archiveId = _state.value.preview?.archiveId ?: return
         _state.update { it.copy(preview = null) }
@@ -466,7 +471,7 @@ internal class SettingsBackupViewModel(
                 repository.discardProcessInspections()
             } finally {
                 closing = false
-                _state.update { it.copy(preview = null, busy = false, archiveProgress = null) }
+                _state.update { it.copy(preview = null, status = null, busy = false, archiveProgress = null) }
                 activeOperation = null
                 candidatesJob = null
             }
@@ -582,5 +587,6 @@ fun rememberSettingsZipBackup(active: Boolean): SettingsZipBackupUi {
         selectAllBooks = model::selectAllBooks,
         archiveProgress = state.archiveProgress,
         cancelArchive = model::cancelArchive,
+        dismissStatus = model::dismissStatus,
     )
 }

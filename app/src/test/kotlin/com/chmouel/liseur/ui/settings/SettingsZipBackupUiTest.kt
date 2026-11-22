@@ -94,6 +94,20 @@ class SettingsZipBackupUiTest {
     }
 
     @Test
+    fun `leaving the screen clears an invalid backup message`() = scenario {
+        val model = model()
+        val invalid = File(folder.root, "invalid.zip").apply { writeText("invalid") }
+
+        model.inspect(Uri.fromFile(invalid))
+        await { !model.state.value.busy }
+        assertEquals(SettingsBackupUiStatus.Failed(SettingsBackupFailure.INVALID_ARCHIVE), model.state.value.status)
+
+        model.close()
+        await { !model.state.value.busy }
+        assertNull(model.state.value.status)
+    }
+
+    @Test
     fun `a prepared export asks for a destination and reports it launched`() = scenario {
         val model = model()
 

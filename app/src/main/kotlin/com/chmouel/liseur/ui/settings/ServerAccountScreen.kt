@@ -242,6 +242,23 @@ fun ServerAccountScreen(
                             Text(stringResource(R.string.cancel))
                         }
                     }
+                } else if (server.needsLiseurSyncPairing) {
+                    Text(server.baseUrl, style = MaterialTheme.typography.titleMedium)
+                    Notice(
+                        text = stringResource(
+                            R.string.settings_backup_liseur_sync_restored_notice,
+                            stringResource(R.string.server_kind_liseur_sync),
+                        ),
+                        tone = NoticeTone.NEUTRAL,
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(onClick = onEditAddress) {
+                            Text(stringResource(R.string.server_pair_again))
+                        }
+                        TextButton(onClick = onDisconnect) {
+                            Text(stringResource(R.string.server_disconnect))
+                        }
+                    }
                 } else {
                     ConnectedCard(
                         server = server,

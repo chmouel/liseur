@@ -970,14 +970,13 @@
     <string name="books_export_error_folder">Složku se nepodařilo otevřít pro export. Vyber složku s oprávněním k zápisu.</string>
     <string name="settings_backup_title">Zálohování a obnovení</string>
     <string name="settings_backup_detail">Uložit nastavení, písma, pozice čtení, anotace a shrnutí průvodce čtením do zálohy ZIP.</string>
-    <string name="settings_backup_export">Exportovat zálohu</string>
+    <string name="settings_backup_export">Vytvořit zálohu</string>
     <string name="settings_backup_export_detail">Vytvoří datovaný soubor ZIP.</string>
     <string name="settings_backup_restore">Obnovit zálohu</string>
     <string name="settings_backup_restore_detail">Před obnovením zobrazit náhled zálohy.</string>
     <string name="settings_backup_companion_preview">Shrnutí kapitol: %1$d. Chybějící shrnutí průvodce čtením se přidají pro knihy v této knihovně; existující zůstanou.</string>
     <string name="settings_backup_companion_restored">Přidaná shrnutí kapitol průvodce čtením: %1$d.</string>
     <string name="settings_backup_preview_title">Obnovit tuto zálohu?</string>
-    <string name="settings_backup_preview_body">Záloha obsahuje %1$s, %2$s a %3$s. Uložená nastavení se použijí a poznámky i zvýraznění se přidají bez nahrazení stávajících.</string>
     <string name="settings_backup_restore_action">Obnovit</string>
     <plurals name="settings_backup_setting_count">
         <item quantity="one">%1$d nastavení</item>
@@ -1025,7 +1024,6 @@
     <string name="settings_backup_error_restore">Zálohu se nepodařilo obnovit.</string>
     <string name="settings_backup_error_partial">Zálohu se podařilo obnovit jen zčásti.</string>
     <string name="settings_backup_include_stats">Zahrnout statistiky čtení</string>
-    <string name="settings_backup_include_stats_detail">Relace čtení za obrazovkou statistik. Obnovené relace zůstávají v zařízení a nikdy se neodesílají na synchronizační server.</string>
     <string name="settings_backup_include_books">Zahrnout soubory knih</string>
     <string name="settings_backup_include_books_detail">Offline soubory EPUB se uloží do zálohy nešifrovaně.</string>
     <string name="settings_backup_books_choose">Vybrat knihy</string>
@@ -1892,14 +1890,17 @@
     <string name="companion_settings_story_auto">Automaticky doplňovat příběh</string>
     <string name="companion_settings_story_auto_summary">Při otevření záložky Příběh v Průvodci shrne předchozí kapitolu a aktualizuje dosavadní děj.</string>
     <string name="companion_settings_privacy">Text knihy před vybraným odstavcem se odesílá na vybraný server; při zapnutém shrnování na pozadí se odesílají celé kapitoly. Poskytovatel může za požadavky účtovat poplatky.</string>
-    <string name="settings_backup_include_connections">Zahrnout účty, služby a hesla</string>
-    <string name="settings_backup_connections_replace">Uložené účty knihoven a KOReader, nastavení služeb a přihlašovací údaje budou automaticky nahrazeny.</string>
+    <string name="settings_backup_other_exports">Další exporty</string>
+    <string name="settings_backup_accounts_password_hint">Chráněno heslem zálohy</string>
+    <string name="server_pair_again">Znovu spárovat</string>
+    <string name="settings_backup_include_connections">Zahrnout účty a hesla</string>
+    <string name="settings_backup_connections_replace">Tato záloha nahradí uložené účty, nastavení služeb a klíče.</string>
+    <string name="settings_backup_no_connections">Tato záloha neobsahuje účty ani hesla.</string>
     <string name="settings_backup_liseur_sync_exported_notice">Záloha obsahuje účet %1$s. Po obnovení jej znovu spáruj.</string>
     <string name="settings_backup_liseur_sync_restored_notice">Pro obnovení synchronizace znovu spáruj účet %1$s.</string>
     <string name="settings_backup_password_title">Heslo zálohy</string>
     <string name="settings_backup_password_confirm">Potvrdit heslo zálohy</string>
     <string name="settings_backup_password_export">Zvol heslo pro šifrování účtů a přihlašovacích údajů. K jejich obnovení budeš heslo potřebovat. Údaje o čtení, nastavení, adresy služeb a písma zůstanou nešifrované.</string>
-    <string name="settings_backup_password_restore">Zadej heslo použité k zašifrování zálohy. Účty a přihlašovací údaje se obnoví bez nutnosti znovu se přihlásit.</string>
     <string name="settings_backup_password_error">Nesprávné heslo nebo poškozená zašifrovaná data. Zkus to znovu.</string>
     <string name="settings_backup_error_credential">Uložený účet nebo přihlašovací údaje KOReader už v tomto zařízení nelze přečíst. Přihlas se znovu nebo exportuj zálohu bez účtů a hesel.</string>
 

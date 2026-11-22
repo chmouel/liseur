@@ -3,8 +3,9 @@ package com.chmouel.liseur.ui.settings
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.FileUpload
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -51,9 +52,11 @@ internal fun EvaluationExportButton(enabled: Boolean) {
             Toast.makeText(context, message, Toast.LENGTH_LONG).show()
         }
     }
-    TextButton(
+    BackupActionRow(
+        icon = { Icon(Icons.Outlined.FileUpload, contentDescription = null) },
+        title = stringResource(R.string.evaluation_export),
         onClick = { launcher.launchPicker(context, "liseur-ratings-and-reviews.json") },
         enabled = enabled && !busy,
         modifier = Modifier.settingsAnchor(SettingsEntries.EvaluationExport),
-    ) { Text(stringResource(R.string.evaluation_export)) }
+    )
 }

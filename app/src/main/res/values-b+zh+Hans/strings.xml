@@ -96,7 +96,6 @@
         <item quantity="other">%1$d 个字体无法安装。</item>
     </plurals>
     <string name="settings_backup_include_stats">包含阅读统计</string>
-    <string name="settings_backup_include_stats_detail">统计页面背后的阅读记录。恢复的记录仅保留在本机，不会发送到同步服务器。</string>
     <string name="settings_backup_include_books">包含图书文件</string>
     <string name="settings_backup_include_books_detail">离线 EPUB 文件将以未加密形式放入备份。</string>
     <string name="settings_backup_books_choose">选择图书</string>
@@ -968,14 +967,13 @@
     <string name="books_export_error_folder">无法打开此文件夹进行导出。请选择可写入的文件夹。</string>
     <string name="settings_backup_title">备份与恢复</string>
     <string name="settings_backup_detail">将设置、字体、阅读进度、批注和阅读伴侣摘要保存为 ZIP 备份。</string>
-    <string name="settings_backup_export">导出备份</string>
+    <string name="settings_backup_export">创建备份</string>
     <string name="settings_backup_export_detail">创建带日期的 ZIP 文件。</string>
     <string name="settings_backup_restore">恢复备份</string>
     <string name="settings_backup_restore_detail">应用前预览备份。</string>
     <string name="settings_backup_companion_preview">章节摘要：%1$d。将为此书库中的书籍添加缺失的阅读伴侣摘要，并保留现有摘要。</string>
     <string name="settings_backup_companion_restored">已添加阅读伴侣章节摘要：%1$d。</string>
     <string name="settings_backup_preview_title">恢复此备份？</string>
-    <string name="settings_backup_preview_body">此备份包含 %1$s、%2$s 和 %3$s。已保存的设置将被应用；批注将被添加，但不会替换现有的标注。</string>
     <string name="settings_backup_restore_action">恢复</string>
     <string name="settings_backup_annotation_count">批注：%1$d。</string>
     <string name="settings_backup_restored_settings">备份已恢复。</string>
@@ -1648,14 +1646,17 @@
     <string name="companion_settings_story_auto">自动补全前情</string>
     <string name="companion_settings_story_auto_summary">在阅读伴侣中打开“前情”时，回顾上一章并让前情摘要保持最新。</string>
     <string name="companion_settings_privacy">所选段落之前的书籍文本会发送到所选服务器；开启后台摘要后会发送整章内容。服务提供方可能对这些请求收费。</string>
-    <string name="settings_backup_include_connections">包含账号、服务和密码</string>
-    <string name="settings_backup_connections_replace">已保存的书库和 KOReader 账号、服务设置及凭据将被自动替换。</string>
+    <string name="settings_backup_other_exports">其他导出</string>
+    <string name="settings_backup_accounts_password_hint">使用备份密码保护</string>
+    <string name="server_pair_again">重新配对</string>
+    <string name="settings_backup_include_connections">包含账号和密码</string>
+    <string name="settings_backup_connections_replace">此备份将替换已保存的账号、服务设置和密钥。</string>
+    <string name="settings_backup_no_connections">此备份不含账号或密码。</string>
     <string name="settings_backup_liseur_sync_exported_notice">此备份包含一个 %1$s 账号。恢复后请重新配对。</string>
     <string name="settings_backup_liseur_sync_restored_notice">请重新配对 %1$s 账号以恢复同步。</string>
     <string name="settings_backup_password_title">备份密码</string>
     <string name="settings_backup_password_confirm">确认备份密码</string>
     <string name="settings_backup_password_export">请设置密码以加密账号和凭据，恢复时需要此密码。阅读数据、设置、服务地址和字体不会被加密。</string>
-    <string name="settings_backup_password_restore">请输入此备份的密码。账号和凭据将被替换，无需登录。</string>
     <string name="settings_backup_password_error">密码错误或加密数据已损坏，请重试。</string>
     <string name="settings_backup_error_credential">此设备无法读取保存的账号或 KOReader 凭据。请重新登录，或在不包含账号和密码的情况下导出。</string>
 

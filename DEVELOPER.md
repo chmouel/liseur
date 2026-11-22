@@ -151,7 +151,7 @@ leave data they lack unchanged.
   unset keys stay absent so restore leaves destination values alone. Fonts
   keep content-based names and go through the normal font importer.
 - Service addresses are included; credentials and API keys are excluded
-  unless "Include accounts, services and passwords" (unchecked, password
+  unless "Include accounts and passwords" (unchecked, password
   entered twice) is set; then only `connections.enc.json` (library
   account, KOReader pairing, API keys, Play Gemini key) is encrypted:
   AES-256-GCM, fresh 12-byte nonce, PBKDF2-HMAC-SHA256, fresh 32-byte

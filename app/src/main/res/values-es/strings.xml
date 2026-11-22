@@ -892,14 +892,13 @@
     <string name="books_export_error_folder">No se pudo exportar a esta carpeta. Elige una carpeta con permiso de escritura.</string>
     <string name="settings_backup_title">Copia de seguridad y restauración</string>
     <string name="settings_backup_detail">Guarda ajustes, fuentes, posiciones de lectura, anotaciones y resúmenes del compañero en una copia ZIP.</string>
-    <string name="settings_backup_export">Exportar copia</string>
+    <string name="settings_backup_export">Crear copia de seguridad</string>
     <string name="settings_backup_export_detail">Crea un archivo ZIP fechado.</string>
     <string name="settings_backup_restore">Restaurar copia</string>
     <string name="settings_backup_restore_detail">Previsualiza una copia antes de aplicarla.</string>
     <string name="settings_backup_companion_preview">Resúmenes de capítulos: %1$d. Se añadirán los resúmenes del compañero que falten para los libros de esta biblioteca; se conservarán los existentes.</string>
     <string name="settings_backup_companion_restored">Resúmenes de capítulos del compañero añadidos: %1$d.</string>
     <string name="settings_backup_preview_title">¿Restaurar esta copia?</string>
-    <string name="settings_backup_preview_body">Esta copia contiene %1$s, %2$s y %3$s. Se aplicarán los ajustes guardados; las anotaciones se añadirán sin reemplazar las marcas existentes.</string>
     <string name="settings_backup_restore_action">Restaurar</string>
     <plurals name="settings_backup_setting_count">
         <item quantity="one">%1$d ajuste</item>
@@ -935,7 +934,6 @@
     <string name="settings_backup_error_restore">No se pudo restaurar la copia.</string>
     <string name="settings_backup_error_partial">Solo se pudo restaurar parte de la copia.</string>
     <string name="settings_backup_include_stats">Incluir estadísticas de lectura</string>
-    <string name="settings_backup_include_stats_detail">Sesiones de lectura detrás de la pantalla de estadísticas. Las sesiones restauradas permanecen en el dispositivo y nunca se envían a un servidor de sincronización.</string>
     <string name="settings_backup_include_books">Incluir archivos de libros</string>
     <string name="settings_backup_include_books_detail">Los EPUB sin conexión se incluyen en la copia, sin cifrar.</string>
     <string name="settings_backup_books_choose">Elegir libros</string>
@@ -1718,14 +1716,17 @@
     <string name="companion_settings_story_auto">Completar la historia por sí sola</string>
     <string name="companion_settings_story_auto_summary">Cuando el Compañero se abre en Historia, resume el capítulo anterior y mantiene al día la historia hasta ahora.</string>
     <string name="companion_settings_privacy">El texto del libro anterior al párrafo seleccionado se envía al servidor elegido, y capítulos enteros si los resúmenes en segundo plano están activados. Su proveedor puede cobrar por estas solicitudes.</string>
-    <string name="settings_backup_include_connections">Incluir cuentas, servicios y contraseñas</string>
-    <string name="settings_backup_connections_replace">Las cuentas de biblioteca y KOReader, la configuración de servicios y las credenciales guardadas se reemplazarán automáticamente.</string>
+    <string name="settings_backup_other_exports">Otras exportaciones</string>
+    <string name="settings_backup_accounts_password_hint">Protegidas con una contraseña de copia</string>
+    <string name="server_pair_again">Vincular de nuevo</string>
+    <string name="settings_backup_include_connections">Incluir cuentas y contraseñas</string>
+    <string name="settings_backup_connections_replace">Esta copia reemplazará las cuentas, los ajustes de servicios y las claves guardadas.</string>
+    <string name="settings_backup_no_connections">Esta copia no contiene cuentas ni contraseñas.</string>
     <string name="settings_backup_liseur_sync_exported_notice">Esta copia contiene una cuenta de %1$s. Vuelve a emparejarla después de restaurarla.</string>
     <string name="settings_backup_liseur_sync_restored_notice">Vuelve a emparejar la cuenta de %1$s para reanudar la sincronización.</string>
     <string name="settings_backup_password_title">Contraseña de la copia</string>
     <string name="settings_backup_password_confirm">Confirmar contraseña</string>
     <string name="settings_backup_password_export">Elige una contraseña para cifrar las cuentas y credenciales. La necesitarás para restaurarlas. Los datos de lectura, los ajustes, las direcciones de los servicios y las fuentes seguirán sin cifrar.</string>
-    <string name="settings_backup_password_restore">Introduce la contraseña de esta copia. Las cuentas y credenciales se reemplazarán sin iniciar sesión.</string>
     <string name="settings_backup_password_error">Contraseña incorrecta o datos cifrados dañados. Inténtalo de nuevo.</string>
     <string name="settings_backup_error_credential">No se puede leer en este dispositivo una credencial guardada de una cuenta o de KOReader. Vuelve a iniciar sesión o exporta sin cuentas ni contraseñas.</string>
 

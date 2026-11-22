@@ -946,14 +946,13 @@
     <string name="books_export_error_folder">Не удалось экспортировать в эту папку. Выберите папку с разрешением на запись.</string>
     <string name="settings_backup_title">Резервное копирование и восстановление</string>
     <string name="settings_backup_detail">Сохраните настройки, шрифты, позиции чтения, аннотации и сводки помощника в ZIP-копии.</string>
-    <string name="settings_backup_export">Экспортировать резервную копию</string>
+    <string name="settings_backup_export">Создать резервную копию</string>
     <string name="settings_backup_export_detail">Создайте ZIP-файл с датой.</string>
     <string name="settings_backup_restore">Восстановить резервную копию</string>
     <string name="settings_backup_restore_detail">Просмотрите содержимое резервной копии перед восстановлением.</string>
     <string name="settings_backup_companion_preview">Сводки глав: %1$d. Для книг в этой библиотеке будут добавлены недостающие сводки помощника; существующие сохранятся.</string>
     <string name="settings_backup_companion_restored">Добавлено сводок глав помощника: %1$d.</string>
     <string name="settings_backup_preview_title">Восстановить эту резервную копию?</string>
-    <string name="settings_backup_preview_body">Эта копия содержит %1$s, %2$s и %3$s. Сохранённые настройки будут применены; аннотации будут добавлены без замены существующих отметок.</string>
     <string name="settings_backup_restore_action">Восстановить</string>
     <plurals name="settings_backup_setting_count">
         <item quantity="one">%1$d параметр</item>
@@ -1001,7 +1000,6 @@
     <string name="settings_backup_error_restore">Не удалось восстановить резервную копию.</string>
     <string name="settings_backup_error_partial">Резервную копию удалось восстановить лишь частично.</string>
     <string name="settings_backup_include_stats">Включить статистику чтения</string>
-    <string name="settings_backup_include_stats_detail">Сессии чтения для экрана статистики. Восстановленные сессии остаются на устройстве и никогда не отправляются на сервер синхронизации.</string>
     <string name="settings_backup_include_books">Включить файлы книг</string>
     <string name="settings_backup_include_books_detail">Офлайн-файлы EPUB добавляются в копию без шифрования.</string>
     <string name="settings_backup_books_choose">Выбрать книги</string>
@@ -1860,14 +1858,17 @@
     <string name="companion_settings_story_auto">Дополнять сюжет самостоятельно</string>
     <string name="companion_settings_story_auto_summary">Когда Помощник открывается на вкладке «Сюжет», пересказывает предыдущую главу и обновляет краткое содержание сюжета.</string>
     <string name="companion_settings_privacy">Текст книги до выделенного абзаца отправляется на выбранный сервер, а при включённых фоновых пересказах — целые главы. Его поставщик может брать плату за эти запросы.</string>
-    <string name="settings_backup_include_connections">Включить аккаунты, сервисы и пароли</string>
-    <string name="settings_backup_connections_replace">Сохранённые аккаунты библиотеки и KOReader, настройки сервисов и учётные данные будут автоматически заменены.</string>
+    <string name="settings_backup_other_exports">Другой экспорт</string>
+    <string name="settings_backup_accounts_password_hint">Защищены паролем резервной копии</string>
+    <string name="server_pair_again">Подключить снова</string>
+    <string name="settings_backup_include_connections">Включить аккаунты и пароли</string>
+    <string name="settings_backup_connections_replace">Эта копия заменит сохранённые аккаунты, настройки сервисов и ключи.</string>
+    <string name="settings_backup_no_connections">В этой копии нет аккаунтов и паролей.</string>
     <string name="settings_backup_liseur_sync_exported_notice">Эта резервная копия содержит аккаунт %1$s. После восстановления настройте сопряжение заново.</string>
     <string name="settings_backup_liseur_sync_restored_notice">Повторно настройте сопряжение с аккаунтом %1$s, чтобы возобновить синхронизацию.</string>
     <string name="settings_backup_password_title">Пароль резервной копии</string>
     <string name="settings_backup_password_confirm">Подтвердите пароль</string>
     <string name="settings_backup_password_export">Выберите пароль для шифрования аккаунтов и учётных данных. Он понадобится для восстановления. Данные чтения, настройки, адреса сервисов и шрифты останутся незашифрованными.</string>
-    <string name="settings_backup_password_restore">Введите пароль этой резервной копии. Аккаунты и учётные данные будут заменены без входа в систему.</string>
     <string name="settings_backup_password_error">Неверный пароль или повреждены зашифрованные данные. Попробуйте ещё раз.</string>
     <string name="settings_backup_error_credential">Сохранённые учётные данные аккаунта или KOReader нельзя прочитать на этом устройстве. Войдите снова или экспортируйте без аккаунтов и паролей.</string>
 

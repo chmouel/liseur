@@ -118,6 +118,9 @@ class ConnectionBackupRepositoryTest {
             assertNull(keys.get("https://old.example:443"))
             assertTrue(owners.containsAll(listOf("https://voice.example:443", "https://old.example:443", "gemini")))
             assertEquals(1, stopped)
+            assertTrue(restored.needsLiseurSyncPairing)
+            assertFalse(account.forgetUnreadableAccount())
+            assertEquals(restored, account.current())
             // An empty saved connection set replaces destination accounts and keys too.
             payload.put("account", org.json.JSONObject.NULL).put("kosync", org.json.JSONObject.NULL)
                 .put("keys", org.json.JSONObject())
