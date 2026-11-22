@@ -2230,6 +2230,39 @@ class SettingsBackupRepositoryTest {
     }
 
     @Test
+    fun `backup with book metadata and cover can be inspected and restored`() = runTest {
+        val overrides = BookMetadataOverrideRepository(
+            bookDao = db.bookDao(),
+            overrideDao = db.bookMetadataOverrideDao(),
+            coversDir = folder.newFolder("restore-metadata-covers"),
+            inTransaction = { block -> db.withTransaction { block() } },
+            encodeCoverJpeg = { it },
+        )
+        val url = "metadata-restore-book"
+        db.bookDao().upsert(
+            Book(url = url, title = "Original", author = null, coverPath = null, source = null, addedAt = 1, lastOpenedAt = null),
+        )
+        db.bookDao().setDescriptionOverride(url, "Edited description")
+        val cover = File(folder.root, "cover.jpg").apply { writeBytes(byteArrayOf(1, 2, 3)) }
+        val digest = java.security.MessageDigest.getInstance("SHA-256").digest(cover.readBytes())
+            .joinToString("") { "%02x".format(it) }
+        db.bookDao().setCoverOverride(url, cover.path, digest)
+        val repository = SettingsBackupRepository(
+            context,
+            AppSettingsRepository(store("metadata-restore-app.preferences_pb")),
+            ReaderPreferencesRepository(store("metadata-restore-reader.preferences_pb")),
+            UserFontRepository(context, this, loadCheck = { true }),
+            AnnotationBackupRepository(context, db.annotationDao(), db.bookDao(), requested::add),
+            ReadingPositionBackupRepository(db.readingProgressDao(), db.bookDao(), requested::add),
+            companionBackup(),
+            metadataOverrides = BookMetadataOverrideBackupRepository(db.bookDao(), overrides),
+        )
+        val uri = Uri.fromFile(File(folder.root, "metadata-restore.zip"))
+        assertTrue(repository.exportTo(uri) is SettingsBackupExportResult.Exported)
+        assertTrue(restore(repository, uri) is SettingsBackupRestoreResult.Restored)
+    }
+
+    @Test
     fun `an oversized metadata payload is refused before the archive is written`() = runTest {
         val overrides = BookMetadataOverrideRepository(
             bookDao = db.bookDao(),

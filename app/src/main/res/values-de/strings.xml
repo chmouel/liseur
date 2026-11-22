@@ -903,14 +903,13 @@
     <string name="books_export_error_folder">In diesen Ordner konnte nicht exportiert werden. Wähle einen beschreibbaren Ordner.</string>
     <string name="settings_backup_title">Sichern und Wiederherstellen</string>
     <string name="settings_backup_detail">Einstellungen, Schriftarten, Lesepositionen, Anmerkungen und Begleiter-Zusammenfassungen in einer ZIP-Sicherung speichern.</string>
-    <string name="settings_backup_export">Sicherung exportieren</string>
+    <string name="settings_backup_export">Sicherung erstellen</string>
     <string name="settings_backup_export_detail">Eine datierte ZIP-Datei erstellen.</string>
     <string name="settings_backup_restore">Sicherung wiederherstellen</string>
     <string name="settings_backup_restore_detail">Zeige den Inhalt einer Sicherung vor dem Anwenden an.</string>
     <string name="settings_backup_companion_preview">Kapitelzusammenfassungen: %1$d. Fehlende Begleiter-Zusammenfassungen werden für Bücher in dieser Bibliothek hinzugefügt; vorhandene bleiben erhalten.</string>
     <string name="settings_backup_companion_restored">Hinzugefügte Kapitelzusammenfassungen des Begleiters: %1$d.</string>
     <string name="settings_backup_preview_title">Diese Sicherung wiederherstellen?</string>
-    <string name="settings_backup_preview_body">Diese Sicherung enthält %1$s, %2$s und %3$s. Gespeicherte Einstellungen werden angewendet; Anmerkungen werden hinzugefügt, ohne vorhandene Markierungen zu ersetzen.</string>
     <string name="settings_backup_restore_action">Wiederherstellen</string>
     <plurals name="settings_backup_setting_count">
         <item quantity="one">%1$d Einstellung</item>
@@ -946,7 +945,6 @@
     <string name="settings_backup_error_restore">Die Sicherung konnte nicht wiederhergestellt werden.</string>
     <string name="settings_backup_error_partial">Die Sicherung konnte nur teilweise wiederhergestellt werden.</string>
     <string name="settings_backup_include_stats">Lesestatistiken einschließen</string>
-    <string name="settings_backup_include_stats_detail">Lesesitzungen hinter dem Statistikbildschirm. Wiederhergestellte Sitzungen bleiben auf dem Gerät und werden nie an einen Synchronisierungsserver gesendet.</string>
     <string name="settings_backup_include_books">Buchdateien einschließen</string>
     <string name="settings_backup_include_books_detail">Offline-EPUBs werden unverschlüsselt in die Sicherung aufgenommen.</string>
     <string name="settings_backup_books_choose">Bücher auswählen</string>
@@ -1730,14 +1728,17 @@
     <string name="companion_settings_story_auto">Handlung selbstständig ergänzen</string>
     <string name="companion_settings_story_auto_summary">Wenn der Lesebegleiter mit Handlung öffnet, wird das vorige Kapitel zusammengefasst und die bisherige Handlung aktuell gehalten.</string>
     <string name="companion_settings_privacy">Text aus dem Buch vor dem ausgewählten Absatz wird an den gewählten Server gesendet, bei aktivierten Hintergrund-Zusammenfassungen ganze Kapitel. Der Anbieter kann diese Anfragen berechnen.</string>
-    <string name="settings_backup_include_connections">Konten, Dienste und Passwörter einschließen</string>
-    <string name="settings_backup_connections_replace">Gespeicherte Bibliotheks- und KOReader-Konten, Diensteinstellungen und Zugangsdaten werden automatisch ersetzt.</string>
+    <string name="settings_backup_other_exports">Weitere Exporte</string>
+    <string name="settings_backup_accounts_password_hint">Mit einem Sicherungspasswort geschützt</string>
+    <string name="server_pair_again">Erneut koppeln</string>
+    <string name="settings_backup_include_connections">Konten und Passwörter einschließen</string>
+    <string name="settings_backup_connections_replace">Diese Sicherung ersetzt gespeicherte Konten, Diensteinstellungen und Schlüssel.</string>
+    <string name="settings_backup_no_connections">Diese Sicherung enthält keine Konten oder Passwörter.</string>
     <string name="settings_backup_liseur_sync_exported_notice">Dieses Backup enthält ein %1$s-Konto. Kopple es nach der Wiederherstellung erneut.</string>
     <string name="settings_backup_liseur_sync_restored_notice">Kopple das %1$s-Konto erneut, um die Synchronisierung fortzusetzen.</string>
     <string name="settings_backup_password_title">Backup-Passwort</string>
     <string name="settings_backup_password_confirm">Backup-Passwort bestätigen</string>
     <string name="settings_backup_password_export">Wähle ein Passwort zum Verschlüsseln der Konten und Zugangsdaten. Du benötigst es zur Wiederherstellung. Lesedaten, Einstellungen, Dienstadressen und Schriftarten bleiben unverschlüsselt.</string>
-    <string name="settings_backup_password_restore">Gib das Passwort dieses Backups ein. Konten und Zugangsdaten werden ohne Anmeldung ersetzt.</string>
     <string name="settings_backup_password_error">Falsches Passwort oder beschädigte verschlüsselte Daten. Versuche es erneut.</string>
     <string name="settings_backup_error_credential">Gespeicherte Zugangsdaten eines Kontos oder von KOReader können auf diesem Gerät nicht gelesen werden. Melde dich erneut an oder exportiere ohne Konten und Passwörter.</string>
 

@@ -1049,7 +1049,7 @@ class RemoteAccountRepository(
      */
     suspend fun forgetUnreadableAccount(): Boolean = changingAccount {
         val server = dao.get() ?: return@changingAccount false
-        if (server.credentials != null) return@changingAccount false
+        if (server.needsLiseurSyncPairing || server.credentials != null) return@changingAccount false
         // Through the same door as a disconnect. This used to drop the
         // row on its own, which left every scrap of per-account state
         // behind — work names, sync agreements, a cursor — for whoever

@@ -192,6 +192,10 @@ data class RemoteServer(
     val liseurDeviceId: String?
         get() = accountId.takeIf { kind == ServerKind.LISEUR_SYNC }
 
+    @get:Ignore
+    val needsLiseurSyncPairing: Boolean
+        get() = kind == ServerKind.LISEUR_SYNC && liseurDeviceId == null && liseurTokenCipher == null
+
     /**
      * How to sign a request to this server, or null when the secret
      * cannot be read back — a database restored onto another phone

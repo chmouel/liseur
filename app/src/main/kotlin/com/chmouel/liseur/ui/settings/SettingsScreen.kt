@@ -467,14 +467,14 @@ private val ThemeMode.label: Int
 internal fun BackupActionRow(
     icon: @Composable () -> Unit,
     title: String,
-    subtitle: String,
+    subtitle: String? = null,
     enabled: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     ListItem(
         headlineContent = { Text(title) },
-        supportingContent = { Text(subtitle) },
+        supportingContent = subtitle?.let { { Text(it) } },
         leadingContent = { Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) { icon() } },
         colors = if (enabled) {
             ListItemDefaults.colors(containerColor = Color.Transparent)

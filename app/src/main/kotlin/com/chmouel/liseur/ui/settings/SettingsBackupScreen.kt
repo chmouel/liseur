@@ -74,6 +74,7 @@ fun SettingsBackupScreen(
     val context = LocalContext.current
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
+    var showExportOptions by remember { mutableStateOf(false) }
     var includeConnections by remember { mutableStateOf(false) }
     var includeTranslations by remember { mutableStateOf(true) }
     var showBookPicker by remember { mutableStateOf(false) }
@@ -106,136 +107,13 @@ fun SettingsBackupScreen(
         )
     }
 
-    passwordMode?.let { mode ->
-        BackupPasswordDialog(
-            exporting = mode == "export",
-            busy = backup.busy,
-            failed = restoreAttempted &&
-                (backup.status as? SettingsBackupUiStatus.Failed)?.failure == SettingsBackupFailure.PASSWORD,
-            onDismiss = { if (!backup.busy) passwordMode = null },
-            onConfirm = { password ->
-                if (mode == "export") {
-                    passwordMode = null
-                    backup.export(password, includeTranslations)
-                } else {
-                    restoreAttempted = true
-                    backup.confirmRestore(password)
-                }
-            },
-        )
-    }
-
-    backup.preview?.takeIf { passwordMode == null }?.let { ready ->
-        val settingCount = pluralStringResource(
-            R.plurals.settings_backup_setting_count,
-            ready.preview.settingCount,
-            ready.preview.settingCount,
-        )
-        val fontCount = pluralStringResource(
-            R.plurals.settings_backup_font_count,
-            ready.preview.fontCount,
-            ready.preview.fontCount,
-        )
+    if (showExportOptions && !showBookPicker) {
         AlertDialog(
-            onDismissRequest = backup.dismissPreview,
-            title = { Text(stringResource(R.string.settings_backup_preview_title)) },
+            onDismissRequest = { showExportOptions = false },
+            title = { Text(stringResource(R.string.settings_backup_export)) },
             text = {
-                Text(
-                    stringResource(
-                        R.string.settings_backup_preview_body,
-                        settingCount,
-                        fontCount,
-                        stringResource(
-                            R.string.annotations_backup_summary,
-                            pluralStringResource(R.plurals.annotations_backup_mark_count, ready.preview.annotationCount, ready.preview.annotationCount),
-                            pluralStringResource(R.plurals.annotations_backup_book_count, ready.preview.annotationBookCount, ready.preview.annotationBookCount),
-                        ),
-                    ) + (if (ready.preview.bookCount > 0) {
-                        "\n\n" + pluralStringResource(R.plurals.settings_backup_books_preview, ready.preview.bookCount, ready.preview.bookCount) +
-                            if (ready.preview.booksToImport > 0) {
-                                " " + pluralStringResource(
-                                    R.plurals.settings_backup_books_to_add,
-                                    ready.preview.booksToImport,
-                                    ready.preview.booksToImport,
-                                    Formatter.formatShortFileSize(context, ready.preview.bookImportBytes),
-                                )
-                            } else {
-                                ""
-                            }
-                    } else { "" }) + (if (ready.preview.sessionCount > 0) {
-                        "\n\n" + pluralStringResource(R.plurals.settings_backup_sessions_preview, ready.preview.sessionCount, ready.preview.sessionCount)
-                    } else { "" }) + (if (ready.preview.positionCount > 0) {
-                        "\n\n" + pluralStringResource(R.plurals.settings_backup_positions_preview, ready.preview.positionCount, ready.preview.positionCount)
-                    } else { "" }) + (if (ready.preview.companionRecapCount > 0) {
-                        "\n\n" + stringResource(R.string.settings_backup_companion_preview, ready.preview.companionRecapCount)
-                    } else { "" }) + (if (ready.preview.translationBookCount > 0) {
-                        "\n\n" + stringResource(R.string.whole_book_backup_preview, ready.preview.translationBookCount)
-                    } else { "" }) + (if (ready.preview.includesConnections) {
-                        "\n\n" + stringResource(R.string.settings_backup_connections_replace)
-                    } else { "" }) + (if (ready.preview.annotationCount > 0) {
-                        "\n\n" + stringResource(
-                            R.string.import_preview_body,
-                            stringResource(
-                                R.string.annotations_backup_summary,
-                                pluralStringResource(R.plurals.annotations_backup_mark_count, ready.preview.annotationCount, ready.preview.annotationCount),
-                                pluralStringResource(R.plurals.annotations_backup_book_count, ready.preview.annotationBookCount, ready.preview.annotationBookCount),
-                            ),
-                            pluralStringResource(R.plurals.annotations_backup_matched_books, ready.preview.matchedAnnotationBooks, ready.preview.matchedAnnotationBooks),
-                        )
-                    } else {
-                        ""
-                    }),
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    if (ready.preview.includesConnections) {
-                        restoreAttempted = false
-                        passwordMode = "restore"
-                    } else backup.confirmRestore(null)
-                }, enabled = !backup.busy) {
-                    Text(stringResource(R.string.settings_backup_restore_action))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = backup.dismissPreview, enabled = !backup.busy) {
-                    Text(stringResource(R.string.cancel))
-                }
-            },
-        )
-    }
-
-    Scaffold(
-        modifier = modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-        topBar = {
-            LargeTopAppBar(
-                title = { Text(stringResource(R.string.settings_backup_title)) },
-                navigationIcon = { PaneBackButton(onBack) },
-                scrollBehavior = scrollBehavior,
-            )
-        },
-    ) { padding ->
-        Box(
-            Modifier.fillMaxSize().padding(padding),
-            contentAlignment = Alignment.TopCenter,
-        ) {
-            Column(
-                Modifier
-                    .widthIn(max = contentWidthCap(windowWidth()))
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 20.dp)
-                    .padding(top = 12.dp, bottom = 32.dp),
-            ) {
-                Card(Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
-                        Text(
-                            stringResource(R.string.settings_backup_detail),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    RowDivider()
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    Text(stringResource(R.string.settings_backup_detail))
                     Row(
                         Modifier
                             .fillMaxWidth()
@@ -245,14 +123,18 @@ fun SettingsBackupScreen(
                                 role = Role.Checkbox,
                                 onValueChange = { includeConnections = it },
                             )
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                            .padding(vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Checkbox(checked = includeConnections, onCheckedChange = null, enabled = !backup.busy)
-                        Text(
-                            stringResource(R.string.settings_backup_include_connections),
-                            Modifier.padding(start = 12.dp),
-                        )
+                        Column(Modifier.padding(start = 12.dp)) {
+                            Text(stringResource(R.string.settings_backup_include_connections))
+                            Text(
+                                stringResource(R.string.settings_backup_accounts_password_hint),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                     RowDivider()
                     Row(
@@ -264,18 +146,11 @@ fun SettingsBackupScreen(
                                 role = Role.Checkbox,
                                 onValueChange = backup.setIncludeSessions,
                             )
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                            .padding(vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Checkbox(checked = backup.includeSessions, onCheckedChange = null, enabled = !backup.busy)
-                        Column(Modifier.padding(start = 12.dp)) {
-                            Text(stringResource(R.string.settings_backup_include_stats))
-                            Text(
-                                stringResource(R.string.settings_backup_include_stats_detail),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
+                        Text(stringResource(R.string.settings_backup_include_stats), Modifier.padding(start = 12.dp))
                     }
                     RowDivider()
                     Row(
@@ -287,7 +162,7 @@ fun SettingsBackupScreen(
                                 role = Role.Checkbox,
                                 onValueChange = backup.setIncludeBooks,
                             )
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                            .padding(vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Checkbox(checked = backup.includeBooks, onCheckedChange = null, enabled = !backup.busy)
@@ -307,14 +182,14 @@ fun SettingsBackupScreen(
                                 stringResource(R.string.settings_backup_books_none),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                                modifier = Modifier.padding(vertical = 10.dp),
                             )
                         } else if (candidates != null) {
                             Column(
                                 Modifier
                                     .fillMaxWidth()
                                     .clickable(enabled = !backup.busy) { showBookPicker = true }
-                                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                                    .padding(vertical = 10.dp),
                             ) {
                                 Text(
                                     stringResource(R.string.settings_backup_books_choose),
@@ -355,7 +230,7 @@ fun SettingsBackupScreen(
                                     role = Role.Checkbox,
                                     onValueChange = { includeTranslations = it },
                                 )
-                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                                .padding(vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Checkbox(checked = includeTranslations, onCheckedChange = null, enabled = !backup.busy)
@@ -369,28 +244,190 @@ fun SettingsBackupScreen(
                             }
                         }
                     }
-                    RowDivider()
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !backup.busy && !booksOverTotalLimit,
+                    onClick = {
+                        showExportOptions = false
+                        if (includeConnections) passwordMode = "export" else backup.export(null, includeTranslations)
+                    },
+                ) {
+                    Text(stringResource(R.string.settings_backup_export))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showExportOptions = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
+    }
+
+    passwordMode?.let { mode ->
+        BackupPasswordDialog(
+            exporting = mode == "export",
+            busy = backup.busy,
+            failed = restoreAttempted &&
+                (backup.status as? SettingsBackupUiStatus.Failed)?.failure == SettingsBackupFailure.PASSWORD,
+            onDismiss = {
+                if (!backup.busy) {
+                    passwordMode = null
+                    if (mode == "restore") backup.dismissStatus()
+                    if (mode == "export") showExportOptions = true
+                }
+            },
+            onConfirm = { password ->
+                if (mode == "export") {
+                    passwordMode = null
+                    backup.export(password, includeTranslations)
+                } else {
+                    restoreAttempted = true
+                    backup.confirmRestore(password)
+                }
+            },
+        )
+    }
+
+    (backup.status as? SettingsBackupUiStatus.Failed)
+        ?.takeIf { passwordMode == null }
+        ?.let { failure ->
+            AlertDialog(
+                onDismissRequest = backup.dismissStatus,
+                text = { Text(stringResource(failure.failure.message)) },
+                confirmButton = {
+                    TextButton(onClick = backup.dismissStatus) {
+                        Text(stringResource(android.R.string.ok))
+                    }
+                },
+            )
+        }
+
+    backup.preview?.takeIf { passwordMode == null }?.let { ready ->
+        val preview = ready.preview
+        AlertDialog(
+            onDismissRequest = { if (!backup.busy) backup.dismissPreview() },
+            title = { Text(stringResource(R.string.settings_backup_preview_title)) },
+            text = {
+                Column(
+                    Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        stringResource(
+                            if (preview.includesConnections) R.string.settings_backup_connections_replace
+                            else R.string.settings_backup_no_connections,
+                        ),
+                    )
+                    if (preview.settingCount > 0) {
+                        Text(pluralStringResource(R.plurals.settings_backup_setting_count, preview.settingCount, preview.settingCount))
+                    }
+                    if (preview.fontCount > 0) {
+                        Text(pluralStringResource(R.plurals.settings_backup_font_count, preview.fontCount, preview.fontCount))
+                    }
+                    if (preview.bookCount > 0) {
+                        val books = pluralStringResource(R.plurals.settings_backup_books_preview, preview.bookCount, preview.bookCount)
+                        val toAdd = if (preview.booksToImport > 0) {
+                            pluralStringResource(
+                                R.plurals.settings_backup_books_to_add,
+                                preview.booksToImport,
+                                preview.booksToImport,
+                                Formatter.formatShortFileSize(context, preview.bookImportBytes),
+                            )
+                        } else {
+                            null
+                        }
+                        Text(listOfNotNull(books, toAdd).joinToString(" "))
+                    }
+                    if (preview.annotationCount > 0) {
+                        val marks = stringResource(
+                            R.string.annotations_backup_summary,
+                            pluralStringResource(R.plurals.annotations_backup_mark_count, preview.annotationCount, preview.annotationCount),
+                            pluralStringResource(R.plurals.annotations_backup_book_count, preview.annotationBookCount, preview.annotationBookCount),
+                        )
+                        if (preview.matchedAnnotationBooks == preview.annotationBookCount) {
+                            Text(marks)
+                        } else {
+                            Text(
+                                stringResource(
+                                    R.string.import_preview_body,
+                                    marks,
+                                    pluralStringResource(R.plurals.annotations_backup_matched_books, preview.matchedAnnotationBooks, preview.matchedAnnotationBooks),
+                                ),
+                            )
+                        }
+                    }
+                    if (preview.positionCount > 0) {
+                        Text(pluralStringResource(R.plurals.settings_backup_positions_preview, preview.positionCount, preview.positionCount))
+                    }
+                    if (preview.sessionCount > 0) {
+                        Text(pluralStringResource(R.plurals.settings_backup_sessions_preview, preview.sessionCount, preview.sessionCount))
+                    }
+                    if (preview.companionRecapCount > 0) {
+                        Text(stringResource(R.string.settings_backup_companion_preview, preview.companionRecapCount))
+                    }
+                    if (preview.translationBookCount > 0) {
+                        Text(stringResource(R.string.whole_book_backup_preview, preview.translationBookCount))
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    if (preview.includesConnections) {
+                        restoreAttempted = false
+                        passwordMode = "restore"
+                    } else backup.confirmRestore(null)
+                }, enabled = !backup.busy) {
+                    Text(stringResource(R.string.settings_backup_restore_action))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = backup.dismissPreview, enabled = !backup.busy) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
+    }
+
+    Scaffold(
+        modifier = modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        topBar = {
+            LargeTopAppBar(
+                title = { Text(stringResource(R.string.settings_backup_title)) },
+                navigationIcon = { PaneBackButton(onBack) },
+                scrollBehavior = scrollBehavior,
+            )
+        },
+    ) { padding ->
+        Box(
+            Modifier.fillMaxSize().padding(padding),
+            contentAlignment = Alignment.TopCenter,
+        ) {
+            Column(
+                Modifier
+                    .widthIn(max = contentWidthCap(windowWidth()))
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp)
+                    .padding(top = 12.dp, bottom = 32.dp),
+            ) {
+                Card(Modifier.fillMaxWidth()) {
                     BackupActionRow(
                         icon = { Icon(Icons.Outlined.FileUpload, contentDescription = null) },
                         title = stringResource(R.string.settings_backup_export),
-                        subtitle = stringResource(R.string.settings_backup_export_detail),
                         enabled = !backup.busy,
-                        onClick = {
-                            if (includeConnections) passwordMode = "export" else backup.export(null, includeTranslations)
-                        },
+                        onClick = { showExportOptions = true },
                         modifier = Modifier.settingsAnchor(SettingsEntries.BackupExport),
                     )
                     RowDivider()
                     BackupActionRow(
                         icon = { Icon(Icons.Outlined.FileOpen, contentDescription = null) },
                         title = stringResource(R.string.settings_backup_restore),
-                        subtitle = stringResource(R.string.settings_backup_restore_detail),
                         enabled = !backup.busy,
                         onClick = backup.restore,
                         modifier = Modifier.settingsAnchor(SettingsEntries.BackupRestore),
                     )
-                    RowDivider()
-                    EvaluationExportButton(enabled = !backup.busy)
                     backup.archiveProgress?.let { progress ->
                         RowDivider()
                         Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
@@ -438,7 +475,7 @@ fun SettingsBackupScreen(
                     }
                 }
 
-                SettingsGroup(stringResource(R.string.books_export_title)) {
+                SettingsGroup(stringResource(R.string.settings_backup_other_exports)) {
                     BackupActionRow(
                         icon = { Icon(Icons.Outlined.FolderOpen, contentDescription = null) },
                         title = stringResource(R.string.books_export_title),
@@ -447,6 +484,8 @@ fun SettingsBackupScreen(
                         onClick = backup.exportBooks,
                         modifier = Modifier.settingsAnchor(SettingsEntries.BooksExport),
                     )
+                    RowDivider()
+                    EvaluationExportButton(enabled = !backup.busy)
                     backup.bookProgress?.let { progress ->
                         RowDivider()
                         Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
@@ -468,7 +507,7 @@ fun SettingsBackupScreen(
                         }
                     }
                 }
-                backup.status?.let { status ->
+                backup.status?.takeUnless { it is SettingsBackupUiStatus.Failed }?.let { status ->
                     val message = when (status) {
                         is SettingsBackupUiStatus.Exported -> listOfNotNull(
                             pluralStringResource(
@@ -756,15 +795,9 @@ private fun BackupPasswordDialog(
         title = { Text(stringResource(R.string.settings_backup_password_title)) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
-                Text(
-                    if (exporting) {
-                        stringResource(
-                            R.string.settings_backup_password_export,
-                        )
-                    } else {
-                        stringResource(R.string.settings_backup_password_restore)
-                    },
-                )
+                if (exporting) {
+                    Text(stringResource(R.string.settings_backup_password_export))
+                }
                 OutlinedTextField(
                     value = password, onValueChange = { password = it }, enabled = !busy,
                     label = { Text(stringResource(R.string.settings_backup_password_title)) },
