@@ -76,7 +76,8 @@
     <string name="companion_gemini_privacy">Text aus dem Buch vor dem ausgewählten Absatz wird mit deinem Gemini-Schlüssel an Google gesendet, bei aktivierten Hintergrund-Zusammenfassungen ganze Kapitel. Google kann diese Anfragen berechnen.</string>
     <string name="hardcover_settings_summary">Deinen Lesefortschritt an dein Hardcover-Konto melden</string>
     <string name="reading_services_title">Lesedienste</string>
-    <string name="hardcover_intro">Liseur kann Hardcover mitteilen, was du liest, wie weit du bist, wann du angefangen und aufgehört hast und wie du es bewertet hast. Aus deiner Hardcover-Bibliothek wird nichts übernommen; die Ausgabenauswahl zeigt nur öffentliche Katalogdaten.</string>
+    <string name="hardcover_intro">Liseur kann Hardcover mitteilen, was du liest, wie weit du bist, wann du angefangen und aufgehört hast, und deine Bewertungen und Rezensionen synchronisieren. Lesestatus und Fortschritt werden in eine Richtung gesendet; die Ausgabenauswahl zeigt nur öffentliche Katalogdaten.</string>
+    <string name="hardcover_intro_evaluations">Bewertungen und Rezensionen werden in beide Richtungen synchronisiert. Deine Rezension wird als öffentliche Hardcover-Rezension veröffentlicht.</string>
     <string name="hardcover_token_label">API-Token</string>
     <string name="hardcover_token_help">Erstelle ein Token bei Hardcover und füge es hier ein.</string>
     <string name="hardcover_token_hint">Füge dein Token ein</string>
@@ -91,7 +92,7 @@
     <string name="hardcover_error_scope">Mit diesem Token lässt sich deine Hardcover-Bibliothek nicht ändern. Erstelle über „Token holen“ ein neues.</string>
     <string name="hardcover_error_offline">Hardcover ist nicht erreichbar. Prüfe deine Verbindung und versuche es erneut.</string>
     <string name="hardcover_error_other">Hardcover konnte gerade nicht aktualisiert werden. Versuche es später erneut.</string>
-    <string name="hardcover_privacy">Um jedes Buch zu finden, sendet Liseur Titel, Autor und ISBN an Hardcover. Danach sendet es Status, gelesene Seiten, Lesedaten und deine Bewertung. Wenn du eine Ausgabe von Hand auswählst, sendet es außerdem deine Suche und lädt Cover vom Bilderserver von Hardcover.</string>
+    <string name="hardcover_privacy">Um jedes Buch zu finden, sendet Liseur Titel, Autor und ISBN an Hardcover. Danach sendet es Status, gelesene Seiten, Lesedaten und synchronisiert deine Bewertung und öffentliche Rezension. Wenn du eine Ausgabe von Hand auswählst, sendet es außerdem deine Suche und lädt Cover vom Bilderserver von Hardcover.</string>
     <string name="hardcover_push">An Hardcover senden</string>
     <string name="hardcover_pushed">An Hardcover gesendet</string>
     <string name="hardcover_up_to_date">Hardcover ist bereits aktuell</string>
@@ -134,4 +135,12 @@
     <string name="hardcover_update_details_cover_failed">Angaben aktualisiert, aber das Cover konnte nicht heruntergeladen werden.</string>
     <string name="hardcover_update_details_cover_only_failed">Das Cover konnte nicht heruntergeladen werden.</string>
     <string name="hardcover_update_details_stale">Das Buch hat sich inzwischen geändert. Versuche die Aktualisierung erneut.</string>
+    <string name="hardcover_conflict_rating_title">Bewertung weicht ab</string>
+    <string name="hardcover_conflict_review_title">Rezension weicht ab</string>
+    <string name="hardcover_conflict_local">Liseur: %1$s</string>
+    <string name="hardcover_conflict_remote">Hardcover: %1$s</string>
+    <string name="hardcover_conflict_keep_local">Von Liseur behalten</string>
+    <string name="hardcover_conflict_use_remote">Von Hardcover übernehmen</string>
+    <string name="hardcover_conflict_resolved">Aktualisiert</string>
+    <string name="hardcover_conflict_review_too_long">Diese Hardcover-Rezension ist zu lang, um in Liseur übernommen zu werden.</string>
 </resources>

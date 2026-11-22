@@ -37,35 +37,38 @@ class HardcoverPlanTest {
     }
 
     @Test
-    fun `a book not on the shelf is added with its status and rating`() {
+    fun `a book not on the shelf is added with its status, rating and review`() {
         assertEquals(
-            HardcoverEntryStep.Add(HardcoverStatus.READ, 4.5),
-            HardcoverPlan.entryStep(absent, local(ReadingStatus.FINISHED, rating = 4.5), pushedRating = null),
+            HardcoverEntryStep.Add(HardcoverStatus.READ, 4.5, "Great"),
+            HardcoverPlan.entryStep(
+                absent,
+                local(ReadingStatus.FINISHED, rating = 4.5),
+                ratingDecision = HardcoverEvaluationDecision.PushToRemote("9"),
+                reviewDecision = HardcoverEvaluationDecision.PushToRemote("Great"),
+            ),
         )
-        assertNull(HardcoverPlan.entryStep(absent, local(ReadingStatus.READY_TO_READ), pushedRating = null))
+        assertNull(HardcoverPlan.entryStep(absent, local(ReadingStatus.READY_TO_READ)))
     }
 
     @Test
     fun `a book read on hardcover stays read`() {
-        assertNull(HardcoverPlan.entryStep(shelf(HardcoverStatus.READ), local(ReadingStatus.READING), null))
+        assertNull(HardcoverPlan.entryStep(shelf(HardcoverStatus.READ), local(ReadingStatus.READING)))
         assertNull(
             HardcoverPlan.entryStep(
                 shelf(HardcoverStatus.READ),
                 local(ReadingStatus.DID_NOT_FINISH, chosen = true),
-                null,
             ),
         )
     }
 
     @Test
     fun `paused and did not finish move only for a chosen status`() {
-        assertNull(HardcoverPlan.entryStep(shelf(HardcoverStatus.PAUSED), local(ReadingStatus.READING), null))
+        assertNull(HardcoverPlan.entryStep(shelf(HardcoverStatus.PAUSED), local(ReadingStatus.READING)))
         assertEquals(
             HardcoverEntryStep.Update(HardcoverStatus.CURRENTLY_READING, null),
             HardcoverPlan.entryStep(
                 shelf(HardcoverStatus.DID_NOT_FINISH),
                 local(ReadingStatus.READING, chosen = true),
-                null,
             ),
         )
     }
@@ -76,21 +79,39 @@ class HardcoverPlanTest {
             HardcoverPlan.entryStep(
                 shelf(HardcoverStatus.CURRENTLY_READING, rating = 4.0),
                 local(ReadingStatus.READING, rating = 4.0),
-                pushedRating = 4.0,
             ),
         )
     }
 
     @Test
-    fun `a rating is cleared only when this device set it`() {
+    fun `rating and review updates and clears follow the evaluation plan`() {
         val unrated = local(ReadingStatus.READING)
         val reading = HardcoverStatus.CURRENTLY_READING
         assertEquals(
             HardcoverEntryStep.Update(null, null, clearRating = true),
-            HardcoverPlan.entryStep(shelf(reading, rating = 3.0), unrated, pushedRating = 3.0),
+            HardcoverPlan.entryStep(
+                shelf(reading, rating = 3.0),
+                unrated,
+                ratingDecision = HardcoverEvaluationDecision.PushToRemote(null),
+            ),
         )
-        assertNull(HardcoverPlan.entryStep(shelf(reading, rating = 3.0), unrated, pushedRating = null))
-        assertNull(HardcoverPlan.entryStep(shelf(reading, rating = 3.5), unrated, pushedRating = 3.0))
+        assertNull(HardcoverPlan.entryStep(shelf(reading, rating = 3.0), unrated))
+        assertEquals(
+            HardcoverEntryStep.Update(null, null, review = "Loved it"),
+            HardcoverPlan.entryStep(
+                shelf(reading),
+                unrated,
+                reviewDecision = HardcoverEvaluationDecision.PushToRemote("Loved it"),
+            ),
+        )
+        assertEquals(
+            HardcoverEntryStep.Update(null, null, clearReview = true),
+            HardcoverPlan.entryStep(
+                shelf(reading).copy(review = "Old"),
+                unrated,
+                reviewDecision = HardcoverEvaluationDecision.PushToRemote(null),
+            ),
+        )
     }
 
     @Test
@@ -125,12 +146,12 @@ class HardcoverPlanTest {
     fun `an edition chosen here moves the entry, one found alone does not`() {
         val onOther = shelf(HardcoverStatus.CURRENTLY_READING).copy(editionId = 8)
         val local = local(ReadingStatus.READING)
-        assertNull(HardcoverPlan.entryStep(onOther, local, null))
+        assertNull(HardcoverPlan.entryStep(onOther, local))
         assertEquals(
             HardcoverEntryStep.Update(null, null, editionId = 5),
-            HardcoverPlan.entryStep(onOther, local, null, chosenEdition = 5),
+            HardcoverPlan.entryStep(onOther, local, chosenEdition = 5),
         )
-        assertNull(HardcoverPlan.entryStep(onOther.copy(editionId = 5), local, null, chosenEdition = 5))
+        assertNull(HardcoverPlan.entryStep(onOther.copy(editionId = 5), local, chosenEdition = 5))
     }
 
     @Test

@@ -83,7 +83,8 @@
     <string name="hardcover_title" translatable="false">Hardcover</string>
     <string name="hardcover_settings_summary">Report your reading to your Hardcover account</string>
     <string name="reading_services_title">Reading services</string>
-    <string name="hardcover_intro">Liseur can tell Hardcover what you are reading, how far along you are, when you started and finished, and how you rated it. Nothing from your Hardcover library is brought back; the edition picker shows public catalogue details only.</string>
+    <string name="hardcover_intro">Liseur can tell Hardcover what you are reading, how far along you are, when you started and finished, and sync your ratings and reviews. Your reading status and progress are sent one way; the edition picker shows public catalogue details only.</string>
+    <string name="hardcover_intro_evaluations">Ratings and reviews sync both ways. Your review is published as your public Hardcover review.</string>
     <string name="hardcover_token_label">API token</string>
     <string name="hardcover_token_help">Create a token on Hardcover and paste it here.</string>
     <string name="hardcover_token_hint">Paste your token</string>
@@ -98,7 +99,7 @@
     <string name="hardcover_error_scope">This token cannot update your Hardcover library. Create a new one with Get a token.</string>
     <string name="hardcover_error_offline">Could not reach Hardcover. Check your connection and try again.</string>
     <string name="hardcover_error_other">Hardcover could not be updated right now. Try again later.</string>
-    <string name="hardcover_privacy">To find each book, Liseur sends Hardcover its title, author and ISBN. It then sends the status, pages read, reading dates and your rating. When you choose an edition by hand, it also sends what you search for, and loads covers from Hardcover\'s image host.</string>
+    <string name="hardcover_privacy">To find each book, Liseur sends Hardcover its title, author and ISBN. It then sends the status, pages read, reading dates, and syncs your rating and public review. When you choose an edition by hand, it also sends what you search for, and loads covers from Hardcover\'s image host.</string>
     <string name="hardcover_push">Push to Hardcover</string>
     <string name="hardcover_pushed">Sent to Hardcover</string>
     <string name="hardcover_up_to_date">Hardcover is already up to date</string>
@@ -141,4 +142,12 @@
     <string name="hardcover_update_details_cover_failed">Details updated, but the cover could not be downloaded.</string>
     <string name="hardcover_update_details_cover_only_failed">The cover could not be downloaded.</string>
     <string name="hardcover_update_details_stale">This book changed meanwhile. Try the update again.</string>
+    <string name="hardcover_conflict_rating_title">Rating differs</string>
+    <string name="hardcover_conflict_review_title">Review differs</string>
+    <string name="hardcover_conflict_local">Liseur: %1$s</string>
+    <string name="hardcover_conflict_remote">Hardcover: %1$s</string>
+    <string name="hardcover_conflict_keep_local">Keep Liseur\'s</string>
+    <string name="hardcover_conflict_use_remote">Use Hardcover\'s</string>
+    <string name="hardcover_conflict_resolved">Updated</string>
+    <string name="hardcover_conflict_review_too_long">This Hardcover review is too long to bring into Liseur.</string>
 </resources>

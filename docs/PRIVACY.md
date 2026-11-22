@@ -551,18 +551,25 @@ Library, Reading services leads there too). Connecting sends the token to
 opens Hardcover's token page in your browser; Liseur itself sends
 nothing there.
 
-Once connected, closing a book, changing its reading status or rating it
-sends that book to `api.hardcover.app` over HTTPS with your token. To
-find the book on Hardcover, Liseur sends the ISBN the file carries, or
-its title and author when it has none; this happens once per book. It
-then reads what your Hardcover library holds for that book and sends
-only what differs: its status (want to read, currently reading, read,
-paused or did not finish), the page you reached in the chosen edition,
-the days you started and finished it, and your rating. Nothing is sent
-for a book you have not opened, rated or given a status. No book text,
-file, highlight, note or review is sent, and nothing from your Hardcover
-library is brought back into Liseur; the edition picker and "Update from
-Hardcover" use public catalogue details only.
+Once connected, closing a book, changing its reading status, rating it
+or reviewing it sends that book to `api.hardcover.app` over HTTPS with
+your token, and opening Book details for a matched book checks Hardcover
+at most once every ten minutes. To find the book on Hardcover, Liseur
+sends the ISBN the file carries, or its title and author when it has
+none; this happens once per book. It then reads what your Hardcover
+library holds for that book and sends what differs: its status (want to
+read, currently reading, read, paused or did not finish), the page you
+reached in the chosen edition, the days you started and finished it, and
+your rating and review. Your rating and review sync both ways with
+Hardcover: your Liseur review is published as your public review on
+Hardcover, and a rating or review on your Hardcover entry for a matched
+book is brought back into Liseur (and synced to your other devices if
+`liseur-sync` is configured). If a rating or review changed on both
+sides, Liseur waits for you to choose which one to keep in Book details.
+Nothing is sent for an unmatched book you have not opened, rated,
+reviewed or given a status. No book text, file, highlight or note is
+sent, and no reading status or position from your Hardcover library is
+brought back into Liseur.
 
 When you choose an edition by hand, the picker asks `api.hardcover.app`,
 with your token, for the catalogue entries matching what you submit: the
@@ -575,7 +582,7 @@ as your IP address. Picker cover previews are kept in memory only. When
 you tap "Update from Hardcover" in Book details, Liseur asks
 `api.hardcover.app` with your token for the matched edition's public
 catalogue details, downloads the cover from `assets.hardcover.app`
-without your token if you tick it, and saves only the fields you tick on
+without your token to show and compare it, and saves only the fields you tick on
 this device as your own metadata edits (synced like any other edit if
 `liseur-sync` is configured).
 

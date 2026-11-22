@@ -20,6 +20,8 @@ data class LocalDetails(
     val seriesIndex: Double?,
     /** The Hardcover cover URL the current cover was imported from, while that import is still the cover. */
     val importedCoverUrl: String? = null,
+    /** The book's declared language tag, for when its description cannot tell. */
+    val language: String? = null,
 )
 
 data class DetailProposal(
@@ -58,12 +60,14 @@ fun proposeUpdates(local: LocalDetails, remote: HardcoverEditionDetails): List<D
         incoming = remote.author,
     )?.let { proposals += it }
 
-    textProposal(
-        field = DetailField.DESCRIPTION,
-        wireField = MetadataOverrideFields.DESCRIPTION,
-        current = local.description,
-        incoming = remote.description,
-    )?.let { proposals += it }
+    if (!TextLanguage.differs(remote.description, local.description, local.language)) {
+        textProposal(
+            field = DetailField.DESCRIPTION,
+            wireField = MetadataOverrideFields.DESCRIPTION,
+            current = local.description,
+            incoming = remote.description,
+        )?.let { proposals += it }
+    }
 
     val remoteSeries = remote.seriesName?.trim()?.takeIf { it.isNotEmpty() }
     if (remoteSeries != null) {

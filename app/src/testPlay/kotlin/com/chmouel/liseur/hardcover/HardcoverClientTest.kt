@@ -161,9 +161,11 @@ class HardcoverClientTest {
     }
 
     @Test
-    fun `the latest read comes back with its pages, dates and edition`() = runBlocking {
+    fun `the latest read comes back with its pages, dates, edition and review`() = runBlocking {
         answer(
-            """{"user_books":[{"id":7,"status_id":2,"rating":3.5,"edition_id":5,"user_book_reads":[
+            """{"user_books":[{"id":7,"status_id":2,"rating":3.5,"edition_id":5,
+            "review_markdown":"A great adventure.","review_raw":"Raw fallback",
+            "user_book_reads":[
             {"id":3,"progress_pages":120,"started_at":"2026-03-01","finished_at":null,
             "edition_id":8,"edition":{"pages":600}}]}]}""",
         )
@@ -171,7 +173,14 @@ class HardcoverClientTest {
         val result = client().shelfState("tok", userId = 42, bookId = 9)
 
         assertEquals(
-            HardcoverShelfState(7, 2, 3.5, HardcoverRead(3, 120, "2026-03-01", null, 8, 600), editionId = 5),
+            HardcoverShelfState(
+                7,
+                2,
+                3.5,
+                HardcoverRead(3, 120, "2026-03-01", null, 8, 600),
+                editionId = 5,
+                review = "A great adventure.",
+            ),
             (result as RemoteResult.Ok).value,
         )
         val variables = sent().getJSONObject("variables")
@@ -180,10 +189,36 @@ class HardcoverClientTest {
     }
 
     @Test
-    fun `adding a book sends one object and answers the new entry`() = runBlocking {
+    fun `shelfState falls back to review_raw when review_markdown is blank or null`() = runBlocking {
+        answer(
+            """{"user_books":[{"id":7,"status_id":2,"rating":null,"edition_id":5,
+            "review_markdown":"   ","review_raw":"Fallback text","user_book_reads":[]}]}""",
+        )
+        answer(
+            """{"user_books":[{"id":7,"status_id":2,"rating":null,"edition_id":5,
+            "review_markdown":null,"review_raw":"   ","user_book_reads":[]}]}""",
+        )
+
+        val fallback = (client().shelfState("tok", userId = 42, bookId = 9) as RemoteResult.Ok).value
+        val blank = (client().shelfState("tok", userId = 42, bookId = 9) as RemoteResult.Ok).value
+
+        assertEquals("Fallback text", fallback.review)
+        assertNull(blank.review)
+    }
+
+    @Test
+    fun `adding a book sends one object with review and answers the new entry`() = runBlocking {
         answer("""{"insert_user_book":{"error":null,"user_book":{"id":7}}}""")
 
-        val result = client().addToLibrary("tok", bookId = 9, editionId = 5, statusId = 3, rating = 4.5)
+        val result = client().addToLibrary(
+            "tok",
+            bookId = 9,
+            editionId = 5,
+            statusId = 3,
+            rating = 4.5,
+            review = "Loved it",
+            reviewedAt = "2026-05-01",
+        )
 
         assertEquals(7L, (result as RemoteResult.Ok).value)
         val entry = sent().getJSONObject("variables").getJSONObject("object")
@@ -191,15 +226,21 @@ class HardcoverClientTest {
         assertEquals(5, entry.getInt("edition_id"))
         assertEquals(3, entry.getInt("status_id"))
         assertEquals(4.5, entry.getDouble("rating"), 0.0)
+        assertEquals("Loved it", entry.getString("review_markdown"))
+        assertEquals("2026-05-01", entry.getString("reviewed_at"))
     }
 
     @Test
-    fun `an entry update sends only what changes, and a cleared rating as null`() = runBlocking {
+    fun `an entry update sends only what changes, and cleared rating or review as null`() = runBlocking {
+        answer("""{"update_user_book":{"error":null,"user_book":{"id":7}}}""")
+        answer("""{"update_user_book":{"error":null,"user_book":{"id":7}}}""")
         answer("""{"update_user_book":{"error":null,"user_book":{"id":7}}}""")
         answer("""{"update_user_book":{"error":null,"user_book":{"id":7}}}""")
 
         client().updateEntry("tok", 7, HardcoverEntryStep.Update(statusId = 3, rating = null))
         client().updateEntry("tok", 7, HardcoverEntryStep.Update(null, null, clearRating = true))
+        client().updateEntry("tok", 7, HardcoverEntryStep.Update(null, null, review = "My review"), reviewedAt = "2026-05-01")
+        client().updateEntry("tok", 7, HardcoverEntryStep.Update(null, null, clearReview = true))
 
         val status = sent().getJSONObject("variables")
         assertEquals(7, status.getInt("id"))
@@ -207,6 +248,13 @@ class HardcoverClientTest {
         val cleared = sent().getJSONObject("variables").getJSONObject("object")
         assertEquals(listOf("rating"), cleared.keys().asSequence().toList())
         assertTrue(cleared.isNull("rating"))
+        val reviewed = sent().getJSONObject("variables").getJSONObject("object")
+        assertEquals("My review", reviewed.getString("review_markdown"))
+        assertEquals("2026-05-01", reviewed.getString("reviewed_at"))
+        val reviewCleared = sent().getJSONObject("variables").getJSONObject("object")
+        assertEquals(setOf("review_markdown", "reviewed_at"), reviewCleared.keys().asSequence().toSet())
+        assertTrue(reviewCleared.isNull("review_markdown"))
+        assertTrue(reviewCleared.isNull("reviewed_at"))
     }
 
     @Test

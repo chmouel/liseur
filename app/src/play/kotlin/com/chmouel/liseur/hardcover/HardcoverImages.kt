@@ -1,6 +1,8 @@
 package com.chmouel.liseur.hardcover
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import coil3.ImageLoader
 import coil3.intercept.Interceptor
 import coil3.memory.MemoryCache
@@ -24,6 +26,29 @@ import okhttp3.Request
  * servers and keeps files on disk, neither of which a cover may touch.
  */
 object HardcoverImages {
+    /** The [CoverSimilarity] hash of an encoded image, or null when it cannot be decoded. */
+    fun coverHash(bytes: ByteArray): Long? = runCatching {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+        var sample = 1
+        while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= HASH_SOURCE_SIZE) sample *= 2
+        val decoded = BitmapFactory.decodeByteArray(
+            bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample },
+        ) ?: return null
+        val small = Bitmap.createScaledBitmap(decoded, CoverSimilarity.WIDTH, CoverSimilarity.HEIGHT, true)
+        val pixels = IntArray(CoverSimilarity.WIDTH * CoverSimilarity.HEIGHT)
+        small.getPixels(pixels, 0, CoverSimilarity.WIDTH, 0, 0, CoverSimilarity.WIDTH, CoverSimilarity.HEIGHT)
+        CoverSimilarity.hash(
+            IntArray(pixels.size) { i ->
+                val c = pixels[i]
+                (299 * (c shr 16 and 0xFF) + 587 * (c shr 8 and 0xFF) + 114 * (c and 0xFF)) / 1000
+            },
+        )
+    }.getOrNull()
+
+    private const val HASH_SOURCE_SIZE = 128
+
     const val HOST = "assets.hardcover.app"
 
     /** [url] when it is https on [HOST] with no userinfo and the default port; else null. */

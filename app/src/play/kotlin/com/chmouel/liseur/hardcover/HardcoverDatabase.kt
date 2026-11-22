@@ -123,6 +123,27 @@ data class HardcoverForgetting(
     @PrimaryKey @ColumnInfo(name = "book_url") val bookUrl: String,
 )
 
+/**
+ * Per-book, per-field (rating, review) sync base and conflict state for
+ * two-way Hardcover evaluation sync (ADR 0077).
+ */
+@Entity(tableName = "hardcover_evaluation", primaryKeys = ["book_url", "field"])
+data class HardcoverEvaluation(
+    @ColumnInfo(name = "book_url") val bookUrl: String,
+    val field: String,
+    @ColumnInfo(name = "base_local") val baseLocal: String? = null,
+    @ColumnInfo(name = "base_remote") val baseRemote: String? = null,
+    @ColumnInfo(name = "has_base", defaultValue = "0") val hasBase: Boolean = false,
+    @ColumnInfo(name = "conflict", defaultValue = "0") val conflict: Boolean = false,
+    @ColumnInfo(name = "conflict_local") val conflictLocal: String? = null,
+    @ColumnInfo(name = "conflict_remote") val conflictRemote: String? = null,
+    @ColumnInfo(name = "remote_too_long", defaultValue = "0") val remoteTooLong: Boolean = false,
+) {
+    @get:Ignore
+    val base: HardcoverEvaluationBase?
+        get() = if (hasBase) HardcoverEvaluationBase(baseLocal, baseRemote) else null
+}
+
 @Dao
 interface HardcoverDao {
     @Query("SELECT * FROM hardcover_account WHERE id = :id")
@@ -212,6 +233,21 @@ interface HardcoverDao {
 
     @Query("SELECT book_url FROM hardcover_forgetting")
     suspend fun forgetting(): List<String>
+
+    @Query("SELECT * FROM hardcover_evaluation WHERE book_url = :bookUrl ORDER BY field")
+    fun observeEvaluations(bookUrl: String): Flow<List<HardcoverEvaluation>>
+
+    @Query("SELECT * FROM hardcover_evaluation WHERE book_url = :bookUrl AND field = :field")
+    suspend fun evaluation(bookUrl: String, field: String): HardcoverEvaluation?
+
+    @Upsert
+    suspend fun upsertEvaluation(evaluation: HardcoverEvaluation)
+
+    @Query("DELETE FROM hardcover_evaluation WHERE book_url IN (:bookUrls)")
+    suspend fun forgetEvaluations(bookUrls: List<String>)
+
+    @Query("DELETE FROM hardcover_evaluation")
+    suspend fun deleteEvaluations()
 }
 
 /**
@@ -225,10 +261,14 @@ interface HardcoverDao {
         HardcoverLinksOwner::class,
         HardcoverPending::class,
         HardcoverForgetting::class,
+        HardcoverEvaluation::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = true,
-    autoMigrations = [AutoMigration(from = 1, to = 2)],
+    autoMigrations = [
+        AutoMigration(from = 1, to = 2),
+        AutoMigration(from = 2, to = 3),
+    ],
 )
 abstract class HardcoverDatabase : RoomDatabase() {
     abstract fun hardcover(): HardcoverDao
