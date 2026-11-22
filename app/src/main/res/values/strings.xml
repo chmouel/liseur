@@ -2095,7 +2095,7 @@
     <string name="book_details_sha256" translatable="false">SHA-256</string>
     <string name="book_details">Book details</string>
     <string name="book_details_publication">Publication</string>
-    <string name="book_details_subjects">Subjects</string>
+    <string name="book_details_more">More book details</string>
     <string name="book_details_role_translator">Translation</string>
     <string name="book_details_role_editor">Editor</string>
     <string name="book_details_role_illustrator">Illustrations</string>
@@ -2152,7 +2152,8 @@
     <string name="book_details_annotations">Highlights and notes</string>
     <string name="book_details_read">Read</string>
     <string name="book_details_retry_download">Retry download</string>
-    <string name="book_details_file_info">File info</string>
+    <string name="book_details_technical">Technical details</string>
+    <string name="book_details_copy_field">Copy %1$s</string>
     <string name="book_details_read_more">Read more</string>
     <string name="book_details_show_less">Show less</string>
     <string name="library_style">Library style</string>

@@ -98,9 +98,12 @@
     <string name="hardcover_needs_match">请先在图书详情中选择此书的 Hardcover 版本</string>
     <string name="hardcover_push_off">此书不会同步到 Hardcover</string>
     <string name="hardcover_book_matched">已匹配到 %1$s</string>
-    <string name="hardcover_book_unmatched">尚未匹配版本</string>
+    <string name="hardcover_book_unmatched">未关联版本</string>
     <string name="hardcover_book_sync">同步此书</string>
     <string name="hardcover_book_choose">选择版本</string>
+    <string name="hardcover_book_change">更改版本</string>
+    <string name="hardcover_book_choose_and_push">选择并推送进度</string>
+    <string name="hardcover_book_keep_off">不同步到 Hardcover</string>
     <plurals name="hardcover_edition_pages">
         <item quantity="other">%d 页</item>
     </plurals>

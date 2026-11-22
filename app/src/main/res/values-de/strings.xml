@@ -2031,7 +2031,7 @@
     <string name="selection_delete_action">Aktion löschen</string>
     <string name="book_details">Buchdetails</string>
     <string name="book_details_publication">Veröffentlichung</string>
-    <string name="book_details_subjects">Themen</string>
+    <string name="book_details_more">Weitere Buchdetails</string>
     <string name="book_details_role_translator">Übersetzung</string>
     <string name="book_details_role_editor">Herausgabe</string>
     <string name="book_details_role_illustrator">Illustrationen</string>
@@ -2088,7 +2088,8 @@
     <string name="book_details_annotations">Markierungen und Notizen</string>
     <string name="book_details_read">Lesen</string>
     <string name="book_details_retry_download">Download wiederholen</string>
-    <string name="book_details_file_info">Dateiinfo</string>
+    <string name="book_details_technical">Technische Details</string>
+    <string name="book_details_copy_field">%1$s kopieren</string>
     <string name="book_details_read_more">Mehr anzeigen</string>
     <string name="book_details_show_less">Weniger anzeigen</string>
     <string name="library_style">Bibliotheksstil</string>

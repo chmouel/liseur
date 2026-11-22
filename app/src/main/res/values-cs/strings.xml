@@ -2209,7 +2209,7 @@
     <string name="selection_delete_action">Smazat akci</string>
     <string name="book_details">Podrobnosti o knize</string>
     <string name="book_details_publication">Vydání</string>
-    <string name="book_details_subjects">Témata</string>
+    <string name="book_details_more">Další podrobnosti o knize</string>
     <string name="book_details_role_translator">Překlad</string>
     <string name="book_details_role_editor">Editor</string>
     <string name="book_details_role_illustrator">Ilustrace</string>
@@ -2266,7 +2266,8 @@
     <string name="book_details_annotations">Zvýraznění a poznámky</string>
     <string name="book_details_read">Číst</string>
     <string name="book_details_retry_download">Zkusit znovu stáhnout</string>
-    <string name="book_details_file_info">Informace o souboru</string>
+    <string name="book_details_technical">Technické podrobnosti</string>
+    <string name="book_details_copy_field">Kopírovat: %1$s</string>
     <string name="book_details_read_more">Zobrazit více</string>
     <string name="book_details_show_less">Zobrazit méně</string>
     <string name="library_style">Vzhled knihovny</string>

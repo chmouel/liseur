@@ -98,9 +98,12 @@
     <string name="hardcover_needs_match">Wähle zuerst in den Buchdetails die Hardcover-Ausgabe dieses Buchs</string>
     <string name="hardcover_push_off">Dieses Buch wird nicht an Hardcover gesendet</string>
     <string name="hardcover_book_matched">Zugeordnet: %1$s</string>
-    <string name="hardcover_book_unmatched">Noch keiner Ausgabe zugeordnet</string>
+    <string name="hardcover_book_unmatched">Keine Ausgabe verknüpft</string>
     <string name="hardcover_book_sync">Dieses Buch synchronisieren</string>
     <string name="hardcover_book_choose">Ausgabe wählen</string>
+    <string name="hardcover_book_change">Ausgabe ändern</string>
+    <string name="hardcover_book_choose_and_push">Auswählen und Fortschritt senden</string>
+    <string name="hardcover_book_keep_off">Nicht an Hardcover senden</string>
     <plurals name="hardcover_edition_pages">
         <item quantity="one">%d Seite</item>
         <item quantity="other">%d Seiten</item>

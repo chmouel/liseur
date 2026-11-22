@@ -2019,7 +2019,7 @@
     <string name="selection_delete_action">Elimina azione</string>
     <string name="book_details">Dettagli del libro</string>
     <string name="book_details_publication">Pubblicazione</string>
-    <string name="book_details_subjects">Argomenti</string>
+    <string name="book_details_more">Altri dettagli sul libro</string>
     <string name="book_details_role_translator">Traduzione</string>
     <string name="book_details_role_editor">Curatela</string>
     <string name="book_details_role_illustrator">Illustrazioni</string>
@@ -2076,7 +2076,8 @@
     <string name="book_details_annotations">Evidenziazioni e note</string>
     <string name="book_details_read">Leggi</string>
     <string name="book_details_retry_download">Riprova a scaricare</string>
-    <string name="book_details_file_info">Informazioni sul file</string>
+    <string name="book_details_technical">Dettagli tecnici</string>
+    <string name="book_details_copy_field">Copia %1$s</string>
     <string name="book_details_read_more">Mostra altro</string>
     <string name="book_details_show_less">Mostra meno</string>
     <string name="library_style">Stile della libreria</string>

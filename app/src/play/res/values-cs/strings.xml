@@ -100,9 +100,12 @@
     <string name="hardcover_needs_match">Nejdřív v Podrobnostech o knize vyberte vydání této knihy na Hardcover</string>
     <string name="hardcover_push_off">Tato kniha se na Hardcover neodesílá</string>
     <string name="hardcover_book_matched">Spárováno s %1$s</string>
-    <string name="hardcover_book_unmatched">Zatím nespárováno s žádným vydáním</string>
+    <string name="hardcover_book_unmatched">Žádné vydání není propojeno</string>
     <string name="hardcover_book_sync">Synchronizovat tuto knihu</string>
     <string name="hardcover_book_choose">Vybrat vydání</string>
+    <string name="hardcover_book_change">Změnit vydání</string>
+    <string name="hardcover_book_choose_and_push">Vybrat a odeslat postup</string>
+    <string name="hardcover_book_keep_off">Neodesílat na Hardcover</string>
     <plurals name="hardcover_edition_pages">
         <item quantity="one">%d strana</item>
         <item quantity="few">%d strany</item>
