@@ -27,7 +27,16 @@ the same reason Gemini lives only in `play`
 implements as no-ops, and reaches it only through callbacks and
 composable slots.
 
-Liseur reports to Hardcover and reads nothing back. The tracker is no
+Liseur reports to Hardcover and brings nothing from the reader's library
+back. The edition picker reads the public catalogue to show candidates:
+search text only on an explicit submission, the slug of a pasted
+Hardcover book link, or a pasted ID or ISBN, with the token, to
+`api.hardcover.app`. Its cover images come from `assets.hardcover.app`
+through an `ImageLoader` of its own (`HardcoverImages`): a bare OkHttp
+client with no interceptors, authenticator, cookie jar or redirects, no
+disk cache, and only validated https URLs on that host. The app's shared
+loader signs requests for the reader's servers and must not serve it.
+The tracker is no
 `PeerPositionSync`, takes no part in `ReadingStateMerge` or
 `RemoteRouter`, and works with or without a library server. Its state
 (account, per-book match and exclusion, push queue) is a separate Room

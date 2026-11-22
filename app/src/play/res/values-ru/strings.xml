@@ -76,7 +76,7 @@
     <string name="companion_gemini_privacy">Текст книги до выделенного абзаца отправляется в Google с вашим ключом Gemini, а при включённых фоновых пересказах — целые главы. Google может брать плату за эти запросы.</string>
     <string name="hardcover_settings_summary">Сообщать о чтении в ваш аккаунт Hardcover</string>
     <string name="reading_services_title">Сервисы для чтения</string>
-    <string name="hardcover_intro">Liseur может сообщать Hardcover, что вы читаете, сколько прочитано, когда вы начали и закончили и какую оценку поставили. Из Hardcover ничего не загружается.</string>
+    <string name="hardcover_intro">Liseur может сообщать Hardcover, что вы читаете, сколько прочитано, когда вы начали и закончили и какую оценку поставили. Ничего из вашей библиотеки Hardcover не загружается; выбор издания показывает только общедоступные данные каталога.</string>
     <string name="hardcover_token_label">Токен API</string>
     <string name="hardcover_token_help">Создайте токен на Hardcover и вставьте его сюда.</string>
     <string name="hardcover_token_hint">Вставьте свой токен</string>
@@ -91,7 +91,7 @@
     <string name="hardcover_error_scope">Этот токен не может изменять вашу библиотеку Hardcover. Создайте новый с помощью «Получить токен».</string>
     <string name="hardcover_error_offline">Не удалось связаться с Hardcover. Проверьте соединение и повторите попытку.</string>
     <string name="hardcover_error_other">Сейчас не удалось обновить Hardcover. Повторите попытку позже.</string>
-    <string name="hardcover_privacy">Чтобы найти каждую книгу, Liseur отправляет в Hardcover её название, автора и ISBN. Затем он отправляет статус, прочитанные страницы, даты чтения и вашу оценку.</string>
+    <string name="hardcover_privacy">Чтобы найти каждую книгу, Liseur отправляет в Hardcover её название, автора и ISBN. Затем он отправляет статус, прочитанные страницы, даты чтения и вашу оценку. Когда вы выбираете издание вручную, он также отправляет ваш поисковый запрос и загружает обложки с сервера изображений Hardcover.</string>
     <string name="hardcover_push">Отправить в Hardcover</string>
     <string name="hardcover_pushed">Отправлено в Hardcover</string>
     <string name="hardcover_up_to_date">В Hardcover уже всё актуально</string>

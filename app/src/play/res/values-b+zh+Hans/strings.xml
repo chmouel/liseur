@@ -76,7 +76,7 @@
     <string name="companion_gemini_privacy">所选段落之前的书籍文本会使用你的 Gemini 密钥发送给 Google；开启后台摘要后会发送整章内容。Google 可能对这些请求收费。</string>
     <string name="hardcover_settings_summary">将阅读情况同步到你的 Hardcover 账户</string>
     <string name="reading_services_title">阅读服务</string>
-    <string name="hardcover_intro">Liseur 可以告诉 Hardcover 你在读什么、读到哪里、何时开始和读完，以及你给的评分。不会从 Hardcover 读取任何内容。</string>
+    <string name="hardcover_intro">Liseur 可以告诉 Hardcover 你在读什么、读到哪里、何时开始和读完，以及你给的评分。不会带回你 Hardcover 书库中的任何内容；版本选择器只显示公开的目录信息。</string>
     <string name="hardcover_token_label">API 令牌</string>
     <string name="hardcover_token_help">在 Hardcover 上创建令牌并粘贴到这里。</string>
     <string name="hardcover_token_hint">粘贴你的令牌</string>
@@ -91,7 +91,7 @@
     <string name="hardcover_error_scope">此令牌无法修改你的 Hardcover 书库。请通过“获取令牌”创建新令牌。</string>
     <string name="hardcover_error_offline">无法连接 Hardcover。请检查网络后重试。</string>
     <string name="hardcover_error_other">暂时无法更新 Hardcover。请稍后重试。</string>
-    <string name="hardcover_privacy">为了找到每本书，Liseur 会向 Hardcover 发送书名、作者和 ISBN，然后发送阅读状态、已读页数、阅读日期和你的评分。</string>
+    <string name="hardcover_privacy">为了找到每本书，Liseur 会向 Hardcover 发送书名、作者和 ISBN，然后发送阅读状态、已读页数、阅读日期和你的评分。手动选择版本时，还会发送你的搜索内容，并从 Hardcover 的图片服务器加载封面。</string>
     <string name="hardcover_push">推送到 Hardcover</string>
     <string name="hardcover_pushed">已发送到 Hardcover</string>
     <string name="hardcover_up_to_date">Hardcover 已是最新</string>

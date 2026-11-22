@@ -76,7 +76,7 @@
     <string name="companion_gemini_privacy">Le texte du livre avant le paragraphe sélectionné est envoyé à Google avec votre clé Gemini, et des chapitres entiers si les résumés en arrière-plan sont activés. Google peut facturer ces requêtes.</string>
     <string name="hardcover_settings_summary">Signaler vos lectures à votre compte Hardcover</string>
     <string name="reading_services_title">Services de lecture</string>
-    <string name="hardcover_intro">Liseur peut indiquer à Hardcover ce que vous lisez, où vous en êtes, quand vous avez commencé et terminé, et la note que vous avez donnée. Rien n\'est récupéré depuis Hardcover.</string>
+    <string name="hardcover_intro">Liseur peut indiquer à Hardcover ce que vous lisez, où vous en êtes, quand vous avez commencé et terminé, et la note que vous avez donnée. Rien de votre bibliothèque Hardcover n\'est récupéré ; le sélecteur d\'édition n\'affiche que des informations publiques du catalogue.</string>
     <string name="hardcover_token_label">Jeton d\'API</string>
     <string name="hardcover_token_help">Créez un jeton sur Hardcover et collez-le ici.</string>
     <string name="hardcover_token_hint">Collez votre jeton</string>
@@ -91,7 +91,7 @@
     <string name="hardcover_error_scope">Ce jeton ne permet pas de modifier votre bibliothèque Hardcover. Créez-en un nouveau avec Obtenir un jeton.</string>
     <string name="hardcover_error_offline">Impossible de joindre Hardcover. Vérifiez votre connexion et réessayez.</string>
     <string name="hardcover_error_other">Impossible de mettre à jour Hardcover pour le moment. Réessayez plus tard.</string>
-    <string name="hardcover_privacy">Pour trouver chaque livre, Liseur envoie à Hardcover son titre, son auteur et son ISBN. Il envoie ensuite le statut, les pages lues, les dates de lecture et votre note.</string>
+    <string name="hardcover_privacy">Pour trouver chaque livre, Liseur envoie à Hardcover son titre, son auteur et son ISBN. Il envoie ensuite le statut, les pages lues, les dates de lecture et votre note. Quand vous choisissez une édition à la main, il envoie aussi votre recherche et charge les couvertures depuis le serveur d\'images de Hardcover.</string>
     <string name="hardcover_push">Envoyer vers Hardcover</string>
     <string name="hardcover_pushed">Envoyé à Hardcover</string>
     <string name="hardcover_up_to_date">Hardcover est déjà à jour</string>

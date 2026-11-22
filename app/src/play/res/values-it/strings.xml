@@ -76,7 +76,7 @@
     <string name="companion_gemini_privacy">Il testo del libro prima del paragrafo selezionato viene inviato a Google con la tua chiave Gemini, e capitoli interi se i riassunti in background sono attivi. Google può addebitare queste richieste.</string>
     <string name="hardcover_settings_summary">Segnala le tue letture al tuo account Hardcover</string>
     <string name="reading_services_title">Servizi di lettura</string>
-    <string name="hardcover_intro">Liseur può comunicare a Hardcover cosa stai leggendo, a che punto sei, quando hai iniziato e finito e il voto che hai dato. Nulla viene letto da Hardcover.</string>
+    <string name="hardcover_intro">Liseur può comunicare a Hardcover cosa stai leggendo, a che punto sei, quando hai iniziato e finito e il voto che hai dato. Nulla della tua libreria Hardcover viene riportato indietro; il selettore di edizioni mostra solo dati pubblici del catalogo.</string>
     <string name="hardcover_token_label">Token API</string>
     <string name="hardcover_token_help">Crea un token su Hardcover e incollalo qui.</string>
     <string name="hardcover_token_hint">Incolla il tuo token</string>
@@ -91,7 +91,7 @@
     <string name="hardcover_error_scope">Questo token non può modificare la tua libreria Hardcover. Creane uno nuovo con Ottieni un token.</string>
     <string name="hardcover_error_offline">Impossibile raggiungere Hardcover. Controlla la connessione e riprova.</string>
     <string name="hardcover_error_other">Impossibile aggiornare Hardcover in questo momento. Riprova più tardi.</string>
-    <string name="hardcover_privacy">Per trovare ogni libro, Liseur invia a Hardcover titolo, autore e ISBN. Poi invia lo stato, le pagine lette, le date di lettura e il tuo voto.</string>
+    <string name="hardcover_privacy">Per trovare ogni libro, Liseur invia a Hardcover titolo, autore e ISBN. Poi invia lo stato, le pagine lette, le date di lettura e il tuo voto. Quando scegli un\'edizione a mano, invia anche ciò che cerchi e carica le copertine dal server di immagini di Hardcover.</string>
     <string name="hardcover_push">Invia a Hardcover</string>
     <string name="hardcover_pushed">Inviato a Hardcover</string>
     <string name="hardcover_up_to_date">Hardcover è già aggiornato</string>
