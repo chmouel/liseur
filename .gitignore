@@ -25,3 +25,4 @@ fastlane/report.xml
 fastlane/README.md
 fastlane/Preview.html
 fastlane/play-service-account.json
+/AGENTS.override.md
