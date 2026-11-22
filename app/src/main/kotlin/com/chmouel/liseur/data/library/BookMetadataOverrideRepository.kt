@@ -2,6 +2,7 @@ package com.chmouel.liseur.data.library
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.db.BookMetadataOverrideDao
 import com.chmouel.liseur.data.db.MetadataOverrideFields
@@ -42,11 +43,15 @@ class BookMetadataOverrideRepository(
         title: FieldEdit = FieldEdit.Unchanged,
         author: FieldEdit = FieldEdit.Unchanged,
         description: FieldEdit = FieldEdit.Unchanged,
-    ) {
+        expected: Book? = null,
+    ): Boolean {
+        var current = false
         var changed = false
         val at = now()
         inTransaction {
-            if (bookDao.getByUrl(bookUrl) == null) return@inTransaction
+            val existing = bookDao.getByUrl(bookUrl) ?: return@inTransaction
+            if (expected != null && !existing.sameGeneration(expected)) return@inTransaction
+            current = true
             for (field in MetadataOverrideFields.TEXT_FIELDS) {
                 val edit = when (field) {
                     MetadataOverrideFields.TITLE -> title
@@ -58,6 +63,7 @@ class BookMetadataOverrideRepository(
             }
         }
         if (changed) requestSync(bookUrl)
+        return current
     }
 
     private suspend fun applyTextEdit(bookUrl: String, field: String, edit: FieldEdit, at: Long): Boolean = when (edit) {
@@ -89,10 +95,19 @@ class BookMetadataOverrideRepository(
         }
 
     suspend fun setCoverFromBytes(bookUrl: String, rawBytes: ByteArray): Boolean =
+        coverFromBytes(bookUrl, rawBytes) != null
+
+    /**
+     * Stores [rawBytes] as the book's cover and answers the stored JPEG's
+     * digest, or null when nothing was stored. With [expected], the book
+     * must still be that generation when the cover is committed.
+     */
+    suspend fun coverFromBytes(bookUrl: String, rawBytes: ByteArray, expected: Book? = null): String? =
         withContext(Dispatchers.IO) {
-            if (rawBytes.isEmpty() || rawBytes.size > MAX_COVER_SOURCE_BYTES) return@withContext false
-            val jpeg = encodeCoverJpeg(rawBytes) ?: return@withContext false
-            storeCover(bookUrl, sha256Hex(jpeg), jpeg)
+            if (rawBytes.isEmpty() || rawBytes.size > MAX_COVER_SOURCE_BYTES) return@withContext null
+            val jpeg = encodeCoverJpeg(rawBytes) ?: return@withContext null
+            val sha256 = sha256Hex(jpeg)
+            sha256.takeIf { storeCover(bookUrl, it, jpeg, expected) }
         }
 
     /**
@@ -108,7 +123,7 @@ class BookMetadataOverrideRepository(
             storeCover(bookUrl, sha256, jpegBytes)
         }
 
-    private suspend fun storeCover(bookUrl: String, sha256: String, jpeg: ByteArray): Boolean {
+    private suspend fun storeCover(bookUrl: String, sha256: String, jpeg: ByteArray, expected: Book? = null): Boolean {
         val target = writeCoverFile(bookUrl, sha256, jpeg) ?: return false
         var oldPath: String? = null
         var updated = false
@@ -116,12 +131,14 @@ class BookMetadataOverrideRepository(
         inTransaction {
             val existing = bookDao.getByUrl(bookUrl) ?: return@inTransaction
             oldPath = existing.userCoverPath
+            if (expected != null && !existing.sameGeneration(expected)) return@inTransaction
             bookDao.setCoverOverride(bookUrl, target.absolutePath, sha256)
             bumpRevision(bookUrl, MetadataOverrideFields.COVER, at)
             updated = true
         }
         if (!updated) {
-            target.delete()
+            // The replacement book may already hold this very file as its cover.
+            if (oldPath != target.absolutePath) target.delete()
             return false
         }
         if (oldPath != null && oldPath != target.absolutePath) {

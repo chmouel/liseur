@@ -983,6 +983,10 @@ class HardcoverRepositoryTest {
             links[bookUrl]?.let { links[bookUrl] = it.copy(datesPending = true) }
         }
 
+        override suspend fun setImportedCover(bookUrl: String, url: String, sha256: String) {
+            links[bookUrl]?.let { links[bookUrl] = it.copy(importedCoverUrl = url, importedCoverSha256 = sha256) }
+        }
+
         override suspend fun linksOwner(id: Long): Long? = owner
         override suspend fun setLinksOwner(owner: HardcoverLinksOwner) {
             this.owner = owner.userId

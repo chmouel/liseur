@@ -53,6 +53,34 @@ class BookMetadataOverrideTest {
     }
 
     @Test
+    fun `edits made for an older generation of the book are not written`() = runTest {
+        val url = "book"
+        db.bookDao().upsert(
+            Book(url = url, title = "T", author = null, coverPath = null, source = null, addedAt = 1, lastOpenedAt = null),
+        )
+        val reviewed = db.bookDao().getByUrl(url)!!
+        db.bookDao().refreshIndexedFile(
+            url = url,
+            title = "Replaced",
+            author = null,
+            coverPath = null,
+            fileModifiedAt = 2,
+            workId = "work-b",
+            seriesName = null,
+            seriesIndex = null,
+        )
+
+        assertFalse(repository.applyTextEdits(url, title = FieldEdit.Set("Stale"), expected = reviewed))
+        assertNull(repository.coverFromBytes(url, byteArrayOf(1, 2, 3), expected = reviewed))
+
+        val current = db.bookDao().getByUrl(url)!!
+        assertFalse(current.titleOverridden)
+        assertFalse(current.coverOverridden)
+        assertTrue(repository.applyTextEdits(url, title = FieldEdit.Set("Fresh"), expected = current))
+        assertNotNull(repository.coverFromBytes(url, byteArrayOf(1, 2, 3), expected = current))
+    }
+
+    @Test
     fun `user metadata overrides win and survive catalog and file refresh until reset`() = runTest {
         val url = "book"
         db.bookDao().upsert(

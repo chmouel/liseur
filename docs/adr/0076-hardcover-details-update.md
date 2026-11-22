@@ -40,6 +40,10 @@ future change.
 - Applied details behave like any manual edit: "Edit details" can reset
   them to the file or catalogue values, and `liseur-sync` carries them
   to other devices.
-- No new database columns or sync paths are needed.
+- Every write checks that the book is still the generation that was
+  reviewed, so a file replaced meanwhile keeps its own details.
+- `hardcover.db` (version 2) remembers the imported cover URL and the
+  digest of the override it became, so an unchanged cover is not offered
+  again. `liseur.db` and the sync protocol are unchanged.
 - Pulling the reader's personal Hardcover library state remains left for
   later.

@@ -1,6 +1,7 @@
 package com.chmouel.liseur.hardcover
 
 import android.content.Context
+import androidx.room.AutoMigration
 import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Database
@@ -78,6 +79,12 @@ data class HardcoverBookLink(
      * asking never replaces the one the reader keeps on Hardcover.
      */
     @ColumnInfo(name = "edition_chosen", defaultValue = "0") val editionChosen: Boolean = false,
+    /**
+     * The Hardcover cover last saved as this book's cover, and the digest
+     * of the override it became, so an unchanged cover is not offered again.
+     */
+    @ColumnInfo(name = "imported_cover_url") val importedCoverUrl: String? = null,
+    @ColumnInfo(name = "imported_cover_sha256") val importedCoverSha256: String? = null,
 ) {
     @get:Ignore
     val matched: Boolean get() = hardcoverBookId != null && editionId != null
@@ -161,6 +168,12 @@ interface HardcoverDao {
     @Query("UPDATE hardcover_book SET dates_pending = 1 WHERE book_url = :bookUrl")
     suspend fun markDatesPending(bookUrl: String)
 
+    @Query(
+        "UPDATE hardcover_book SET imported_cover_url = :url, imported_cover_sha256 = :sha256 " +
+            "WHERE book_url = :bookUrl",
+    )
+    suspend fun setImportedCover(bookUrl: String, url: String, sha256: String)
+
     @Query("SELECT user_id FROM hardcover_links_owner WHERE id = :id")
     suspend fun linksOwner(id: Long = HardcoverAccount.SINGLE_ID): Long?
 
@@ -213,8 +226,9 @@ interface HardcoverDao {
         HardcoverPending::class,
         HardcoverForgetting::class,
     ],
-    version = 1,
+    version = 2,
     exportSchema = true,
+    autoMigrations = [AutoMigration(from = 1, to = 2)],
 )
 abstract class HardcoverDatabase : RoomDatabase() {
     abstract fun hardcover(): HardcoverDao

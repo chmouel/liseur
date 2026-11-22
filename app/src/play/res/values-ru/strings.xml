@@ -136,4 +136,6 @@
     <string name="hardcover_update_details_empty">В Hardcover нет отличий для этой книги.</string>
     <string name="hardcover_update_details_done">Сведения обновлены из Hardcover.</string>
     <string name="hardcover_update_details_cover_failed">Сведения обновлены, но загрузить обложку не удалось.</string>
+    <string name="hardcover_update_details_cover_only_failed">Не удалось загрузить обложку.</string>
+    <string name="hardcover_update_details_stale">Книга тем временем изменилась. Повторите обновление.</string>
 </resources>

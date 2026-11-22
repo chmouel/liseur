@@ -18,7 +18,8 @@ data class LocalDetails(
     val description: String?,
     val seriesName: String?,
     val seriesIndex: Double?,
-    val hasCover: Boolean,
+    /** The Hardcover cover URL the current cover was imported from, while that import is still the cover. */
+    val importedCoverUrl: String? = null,
 )
 
 data class DetailProposal(
@@ -35,7 +36,7 @@ fun proposeUpdates(local: LocalDetails, remote: HardcoverEditionDetails): List<D
     val proposals = mutableListOf<DetailProposal>()
 
     val coverUrl = HardcoverImages.validCoverUrl(remote.coverUrl)
-    if (coverUrl != null) {
+    if (coverUrl != null && coverUrl != local.importedCoverUrl) {
         proposals += DetailProposal(
             field = DetailField.COVER,
             newCoverUrl = coverUrl,

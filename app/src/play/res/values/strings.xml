@@ -139,4 +139,6 @@
     <string name="hardcover_update_details_empty">Hardcover has nothing different for this book.</string>
     <string name="hardcover_update_details_done">Details updated from Hardcover.</string>
     <string name="hardcover_update_details_cover_failed">Details updated, but the cover could not be downloaded.</string>
+    <string name="hardcover_update_details_cover_only_failed">The cover could not be downloaded.</string>
+    <string name="hardcover_update_details_stale">This book changed meanwhile. Try the update again.</string>
 </resources>

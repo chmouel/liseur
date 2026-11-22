@@ -259,8 +259,9 @@ class HardcoverClient(
         releaseYear = row.optInt("release_year", 0).takeIf { it > 0 },
         publisher = row.optJSONObject("publisher")?.text("name"),
         usersCount = row.optInt("users_count", 0).coerceAtLeast(0),
-        coverUrl = HardcoverImages.validCoverUrl(
-            row.optJSONObject("image")?.text("url") ?: cachedImageUrl(row.optJSONObject("book")?.opt("cached_image")),
+        coverUrl = firstValidCover(
+            row.optJSONObject("image")?.text("url"),
+            cachedImageUrl(row.optJSONObject("book")?.opt("cached_image")),
         ),
         authors = authorsOf(row.optJSONObject("book")?.opt("cached_contributors")),
     )
@@ -277,15 +278,18 @@ class HardcoverClient(
             title = row.text("title") ?: book?.text("title"),
             author = authors,
             description = book?.text("description"),
-            coverUrl = HardcoverImages.validCoverUrl(
-                row.optJSONObject("image")?.text("url")
-                    ?: cachedImageUrl(row.opt("cached_image"))
-                    ?: cachedImageUrl(book?.opt("cached_image")),
+            coverUrl = firstValidCover(
+                row.optJSONObject("image")?.text("url"),
+                cachedImageUrl(row.opt("cached_image")),
+                cachedImageUrl(book?.opt("cached_image")),
             ),
             seriesName = series?.first,
             seriesPosition = series?.second,
         )
     }
+
+    private fun firstValidCover(vararg candidates: String?): String? =
+        candidates.firstNotNullOfOrNull(HardcoverImages::validCoverUrl)
 
     private fun cachedImageUrl(cachedImage: Any?): String? {
         val obj = when (cachedImage) {

@@ -138,4 +138,6 @@
     <string name="hardcover_update_details_empty">Hardcover pro tuto knihu nemá nic odlišného.</string>
     <string name="hardcover_update_details_done">Údaje aktualizovány z Hardcoveru.</string>
     <string name="hardcover_update_details_cover_failed">Údaje byly aktualizovány, ale obálku se nepodařilo stáhnout.</string>
+    <string name="hardcover_update_details_cover_only_failed">Obálku se nepodařilo stáhnout.</string>
+    <string name="hardcover_update_details_stale">Kniha se mezitím změnila. Zkuste aktualizaci znovu.</string>
 </resources>

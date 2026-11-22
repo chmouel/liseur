@@ -132,4 +132,6 @@
     <string name="hardcover_update_details_empty">Hardcover non ha nulla di diverso per questo libro.</string>
     <string name="hardcover_update_details_done">Dettagli aggiornati da Hardcover.</string>
     <string name="hardcover_update_details_cover_failed">Dettagli aggiornati, ma non è stato possibile scaricare la copertina.</string>
+    <string name="hardcover_update_details_cover_only_failed">Impossibile scaricare la copertina.</string>
+    <string name="hardcover_update_details_stale">Il libro è cambiato nel frattempo. Riprova l\'aggiornamento.</string>
 </resources>

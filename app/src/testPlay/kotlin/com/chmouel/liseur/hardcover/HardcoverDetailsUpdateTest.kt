@@ -14,7 +14,6 @@ class HardcoverDetailsUpdateTest {
         description = "Local description",
         seriesName = "Middle-earth",
         seriesIndex = 1.0,
-        hasCover = true,
     )
 
     private val baseRemote = HardcoverEditionDetails(
@@ -49,6 +48,18 @@ class HardcoverDetailsUpdateTest {
     }
 
     @Test
+    fun `a cover already imported from the same URL is not offered again`() {
+        val url = "https://assets.hardcover.app/books/1/cover.jpg"
+        assertTrue(proposeUpdates(baseLocal.copy(importedCoverUrl = url), baseRemote.copy(coverUrl = url)).isEmpty())
+
+        val newer = proposeUpdates(
+            baseLocal.copy(importedCoverUrl = url),
+            baseRemote.copy(coverUrl = "https://assets.hardcover.app/books/1/other.jpg"),
+        )
+        assertEquals(DetailField.COVER, newer.single().field)
+    }
+
+    @Test
     fun `blank local fields are ticked by default while overwriting non-blank fields are unticked`() {
         val local = LocalDetails(
             title = "Old Title",
@@ -56,7 +67,6 @@ class HardcoverDetailsUpdateTest {
             description = null,
             seriesName = null,
             seriesIndex = null,
-            hasCover = false,
         )
         val remote = HardcoverEditionDetails(
             editionId = 5,
