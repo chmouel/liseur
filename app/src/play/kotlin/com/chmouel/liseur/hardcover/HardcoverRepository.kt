@@ -295,8 +295,9 @@ class HardcoverRepository(
     suspend fun currentLink(bookUrl: String): HardcoverBookLink? = dao.link(bookUrl)
 
     /** Notes that [url] became the book's cover override with digest [sha256]. */
-    suspend fun rememberImportedCover(bookUrl: String, url: String, sha256: String) =
+    suspend fun rememberImportedCover(bookUrl: String, url: String, sha256: String) = lock.withLock {
         dao.setImportedCover(bookUrl, url, sha256)
+    }
 
     /**
      * Remembers which edition a book is, if the account and book generation
