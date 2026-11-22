@@ -78,7 +78,7 @@
     <string name="companion_gemini_privacy">Text knihy před vybraným odstavcem se odesílá Googlu pod tvým klíčem Gemini. Při zapnutí shrnování na pozadí se odesílají i celé kapitoly. Google může požadavky zpoplatnit.</string>
     <string name="hardcover_settings_summary">Hlásit čtení na váš účet Hardcover</string>
     <string name="reading_services_title">Čtenářské služby</string>
-    <string name="hardcover_intro">Liseur může službě Hardcover sdělit, co čtete, jak jste daleko, kdy jste začali a dočetli a jak jste knihu ohodnotili. Ze služby Hardcover se nic nenačítá.</string>
+    <string name="hardcover_intro">Liseur může službě Hardcover sdělit, co čtete, jak jste daleko, kdy jste začali a dočetli a jak jste knihu ohodnotili. Z vaší knihovny na Hardcoveru se nic nenačítá; výběr vydání zobrazuje jen veřejné údaje z katalogu.</string>
     <string name="hardcover_token_label">Token API</string>
     <string name="hardcover_token_help">Vytvořte token na Hardcover a vložte ho sem.</string>
     <string name="hardcover_token_hint">Vložte svůj token</string>
@@ -93,7 +93,7 @@
     <string name="hardcover_error_scope">Tento token nemůže upravovat vaši knihovnu na Hardcover. Vytvořte nový pomocí Získat token.</string>
     <string name="hardcover_error_offline">Hardcover není dostupný. Zkontrolujte připojení a zkuste to znovu.</string>
     <string name="hardcover_error_other">Hardcover se teď nepodařilo aktualizovat. Zkuste to později.</string>
-    <string name="hardcover_privacy">Aby Liseur každou knihu našel, posílá službě Hardcover její název, autora a ISBN. Potom posílá stav, přečtené stránky, data čtení a vaše hodnocení.</string>
+    <string name="hardcover_privacy">Aby Liseur každou knihu našel, posílá službě Hardcover její název, autora a ISBN. Potom posílá stav, přečtené stránky, data čtení a vaše hodnocení. Když vydání vybíráte ručně, posílá také váš dotaz a načítá obálky z obrazového serveru služby Hardcover.</string>
     <string name="hardcover_push">Odeslat na Hardcover</string>
     <string name="hardcover_pushed">Odesláno na Hardcover</string>
     <string name="hardcover_up_to_date">Hardcover je už aktuální</string>

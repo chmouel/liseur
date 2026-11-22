@@ -560,8 +560,19 @@ only what differs: its status (want to read, currently reading, read,
 paused or did not finish), the page you reached in the chosen edition,
 the days you started and finished it, and your rating. Nothing is sent
 for a book you have not opened, rated or given a status. No book text,
-file, highlight, note or review is sent, and nothing Hardcover holds is
-brought back into Liseur.
+file, highlight, note or review is sent, and nothing from your Hardcover
+library is brought back into Liseur; the edition picker shows public
+catalogue details only.
+
+When you choose an edition by hand, the picker asks `api.hardcover.app`,
+with your token, for the catalogue entries matching what you submit: the
+search text when you press Search on the keyboard (never while you type),
+the slug of a pasted Hardcover book link, or a pasted book ID or ISBN. A
+pasted link to any other site is not sent anywhere. The picker also loads
+cover images from `assets.hardcover.app` over HTTPS, without your token;
+that host sees the image requested and the usual connection details such
+as your IP address. Cover images are kept in memory only and never
+written to disk.
 
 You can turn off automatic updates and push a book by hand from the
 reader menu or Book details, keep a single book off Hardcover from Book
@@ -569,7 +580,8 @@ details, or disconnect in Settings, after which no more requests are
 made. What Hardcover keeps is under
 [Hardcover's own terms](https://hardcover.app/pages/privacy-policy).
 
-Liseur never contacts any other host. It requests the `INTERNET` and
+Liseur never contacts any other host; under Hardcover, the only extra
+one is `assets.hardcover.app`, for cover images. It requests the `INTERNET` and
 `ACCESS_NETWORK_STATE` permissions for the purposes above and for nothing
 else. It requests `POST_NOTIFICATIONS`, `WAKE_LOCK` and
 `FOREGROUND_SERVICE_DATA_SYNC` only to translate a whole book: to show a

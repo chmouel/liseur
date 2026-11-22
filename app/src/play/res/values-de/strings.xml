@@ -76,7 +76,7 @@
     <string name="companion_gemini_privacy">Text aus dem Buch vor dem ausgewählten Absatz wird mit deinem Gemini-Schlüssel an Google gesendet, bei aktivierten Hintergrund-Zusammenfassungen ganze Kapitel. Google kann diese Anfragen berechnen.</string>
     <string name="hardcover_settings_summary">Deinen Lesefortschritt an dein Hardcover-Konto melden</string>
     <string name="reading_services_title">Lesedienste</string>
-    <string name="hardcover_intro">Liseur kann Hardcover mitteilen, was du liest, wie weit du bist, wann du angefangen und aufgehört hast und wie du es bewertet hast. Von Hardcover wird nichts übernommen.</string>
+    <string name="hardcover_intro">Liseur kann Hardcover mitteilen, was du liest, wie weit du bist, wann du angefangen und aufgehört hast und wie du es bewertet hast. Aus deiner Hardcover-Bibliothek wird nichts übernommen; die Ausgabenauswahl zeigt nur öffentliche Katalogdaten.</string>
     <string name="hardcover_token_label">API-Token</string>
     <string name="hardcover_token_help">Erstelle ein Token bei Hardcover und füge es hier ein.</string>
     <string name="hardcover_token_hint">Füge dein Token ein</string>
@@ -91,7 +91,7 @@
     <string name="hardcover_error_scope">Mit diesem Token lässt sich deine Hardcover-Bibliothek nicht ändern. Erstelle über „Token holen“ ein neues.</string>
     <string name="hardcover_error_offline">Hardcover ist nicht erreichbar. Prüfe deine Verbindung und versuche es erneut.</string>
     <string name="hardcover_error_other">Hardcover konnte gerade nicht aktualisiert werden. Versuche es später erneut.</string>
-    <string name="hardcover_privacy">Um jedes Buch zu finden, sendet Liseur Titel, Autor und ISBN an Hardcover. Danach sendet es Status, gelesene Seiten, Lesedaten und deine Bewertung.</string>
+    <string name="hardcover_privacy">Um jedes Buch zu finden, sendet Liseur Titel, Autor und ISBN an Hardcover. Danach sendet es Status, gelesene Seiten, Lesedaten und deine Bewertung. Wenn du eine Ausgabe von Hand auswählst, sendet es außerdem deine Suche und lädt Cover vom Bilderserver von Hardcover.</string>
     <string name="hardcover_push">An Hardcover senden</string>
     <string name="hardcover_pushed">An Hardcover gesendet</string>
     <string name="hardcover_up_to_date">Hardcover ist bereits aktuell</string>
