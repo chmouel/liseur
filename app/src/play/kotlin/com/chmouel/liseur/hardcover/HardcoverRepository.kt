@@ -651,6 +651,8 @@ class HardcoverRepository(
                         )
                     } else {
                         val target = HardcoverPlan.targetStatus(local) ?: HardcoverStatus.WANT_TO_READ
+                        // Hardcover dates a read it finishes on insert today; the next push corrects it to the real dates.
+                        if (target == HardcoverStatus.READ) dao.markDatesPending(bookUrl)
                         when (val sent = client.addToLibrary(token, bookId, editionId, target, remoteDouble)) {
                             is RemoteResult.Failed -> return HardcoverConflictResolution.Failed(sent.reason)
                             is RemoteResult.Ok -> Unit
@@ -705,6 +707,8 @@ class HardcoverRepository(
                         )
                     } else {
                         val target = HardcoverPlan.targetStatus(local) ?: HardcoverStatus.WANT_TO_READ
+                        // Hardcover dates a read it finishes on insert today; the next push corrects it to the real dates.
+                        if (target == HardcoverStatus.READ) dao.markDatesPending(bookUrl)
                         val sent = client.addToLibrary(
                             token = token,
                             bookId = bookId,
