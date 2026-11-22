@@ -1424,6 +1424,15 @@ class SettingsBackupRepository internal constructor(
                         return ArchiveResult.Error(SettingsBackupFailure.INVALID_ARCHIVE)
                     }
                 }
+                if (path.startsWith("metadata_covers/")) {
+                    val expectedName = "${entry.sha256}.jpg"
+                    if (
+                        !METADATA_COVER_ENTRY_PATH.matches(path) ||
+                        path.removePrefix("metadata_covers/") != expectedName
+                    ) {
+                        return ArchiveResult.Error(SettingsBackupFailure.INVALID_ARCHIVE)
+                    }
+                }
             }
             keepStaging = true
             ArchiveResult.Valid(
