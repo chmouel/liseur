@@ -100,11 +100,20 @@
     <string name="hardcover_push_off">此书不会同步到 Hardcover</string>
     <string name="hardcover_book_matched">已匹配到 %1$s</string>
     <string name="hardcover_book_unmatched">未关联版本</string>
+    <string name="hardcover_book_linked">已关联</string>
+    <string name="hardcover_book_not_linked">未关联</string>
     <string name="hardcover_book_sync">同步此书</string>
+    <string name="hardcover_book_sync_subtitle">将阅读数据与 Hardcover 保持同步</string>
     <string name="hardcover_book_choose">选择版本</string>
     <string name="hardcover_book_change">更改版本</string>
     <string name="hardcover_book_choose_and_push">选择并推送进度</string>
     <string name="hardcover_book_keep_off">不同步到 Hardcover</string>
+    <string name="hardcover_book_unlink">取消关联</string>
+    <string name="hardcover_book_unlink_title">取消关联此书？</string>
+    <string name="hardcover_book_unlink_body">Liseur 将忘记此书对应的 Hardcover 版本。Hardcover 上的内容不会改变。开启同步时，Liseur 下次上报此书时可能会重新匹配。</string>
+    <string name="hardcover_book_not_connected">未连接</string>
+    <string name="hardcover_book_needs_new_token">Hardcover 需要新令牌</string>
+    <string name="hardcover_book_open_settings">打开 Hardcover 设置</string>
     <plurals name="hardcover_edition_pages">
         <item quantity="other">%d 页</item>
     </plurals>

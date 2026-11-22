@@ -33,7 +33,7 @@ internal class ReadingTracker(context: Context, database: LiseurDatabase) {
     fun reviewPublicNote(bookUrl: String): String? = null
 
     @Composable
-    fun BookDetailsSection(bookUrl: String, modifier: Modifier) = Unit
+    fun BookDetailsSection(bookUrl: String, modifier: Modifier, onOpenSettings: () -> Unit = {}) = Unit
 
     @Composable
     fun ReaderMenuItem(

@@ -719,7 +719,11 @@ private fun LiseurApp(
                             },
                             reviewPublicNote = { context.container.readingTracker.reviewPublicNote(target.bookUrl) },
                             extraSection = { section ->
-                                context.container.readingTracker.BookDetailsSection(target.bookUrl, section)
+                                context.container.readingTracker.BookDetailsSection(
+                                    bookUrl = target.bookUrl,
+                                    modifier = section,
+                                    onOpenSettings = { openPage(Route.Services) },
+                                )
                             },
                         )
                     }
