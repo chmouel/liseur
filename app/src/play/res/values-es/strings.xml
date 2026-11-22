@@ -123,4 +123,13 @@
     <string name="hardcover_edition_selected">Seleccionada</string>
     <string name="hardcover_ref_not_hardcover">Ese no es un enlace de Hardcover</string>
     <string name="hardcover_ref_bad_id">Ese no es un ID de libro de Hardcover</string>
+    <string name="hardcover_update_details">Actualizar desde Hardcover</string>
+    <string name="hardcover_update_details_intro">Elige qué detalles reemplazar por los de Hardcover.</string>
+    <string name="hardcover_update_details_now">Ahora: %1$s</string>
+    <string name="hardcover_update_details_remote">Hardcover: %1$s</string>
+    <string name="hardcover_update_details_now_label">Ahora</string>
+    <string name="hardcover_update_details_apply">Aplicar</string>
+    <string name="hardcover_update_details_empty">Hardcover no tiene nada diferente para este libro.</string>
+    <string name="hardcover_update_details_done">Detalles actualizados desde Hardcover.</string>
+    <string name="hardcover_update_details_cover_failed">Detalles actualizados, pero no se pudo descargar la portada.</string>
 </resources>

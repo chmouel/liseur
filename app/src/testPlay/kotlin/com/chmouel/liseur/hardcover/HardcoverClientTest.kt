@@ -325,6 +325,70 @@ class HardcoverClientTest {
     }
 
     @Test
+    fun `edition details parse title, authors, description, series and cover fallbacks`() = runBlocking {
+        answer(
+            """{"editions":[{"id":5,"title":"Edition Title","subtitle":"Ignored Subtitle",
+              "image":null,"cached_image":"{\"url\":\"https://assets.hardcover.app/ec.jpg\"}",
+              "book":{"title":"Book Title","subtitle":"Ignored Book Subtitle","description":"A synopsis.",
+              "cached_image":{"url":"https://assets.hardcover.app/bc.jpg"},
+              "cached_contributors":[{"author":{"name":"Ann Leckie"},"contribution":"Author"},
+              {"author":{"name":"Translator"},"contribution":"Translator"}],
+              "featured_book_series":{"position":1.5,"series":{"name":"Imperial Radch"}},
+              "book_series":[{"position":2.0,"series":{"name":"Other Series"}}]}}]}""",
+        )
+
+        val details = (client().editionDetails("tok", 5) as RemoteResult.Ok).value
+
+        assertEquals(
+            HardcoverEditionDetails(
+                editionId = 5,
+                title = "Edition Title",
+                author = "Ann Leckie",
+                description = "A synopsis.",
+                coverUrl = "https://assets.hardcover.app/ec.jpg",
+                seriesName = "Imperial Radch",
+                seriesPosition = 1.5,
+            ),
+            details,
+        )
+        assertEquals(5, sent().getJSONObject("variables").getInt("id"))
+    }
+
+    @Test
+    fun `edition details fall back to book title, book cover and first book series`() = runBlocking {
+        answer(
+            """{"editions":[{"id":5,"title":"","image":null,"cached_image":null,
+              "book":{"title":"Book Title","description":null,
+              "cached_image":{"url":"https://assets.hardcover.app/bc.jpg"},
+              "cached_contributors":"[{\"author\":{\"name\":\"First\"}},{\"author\":{\"name\":\"Second\"}}]",
+              "featured_book_series":null,
+              "book_series":[{"position":null,"series":{"name":"Saga"}}]}}]}""",
+        )
+
+        val details = (client().editionDetails("tok", 5) as RemoteResult.Ok).value
+
+        assertEquals(
+            HardcoverEditionDetails(
+                editionId = 5,
+                title = "Book Title",
+                author = "First, Second",
+                description = null,
+                coverUrl = "https://assets.hardcover.app/bc.jpg",
+                seriesName = "Saga",
+                seriesPosition = null,
+            ),
+            details,
+        )
+    }
+
+    @Test
+    fun `edition details answer null when the edition is missing`() = runBlocking {
+        answer("""{"editions":[]}""")
+
+        assertNull((client().editionDetails("tok", 5) as RemoteResult.Ok).value)
+    }
+
+    @Test
     fun `cancelling after the headers arrive stops a slow body read`() = runBlocking {
         server.enqueue(
             MockResponse.Builder()

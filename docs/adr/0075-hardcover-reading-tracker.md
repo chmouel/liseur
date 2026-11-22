@@ -99,5 +99,7 @@ until the reader pastes a new one.
   pages.
 - Android backup does not carry `hardcover.db`; the connection backup
   carries the account, and matches are made again on the new device.
-- Pulling from Hardcover, OAuth, and ISBNs from sources other than the
-  EPUB are left for later.
+- Pulling the reader's library state from Hardcover, OAuth, and ISBNs
+  from sources other than the EPUB are left for later; pulling public
+  catalogue details on request is covered by
+  [ADR 0076](0076-hardcover-details-update.md).

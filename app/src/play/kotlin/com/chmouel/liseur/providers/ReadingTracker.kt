@@ -3,20 +3,32 @@ package com.chmouel.liseur.providers
 import android.content.Context
 import android.widget.Toast
 import androidx.annotation.StringRes
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.ContentPaste
@@ -24,7 +36,9 @@ import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material.icons.outlined.TaskAlt
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -33,9 +47,11 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -47,7 +63,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
@@ -58,17 +76,28 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.room.withTransaction
+import coil3.compose.AsyncImage
 import com.chmouel.liseur.R
+import com.chmouel.liseur.container
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.LiseurDatabase
+import com.chmouel.liseur.data.library.FieldEdit
+import com.chmouel.liseur.data.library.fileBookInSeries
 import com.chmouel.liseur.data.remote.RemoteResult
 import com.chmouel.liseur.data.remote.SyncFailure
 import com.chmouel.liseur.data.remote.UnreadableCredentialException
 import com.chmouel.liseur.domain.FinishedOverride
+import com.chmouel.liseur.domain.MetadataSource
 import com.chmouel.liseur.domain.PersonalEvaluation
 import com.chmouel.liseur.domain.readingStatusFor
+import com.chmouel.liseur.domain.resolveMetadata
+import com.chmouel.liseur.domain.seriesIndexLabel
+import com.chmouel.liseur.domain.validSeriesPosition
+import com.chmouel.liseur.hardcover.DetailField
+import com.chmouel.liseur.hardcover.DetailProposal
 import com.chmouel.liseur.hardcover.EditionChoice
 import com.chmouel.liseur.hardcover.HardcoverAccount
 import com.chmouel.liseur.hardcover.HardcoverBookLink
@@ -76,18 +105,26 @@ import com.chmouel.liseur.hardcover.HardcoverClient
 import com.chmouel.liseur.hardcover.HardcoverConnectOutcome
 import com.chmouel.liseur.hardcover.HardcoverDatabase
 import com.chmouel.liseur.hardcover.HardcoverEdition
+import com.chmouel.liseur.hardcover.HardcoverImages
 import com.chmouel.liseur.hardcover.HardcoverPlan
 import com.chmouel.liseur.hardcover.HardcoverPushOutcome
 import com.chmouel.liseur.hardcover.HardcoverPushWorker
 import com.chmouel.liseur.hardcover.HardcoverRepository
+import com.chmouel.liseur.hardcover.LocalDetails
 import com.chmouel.liseur.hardcover.LocalReading
+import com.chmouel.liseur.hardcover.proposeUpdates
 import com.chmouel.liseur.ui.BusyIndicator
+import com.chmouel.liseur.ui.LiseurModalBottomSheet
+import com.chmouel.liseur.ui.LocalEInk
+import com.chmouel.liseur.ui.contentWidthCap
+import com.chmouel.liseur.ui.library.BookCover
 import com.chmouel.liseur.ui.settings.ConnectionRow
 import com.chmouel.liseur.ui.settings.RowDivider
 import com.chmouel.liseur.ui.settings.SettingsGroup
 import com.chmouel.liseur.ui.settings.SwitchRow
 import com.chmouel.liseur.ui.settings.search.SettingsFocus
 import com.chmouel.liseur.ui.settings.search.settingsAnchor
+import com.chmouel.liseur.ui.windowWidth
 import java.time.Instant
 import java.time.ZoneId
 import kotlinx.coroutines.CoroutineScope
@@ -243,6 +280,70 @@ internal class ReadingTracker(context: Context, private val database: LiseurData
 
     private fun day(millis: Long): String =
         Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).toLocalDate().toString()
+
+    private suspend fun localDetails(bookUrl: String): Pair<Book, LocalDetails>? {
+        val book = database.bookDao().getByUrl(bookUrl) ?: return null
+        val description = if (book.descriptionOverridden) {
+            book.userDescription?.takeIf { it.isNotEmpty() }
+        } else {
+            database.bookMetadataDao().forBook(bookUrl)
+                .mapNotNull { row -> MetadataSource.of(row.source)?.let { it to row.toSnapshot() } }
+                .toMap()
+                .let(::resolveMetadata)
+                ?.description
+        }
+        val details = LocalDetails(
+            title = book.title,
+            author = book.author,
+            description = description,
+            seriesName = book.seriesName,
+            seriesIndex = book.seriesIndex,
+            hasCover = book.effectiveCover != null,
+        )
+        return book to details
+    }
+
+    private suspend fun applyDetailsUpdate(
+        bookUrl: String,
+        proposals: List<DetailProposal>,
+        selected: Set<DetailField>,
+    ): Int? {
+        val book = database.bookDao().getByUrl(bookUrl) ?: return null
+        val byField = proposals.filter { it.field in selected }.associateBy { it.field }
+        if (byField.isEmpty()) return null
+        val appContainer = context.container
+        val titleEdit = byField[DetailField.TITLE]?.newText?.let(FieldEdit::Set) ?: FieldEdit.Unchanged
+        val authorEdit = byField[DetailField.AUTHOR]?.newText?.let(FieldEdit::Set) ?: FieldEdit.Unchanged
+        val descriptionEdit = byField[DetailField.DESCRIPTION]?.newText?.let(FieldEdit::Set) ?: FieldEdit.Unchanged
+        if (titleEdit is FieldEdit.Set || authorEdit is FieldEdit.Set || descriptionEdit is FieldEdit.Set) {
+            appContainer.metadataOverrides.applyTextEdits(
+                bookUrl = bookUrl,
+                title = titleEdit,
+                author = authorEdit,
+                description = descriptionEdit,
+            )
+        }
+        byField[DetailField.SERIES]?.let { series ->
+            fileBookInSeries(
+                bookDao = database.bookDao(),
+                catalog = appContainer.remoteCatalog,
+                book = book,
+                name = series.newText,
+                index = series.newSeriesIndex,
+            )
+        }
+        var coverFailed = false
+        byField[DetailField.COVER]?.newCoverUrl?.let { url ->
+            val bytes = HardcoverImages.downloadCover(url)
+            val saved = bytes != null && appContainer.metadataOverrides.setCoverFromBytes(bookUrl, bytes)
+            if (!saved) coverFailed = true
+        }
+        return if (coverFailed) {
+            R.string.hardcover_update_details_cover_failed
+        } else {
+            R.string.hardcover_update_details_done
+        }
+    }
 
     /**
      * The Library row that leads to the reading services, on the Services
@@ -415,6 +516,7 @@ internal class ReadingTracker(context: Context, private val database: LiseurData
         var busy by remember { mutableStateOf(false) }
         var message by remember(bookUrl) { mutableStateOf<Int?>(null) }
         var choices by remember(bookUrl) { mutableStateOf<PickerSession?>(null) }
+        var review by remember(bookUrl) { mutableStateOf<DetailsReviewSession?>(null) }
         val view = hardcoverBookDetailsView(link)
         fun busyWhile(work: suspend () -> Unit) {
             busy = true
@@ -429,6 +531,27 @@ internal class ReadingTracker(context: Context, private val database: LiseurData
                 when (val found = hardcover.candidates(bookUrl)) {
                     is RemoteResult.Ok -> choices = PickerSession(found.value, push)
                     is RemoteResult.Failed -> message = failureMessage(found.reason)
+                }
+            }
+        }
+        fun openDetailsUpdate() {
+            busyWhile {
+                val (book, local) = localDetails(bookUrl) ?: return@busyWhile
+                when (val fetched = hardcover.editionDetails(bookUrl)) {
+                    is RemoteResult.Failed -> message = failureMessage(fetched.reason)
+                    is RemoteResult.Ok -> {
+                        val remote = fetched.value
+                        if (remote == null) {
+                            message = R.string.hardcover_error_other
+                            return@busyWhile
+                        }
+                        val proposals = proposeUpdates(local, remote)
+                        if (proposals.isEmpty()) {
+                            message = R.string.hardcover_update_details_empty
+                        } else {
+                            review = DetailsReviewSession(book = book, proposals = proposals)
+                        }
+                    }
                 }
             }
         }
@@ -507,6 +630,12 @@ internal class ReadingTracker(context: Context, private val database: LiseurData
                         onClick = { performAction(secondary) },
                     ) { Text(stringResource(secondary.labelRes)) }
                 }
+                if (view.showUpdateDetails) {
+                    TextButton(
+                        enabled = !busy,
+                        onClick = ::openDetailsUpdate,
+                    ) { Text(stringResource(R.string.hardcover_update_details)) }
+                }
                 if (busy) BusyIndicator()
             }
             message?.let {
@@ -543,6 +672,20 @@ internal class ReadingTracker(context: Context, private val database: LiseurData
                     }
                 },
                 onDismiss = { choices = null },
+            )
+        }
+
+        review?.let { session ->
+            DetailsUpdateSheet(
+                session = session,
+                onApply = { selected ->
+                    val proposals = session.proposals
+                    review = null
+                    busyWhile {
+                        message = applyDetailsUpdate(bookUrl, proposals, selected)
+                    }
+                },
+                onDismiss = { review = null },
             )
         }
     }
@@ -744,6 +887,7 @@ internal data class HardcoverBookDetailsView(
     val syncSwitchChecked: Boolean?,
     val primaryAction: HardcoverAction?,
     val secondaryActions: List<HardcoverAction>,
+    val showUpdateDetails: Boolean = false,
 )
 
 internal fun hardcoverBookDetailsView(link: HardcoverBookLink?): HardcoverBookDetailsView {
@@ -757,6 +901,7 @@ internal fun hardcoverBookDetailsView(link: HardcoverBookLink?): HardcoverBookDe
             primaryAction = HardcoverAction.CHOOSE_EDITION,
             // Auto-sync can still match and report an unlinked book, so it needs a way out.
             secondaryActions = listOf(HardcoverAction.CHOOSE_AND_PUSH, HardcoverAction.KEEP_OFF),
+            showUpdateDetails = false,
         )
         !matched && excluded -> HardcoverBookDetailsView(
             matchedEditionTitle = null,
@@ -764,6 +909,7 @@ internal fun hardcoverBookDetailsView(link: HardcoverBookLink?): HardcoverBookDe
             syncSwitchChecked = false,
             primaryAction = null,
             secondaryActions = listOf(HardcoverAction.CHOOSE_EDITION),
+            showUpdateDetails = false,
         )
         matched && !excluded -> HardcoverBookDetailsView(
             matchedEditionTitle = link.editionTitle,
@@ -771,6 +917,7 @@ internal fun hardcoverBookDetailsView(link: HardcoverBookLink?): HardcoverBookDe
             syncSwitchChecked = true,
             primaryAction = HardcoverAction.PUSH,
             secondaryActions = listOf(HardcoverAction.CHANGE_EDITION),
+            showUpdateDetails = true,
         )
         else -> HardcoverBookDetailsView(
             matchedEditionTitle = link.editionTitle,
@@ -778,6 +925,262 @@ internal fun hardcoverBookDetailsView(link: HardcoverBookLink?): HardcoverBookDe
             syncSwitchChecked = false,
             primaryAction = null,
             secondaryActions = listOf(HardcoverAction.CHANGE_EDITION),
+            showUpdateDetails = true,
         )
     }
+}
+
+private data class DetailsReviewSession(
+    val book: Book,
+    val proposals: List<DetailProposal>,
+)
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DetailsUpdateSheet(
+    session: DetailsReviewSession,
+    onApply: (Set<DetailField>) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var selected by remember(session) {
+        mutableStateOf(session.proposals.filter { it.defaultChecked }.map { it.field }.toSet())
+    }
+    val eInk = LocalEInk.current
+    val loader = HardcoverImages.loader(LocalContext.current)
+    LiseurModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+    ) {
+        Column(
+            Modifier
+                .align(Alignment.CenterHorizontally)
+                .widthIn(max = contentWidthCap(windowWidth()))
+                .fillMaxWidth()
+                .navigationBarsPadding(),
+        ) {
+            Text(
+                text = stringResource(R.string.hardcover_update_details),
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier
+                    .padding(horizontal = 20.dp)
+                    .padding(top = 4.dp, bottom = 4.dp)
+                    .semantics { heading() },
+            )
+            Text(
+                text = stringResource(R.string.hardcover_update_details_intro),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .padding(horizontal = 20.dp)
+                    .padding(bottom = 12.dp),
+            )
+            HorizontalDivider()
+            Column(
+                Modifier
+                    .weight(1f, fill = false)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                session.proposals.forEach { proposal ->
+                    val checked = proposal.field in selected
+                    ProposalRow(
+                        proposal = proposal,
+                        book = session.book,
+                        checked = checked,
+                        eInk = eInk,
+                        loader = loader,
+                        onToggle = { on ->
+                            selected = if (on) selected + proposal.field else selected - proposal.field
+                        },
+                    )
+                }
+            }
+            HorizontalDivider()
+            Row(
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
+            ) {
+                TextButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.heightIn(min = 48.dp),
+                ) {
+                    Text(stringResource(R.string.cancel))
+                }
+                Spacer(Modifier.width(8.dp))
+                Button(
+                    onClick = { onApply(selected) },
+                    enabled = selected.isNotEmpty(),
+                    modifier = Modifier.heightIn(min = 48.dp),
+                ) {
+                    Text(stringResource(R.string.hardcover_update_details_apply))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProposalRow(
+    proposal: DetailProposal,
+    book: Book,
+    checked: Boolean,
+    eInk: Boolean,
+    loader: coil3.ImageLoader,
+    onToggle: (Boolean) -> Unit,
+) {
+    val colors = MaterialTheme.colorScheme
+    val shape = RoundedCornerShape(12.dp)
+    Surface(
+        shape = shape,
+        color = if (eInk) colors.surface else colors.surfaceContainerLow,
+        border = BorderStroke(
+            width = if (checked) 1.5.dp else 1.dp,
+            color = when {
+                checked -> colors.primary
+                eInk -> colors.outline
+                else -> colors.outlineVariant
+            },
+        ),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .toggleable(
+                value = checked,
+                role = Role.Checkbox,
+                onValueChange = onToggle,
+            ),
+    ) {
+        Row(
+            verticalAlignment = Alignment.Top,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
+        ) {
+            Checkbox(
+                checked = checked,
+                onCheckedChange = null,
+                modifier = Modifier.padding(top = 2.dp),
+            )
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = stringResource(proposalFieldLabel(proposal.field)),
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                if (proposal.field == DetailField.COVER) {
+                    CoverComparison(
+                        book = book,
+                        remoteCoverUrl = proposal.newCoverUrl,
+                        loader = loader,
+                    )
+                } else {
+                    val nowValue = formatProposalValue(proposal, current = true)
+                    val remoteValue = formatProposalValue(proposal, current = false)
+                    val maxLines = if (proposal.field == DetailField.DESCRIPTION) 4 else 2
+                    Text(
+                        text = stringResource(R.string.hardcover_update_details_now, nowValue),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.onSurfaceVariant,
+                        maxLines = maxLines,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = stringResource(R.string.hardcover_update_details_remote, remoteValue),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = colors.onSurface,
+                        maxLines = maxLines,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CoverComparison(
+    book: Book,
+    remoteCoverUrl: String?,
+    loader: coil3.ImageLoader,
+) {
+    val colors = MaterialTheme.colorScheme
+    val coverShape = RoundedCornerShape(8.dp)
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalAlignment = Alignment.Top,
+        modifier = Modifier.padding(top = 4.dp),
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            BookCover(
+                book = book,
+                shape = coverShape,
+                modifier = Modifier
+                    .width(64.dp)
+                    .aspectRatio(2f / 3f),
+            )
+            Text(
+                text = stringResource(R.string.hardcover_update_details_now_label),
+                style = MaterialTheme.typography.labelSmall,
+                color = colors.onSurfaceVariant,
+            )
+        }
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .width(64.dp)
+                    .aspectRatio(2f / 3f)
+                    .clip(coverShape)
+                    .background(colors.surfaceContainerHighest)
+                    .border(BorderStroke(1.dp, colors.outlineVariant.copy(alpha = 0.35f)), coverShape),
+            ) {
+                if (remoteCoverUrl != null) {
+                    AsyncImage(
+                        model = remoteCoverUrl,
+                        contentDescription = null,
+                        imageLoader = loader,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+            }
+            Text(
+                text = stringResource(R.string.hardcover_title),
+                style = MaterialTheme.typography.labelSmall,
+                color = colors.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@StringRes
+private fun proposalFieldLabel(field: DetailField): Int = when (field) {
+    DetailField.COVER -> R.string.book_metadata_cover_label
+    DetailField.TITLE -> R.string.book_metadata_title_label
+    DetailField.AUTHOR -> R.string.book_metadata_author_label
+    DetailField.DESCRIPTION -> R.string.book_metadata_description_label
+    DetailField.SERIES -> R.string.sort_series
+}
+
+@Composable
+private fun formatProposalValue(proposal: DetailProposal, current: Boolean): String {
+    val text = if (current) proposal.currentText else proposal.newText
+    if (proposal.field == DetailField.SERIES) {
+        val name = text?.takeIf { it.isNotBlank() } ?: return stringResource(R.string.book_metadata_no_series)
+        val rawIndex = if (current) proposal.currentSeriesIndex else proposal.newSeriesIndex
+        val index = seriesIndexLabel(validSeriesPosition(rawIndex))
+        return if (index == null) name else stringResource(R.string.series_position, name, index)
+    }
+    return text?.takeIf { it.isNotBlank() } ?: stringResource(R.string.book_metadata_no_series)
 }

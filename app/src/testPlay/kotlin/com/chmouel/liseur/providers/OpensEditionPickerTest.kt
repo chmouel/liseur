@@ -23,6 +23,7 @@ class OpensEditionPickerTest {
         assertNull(view.syncSwitchChecked)
         assertEquals(HardcoverAction.CHOOSE_EDITION, view.primaryAction)
         assertEquals(listOf(HardcoverAction.CHOOSE_AND_PUSH, HardcoverAction.KEEP_OFF), view.secondaryActions)
+        assertFalse(view.showUpdateDetails)
     }
 
     @Test
@@ -33,6 +34,7 @@ class OpensEditionPickerTest {
         assertEquals(false, view.syncSwitchChecked)
         assertNull(view.primaryAction)
         assertEquals(listOf(HardcoverAction.CHOOSE_EDITION), view.secondaryActions)
+        assertFalse(view.showUpdateDetails)
     }
 
     @Test
@@ -51,6 +53,7 @@ class OpensEditionPickerTest {
         assertEquals(true, view.syncSwitchChecked)
         assertEquals(HardcoverAction.PUSH, view.primaryAction)
         assertEquals(listOf(HardcoverAction.CHANGE_EDITION), view.secondaryActions)
+        assertTrue(view.showUpdateDetails)
     }
 
     @Test
@@ -69,5 +72,6 @@ class OpensEditionPickerTest {
         assertEquals(false, view.syncSwitchChecked)
         assertNull(view.primaryAction)
         assertEquals(listOf(HardcoverAction.CHANGE_EDITION), view.secondaryActions)
+        assertTrue(view.showUpdateDetails)
     }
 }

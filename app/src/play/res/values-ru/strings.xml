@@ -127,4 +127,13 @@
     <string name="hardcover_edition_selected">Выбрано</string>
     <string name="hardcover_ref_not_hardcover">Это не ссылка Hardcover</string>
     <string name="hardcover_ref_bad_id">Это не ID книги Hardcover</string>
+    <string name="hardcover_update_details">Обновить из Hardcover</string>
+    <string name="hardcover_update_details_intro">Выберите сведения, которые нужно заменить данными из Hardcover.</string>
+    <string name="hardcover_update_details_now">Сейчас: %1$s</string>
+    <string name="hardcover_update_details_remote">Hardcover: %1$s</string>
+    <string name="hardcover_update_details_now_label">Сейчас</string>
+    <string name="hardcover_update_details_apply">Применить</string>
+    <string name="hardcover_update_details_empty">В Hardcover нет отличий для этой книги.</string>
+    <string name="hardcover_update_details_done">Сведения обновлены из Hardcover.</string>
+    <string name="hardcover_update_details_cover_failed">Сведения обновлены, но загрузить обложку не удалось.</string>
 </resources>

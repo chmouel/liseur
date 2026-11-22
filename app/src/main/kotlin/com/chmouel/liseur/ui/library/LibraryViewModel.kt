@@ -30,6 +30,7 @@ import com.chmouel.liseur.data.db.UploadRefusalDao
 import com.chmouel.liseur.data.library.FinishedState
 import com.chmouel.liseur.data.library.ImportResult
 import com.chmouel.liseur.data.library.LocalLibraryRepository
+import com.chmouel.liseur.data.library.fileBookInSeries
 import com.chmouel.liseur.data.library.openableUri
 import com.chmouel.liseur.data.remote.BookUploadRepository
 import com.chmouel.liseur.data.remote.CatalogStatus
@@ -1739,13 +1740,7 @@ class LibraryViewModel(
         index: Double?,
     ) {
         viewModelScope.launch {
-            val clean = name?.trim()?.takeIf { it.isNotEmpty() }
-            bookDao.setSeriesOverride(book.url, clean, index)
-            if (book.browseServerId != null) {
-                bookDao.settleBrowseSeriesEdit(book.url)
-            } else {
-                catalog.retryPendingSeriesClaims()
-            }
+            fileBookInSeries(bookDao, catalog, book, name, index)
         }
     }
 

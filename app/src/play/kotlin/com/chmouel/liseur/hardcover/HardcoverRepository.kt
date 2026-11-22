@@ -281,6 +281,16 @@ class HardcoverRepository(
         return client.editionsOfBooks(token, ids)
     }
 
+    /** Public catalogue details for the edition matched to [bookUrl], or null when none is matched. */
+    suspend fun editionDetails(bookUrl: String): RemoteResult<HardcoverEditionDetails?> {
+        val account = dao.account() ?: return RemoteResult.Failed(SyncFailure.Unauthorised)
+        val token = open(account) ?: return RemoteResult.Failed(SyncFailure.Unauthorised)
+        val link = dao.link(bookUrl)
+        if (link?.matched != true) return RemoteResult.Ok(null)
+        val editionId = link.editionId ?: return RemoteResult.Ok(null)
+        return client.editionDetails(token, editionId)
+    }
+
     /**
      * Remembers which edition a book is, if the account and book generation
      * still match [candidates], and pushes when [push] is true.

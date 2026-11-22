@@ -130,4 +130,13 @@
     <string name="hardcover_edition_selected">Selected</string>
     <string name="hardcover_ref_not_hardcover">That is not a Hardcover link</string>
     <string name="hardcover_ref_bad_id">That is not a Hardcover book ID</string>
+    <string name="hardcover_update_details">Update from Hardcover</string>
+    <string name="hardcover_update_details_intro">Choose which details to replace with Hardcover\'s.</string>
+    <string name="hardcover_update_details_now">Now: %1$s</string>
+    <string name="hardcover_update_details_remote">Hardcover: %1$s</string>
+    <string name="hardcover_update_details_now_label">Now</string>
+    <string name="hardcover_update_details_apply">Apply</string>
+    <string name="hardcover_update_details_empty">Hardcover has nothing different for this book.</string>
+    <string name="hardcover_update_details_done">Details updated from Hardcover.</string>
+    <string name="hardcover_update_details_cover_failed">Details updated, but the cover could not be downloaded.</string>
 </resources>

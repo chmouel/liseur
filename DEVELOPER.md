@@ -120,13 +120,17 @@ for conflict, removal and export semantics.
 Hardcover reporting lives entirely in `app/src/play/` (`hardcover/` and
 `providers/ReadingTracker.kt`); `foss` has a no-op `ReadingTracker` and
 `main` reaches it only through callbacks and composable slots. Keep it
-push-only: it never feeds `ReadingStateMerge`, `RemoteRouter` or a
-position peer. Its state is the separate `hardcover.db`, keyed by local
-`books.url`. Every push runs under the repository's single lock and the
-client's request spacing; queue books with `bookChanged`, never by
-starting a push per book. Statuses adopted from a sync partner must not
-queue a push. Status, date and rating rules belong in `HardcoverPlan`.
-See [ADR 0075](docs/adr/0075-hardcover-reading-tracker.md).
+push-only for reading state: it never feeds `ReadingStateMerge`,
+`RemoteRouter` or a position peer. Public catalogue details for a
+matched edition can be pulled on explicit request and applied only as
+ordinary user overrides through `BookMetadataOverrideRepository` and
+`fileBookInSeries` ([ADR 0076](docs/adr/0076-hardcover-details-update.md)).
+Its state is the separate `hardcover.db`, keyed by local `books.url`.
+Every push runs under the repository's single lock and the client's
+request spacing; queue books with `bookChanged`, never by starting a
+push per book. Statuses adopted from a sync partner must not queue a
+push. Status, date and rating rules belong in `HardcoverPlan`. See
+[ADR 0075](docs/adr/0075-hardcover-reading-tracker.md).
 
 ## Settings backup archive
 
