@@ -18,6 +18,8 @@ class HardcoverEditionRowTest {
         releaseYear: Int? = 2012,
         publisher: String? = "Mariner",
         usersCount: Int = 48,
+        coverUrl: String? = "https://assets.hardcover.app/c.jpg",
+        authors: List<String> = listOf("J.R.R. Tolkien"),
     ) = HardcoverEdition(
         id = id,
         bookId = 9,
@@ -30,18 +32,38 @@ class HardcoverEditionRowTest {
         releaseYear = releaseYear,
         publisher = publisher,
         usersCount = usersCount,
+        coverUrl = coverUrl,
+        authors = authors,
     )
 
     @Test
-    fun `an ebook edition shows format, year, publisher, isbn, pages and readers, and a check when matched`() {
+    fun `an ebook edition shows format, year, pages and readers, the author, the cover and a check when matched`() {
         val row = editionRow(edition(), currentEditionId = 5)
 
         assertEquals(EditionIcon.BOOK, row.icon)
         assertEquals("The Hobbit", row.headline)
-        assertEquals("ebook · 2012 · Mariner · 9780547928227", row.supporting)
-        assertEquals(300, row.pages)
-        assertEquals(48, row.readers)
+        assertEquals("J.R.R. Tolkien", row.authors)
+        assertEquals("https://assets.hardcover.app/c.jpg", row.coverUrl)
+        assertEquals(
+            listOf(
+                EditionChip.Label("ebook"),
+                EditionChip.Label("2012"),
+                EditionChip.Pages(300),
+                EditionChip.Readers(48),
+            ),
+            row.chips,
+        )
         assertTrue(row.current)
+        assertFalse(row.selected)
+    }
+
+    @Test
+    fun `current and selected are independent`() {
+        val row = editionRow(edition(), currentEditionId = 99, selectedEditionId = 5)
+
+        assertFalse(row.current)
+        assertTrue(row.selected)
+        assertEquals(5L, row.editionId)
     }
 
     @Test
@@ -50,7 +72,6 @@ class HardcoverEditionRowTest {
 
         assertEquals(EditionIcon.AUDIOBOOK, row.icon)
         assertEquals("Audiobook", row.formatLabel)
-        assertFalse(row.current)
     }
 
     @Test
@@ -70,18 +91,29 @@ class HardcoverEditionRowTest {
                 bookTitle = "The Hobbit",
                 format = null,
                 pages = null,
-                isbn13 = null,
                 releaseYear = null,
-                publisher = null,
                 usersCount = 0,
+                coverUrl = null,
+                authors = emptyList(),
             ),
             currentEditionId = null,
         )
 
         assertEquals("The Hobbit", row.headline)
-        assertEquals("", row.supporting)
-        assertNull(row.pages)
-        assertNull(row.readers)
+        assertNull(row.authors)
+        assertNull(row.coverUrl)
+        assertEquals(emptyList<EditionChip>(), row.chips)
         assertFalse(row.current)
+    }
+
+    @Test
+    fun `more than two authors are cut to two and a count`() {
+        assertEquals("A, B +2", editionRow(edition(authors = listOf("A", "B", "C", "D")), null).authors)
+        assertEquals("A, B", editionRow(edition(authors = listOf("A", " ", "B")), null).authors)
+    }
+
+    @Test
+    fun `a cover off the image host is not passed on`() {
+        assertNull(editionRow(edition(coverUrl = "https://evil.example/c.jpg"), null).coverUrl)
     }
 }

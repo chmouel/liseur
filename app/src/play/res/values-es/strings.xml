@@ -101,7 +101,6 @@
     <string name="hardcover_book_unmatched">Aún no vinculado a una edición</string>
     <string name="hardcover_book_sync">Sincronizar este libro</string>
     <string name="hardcover_book_choose">Elegir edición</string>
-    <string name="hardcover_editions_none">Hardcover no tiene ninguna edición que coincida con este libro.</string>
     <plurals name="hardcover_edition_pages">
         <item quantity="one">%d página</item>
         <item quantity="other">%d páginas</item>
@@ -111,4 +110,14 @@
         <item quantity="other">%d lectores</item>
     </plurals>
     <string name="hardcover_edition_current">Vinculada actualmente</string>
+    <string name="hardcover_search_hint">Busca en Hardcover o pega un enlace o ID</string>
+    <string name="hardcover_search_clear">Borrar búsqueda</string>
+    <string name="hardcover_search_action">Buscar</string>
+    <string name="hardcover_search_empty">Sin resultados. Prueba con el título, el autor o un ISBN.</string>
+    <string name="hardcover_search_retry">Reintentar</string>
+    <string name="hardcover_choose">Elegir</string>
+    <string name="hardcover_choose_and_push">Elegir y enviar</string>
+    <string name="hardcover_edition_selected">Seleccionada</string>
+    <string name="hardcover_ref_not_hardcover">Ese no es un enlace de Hardcover</string>
+    <string name="hardcover_ref_bad_id">Ese no es un ID de libro de Hardcover</string>
 </resources>

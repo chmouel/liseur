@@ -7,6 +7,9 @@ import java.net.InetAddress
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
@@ -565,6 +568,142 @@ class HardcoverRepositoryTest {
         assertNull(dao.links[BOOK])
     }
 
+    private fun lookedUp(input: String): List<HardcoverEdition> =
+        (runBlocking { repository().lookup(input) } as com.chmouel.liseur.data.remote.RemoteResult.Ok).value
+
+    @Test
+    fun `typed text is searched and the top books editions are listed`() {
+        signedIn()
+        hardcover.hits = listOf(Triple(9L, "The Hobbit", "J.R.R. Tolkien"))
+
+        val editions = lookedUp("  Qumran ")
+
+        assertEquals(listOf(90L), editions.map { it.id })
+        assertEquals(listOf("search", "editions_of_books"), hardcover.queries)
+    }
+
+    @Test
+    fun `an isbn, hyphenated or ending in X, asks for editions by isbn only`() {
+        signedIn()
+
+        assertEquals(listOf(5L), lookedUp("978-0-547-92822-7").map { it.id })
+        assertEquals(listOf("isbn"), hardcover.queries)
+        hardcover.queries.clear()
+        assertTrue(lookedUp("ISBN 080442957X").isEmpty())
+        assertEquals(listOf("isbn"), hardcover.queries)
+    }
+
+    @Test
+    fun `a book id and a book link slug find the book, then its editions`() {
+        signedIn()
+
+        assertEquals(listOf(90L), lookedUp("9").map { it.id })
+        assertEquals(listOf("book_by_id", "editions_of_books"), hardcover.queries)
+        hardcover.queries.clear()
+
+        assertEquals(listOf(90L), lookedUp("https://hardcover.app/books/the-hobbit/editions/5?x=1").map { it.id })
+        assertEquals(listOf("book_by_slug", "editions_of_books"), hardcover.queries)
+        assertEquals(listOf("9", "the-hobbit"), hardcover.sentRefs)
+    }
+
+    @Test
+    fun `a one digit book id is looked up, a one character text is not`() {
+        signedIn()
+
+        lookedUp("7")
+        assertEquals(listOf("book_by_id"), hardcover.queries)
+        hardcover.queries.clear()
+
+        assertTrue(lookedUp("a").isEmpty())
+        assertTrue(hardcover.queries.isEmpty())
+    }
+
+    @Test
+    fun `blank input, another sites link and an overflowing id make no request`() {
+        signedIn()
+
+        assertTrue(lookedUp("   ").isEmpty())
+        assertTrue(lookedUp("https://example.com/books/x?q=secret").isEmpty())
+        assertTrue(lookedUp("example.com/hardcover.app/books/x").isEmpty())
+        assertTrue(lookedUp("99999999999").isEmpty())
+        assertTrue(lookedUp("0").isEmpty())
+        assertEquals(0, server.requestCount)
+    }
+
+    @Test
+    fun `a lookup with a refused token reports it`() = runBlocking {
+        signedIn()
+        hardcover.refuse = true
+
+        assertEquals(
+            com.chmouel.liseur.data.remote.RemoteResult.Failed(SyncFailure.Unauthorised),
+            repository().lookup("Qumran"),
+        )
+    }
+
+    @Test
+    fun `a lookup with no account makes no request`() = runBlocking {
+        assertEquals(
+            com.chmouel.liseur.data.remote.RemoteResult.Failed(SyncFailure.Unauthorised),
+            repository().lookup("Qumran"),
+        )
+        assertEquals(0, server.requestCount)
+    }
+
+    @Test
+    fun `candidates record the isbn or the title and author that found them`() = runBlocking {
+        signedIn()
+        shelve()
+        val byIsbn = (repository().candidates(BOOK) as com.chmouel.liseur.data.remote.RemoteResult.Ok).value
+        assertEquals("9780547928227", byIsbn.query)
+
+        shelve(identifier = "uuid:1234")
+        hardcover.hits = listOf(Triple(9L, "The Hobbit", "J.R.R. Tolkien"))
+        val bySearch = (repository().candidates(BOOK) as com.chmouel.liseur.data.remote.RemoteResult.Ok).value
+        assertEquals("The Hobbit J.R.R. Tolkien", bySearch.query)
+    }
+
+    @Test
+    fun `a lookup cancelled while waiting its turn sends nothing and returns no result`() = runBlocking {
+        signedIn()
+        hardcover.hits = listOf(Triple(9L, "The Hobbit", "J.R.R. Tolkien"))
+        val spaced = HardcoverRepository(
+            dao = dao,
+            bookFor = { books[it] },
+            localFor = { local[it] },
+            client = HardcoverClient(
+                endpoint = "http://127.0.0.1:${server.port}/v1/graphql",
+                spacingMillis = 60_000,
+            ),
+            open = { it.tokenCipher.removePrefix("sealed:") },
+        )
+        var result: Any? = null
+        val job = launch(Dispatchers.IO) { result = spaced.lookup("Qumran") }
+        while (server.requestCount < 1) delay(10)
+        delay(200)
+
+        job.cancelAndJoin()
+
+        assertEquals(1, server.requestCount)
+        assertNull(result)
+    }
+
+    @Test
+    fun `a lookup cancelled during a slow answer stops the call and returns no result`() = runBlocking {
+        signedIn()
+        hardcover.delayMillis = 3_000
+        var result: Any? = null
+        val job = launch(Dispatchers.IO) { result = repository().lookup("Qumran") }
+        while (server.requestCount < 1) delay(10)
+
+        job.cancelAndJoin()
+        delay(300)
+
+        assertEquals(1, server.requestCount)
+        assertNull(result)
+        assertTrue(job.isCancelled)
+    }
+
     /** Hardcover with one reader's library of at most one book, the way the server answers. */
     private class FakeHardcover : Dispatcher() {
         data class Read(
@@ -577,17 +716,20 @@ class HardcoverRepositoryTest {
         data class Entry(val id: Long, var status: Int, var rating: Double?, var read: Read?, var editionId: Long? = null)
 
         @Volatile var refuse = false
+        @Volatile var delayMillis = 0L
         @Volatile var failReads = false
         @Volatile var userId = 42L
         @Volatile var hits: List<Triple<Long, String, String>> = emptyList()
         @Volatile var entry: Entry? = null
         @Volatile var inserts = 0
         val queries: MutableList<String> = java.util.Collections.synchronizedList(mutableListOf())
+        val sentRefs: MutableList<String> = java.util.Collections.synchronizedList(mutableListOf())
         private var nextRead = 3L
 
         @Synchronized
         override fun dispatch(request: RecordedRequest): MockResponse {
             if (refuse) return MockResponse(code = 401, body = "{}")
+            if (delayMillis > 0) Thread.sleep(delayMillis)
             val body = JSONObject(request.body!!.utf8())
             val query = body.getString("query")
             val variables = body.optJSONObject("variables") ?: JSONObject()
@@ -626,6 +768,18 @@ class HardcoverRepositoryTest {
                         )
                     }
                     data.put("search", JSONObject().put("results", JSONObject().put("hits", documents)))
+                }
+                "slug: {_eq" in query -> {
+                    queries += "book_by_slug"
+                    sentRefs += variables.getString("slug")
+                    val known = variables.getString("slug") == "the-hobbit"
+                    data.put("books", JSONArray().apply { if (known) put(JSONObject().put("id", 9)) })
+                }
+                "\$id: Int!) { books(" in query -> {
+                    queries += "book_by_id"
+                    sentRefs += variables.getInt("id").toString()
+                    val known = variables.getInt("id") == 9
+                    data.put("books", JSONArray().apply { if (known) put(JSONObject().put("id", 9)) })
                 }
                 "default_ebook_edition" in query -> {
                     queries += "defaults"

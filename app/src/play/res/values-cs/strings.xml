@@ -103,7 +103,6 @@
     <string name="hardcover_book_unmatched">Zatím nespárováno s žádným vydáním</string>
     <string name="hardcover_book_sync">Synchronizovat tuto knihu</string>
     <string name="hardcover_book_choose">Vybrat vydání</string>
-    <string name="hardcover_editions_none">Hardcover nemá žádné vydání odpovídající této knize.</string>
     <plurals name="hardcover_edition_pages">
         <item quantity="one">%d strana</item>
         <item quantity="few">%d strany</item>
@@ -117,4 +116,14 @@
         <item quantity="other">%d čtenářů</item>
     </plurals>
     <string name="hardcover_edition_current">Aktuálně spárováno</string>
+    <string name="hardcover_search_hint">Hledat na Hardcoveru, nebo vložit odkaz či ID</string>
+    <string name="hardcover_search_clear">Vymazat hledání</string>
+    <string name="hardcover_search_action">Hledat</string>
+    <string name="hardcover_search_empty">Nic nenalezeno. Zkuste název, autora nebo ISBN.</string>
+    <string name="hardcover_search_retry">Zkusit znovu</string>
+    <string name="hardcover_choose">Vybrat</string>
+    <string name="hardcover_choose_and_push">Vybrat a odeslat</string>
+    <string name="hardcover_edition_selected">Vybráno</string>
+    <string name="hardcover_ref_not_hardcover">Toto není odkaz na Hardcover</string>
+    <string name="hardcover_ref_bad_id">Toto není ID knihy na Hardcoveru</string>
 </resources>

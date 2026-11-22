@@ -48,6 +48,8 @@ data class HardcoverCandidates(
     val accountUserId: Long,
     val generation: BookGeneration?,
     val editions: List<HardcoverEdition>,
+    /** What the successful lookup asked for: the ISBN, or the title and author searched. */
+    val query: String = "",
 )
 
 /** What came of choosing an edition, and pushing when asked. */
@@ -230,21 +232,53 @@ class HardcoverRepository(
         when (val byIsbn = editionsByIsbn(token, book)) {
             is RemoteResult.Failed -> return byIsbn
             is RemoteResult.Ok -> if (byIsbn.value.isNotEmpty()) {
-                return RemoteResult.Ok(HardcoverCandidates(account.userId, generation, byIsbn.value))
+                val isbn = bookIsbn(book)?.isbn13.orEmpty()
+                return RemoteResult.Ok(HardcoverCandidates(account.userId, generation, byIsbn.value, isbn))
             }
         }
+        val query = searchQuery(book)
         val found = when (val searched = search(token, book)) {
             is RemoteResult.Failed -> return searched
             is RemoteResult.Ok ->
                 HardcoverMatch.confident(book.matchTitle, book.matchAuthor, searched.value)?.let(::listOf)
                     ?: searched.value.take(PICKER_HITS)
         }
-        if (found.isEmpty()) return RemoteResult.Ok(HardcoverCandidates(account.userId, generation, emptyList()))
+        if (found.isEmpty()) return RemoteResult.Ok(HardcoverCandidates(account.userId, generation, emptyList(), query))
         return when (val editions = client.editionsOfBooks(token, found.map { it.id })) {
             is RemoteResult.Failed -> editions
             is RemoteResult.Ok ->
-                RemoteResult.Ok(HardcoverCandidates(account.userId, generation, editions.value))
+                RemoteResult.Ok(HardcoverCandidates(account.userId, generation, editions.value, query))
         }
+    }
+
+    /**
+     * The editions for what the reader typed in the picker: a search, an
+     * ISBN, a Hardcover book id or the slug of a pasted book link. Needs
+     * the account's token and nothing about the book; blank, one-character
+     * and non-Hardcover input makes no request.
+     */
+    suspend fun lookup(input: String): RemoteResult<List<HardcoverEdition>> {
+        val ref = HardcoverRef.parse(input)
+        when {
+            ref is HardcoverRef.Text && ref.text.length < MIN_SEARCH -> return RemoteResult.Ok(emptyList())
+            ref is HardcoverRef.Blank || ref is HardcoverRef.NotHardcover || ref is HardcoverRef.BadId ->
+                return RemoteResult.Ok(emptyList())
+        }
+        val account = dao.account() ?: return RemoteResult.Failed(SyncFailure.Unauthorised)
+        val token = open(account) ?: return RemoteResult.Failed(SyncFailure.Unauthorised)
+        val ids = when (ref) {
+            is HardcoverRef.Isbn -> return client.editionsByIsbn(token, ref.isbn)
+            is HardcoverRef.Text -> when (val hits = client.searchBooks(token, ref.text)) {
+                is RemoteResult.Failed -> return hits
+                is RemoteResult.Ok -> hits.value.take(PICKER_HITS).map { it.id }
+            }
+            else -> when (val books = client.booksByRef(token, ref)) {
+                is RemoteResult.Failed -> return books
+                is RemoteResult.Ok -> books.value
+            }
+        }
+        if (ids.isEmpty()) return RemoteResult.Ok(emptyList())
+        return client.editionsOfBooks(token, ids)
     }
 
     /**
@@ -414,18 +448,23 @@ class HardcoverRepository(
         }
     }
 
+    private fun searchQuery(book: Book): String =
+        listOfNotNull(book.matchTitle, book.matchAuthor).joinToString(" ").trim()
+
     private suspend fun search(token: String, book: Book): RemoteResult<List<HardcoverBook>> {
-        val query = listOfNotNull(book.matchTitle, book.matchAuthor).joinToString(" ").trim()
+        val query = searchQuery(book)
         if (query.isEmpty()) return RemoteResult.Ok(emptyList())
         return client.searchBooks(token, query)
     }
 
     /** The editions carrying the file's ISBN, or none when its identifier is no ISBN. */
     private suspend fun editionsByIsbn(token: String, book: Book): RemoteResult<List<HardcoverEdition>> {
-        val isbn = Isbn.from(WorkIdentifiers.dcFrom(book.workId, book.stableTitle, book.identityAuthor ?: book.stableAuthor))
-            ?: return RemoteResult.Ok(emptyList())
+        val isbn = bookIsbn(book) ?: return RemoteResult.Ok(emptyList())
         return client.editionsByIsbn(token, isbn)
     }
+
+    private fun bookIsbn(book: Book): Isbn? =
+        Isbn.from(WorkIdentifiers.dcFrom(book.workId, book.stableTitle, book.identityAuthor ?: book.stableAuthor))
 
     private fun HardcoverBookLink.matchedWith(edition: HardcoverEdition) = copy(
         hardcoverBookId = edition.bookId,
@@ -437,6 +476,7 @@ class HardcoverRepository(
     private companion object {
         /** Search hits whose editions the picker offers when none is a sure match. */
         const val PICKER_HITS = 5
+        const val MIN_SEARCH = 2
         private const val SQL_BATCH = 500
     }
 }

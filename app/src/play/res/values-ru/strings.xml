@@ -101,7 +101,6 @@
     <string name="hardcover_book_unmatched">Издание пока не выбрано</string>
     <string name="hardcover_book_sync">Синхронизировать эту книгу</string>
     <string name="hardcover_book_choose">Выбрать издание</string>
-    <string name="hardcover_editions_none">В Hardcover нет издания, соответствующего этой книге.</string>
     <plurals name="hardcover_edition_pages">
         <item quantity="one">%d страница</item>
         <item quantity="few">%d страницы</item>
@@ -115,4 +114,14 @@
         <item quantity="other">%d читателя</item>
     </plurals>
     <string name="hardcover_edition_current">Сейчас выбрано</string>
+    <string name="hardcover_search_hint">Искать в Hardcover или вставить ссылку или ID</string>
+    <string name="hardcover_search_clear">Очистить поиск</string>
+    <string name="hardcover_search_action">Искать</string>
+    <string name="hardcover_search_empty">Ничего не найдено. Попробуйте название, автора или ISBN.</string>
+    <string name="hardcover_search_retry">Повторить</string>
+    <string name="hardcover_choose">Выбрать</string>
+    <string name="hardcover_choose_and_push">Выбрать и отправить</string>
+    <string name="hardcover_edition_selected">Выбрано</string>
+    <string name="hardcover_ref_not_hardcover">Это не ссылка Hardcover</string>
+    <string name="hardcover_ref_bad_id">Это не ID книги Hardcover</string>
 </resources>

@@ -7,13 +7,22 @@ import com.chmouel.liseur.data.remote.SyncFailure
 import com.chmouel.liseur.data.remote.failureForCode
 import com.chmouel.liseur.data.remote.remoteCall
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import java.io.IOException
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
+import okhttp3.Call
+import okhttp3.Callback
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.Response
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -34,6 +43,9 @@ data class HardcoverEdition(
     val releaseYear: Int?,
     val publisher: String?,
     val usersCount: Int = 0,
+    /** A cover on Hardcover's image host over https, or null: see [HardcoverImages.validCoverUrl]. */
+    val coverUrl: String? = null,
+    val authors: List<String> = emptyList(),
 )
 
 /** A book the search turned up, before an edition of it is chosen. */
@@ -100,6 +112,19 @@ class HardcoverClient(
         call(token, EDITIONS_OF_BOOKS, JSONObject().put("bookIds", JSONArray(bookIds))) { data ->
             editions(data).sortedBy { bookIds.indexOf(it.bookId) }
         }
+
+    /** The id of the book a Hardcover book id or slug names, as a list that is empty when there is none. */
+    suspend fun booksByRef(token: String, ref: HardcoverRef): RemoteResult<List<Long>> {
+        val (query, variables) = when (ref) {
+            is HardcoverRef.BookId -> BOOK_BY_ID to JSONObject().put("id", ref.id)
+            is HardcoverRef.Slug -> BOOK_BY_SLUG to JSONObject().put("slug", ref.slug)
+            else -> return RemoteResult.Ok(emptyList())
+        }
+        return call(token, query, variables) { data ->
+            val rows = data.optJSONArray("books") ?: JSONArray()
+            (0 until rows.length()).mapNotNull { rows.optJSONObject(it)?.optLong("id", 0)?.takeIf { id -> id > 0 } }
+        }
+    }
 
     /** The editions Hardcover shows for a book by default, one per kind. */
     suspend fun defaultEditions(token: String, bookId: Long): RemoteResult<HardcoverDefaultEditions> =
@@ -223,7 +248,26 @@ class HardcoverClient(
         releaseYear = row.optInt("release_year", 0).takeIf { it > 0 },
         publisher = row.optJSONObject("publisher")?.text("name"),
         usersCount = row.optInt("users_count", 0).coerceAtLeast(0),
+        coverUrl = HardcoverImages.validCoverUrl(
+            row.optJSONObject("image")?.text("url") ?: row.optJSONObject("book")?.optJSONObject("cached_image")?.text("url"),
+        ),
+        authors = authorsOf(row.optJSONObject("book")?.opt("cached_contributors")),
     )
+
+    /** Contributors credited as authors, or every contributor when none is. */
+    private fun authorsOf(contributors: Any?): List<String> {
+        val rows = when (contributors) {
+            is JSONArray -> contributors
+            is String -> runCatching { JSONArray(contributors) }.getOrNull()
+            else -> null
+        } ?: return emptyList()
+        val people = (0 until rows.length()).mapNotNull { rows.optJSONObject(it) }.mapNotNull { row ->
+            val name = row.optJSONObject("author")?.text("name") ?: return@mapNotNull null
+            name to row.text("contribution")
+        }
+        val authors = people.filter { it.second == null || it.second.equals("Author", ignoreCase = true) }
+        return (authors.ifEmpty { people }).map { it.first }.distinct()
+    }
 
     private suspend fun awaitTurn() = pacing.withLock {
         val wait = lastSentAt + spacingMillis - clock()
@@ -252,7 +296,8 @@ class HardcoverClient(
                     .header("User-Agent", USER_AGENT)
                     .post(body)
                     .build()
-                http.client.newCall(request).execute().use { response ->
+                http.client.newCall(request).await().use { response ->
+                    currentCoroutineContext().ensureActive()
                     if (!response.isSuccessful) throw RemoteHttpFailure(failureFor(response.code))
                     val answer = JSONObject(response.body.string())
                     answer.optJSONArray("errors")?.takeIf { it.length() > 0 }?.let {
@@ -262,6 +307,22 @@ class HardcoverClient(
                 }
             }
         }
+    }
+
+    /** Cancelling the coroutine cancels the HTTP call, so a lookup nobody waits for stops. */
+    private suspend fun Call.await(): Response = suspendCancellableCoroutine { continuation ->
+        continuation.invokeOnCancellation { cancel() }
+        enqueue(
+            object : Callback {
+                override fun onFailure(call: Call, e: IOException) {
+                    if (continuation.isActive) continuation.resumeWithException(e)
+                }
+
+                override fun onResponse(call: Call, response: Response) {
+                    continuation.resume(response) { response.close() }
+                }
+            },
+        )
     }
 
     private fun JSONObject.text(name: String): String? =
@@ -302,7 +363,7 @@ class HardcoverClient(
 
         private const val EDITION_FIELDS =
             "id book_id title edition_format pages isbn_13 isbn_10 release_year users_count " +
-                "book { title } publisher { name }"
+                "image { url } book { title cached_image cached_contributors } publisher { name }"
 
         private const val ME = "query { me { id username } }"
 
@@ -321,6 +382,12 @@ class HardcoverClient(
                 "default_ebook_edition { $EDITION_FIELDS } " +
                 "default_physical_edition { $EDITION_FIELDS } " +
                 "editions(order_by: {users_count: desc}, limit: 1) { $EDITION_FIELDS } } }"
+
+        private const val BOOK_BY_ID =
+            "query (\$id: Int!) { books(where: {id: {_eq: \$id}}, limit: 1) { id } }"
+
+        private const val BOOK_BY_SLUG =
+            "query (\$slug: String!) { books(where: {slug: {_eq: \$slug}}, limit: 1) { id } }"
 
         private const val SEARCH =
             "query (\$query: String!) { " +

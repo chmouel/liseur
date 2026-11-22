@@ -271,4 +271,50 @@ class HardcoverClientTest {
         assertEquals(SyncFailure.Malformed, client().me("tok").failure)
         assertEquals(1, server.requestCount)
     }
+
+    @Test
+    fun `an edition carries its cover and its authors, the edition image first`() = runBlocking {
+        answer(
+            """{"editions":[
+              {"id":1,"book_id":9,"title":"A","image":{"url":"https://assets.hardcover.app/e.jpg"},
+               "book":{"title":"B","cached_image":{"url":"https://assets.hardcover.app/b.jpg"},
+               "cached_contributors":[{"author":{"name":"Ann"},"contribution":"Author"},
+               {"author":{"name":"Tr"},"contribution":"Translator"},{"author":{"name":"Bo"},"contribution":null}]}},
+              {"id":2,"book_id":9,"title":"B","image":null,
+               "book":{"cached_image":{"url":"https://assets.hardcover.app/b.jpg"},
+               "cached_contributors":[{"author":{"name":"Tr"},"contribution":"Translator"}]}}
+            ]}""",
+        )
+
+        val editions = (client().editionsOfBooks("tok", listOf(9)) as RemoteResult.Ok).value
+
+        assertEquals("https://assets.hardcover.app/e.jpg", editions[0].coverUrl)
+        assertEquals(listOf("Ann", "Bo"), editions[0].authors)
+        assertEquals("https://assets.hardcover.app/b.jpg", editions[1].coverUrl)
+        assertEquals(listOf("Tr"), editions[1].authors)
+    }
+
+    @Test
+    fun `a cover on another host or over http is dropped`() = runBlocking {
+        answer(
+            """{"editions":[{"id":1,"book_id":9,"title":"A","image":{"url":"http://assets.hardcover.app/e.jpg"},
+              "book":{"cached_image":{"url":"https://evil.example/b.jpg"},"cached_contributors":[]}}]}""",
+        )
+
+        val edition = (client().editionsOfBooks("tok", listOf(9)) as RemoteResult.Ok).value.single()
+
+        assertEquals(null, edition.coverUrl)
+        assertEquals(emptyList<String>(), edition.authors)
+    }
+
+    @Test
+    fun `a book is found by id or by slug`() = runBlocking {
+        answer("""{"books":[{"id":9}]}""")
+        answer("""{"books":[]}""")
+
+        assertEquals(listOf(9L), (client().booksByRef("tok", HardcoverRef.BookId(9)) as RemoteResult.Ok).value)
+        assertEquals(9, sent().getJSONObject("variables").getInt("id"))
+        assertEquals(emptyList<Long>(), (client().booksByRef("tok", HardcoverRef.Slug("x-1")) as RemoteResult.Ok).value)
+        assertEquals("x-1", sent().getJSONObject("variables").getString("slug"))
+    }
 }
