@@ -13,7 +13,6 @@ Needs JDK 17+ and a recent Android SDK (SDK 37); use the Gradle wrapper.
 
 ```bash
 ./gradlew assemblePlayDebug    # debug APK with Gemini and ML Kit
-./gradlew assembleFossDebug    # debug APK of the F-Droid build
 ./gradlew assembleFossRelease  # minified release APK (F-Droid, GitHub)
 ./gradlew bundlePlayRelease    # minified release AAB, for Google Play only
 ```
@@ -220,15 +219,15 @@ the library or downloads remote books.
 ## Testing
 
 ```bash
-./gradlew testFossDebugUnitTest testPlayDebugUnitTest   # JVM unit tests
-./gradlew lintFossDebug lintPlayDebug                   # Android Lint (0 errors required)
+./gradlew testPlayDebugUnitTest   # JVM unit tests
+./gradlew lintPlayDebug           # Android Lint (0 errors required)
 ```
 
 `make test-fast` runs shared and Play-specific unit tests once for local
 iteration. `make test` and the release checks run both flavors, including
 the FOSS-specific wiring.
 
-Use `make test-fast` most of the time; `make test` is for making use at the end
+Use `make test-fast` most of the time; `make test` is for making sure at the end
 of a change that nothing is broken in the other flavor.
 
 No instrumented suite; reader interactions (gestures, immersive mode,
