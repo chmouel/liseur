@@ -5,7 +5,9 @@ import com.chmouel.liseur.data.db.BookEvaluation
 import com.chmouel.liseur.data.db.BookMetadata
 import com.chmouel.liseur.data.db.DownloadState
 import com.chmouel.liseur.data.db.ReadingProgress
+import com.chmouel.liseur.domain.ContributorRoles
 import com.chmouel.liseur.domain.FinishedOverride
+import com.chmouel.liseur.domain.MetadataSnapshot
 import com.chmouel.liseur.domain.MetadataSource
 import com.chmouel.liseur.domain.PersonalEvaluation
 import com.chmouel.liseur.domain.ReadingStatus
@@ -47,7 +49,7 @@ fun goodreadsCsvExport(
         .sortedWith(compareBy<Book, String>(String.CASE_INSENSITIVE_ORDER) { it.title }.thenBy { it.url })
 
     val out = StringBuilder()
-    out.appendCsvRow(HEADERS)
+    out.appendCsvRow(HEADERS.map(::CsvCell))
     for (book in visibleBooks) {
         val bookProgress = progressByUrl[book.url]
         val bookEvaluations = evaluationsByUrl[book.url].orEmpty().associateBy { it.field }
@@ -61,10 +63,10 @@ private fun rowFor(
     book: Book,
     progress: ReadingProgress?,
     evaluations: Map<String, BookEvaluation>,
-    metadata: com.chmouel.liseur.domain.MetadataSnapshot?,
+    metadata: MetadataSnapshot?,
     zone: ZoneId,
-): List<String> {
-    val (primaryAuthor, additionalAuthors) = splitAuthors(book.author)
+): List<CsvCell> {
+    val (primaryAuthor, additionalAuthors) = resolveAuthors(book, metadata)
     val authorLastFirst = toLastFirst(primaryAuthor)
     val (isbn10, isbn13) = extractIsbns(
         metadata?.identifiers.orEmpty().map { it.value } + listOfNotNull(book.workId),
@@ -134,35 +136,54 @@ private fun rowFor(
     val ownedCopies = if (book.localUri != null || book.downloadState == DownloadState.DOWNLOADED) "1" else "0"
 
     return listOf(
-        "",
-        book.title.trim(),
-        primaryAuthor,
-        authorLastFirst,
-        additionalAuthors,
-        isbn10?.let { "=\"$it\"" }.orEmpty(),
-        isbn13?.let { "=\"$it\"" }.orEmpty(),
-        myRating.toString(),
-        "",
-        publisher,
-        "ebook",
-        pageCount?.toString().orEmpty(),
-        yearPublished,
-        "",
-        dateRead,
-        dateAdded,
-        bookshelves,
-        "",
-        exclusiveShelf,
-        myReview,
-        "",
-        privateNotes,
-        readCount,
-        ownedCopies,
-        readingProgressCell,
-        lastRead,
-        seriesName,
-        seriesIndex,
+        CsvCell(""),
+        CsvCell(book.title.trim()),
+        CsvCell(primaryAuthor),
+        CsvCell(authorLastFirst),
+        CsvCell(additionalAuthors),
+        CsvCell(isbn10?.let { "=\"$it\"" }.orEmpty(), allowFormula = true),
+        CsvCell(isbn13?.let { "=\"$it\"" }.orEmpty(), allowFormula = true),
+        CsvCell(myRating.toString()),
+        CsvCell(""),
+        CsvCell(publisher),
+        CsvCell("ebook"),
+        CsvCell(pageCount?.toString().orEmpty()),
+        CsvCell(yearPublished),
+        CsvCell(""),
+        CsvCell(dateRead),
+        CsvCell(dateAdded),
+        CsvCell(bookshelves),
+        CsvCell(""),
+        CsvCell(exclusiveShelf),
+        CsvCell(myReview),
+        CsvCell(""),
+        CsvCell(privateNotes),
+        CsvCell(readCount),
+        CsvCell(ownedCopies),
+        CsvCell(readingProgressCell),
+        CsvCell(lastRead),
+        CsvCell(seriesName),
+        CsvCell(seriesIndex),
     )
+}
+
+private data class CsvCell(
+    val value: String,
+    val allowFormula: Boolean = false,
+)
+
+private fun resolveAuthors(book: Book, metadata: MetadataSnapshot?): Pair<String, String> {
+    val trimmed = book.author?.trim().orEmpty()
+    if (!book.authorOverridden && trimmed.isNotEmpty()) {
+        val structured = metadata?.contributors.orEmpty()
+            .filter { it.role == ContributorRoles.AUTHOR }
+            .map { it.name.trim() }
+            .filter(String::isNotEmpty)
+        if (structured.isNotEmpty() && structured.joinToString(", ") == trimmed) {
+            return structured.first() to structured.drop(1).joinToString(", ")
+        }
+    }
+    return splitAuthors(trimmed)
 }
 
 private fun splitAuthors(raw: String?): Pair<String, String> {
@@ -183,6 +204,7 @@ private fun splitAuthors(raw: String?): Pair<String, String> {
         }
         else -> listOf(trimmed)
     }
+    if (parts.isEmpty()) return "" to ""
     return parts.first() to parts.drop(1).joinToString(", ")
 }
 
@@ -239,12 +261,19 @@ private fun formatSeriesIndex(index: Double?): String {
     return BigDecimal.valueOf(index).stripTrailingZeros().toPlainString()
 }
 
-private fun StringBuilder.appendCsvRow(cells: List<String>) {
+private fun StringBuilder.appendCsvRow(cells: List<CsvCell>) {
     cells.forEachIndexed { i, cell ->
         if (i > 0) append(',')
-        appendCsvCell(cell)
+        val text = if (cell.allowFormula) cell.value else neutralizeFormula(cell.value)
+        appendCsvCell(text)
     }
     append("\r\n")
+}
+
+private fun neutralizeFormula(value: String): String {
+    if (value.isEmpty()) return value
+    val first = value.firstOrNull { it != ' ' } ?: return value
+    return if (first in FORMULA_PREFIXES) "'$value" else value
 }
 
 private fun StringBuilder.appendCsvCell(value: String) {
@@ -259,6 +288,8 @@ private fun StringBuilder.appendCsvCell(value: String) {
     }
     append('"')
 }
+
+private val FORMULA_PREFIXES = setOf('=', '+', '-', '@', '\t', '\r')
 
 private val GOODREADS_DATE: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy/MM/dd", Locale.ROOT)
 private val ISBN10_REGEX = Regex("\\d{9}[\\dX]")
