@@ -1817,6 +1817,30 @@ class SettingsBackupRepositoryTest {
     }
 
     @Test
+    fun `a metadata cover entry whose name is not its digest is rejected`() = runTest {
+        val repo = repository(
+            AppSettingsRepository(store("bad-cover-digest-app.preferences_pb")),
+            ReaderPreferencesRepository(store("bad-cover-digest-reader.preferences_pb")),
+            UserFontRepository(context, this, loadCheck = { true }),
+        )
+        val settings = JSONObject().put("app", JSONObject()).put("reader", JSONObject())
+        val coverBytes = "cover-bytes".toByteArray()
+        val wrongSha = "e".repeat(64)
+        val file = archive(
+            "bad-cover-digest.zip",
+            settings,
+            linkedMapOf(
+                "annotations.json" to encodeAnnotationBackup(emptyList()).toByteArray(),
+                "positions.json" to """{"format":1,"application":"liseur","positions":[]}""".toByteArray(),
+                "companion.json" to """{"format":1,"application":"liseur","recaps":[]}""".toByteArray(),
+                "metadata_covers/$wrongSha.jpg" to coverBytes,
+            ),
+            format = 7,
+        )
+        assertEquals(SettingsBackupInspection.Failed(SettingsBackupFailure.INVALID_ARCHIVE), repo.inspect(Uri.fromFile(file)))
+    }
+
+    @Test
     fun `a book file without a record, or a record without its file, is rejected`() = runTest {
         val repo = repository(
             AppSettingsRepository(store("orphan-book-app.preferences_pb")),
