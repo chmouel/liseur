@@ -108,7 +108,6 @@
     <string name="hardcover_book_unmatched">Not matched to an edition yet</string>
     <string name="hardcover_book_sync">Sync this book</string>
     <string name="hardcover_book_choose">Choose edition</string>
-    <string name="hardcover_editions_none">Hardcover has no edition matching this book.</string>
     <plurals name="hardcover_edition_pages">
         <item quantity="one">%d page</item>
         <item quantity="other">%d pages</item>
@@ -118,4 +117,14 @@
         <item quantity="other">%d readers</item>
     </plurals>
     <string name="hardcover_edition_current">Currently matched</string>
+    <string name="hardcover_search_hint">Search Hardcover, or paste a link or ID</string>
+    <string name="hardcover_search_clear">Clear search</string>
+    <string name="hardcover_search_action">Search</string>
+    <string name="hardcover_search_empty">No match. Try the title, the author, or an ISBN.</string>
+    <string name="hardcover_search_retry">Retry</string>
+    <string name="hardcover_choose">Choose</string>
+    <string name="hardcover_choose_and_push">Choose and push</string>
+    <string name="hardcover_edition_selected">Selected</string>
+    <string name="hardcover_ref_not_hardcover">That is not a Hardcover link</string>
+    <string name="hardcover_ref_bad_id">That is not a Hardcover book ID</string>
 </resources>

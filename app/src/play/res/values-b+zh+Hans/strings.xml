@@ -101,7 +101,6 @@
     <string name="hardcover_book_unmatched">尚未匹配版本</string>
     <string name="hardcover_book_sync">同步此书</string>
     <string name="hardcover_book_choose">选择版本</string>
-    <string name="hardcover_editions_none">Hardcover 中没有与此书匹配的版本。</string>
     <plurals name="hardcover_edition_pages">
         <item quantity="other">%d 页</item>
     </plurals>
@@ -109,4 +108,14 @@
         <item quantity="other">%d 位读者</item>
     </plurals>
     <string name="hardcover_edition_current">当前已匹配</string>
+    <string name="hardcover_search_hint">在 Hardcover 搜索，或粘贴链接或 ID</string>
+    <string name="hardcover_search_clear">清除搜索</string>
+    <string name="hardcover_search_action">搜索</string>
+    <string name="hardcover_search_empty">没有匹配项。请尝试书名、作者或 ISBN。</string>
+    <string name="hardcover_search_retry">重试</string>
+    <string name="hardcover_choose">选择</string>
+    <string name="hardcover_choose_and_push">选择并推送</string>
+    <string name="hardcover_edition_selected">已选中</string>
+    <string name="hardcover_ref_not_hardcover">这不是 Hardcover 链接</string>
+    <string name="hardcover_ref_bad_id">这不是 Hardcover 书籍 ID</string>
 </resources>

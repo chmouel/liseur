@@ -3,7 +3,6 @@ package com.chmouel.liseur.providers
 import android.content.Context
 import android.widget.Toast
 import androidx.annotation.StringRes
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -12,21 +11,15 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
-import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.ContentPaste
-import androidx.compose.material.icons.outlined.Headphones
-import androidx.compose.material.icons.outlined.MenuBook
 import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material.icons.outlined.TaskAlt
 import androidx.compose.material3.AlertDialog
@@ -48,6 +41,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -57,7 +51,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
-import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.ImeAction
@@ -66,6 +59,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.room.withTransaction
 import com.chmouel.liseur.R
+import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.data.remote.RemoteResult
 import com.chmouel.liseur.data.remote.SyncFailure
@@ -74,9 +68,7 @@ import com.chmouel.liseur.domain.FinishedOverride
 import com.chmouel.liseur.domain.PersonalEvaluation
 import com.chmouel.liseur.domain.readingStatusFor
 import com.chmouel.liseur.hardcover.EditionChoice
-import com.chmouel.liseur.hardcover.EditionIcon
 import com.chmouel.liseur.hardcover.HardcoverAccount
-import com.chmouel.liseur.hardcover.HardcoverCandidates
 import com.chmouel.liseur.hardcover.HardcoverClient
 import com.chmouel.liseur.hardcover.HardcoverConnectOutcome
 import com.chmouel.liseur.hardcover.HardcoverDatabase
@@ -86,7 +78,6 @@ import com.chmouel.liseur.hardcover.HardcoverPushOutcome
 import com.chmouel.liseur.hardcover.HardcoverPushWorker
 import com.chmouel.liseur.hardcover.HardcoverRepository
 import com.chmouel.liseur.hardcover.LocalReading
-import com.chmouel.liseur.hardcover.editionRow
 import com.chmouel.liseur.ui.BusyIndicator
 import com.chmouel.liseur.ui.settings.ConnectionRow
 import com.chmouel.liseur.ui.settings.RowDivider
@@ -514,6 +505,7 @@ internal class ReadingTracker(context: Context, private val database: LiseurData
         choices?.let { session ->
             EditionPicker(
                 session = session,
+                bookUrl = bookUrl,
                 currentEditionId = link?.editionId,
                 onChoose = { edition ->
                     val push = session.push
@@ -628,6 +620,7 @@ internal class ReadingTracker(context: Context, private val database: LiseurData
         val session = loaded ?: return
         EditionPicker(
             session = session,
+            bookUrl = ask,
             currentEditionId = link?.editionId,
             onChoose = { edition ->
                 onDone()
@@ -666,64 +659,20 @@ internal class ReadingTracker(context: Context, private val database: LiseurData
     @Composable
     private fun EditionPicker(
         session: PickerSession,
+        bookUrl: String,
         currentEditionId: Long?,
         onChoose: (HardcoverEdition) -> Unit,
         onDismiss: () -> Unit,
     ) {
-        val editions = session.context.editions
-        AlertDialog(
-            onDismissRequest = onDismiss,
-            title = { Text(stringResource(R.string.hardcover_book_choose)) },
-            text = {
-                if (editions.isEmpty()) {
-                    Text(stringResource(R.string.hardcover_editions_none))
-                } else {
-                    Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
-                        editions.forEach { edition ->
-                            val row = editionRow(edition, currentEditionId)
-                            ListItem(
-                                leadingContent = {
-                                    Icon(
-                                        imageVector = if (row.icon == EditionIcon.AUDIOBOOK) {
-                                            Icons.Outlined.Headphones
-                                        } else {
-                                            Icons.Outlined.MenuBook
-                                        },
-                                        contentDescription = row.formatLabel,
-                                    )
-                                },
-                                headlineContent = { Text(row.headline) },
-                                supportingContent = {
-                                    Column {
-                                        if (row.supporting.isNotEmpty()) Text(row.supporting)
-                                        row.pages?.let {
-                                            Text(pluralStringResource(R.plurals.hardcover_edition_pages, it, it))
-                                        }
-                                        row.readers?.let {
-                                            Text(pluralStringResource(R.plurals.hardcover_edition_readers, it, it))
-                                        }
-                                    }
-                                },
-                                trailingContent = if (row.current) {
-                                    {
-                                        Icon(
-                                            Icons.Outlined.Check,
-                                            contentDescription = stringResource(R.string.hardcover_edition_current),
-                                        )
-                                    }
-                                } else {
-                                    null
-                                },
-                                colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                                modifier = Modifier.fillMaxWidth().clickable { onChoose(edition) },
-                            )
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
-            },
+        val book by produceState<Book?>(null, bookUrl) { value = database.bookDao().getByUrl(bookUrl) }
+        EditionPickerPage(
+            session = session,
+            bookLabel = book?.let { listOfNotNull(it.title, it.author).joinToString(" · ") },
+            currentEditionId = currentEditionId,
+            lookup = hardcover::lookup,
+            failureMessage = ::failureMessage,
+            onChoose = onChoose,
+            onDismiss = onDismiss,
         )
     }
 
@@ -760,6 +709,3 @@ internal class ReadingTracker(context: Context, private val database: LiseurData
         }
     }
 }
-
-/** What an open picker was asked for: the lookup's validation context and whether choosing also pushes. */
-private data class PickerSession(val context: HardcoverCandidates, val push: Boolean)
