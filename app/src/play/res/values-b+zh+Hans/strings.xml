@@ -141,4 +141,5 @@
     <string name="hardcover_conflict_use_remote">使用 Hardcover 的</string>
     <string name="hardcover_conflict_resolved">已更新</string>
     <string name="hardcover_conflict_review_too_long">这条 Hardcover 书评太长，无法导入 Liseur。</string>
+    <string name="hardcover_conflict_stale">Liseur 中的值在此期间已更改。请检查后重新选择。</string>
 </resources>

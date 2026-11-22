@@ -58,7 +58,7 @@ class HardcoverRepositoryTest {
         dao = dao,
         bookFor = { books[it] },
         localFor = { local[it] },
-        writeLocalEvaluation = { url, field, expected, value ->
+        writeLocalEvaluation = { url, field, expected, value, _ ->
             if (!casAccept) return@HardcoverRepository false
             val current = when (field) {
                 PersonalEvaluation.RATING -> local[url]?.ratingRaw
@@ -873,6 +873,89 @@ class HardcoverRepositoryTest {
     }
 
     @Test
+    fun `a failed read-back after a write still records what this device sent`() = runBlocking {
+        signedIn()
+        shelve()
+        dao.links[BOOK] = HardcoverBookLink(bookUrl = BOOK, hardcoverBookId = 9, editionId = 5)
+        hardcover.entry = FakeHardcover.Entry(7, HardcoverStatus.CURRENTLY_READING, 3.0, null, editionId = 5)
+        dao.upsertEvaluation(
+            HardcoverEvaluation(BOOK, PersonalEvaluation.RATING, "6", "3.0", hasBase = true),
+        )
+        reading(ReadingStatus.READING, rating = 4.0)
+        hardcover.failShelfAfterWrite = true
+
+        assertTrue(repository().push(BOOK, asked = false) is HardcoverPushOutcome.Failed)
+        assertEquals(4.0, hardcover.entry?.rating)
+        assertEquals(HardcoverEvaluationBase("8", "4.0"), dao.evaluations[BOOK to PersonalEvaluation.RATING]?.base)
+
+        // A later local edit is a plain local change, not a conflict with this device's own write.
+        hardcover.failShelfAfterWrite = false
+        reading(ReadingStatus.READING, rating = 2.5)
+        repository().push(BOOK, asked = false)
+        assertEquals(2.5, hardcover.entry?.rating)
+        assertFalse(dao.evaluations[BOOK to PersonalEvaluation.RATING]!!.conflict)
+    }
+
+    @Test
+    fun `re-adding a book without the conflicted field keeps the conflict`() = runBlocking {
+        signedIn()
+        shelve()
+        dao.links[BOOK] = HardcoverBookLink(bookUrl = BOOK, hardcoverBookId = 9, editionId = 5)
+        dao.upsertEvaluation(
+            HardcoverEvaluation(
+                BOOK, PersonalEvaluation.REVIEW, "Old", "Old", hasBase = true,
+                conflict = true, conflictLocal = "Mine", conflictRemote = "Theirs",
+            ),
+        )
+        hardcover.entry = null
+        reading(ReadingStatus.READING, review = "Mine")
+
+        repository().push(BOOK, asked = false)
+
+        assertNull(hardcover.entry?.review)
+        assertTrue(dao.evaluations[BOOK to PersonalEvaluation.REVIEW]!!.conflict)
+    }
+
+    @Test
+    fun `using hardcover's value after liseur's moved reports it and shows the new value`() = runBlocking {
+        signedIn()
+        shelve()
+        dao.links[BOOK] = HardcoverBookLink(bookUrl = BOOK, hardcoverBookId = 9, editionId = 5)
+        hardcover.entry = FakeHardcover.Entry(7, HardcoverStatus.CURRENTLY_READING, 3.0, null, editionId = 5)
+        dao.upsertEvaluation(
+            HardcoverEvaluation(
+                BOOK, PersonalEvaluation.RATING, "4", "2.0", hasBase = true,
+                conflict = true, conflictLocal = "8", conflictRemote = "3.0",
+            ),
+        )
+        reading(ReadingStatus.READING, rating = 4.5)
+        casAccept = false
+
+        assertEquals(
+            HardcoverConflictResolution.Stale,
+            repository().resolveConflictUseRemote(BOOK, PersonalEvaluation.RATING),
+        )
+        val row = dao.evaluations[BOOK to PersonalEvaluation.RATING]!!
+        assertTrue(row.conflict)
+        assertEquals("9", row.conflictLocal)
+    }
+
+    @Test
+    fun `opening book details checks a book at most once in ten minutes`() = runBlocking {
+        signedIn()
+        shelve()
+        dao.links[BOOK] = HardcoverBookLink(bookUrl = BOOK, hardcoverBookId = 9, editionId = 5)
+        hardcover.entry = FakeHardcover.Entry(7, HardcoverStatus.CURRENTLY_READING, null, null, editionId = 5)
+        reading(ReadingStatus.READING)
+        val repository = repository()
+
+        assertNotNull(repository.checkFromDetails(BOOK))
+        val asked = hardcover.queries.size
+        assertNull(repository.checkFromDetails(BOOK))
+        assertEquals(asked, hardcover.queries.size)
+    }
+
+    @Test
     fun `forgetting books or moving to another hardcover book deletes evaluation rows`() = runBlocking {
         signedIn()
         shelve()
@@ -932,6 +1015,8 @@ class HardcoverRepositoryTest {
         @Volatile var refuse = false
         @Volatile var delayMillis = 0L
         @Volatile var failReads = false
+        @Volatile var failShelfAfterWrite = false
+        @Volatile private var wroteEntry = false
         @Volatile var userId = 42L
         @Volatile var hits: List<Triple<Long, String, String>> = emptyList()
         @Volatile var entry: Entry? = null
@@ -1067,6 +1152,7 @@ class HardcoverRepositoryTest {
                 }
                 "update_user_book(" in query -> {
                     queries += "update"
+                    wroteEntry = true
                     val o = variables.getJSONObject("object")
                     val current = checkNotNull(entry)
                     if (o.has("rating")) current.rating = if (o.isNull("rating")) null else o.getDouble("rating")
@@ -1082,6 +1168,7 @@ class HardcoverRepositoryTest {
                 }
                 "user_books(" in query -> {
                     queries += "user_books"
+                    if (failShelfAfterWrite && wroteEntry) return MockResponse(code = 500, body = "{}")
                     val rows = JSONArray()
                     entry?.let { e ->
                         val reads = JSONArray()

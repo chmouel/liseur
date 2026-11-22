@@ -69,6 +69,9 @@ sealed interface EditionChoice {
 /** What came of resolving a rating or review conflict in Book details. */
 sealed interface HardcoverConflictResolution {
     data object Resolved : HardcoverConflictResolution
+
+    /** Liseur's value moved while Hardcover was asked; the conflict stays for another look. */
+    data object Stale : HardcoverConflictResolution
     data object NotConnected : HardcoverConflictResolution
     data object SwitchedOff : HardcoverConflictResolution
     data object NeedsMatch : HardcoverConflictResolution
@@ -94,7 +97,17 @@ class HardcoverRepository(
     private val dao: HardcoverDao,
     private val bookFor: suspend (String) -> Book?,
     private val localFor: suspend (String) -> LocalReading?,
-    private val writeLocalEvaluation: suspend (String, String, String?, String?) -> Boolean = { _, _, _, _ -> false },
+    /**
+     * Writes a value pulled from Hardcover into Liseur when the local value
+     * is still `expected` and the book is still `generation`; false otherwise.
+     */
+    private val writeLocalEvaluation: suspend (
+        bookUrl: String,
+        field: String,
+        expected: String?,
+        value: String?,
+        generation: BookGeneration,
+    ) -> Boolean = { _, _, _, _, _ -> false },
     private val client: HardcoverClient = HardcoverClient(),
     private val now: () -> Long = System::currentTimeMillis,
     private val today: () -> String = {
@@ -363,6 +376,21 @@ class HardcoverRepository(
         return updated
     }
 
+    /** When each book was last checked because its details opened. */
+    private val detailsChecks = mutableMapOf<String, Long>()
+
+    /**
+     * Checks a book when Book details opens, at most once every ten
+     * minutes however often it opens; null when it was checked recently.
+     */
+    suspend fun checkFromDetails(bookUrl: String): HardcoverPushOutcome? = lock.withLock {
+        val at = now()
+        val last = listOfNotNull(dao.link(bookUrl)?.pushedAt, detailsChecks[bookUrl]).maxOrNull()
+        if (last != null && at - last < DETAILS_CHECK_MILLIS) return@withLock null
+        detailsChecks[bookUrl] = at
+        pushNoting(bookUrl, asked = false)
+    }
+
     /**
      * Reports where the reader is in one book.
      *
@@ -400,6 +428,7 @@ class HardcoverRepository(
         var link = dao.link(bookUrl)
         if (link?.excluded == true) return HardcoverPushOutcome.SwitchedOff
         val local = localFor(bookUrl) ?: return HardcoverPushOutcome.UpToDate
+        val generation = bookFor(bookUrl)?.let(::BookGeneration) ?: return HardcoverPushOutcome.UpToDate
         // A removal marks the book before it commits, so a mark now means the read may hold its replacement.
         if (dao.isForgetting(bookUrl)) return HardcoverPushOutcome.UpToDate
 
@@ -485,6 +514,11 @@ class HardcoverRepository(
         var wrote = entry != null
         // Kept now, so a read update failing below cannot lose which rating this device set.
         if (wrote && ratingNow != link.pushedRating) dao.setPushedRating(bookUrl, ratingNow)
+        val sentRating = local.ratingRaw?.takeIf { PersonalEvaluation.valid(PersonalEvaluation.RATING, it) }
+        val sentReview = HardcoverEvaluationPlan.normalizeReview(local.review)
+        // Recorded before the read-back, so a failed read-back still knows what this device wrote.
+        if (wroteRating) saveBase(bookUrl, PersonalEvaluation.RATING, sentRatingBase(sentRating))
+        if (wroteReview) saveBase(bookUrl, PersonalEvaluation.REVIEW, HardcoverEvaluationBase(sentReview, sentReview))
         if (statusChanged || entry is HardcoverEntryStep.Add || wroteRating || wroteReview) {
             // Re-read after status or evaluation writes so the server's read row and normalized text become the base.
             shelf = when (val again = client.shelfState(token, account.userId, bookId)) {
@@ -492,14 +526,11 @@ class HardcoverRepository(
                 is RemoteResult.Ok -> again.value
             }
         }
-        if (entry is HardcoverEntryStep.Add || wroteRating) {
+        if (wroteRating) {
             saveBase(
                 bookUrl = bookUrl,
                 field = PersonalEvaluation.RATING,
-                base = HardcoverEvaluationBase(
-                    local = local.ratingRaw?.takeIf { PersonalEvaluation.valid(PersonalEvaluation.RATING, it) },
-                    remote = HardcoverEvaluationPlan.encodeRemoteRating(shelf.rating),
-                ),
+                base = HardcoverEvaluationBase(sentRating, HardcoverEvaluationPlan.encodeRemoteRating(shelf.rating)),
             )
         } else {
             applyPostEvaluationDecision(
@@ -509,17 +540,14 @@ class HardcoverRepository(
                 decision = ratingDecision,
                 previous = storedRatingEval,
                 pushedRating = link.pushedRating,
+                generation = generation,
             )
         }
-        if (entry is HardcoverEntryStep.Add || wroteReview) {
-            val remoteNorm = HardcoverEvaluationPlan.normalizeReview(shelf.review)
+        if (wroteReview) {
             saveBase(
                 bookUrl = bookUrl,
                 field = PersonalEvaluation.REVIEW,
-                base = HardcoverEvaluationBase(
-                    local = HardcoverEvaluationPlan.normalizeReview(local.review),
-                    remote = remoteNorm,
-                ),
+                base = HardcoverEvaluationBase(sentReview, HardcoverEvaluationPlan.normalizeReview(shelf.review)),
             )
         } else {
             applyPostEvaluationDecision(
@@ -529,6 +557,7 @@ class HardcoverRepository(
                 decision = reviewDecision,
                 previous = storedReviewEval,
                 pushedRating = null,
+                generation = generation,
             )
         }
         val justFinished = status == HardcoverStatus.READ && (statusChanged || link.datesPending)
@@ -580,6 +609,7 @@ class HardcoverRepository(
         val bookId = link.hardcoverBookId ?: return HardcoverConflictResolution.NeedsMatch
         val editionId = link.editionId ?: return HardcoverConflictResolution.NeedsMatch
         val local = localFor(bookUrl) ?: return HardcoverConflictResolution.Resolved
+        val generation = bookFor(bookUrl)?.let(::BookGeneration) ?: return HardcoverConflictResolution.Resolved
         if (dao.isForgetting(bookUrl)) return HardcoverConflictResolution.Resolved
 
         var shelf = when (val asking = client.shelfState(token, account.userId, bookId)) {
@@ -605,6 +635,7 @@ class HardcoverRepository(
                                 is RemoteResult.Ok -> Unit
                             }
                             dao.setPushedRating(bookUrl, remoteDouble)
+                            saveBase(bookUrl, field, sentRatingBase(localRating))
                             shelf = when (val again = client.shelfState(token, account.userId, bookId)) {
                                 is RemoteResult.Failed -> return HardcoverConflictResolution.Failed(again.reason)
                                 is RemoteResult.Ok -> again.value
@@ -625,6 +656,7 @@ class HardcoverRepository(
                             is RemoteResult.Ok -> Unit
                         }
                         dao.setPushedRating(bookUrl, remoteDouble)
+                        saveBase(bookUrl, field, sentRatingBase(localRating))
                         shelf = when (val again = client.shelfState(token, account.userId, bookId)) {
                             is RemoteResult.Failed -> return HardcoverConflictResolution.Failed(again.reason)
                             is RemoteResult.Ok -> again.value
@@ -657,6 +689,7 @@ class HardcoverRepository(
                                 reviewedAt = today().takeIf { update.review != null },
                             )
                             if (sent is RemoteResult.Failed) return HardcoverConflictResolution.Failed(sent.reason)
+                            saveBase(bookUrl, field, HardcoverEvaluationBase(localReview, localReview))
                             shelf = when (val again = client.shelfState(token, account.userId, bookId)) {
                                 is RemoteResult.Failed -> return HardcoverConflictResolution.Failed(again.reason)
                                 is RemoteResult.Ok -> again.value
@@ -682,6 +715,7 @@ class HardcoverRepository(
                             reviewedAt = today().takeIf { localReview != null },
                         )
                         if (sent is RemoteResult.Failed) return HardcoverConflictResolution.Failed(sent.reason)
+                        saveBase(bookUrl, field, HardcoverEvaluationBase(localReview, localReview))
                         shelf = when (val again = client.shelfState(token, account.userId, bookId)) {
                             is RemoteResult.Failed -> return HardcoverConflictResolution.Failed(again.reason)
                             is RemoteResult.Ok -> again.value
@@ -703,8 +737,10 @@ class HardcoverRepository(
                     val remoteEncoded = HardcoverEvaluationPlan.encodeRemoteRating(shelf.rating)
                     val pulledLocal = HardcoverEvaluationPlan.ratingToLocal(shelf.rating)
                     val base = HardcoverEvaluationBase(local = pulledLocal, remote = remoteEncoded)
-                    if (local.ratingRaw == pulledLocal || writeLocalEvaluation(bookUrl, field, local.ratingRaw, pulledLocal)) {
+                    if (local.ratingRaw == pulledLocal || pullLocal(bookUrl, field, local.ratingRaw, pulledLocal, generation)) {
                         saveBase(bookUrl, field, base)
+                    } else {
+                        return staleConflict(bookUrl, field)
                     }
                 }
                 PersonalEvaluation.REVIEW -> {
@@ -726,8 +762,10 @@ class HardcoverRepository(
                         return HardcoverConflictResolution.Resolved
                     }
                     val base = HardcoverEvaluationBase(local = remoteReview, remote = remoteReview)
-                    if (local.review == remoteReview || writeLocalEvaluation(bookUrl, field, local.review, remoteReview)) {
+                    if (local.review == remoteReview || pullLocal(bookUrl, field, local.review, remoteReview, generation)) {
                         saveBase(bookUrl, field, base)
+                    } else {
+                        return staleConflict(bookUrl, field)
                     }
                 }
             }
@@ -800,6 +838,7 @@ class HardcoverRepository(
         decision: HardcoverEvaluationDecision,
         previous: HardcoverEvaluation?,
         pushedRating: Double?,
+        generation: BookGeneration,
     ) {
         when (decision) {
             is HardcoverEvaluationDecision.NoChange -> {
@@ -813,7 +852,7 @@ class HardcoverRepository(
             }
             is HardcoverEvaluationDecision.PushToRemote -> Unit
             is HardcoverEvaluationDecision.PullToLocal -> {
-                if (expectedLocal == decision.value || writeLocalEvaluation(bookUrl, field, expectedLocal, decision.value)) {
+                if (expectedLocal == decision.value || pullLocal(bookUrl, field, expectedLocal, decision.value, generation)) {
                     saveBase(bookUrl, field, decision.base)
                 }
             }
@@ -839,6 +878,28 @@ class HardcoverRepository(
             }
         }
     }
+
+    /** Shows the conflict again with Liseur's value as it is now. */
+    private suspend fun staleConflict(bookUrl: String, field: String): HardcoverConflictResolution {
+        val now = localFor(bookUrl)
+        val current = if (field == PersonalEvaluation.RATING) now?.ratingRaw else HardcoverEvaluationPlan.normalizeReview(now?.review)
+        dao.evaluation(bookUrl, field)?.let { dao.upsertEvaluation(it.copy(conflictLocal = current)) }
+        return HardcoverConflictResolution.Stale
+    }
+
+    private fun sentRatingBase(local: String?) = HardcoverEvaluationBase(
+        local,
+        HardcoverEvaluationPlan.encodeRemoteRating(HardcoverEvaluationPlan.ratingFromLocal(local)),
+    )
+
+    /** [writeLocalEvaluation], refused for a book whose removal or replacement is under way. */
+    private suspend fun pullLocal(
+        bookUrl: String,
+        field: String,
+        expected: String?,
+        value: String?,
+        generation: BookGeneration,
+    ): Boolean = !dao.isForgetting(bookUrl) && writeLocalEvaluation(bookUrl, field, expected, value, generation)
 
     private suspend fun saveBase(bookUrl: String, field: String, base: HardcoverEvaluationBase) {
         dao.upsertEvaluation(
@@ -908,6 +969,7 @@ class HardcoverRepository(
         const val PICKER_HITS = 5
         const val MIN_SEARCH = 2
         private const val SQL_BATCH = 500
+        private const val DETAILS_CHECK_MILLIS = 10 * 60 * 1_000L
     }
 }
 
