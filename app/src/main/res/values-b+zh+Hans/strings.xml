@@ -2083,7 +2083,7 @@
     <string name="evaluation_unrated">未评分</string>
     <string name="book_details_reading_progress">阅读进度</string>
     <string name="book_details_description">简介</string>
-    <string name="evaluation_private_synced">私密 · 已与 liseur-sync 同步</string>
+    <string name="evaluation_private_synced">私密 · liseur-sync</string>
     <string name="evaluation_private_local">私密 · 仅保存在此设备</string>
     <string name="evaluation_private_local_detail">私密，仅保存在此设备上。</string>
     <string name="evaluation_empty_hint">为这本书评分或添加私密书评。</string>

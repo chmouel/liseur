@@ -2176,7 +2176,7 @@
     <string name="evaluation_unrated">Unbewertet</string>
     <string name="book_details_reading_progress">Lesefortschritt</string>
     <string name="book_details_description">Beschreibung</string>
-    <string name="evaluation_private_synced">Privat · mit liseur-sync synchronisiert</string>
+    <string name="evaluation_private_synced">Privat · liseur-sync</string>
     <string name="evaluation_private_local">Privat · auf diesem Gerät</string>
     <string name="evaluation_private_local_detail">Privat. Wird nur auf diesem Gerät gespeichert.</string>
     <string name="evaluation_empty_hint">Bewerte dieses Buch oder füge eine private Rezension hinzu.</string>

@@ -2360,7 +2360,7 @@
     <string name="evaluation_unrated">Neohodnocené</string>
     <string name="book_details_reading_progress">Průběh čtení</string>
     <string name="book_details_description">Popis</string>
-    <string name="evaluation_private_synced">Soukromé · synchronizováno s liseur-sync</string>
+    <string name="evaluation_private_synced">Soukromé · liseur-sync</string>
     <string name="evaluation_private_local">Soukromé · v tomto zařízení</string>
     <string name="evaluation_private_local_detail">Soukromé. Uloženo pouze v tomto zařízení.</string>
     <string name="evaluation_empty_hint">Ohodnoťte tuto knihu nebo přidejte soukromou recenzi.</string>

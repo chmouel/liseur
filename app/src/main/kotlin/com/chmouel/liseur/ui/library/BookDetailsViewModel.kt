@@ -67,7 +67,7 @@ data class BookDetails(
     /** The one a download would fetch now. */
     val chosenFormat: DownloadFormat? = null,
     val evaluations: List<com.chmouel.liseur.data.db.BookEvaluation> = emptyList(),
-    val syncedWithLiseurSync: Boolean = false,
+    val liseurSyncConfigured: Boolean = false,
     /** Description from catalog/file before any user override, for showing/resetting in the editor. */
     val sourceDescription: String? = null,
 )
@@ -124,7 +124,7 @@ class BookDetailsViewModel(
                     }
                 }
         val evaluation = evaluationDao?.observe(bookUrl) ?: flowOf(emptyList())
-        val syncedWithLiseurSync =
+        val liseurSyncConfigured =
             remoteServerDao
                 .observe(RemoteServer.SINGLE_ID)
                 .map { it?.kind?.syncsEvaluations == true }
@@ -137,7 +137,7 @@ class BookDetailsViewModel(
                 ::Triple,
             )
         val place = combine(folder, formats, ::Pair)
-        val personal = combine(reading, evaluation, syncedWithLiseurSync, ::Triple)
+        val personal = combine(reading, evaluation, liseurSyncConfigured, ::Triple)
         return combine(book, metadata, place, personal) { current, resolved, (folderName, offered), (readingState, evaluations, evaluationSync) ->
             val (progress, notes, print) = readingState
             if (current == null) {
@@ -166,7 +166,7 @@ class BookDetailsViewModel(
                         formats = offered.first,
                         chosenFormat = offered.second,
                         evaluations = evaluations,
-                        syncedWithLiseurSync = evaluationSync,
+                        liseurSyncConfigured = evaluationSync,
                         sourceDescription = resolved.description,
                     ),
                 )

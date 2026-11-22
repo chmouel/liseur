@@ -2328,7 +2328,7 @@
     <string name="evaluation_unrated">Без оценки</string>
     <string name="book_details_reading_progress">Прогресс чтения</string>
     <string name="book_details_description">Описание</string>
-    <string name="evaluation_private_synced">Личное · синхронизировано с liseur-sync</string>
+    <string name="evaluation_private_synced">Личное · liseur-sync</string>
     <string name="evaluation_private_local">Личное · на этом устройстве</string>
     <string name="evaluation_private_local_detail">Личное. Хранится только на этом устройстве.</string>
     <string name="evaluation_empty_hint">Оцените эту книгу или добавьте личный отзыв.</string>

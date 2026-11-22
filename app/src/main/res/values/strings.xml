@@ -2240,7 +2240,7 @@
     <string name="evaluation_unrated">Unrated</string>
     <string name="book_details_reading_progress">Reading progress</string>
     <string name="book_details_description">Description</string>
-    <string name="evaluation_private_synced">Private · synced with liseur-sync</string>
+    <string name="evaluation_private_synced">Private · liseur-sync</string>
     <string name="evaluation_private_local">Private · on this device</string>
     <string name="evaluation_private_local_detail">Private. Stored only on this device.</string>
     <string name="evaluation_empty_hint">Rate this book or add a private review.</string>
