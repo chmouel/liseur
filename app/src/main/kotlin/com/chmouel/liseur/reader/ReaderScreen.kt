@@ -5674,6 +5674,11 @@ internal fun ReaderScreen(
                         defineWord = null
                         if (automaticSelection != null) dismissSelection()
                     },
+                    onOpenSelectionToolbar = {
+                        defineWord = null
+                        if (automaticSelection != null) dismissSelection()
+                        sheet = ReaderSheet.SELECTION_TOOLBAR
+                    },
                 )
             }
 
