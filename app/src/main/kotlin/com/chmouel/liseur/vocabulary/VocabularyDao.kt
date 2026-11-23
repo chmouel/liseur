@@ -223,6 +223,13 @@ interface VocabularyDao {
 
     @Query(
         "SELECT * FROM vocabulary_words " +
+            "WHERE normalized = :normalized AND language = :language " +
+            "ORDER BY (ownerAccount = '') ASC, id DESC",
+    )
+    suspend fun findAllWordsByKey(normalized: String, language: String): List<VocabularyWord>
+
+    @Query(
+        "SELECT * FROM vocabulary_words " +
             "WHERE normalized = :normalized AND language = :language AND ownerAccount = :ownerAccount",
     )
     suspend fun findWordForOwner(normalized: String, language: String, ownerAccount: String): VocabularyWord?
@@ -404,11 +411,17 @@ interface VocabularyDao {
     @Insert
     suspend fun addReview(review: VocabularyReview): Long
 
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertReviewIgnoringConflicts(review: VocabularyReview): Long
+
     @Update
     suspend fun updateReview(review: VocabularyReview)
 
     @Query("SELECT * FROM vocabulary_reviews WHERE id = :id")
     suspend fun review(id: Long): VocabularyReview?
+
+    @Query("SELECT * FROM vocabulary_reviews WHERE syncId = :syncId LIMIT 1")
+    suspend fun reviewBySyncIdAnyOwner(syncId: String): VocabularyReview?
 
     @Query(
         "SELECT r.* FROM vocabulary_reviews r " +

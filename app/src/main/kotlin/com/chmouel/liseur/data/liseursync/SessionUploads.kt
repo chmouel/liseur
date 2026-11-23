@@ -36,6 +36,7 @@ object SessionUploads {
         editionSha: String?,
         measuredTime: Boolean = false,
     ): JSONObject? {
+        if (session.originDeviceId != null) return null
         val started = session.startedAt
         val ended = session.endedAt ?: return null
         val start = session.startProgression ?: return null

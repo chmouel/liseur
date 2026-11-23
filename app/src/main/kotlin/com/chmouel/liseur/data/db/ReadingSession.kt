@@ -5,6 +5,7 @@ import androidx.room.Dao
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.Insert
+import androidx.room.OnConflictStrategy
 import androidx.room.PrimaryKey
 import androidx.room.Query
 import kotlinx.coroutines.flow.Flow
@@ -25,7 +26,11 @@ import kotlinx.coroutines.flow.Flow
  */
 @Entity(
     tableName = "reading_sessions",
-    indices = [Index("book_url"), Index("started_at")],
+    indices = [
+        Index("book_url"),
+        Index("started_at"),
+        Index(value = ["remote_session_id"], unique = true),
+    ],
 )
 data class ReadingSession(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -74,6 +79,10 @@ data class ReadingSession(
     val legacyEvidenceUnknown: Boolean = false,
     /** When this session was restored from a backup archive; imported sessions stay local and are never uploaded. */
     @ColumnInfo(name = "imported_at") val importedAt: Long? = null,
+    /** Content-derived or peer-supplied cross-device session identity, assigned once if null. */
+    @ColumnInfo(name = "remote_session_id") val remoteSessionId: String? = null,
+    /** Authoring device identifier for sessions pulled from another device; null for locally recorded sessions. */
+    @ColumnInfo(name = "origin_device_id") val originDeviceId: String? = null,
 ) {
     val isOpen: Boolean get() = endedAt == null
 }
@@ -92,6 +101,44 @@ interface ReadingSessionDao {
 
     @Insert
     suspend fun insertAll(sessions: List<ReadingSession>)
+
+    /** Inserts a remote session idempotently, ignoring duplicates by `remote_session_id`. */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertIgnoringConflicts(session: ReadingSession): Long
+
+    @Query("SELECT * FROM reading_sessions WHERE remote_session_id = :remoteSessionId LIMIT 1")
+    suspend fun byRemoteSessionId(remoteSessionId: String): ReadingSession?
+
+    /** Assigns a deterministic cross-device session identity once when absent. */
+    @Query(
+        "UPDATE reading_sessions SET remote_session_id = :remoteSessionId " +
+            "WHERE id = :id AND remote_session_id IS NULL",
+    )
+    suspend fun assignRemoteSessionIdIfNull(id: Long, remoteSessionId: String): Int
+
+    /**
+     * Closed, locally recorded sessions eligible for cross-device sync
+     * (excluding imported backup sessions and sessions pulled from other devices).
+     */
+    @Query(
+        """
+        SELECT * FROM reading_sessions
+        WHERE ended_at IS NOT NULL AND imported_at IS NULL AND origin_device_id IS NULL
+          AND start_progression IS NOT NULL AND end_progression IS NOT NULL
+        ORDER BY started_at, id
+        """,
+    )
+    suspend fun localSessionsForSync(): List<ReadingSession>
+
+    @Query(
+        """
+        SELECT * FROM reading_sessions
+        WHERE book_url = :bookUrl AND ended_at IS NOT NULL AND imported_at IS NULL AND origin_device_id IS NULL
+          AND start_progression IS NOT NULL AND end_progression IS NOT NULL
+        ORDER BY started_at, id
+        """,
+    )
+    suspend fun localSessionsForBookSync(bookUrl: String): List<ReadingSession>
 
     /**
      * Stores the total reached by an open session and moves its checkpoint
@@ -235,6 +282,7 @@ interface ReadingSessionDao {
         """
         SELECT * FROM reading_sessions
         WHERE ended_at IS NOT NULL AND uploaded_at IS NULL AND imported_at IS NULL
+          AND origin_device_id IS NULL
           AND start_progression IS NOT NULL AND end_progression IS NOT NULL
         ORDER BY started_at
         LIMIT :limit
@@ -259,6 +307,7 @@ interface ReadingSessionDao {
         JOIN work_alias a ON a.book_url = s.book_url AND a.peer_id = :peerId
           AND (a.confirmed = 1 OR a.confidence = 'high')
         WHERE s.ended_at IS NOT NULL AND s.uploaded_at IS NULL AND s.imported_at IS NULL
+          AND s.origin_device_id IS NULL
           AND s.start_progression IS NOT NULL AND s.end_progression IS NOT NULL
           AND NOT EXISTS (
             SELECT 1 FROM session_refusal r WHERE r.peer_id = :peerId AND r.session_id = s.id
