@@ -125,7 +125,7 @@ internal fun VocabularyLookupAction(
             .heightIn(min = 48.dp)
             .alpha(if (busy) 0.45f else 1f)
             .semantics(mergeDescendants = true) {
-                role = Role.Checkbox
+                role = Role.Button
                 selected = alreadySaved
                 onClick(label = actionLabel) {
                     onChipClick()

@@ -35,8 +35,11 @@ import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.padding
@@ -115,7 +118,6 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
 import com.chmouel.liseur.domain.DictionaryUrl
@@ -558,6 +560,7 @@ private fun DefinitionModeControl(onSelectText: () -> Unit) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .height(IntrinsicSize.Min)
                 .padding(4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -567,7 +570,9 @@ private fun DefinitionModeControl(onSelectText: () -> Unit) {
                 selected = true,
                 eInk = eInk,
                 onClick = {},
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(),
             )
             DefinitionModeSegment(
                 label = stringResource(R.string.dictionary_select_text),
@@ -575,7 +580,9 @@ private fun DefinitionModeControl(onSelectText: () -> Unit) {
                 selected = false,
                 eInk = eInk,
                 onClick = onSelectText,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(),
             )
         }
     }
@@ -626,8 +633,6 @@ private fun DefinitionModeSegment(
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Medium),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
             )
         }
     }
