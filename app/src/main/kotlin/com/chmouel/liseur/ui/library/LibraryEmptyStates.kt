@@ -1,14 +1,13 @@
 package com.chmouel.liseur.ui.library
 
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
@@ -68,6 +67,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -595,24 +595,30 @@ private fun WelcomeHeroEmblem(
         }
     }
 
-    val bubbleContainer = when {
-        eInk -> MaterialTheme.colorScheme.surface
-        palette != null -> palette.pill
-        else -> MaterialTheme.colorScheme.secondaryContainer
-    }
-    val bubbleContent = when {
-        eInk -> MaterialTheme.colorScheme.onSurface
-        palette != null -> palette.onPill
-        else -> MaterialTheme.colorScheme.onSecondaryContainer
-    }
-    val bubbleBorder = when {
-        eInk -> BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
-        palette != null -> BorderStroke(1.dp, palette.cardBorder)
-        else -> null
-    }
-
     val appName = stringResource(R.string.app_name)
     val helloLabel = stringResource(R.string.welcome_emblem_hello)
+    val helloProgress by animateFloatAsState(
+        targetValue = if (sayingHello) 1f else 0f,
+        animationSpec = tween(
+            durationMillis = if (eInk) 0 else EMBLEM_CROSSFADE_MS,
+            easing = FastOutSlowInEasing,
+        ),
+        label = "welcomeHeroEmblemCrossfade",
+    )
+    val readingRes = if (darkMark) {
+        R.drawable.ic_brand_emblem_night_transparent
+    } else {
+        R.drawable.ic_brand_emblem_transparent
+    }
+    val helloRes = if (darkMark) {
+        R.drawable.ic_brand_emblem_hello_night_transparent
+    } else {
+        R.drawable.ic_brand_emblem_hello_transparent
+    }
+
+    val bubbleColors = remember(palette, darkMark, eInk) {
+        emblemHelloBubbleColors(palette, darkMark, eInk)
+    }
 
     Box(
         modifier = Modifier
@@ -632,65 +638,161 @@ private fun WelcomeHeroEmblem(
             },
         contentAlignment = Alignment.Center,
     ) {
-        AnimatedContent(
-            targetState = sayingHello,
-            transitionSpec = {
-                if (eInk) {
-                    fadeIn(tween(0)) togetherWith fadeOut(tween(0))
-                } else {
-                    (fadeIn(tween(240)) + scaleIn(initialScale = 0.94f, animationSpec = tween(240)))
-                        .togetherWith(fadeOut(tween(180)) + scaleOut(targetScale = 0.96f, animationSpec = tween(180)))
-                }
-            },
-            label = "welcomeHeroEmblem",
-        ) { greeting ->
-            val resId = when {
-                greeting && darkMark -> R.drawable.ic_brand_emblem_hello_night_transparent
-                greeting -> R.drawable.ic_brand_emblem_hello_transparent
-                darkMark -> R.drawable.ic_brand_emblem_night_transparent
-                else -> R.drawable.ic_brand_emblem_transparent
-            }
+        // Both drawables share identical dimensions and framing so the arch,
+        // leaves, armchair, and lamp stay locked in place across the dissolve.
+        if (helloProgress < 1f) {
             Image(
-                painter = painterResource(resId),
-                contentDescription = if (greeting) stringResource(R.string.welcome_emblem_hello) else null,
+                painter = painterResource(readingRes),
+                contentDescription = null,
                 contentScale = ContentScale.Fit,
-                modifier = Modifier.fillMaxWidth().height(height),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(height)
+                    .graphicsLayer { alpha = 1f - helloProgress },
+            )
+        }
+        if (helloProgress > 0f) {
+            Image(
+                painter = painterResource(helloRes),
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(height)
+                    .graphicsLayer { alpha = helloProgress },
             )
         }
 
-        AnimatedVisibility(
-            visible = sayingHello,
-            enter = if (eInk) fadeIn(tween(0)) else fadeIn(tween(220)) + scaleIn(initialScale = 0.85f, animationSpec = tween(220)),
-            exit = if (eInk) fadeOut(tween(0)) else fadeOut(tween(180)) + scaleOut(targetScale = 0.9f, animationSpec = tween(180)),
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .offset(x = (-16).dp, y = 8.dp),
-        ) {
-            Surface(
-                shape = RoundedCornerShape(
-                    topStart = 16.dp,
-                    topEnd = 16.dp,
-                    bottomEnd = 16.dp,
-                    bottomStart = 4.dp,
-                ),
-                color = bubbleContainer,
-                contentColor = bubbleContent,
-                border = bubbleBorder,
-                shadowElevation = if (eInk) 0.dp else 2.dp,
+        val fontScale = LocalDensity.current.fontScale
+        val bubbles = if (height >= 150.dp && fontScale <= 1.15f) {
+            EMBLEM_HELLO_BUBBLES
+        } else {
+            EMBLEM_HELLO_BUBBLES_COMPACT
+        }
+        bubbles.forEachIndexed { index, spec ->
+            val tint = bubbleColors[index % bubbleColors.size]
+            val delayMs = if (eInk) 0 else index * EMBLEM_BUBBLE_STAGGER_MS
+            val yOffset = height * spec.yFraction
+            AnimatedVisibility(
+                visible = sayingHello,
+                enter = if (eInk) {
+                    fadeIn(tween(0))
+                } else {
+                    fadeIn(tween(240, delayMillis = delayMs)) +
+                        scaleIn(initialScale = 0.78f, animationSpec = tween(260, delayMillis = delayMs))
+                },
+                exit = if (eInk) {
+                    fadeOut(tween(0))
+                } else {
+                    fadeOut(tween(180)) + scaleOut(targetScale = 0.88f, animationSpec = tween(180))
+                },
+                modifier = Modifier
+                    .align(spec.alignment)
+                    .offset(x = spec.xOffset, y = yOffset),
             ) {
-                Text(
-                    text = stringResource(R.string.welcome_emblem_hello),
-                    style = MaterialTheme.typography.titleSmall.copy(
-                        fontFamily = MaterialTheme.typography.headlineSmall.fontFamily,
-                    ),
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                )
+                Surface(
+                    shape = if (spec.alignment == Alignment.TopStart) {
+                        RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp, bottomStart = 14.dp, bottomEnd = 4.dp)
+                    } else {
+                        RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp, bottomEnd = 14.dp, bottomStart = 4.dp)
+                    },
+                    color = tint.container,
+                    contentColor = tint.content,
+                    border = BorderStroke(1.dp, tint.border),
+                    shadowElevation = if (eInk) 0.dp else 1.dp,
+                ) {
+                    Text(
+                        text = spec.text,
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontFamily = MaterialTheme.typography.headlineSmall.fontFamily,
+                        ),
+                        maxLines = 1,
+                        softWrap = false,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                    )
+                }
             }
         }
     }
 }
 
-private const val EMBLEM_HELLO_DURATION_MS = 4500L
+private data class HelloBubbleSpec(
+    val text: String,
+    val alignment: Alignment,
+    val xOffset: Dp,
+    val yFraction: Float,
+)
+
+private data class HelloBubbleTint(
+    val container: Color,
+    val content: Color,
+    val border: Color,
+)
+
+private val EMBLEM_HELLO_BUBBLES = listOf(
+    HelloBubbleSpec("Bonjour !", Alignment.TopStart, 14.dp, 0.00f),
+    HelloBubbleSpec("Hallo!", Alignment.TopStart, 0.dp, 0.20f),
+    HelloBubbleSpec("¡Hola!", Alignment.TopStart, 6.dp, 0.40f),
+    HelloBubbleSpec("Ciao!", Alignment.TopStart, 0.dp, 0.61f),
+    HelloBubbleSpec("مرحباً!", Alignment.TopStart, 6.dp, 0.81f),
+    HelloBubbleSpec("Hello!", Alignment.TopEnd, (-16).dp, 0.00f),
+    HelloBubbleSpec("Olá!", Alignment.TopEnd, 0.dp, 0.17f),
+    HelloBubbleSpec("Ahoj!", Alignment.TopEnd, (-4).dp, 0.34f),
+    HelloBubbleSpec("Привет!", Alignment.TopEnd, 0.dp, 0.51f),
+    HelloBubbleSpec("שלום!", Alignment.TopEnd, (-4).dp, 0.68f),
+    HelloBubbleSpec("你好！", Alignment.TopEnd, (-12).dp, 0.85f),
+)
+
+private val EMBLEM_HELLO_BUBBLES_COMPACT = listOf(
+    HelloBubbleSpec("Bonjour !", Alignment.TopStart, 6.dp, 0.04f),
+    HelloBubbleSpec("مرحباً!", Alignment.TopStart, 0.dp, 0.54f),
+    HelloBubbleSpec("Hello!", Alignment.TopEnd, (-6).dp, 0.04f),
+    HelloBubbleSpec("שלום!", Alignment.TopEnd, 0.dp, 0.54f),
+)
+
+private fun emblemHelloBubbleColors(
+    palette: com.chmouel.liseur.ui.theme.HomePalette?,
+    darkMark: Boolean,
+    eInk: Boolean,
+): List<HelloBubbleTint> {
+    if (eInk) {
+        val fg = if (darkMark) Color.White else Color.Black
+        val bg = if (darkMark) Color.Black else Color.White
+        return listOf(HelloBubbleTint(bg, fg, fg))
+    }
+    if (palette != null) {
+        val rose = if (darkMark) {
+            HelloBubbleTint(Color(0xFF3A2535), Color(0xFFF5B2CC), Color(0xFF55364E))
+        } else {
+            HelloBubbleTint(Color(0xFFFCEBF2), Color(0xFF9C3560), Color(0xFFF3CFE0))
+        }
+        val sage = if (darkMark) {
+            HelloBubbleTint(Color(0xFF213128), Color(0xFFA7E8BE), Color(0xFF324C3D))
+        } else {
+            HelloBubbleTint(Color(0xFFEAF7EE), Color(0xFF206B43), Color(0xFFCDEBD7))
+        }
+        return listOf(
+            HelloBubbleTint(palette.toRead.container, palette.toRead.content, palette.toRead.glow),
+            HelloBubbleTint(palette.series.container, palette.series.content, palette.series.glow),
+            HelloBubbleTint(palette.finished.container, palette.finished.content, palette.finished.glow),
+            rose,
+            sage,
+            HelloBubbleTint(palette.reading.container, palette.reading.content, palette.reading.glow),
+            HelloBubbleTint(palette.pill, palette.onPill, palette.cardBorder),
+            HelloBubbleTint(palette.series.container, palette.series.content, palette.series.glow),
+            HelloBubbleTint(palette.toRead.container, palette.toRead.content, palette.toRead.glow),
+            rose,
+            HelloBubbleTint(palette.finished.container, palette.finished.content, palette.finished.glow),
+        )
+    }
+    return listOf(
+        HelloBubbleTint(Color(0xFFEEE7FF), Color(0xFF4F2FBF), Color(0xFFD9CCFA)),
+    )
+}
+
+private const val EMBLEM_HELLO_DURATION_MS = 5000L
+private const val EMBLEM_CROSSFADE_MS = 420
+private const val EMBLEM_BUBBLE_STAGGER_MS = 45
 
 @Composable
 private fun MoreWaysDivider(
