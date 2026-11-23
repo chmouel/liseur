@@ -59,6 +59,7 @@ import org.readium.r2.shared.publication.Metadata
 @Composable
 internal fun ReaderBookInfoSheet(
     book: Book?,
+    storedDescription: String?,
     metadata: Metadata,
     displayAuthors: List<String>,
     progress: ReaderProgress?,
@@ -69,11 +70,15 @@ internal fun ReaderBookInfoSheet(
 ) {
     val eInk = LocalEInk.current
     val locale = LocalConfiguration.current.locales[0]
-    val title = metadata.title?.trim().orEmpty()
-    val authors = remember(displayAuthors, metadata.authors) {
-        val primary = displayAuthors.map { it.trim() }.filter { it.isNotEmpty() }
-        val raw = if (primary.isNotEmpty()) primary else metadata.authors.map { it.name.trim() }.filter { it.isNotEmpty() }
-        raw.joinToString(", ").takeIf { it.isNotEmpty() }
+    val title = book?.title?.trim()?.takeIf { it.isNotEmpty() } ?: metadata.title?.trim().orEmpty()
+    val authors = remember(book?.authorOverridden, book?.author, displayAuthors, metadata.authors) {
+        if (book?.authorOverridden == true) {
+            book.author?.trim()?.takeIf { it.isNotEmpty() }
+        } else {
+            val primary = displayAuthors.map { it.trim() }.filter { it.isNotEmpty() }
+            val raw = if (primary.isNotEmpty()) primary else metadata.authors.map { it.name.trim() }.filter { it.isNotEmpty() }
+            raw.joinToString(", ").takeIf { it.isNotEmpty() }
+        }
     }
     val publishers = remember(metadata.publishers) {
         metadata.publishers.map { it.name.trim() }.filter { it.isNotEmpty() }.joinToString(", ").takeIf { it.isNotEmpty() }
@@ -85,8 +90,12 @@ internal fun ReaderBookInfoSheet(
             .joinToString(", ") { languageName(it, locale) }
             .takeIf { it.isNotEmpty() }
     }
-    val description = remember(metadata.description) {
-        descriptionText(metadata.description)
+    val description = remember(book?.descriptionOverridden, book?.userDescription, storedDescription, metadata.description) {
+        if (book?.descriptionOverridden == true) {
+            descriptionText(book.userDescription)
+        } else {
+            descriptionText(storedDescription) ?: descriptionText(metadata.description)
+        }
     }
     val pages = remember(reflowable, screens, progress, bookScreens) {
         footerPages(reflowable, screens, progress, bookScreens)

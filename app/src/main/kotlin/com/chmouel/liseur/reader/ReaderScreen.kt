@@ -511,6 +511,7 @@ internal fun ReaderScreen(
     catchUpFlow: StateFlow<ReaderViewModel.CatchUp?>,
     continuationFlow: StateFlow<EndpaperContinuation?>,
     currentBookFlow: StateFlow<com.chmouel.liseur.data.db.Book?>,
+    storedDescription: String? = null,
     onContinueNext: () -> Unit,
     onReachedEndpaper: () -> Unit,
     onLeftEndpaper: () -> Unit,
@@ -5898,8 +5899,9 @@ internal fun ReaderScreen(
             onOpenReadAloudSetup = { readAloudSetup = true },
             syncable = syncable,
             onSyncBook = onBookSyncAction.start,
-            rememberTrackerSync = onBookSyncAction.rememberTrackerSync,
+            trackerOnlySync = onBookSyncAction.trackerOnlySync,
             book = currentBookFlow.collectAsStateWithLifecycle().value,
+            storedDescription = storedDescription,
             publicationMetadata = publication.metadata,
             displayAuthors = displayAuthors,
             progress = progress,
@@ -6120,8 +6122,9 @@ private fun ReaderSheetHost(
     onOpenReadAloudSetup: () -> Unit,
     syncable: Boolean,
     onSyncBook: () -> Unit,
-    rememberTrackerSync: (@Composable () -> (() -> Unit)?)?,
+    trackerOnlySync: (() -> Unit)?,
     book: com.chmouel.liseur.data.db.Book?,
+    storedDescription: String?,
     publicationMetadata: org.readium.r2.shared.publication.Metadata,
     displayAuthors: List<String>,
     progress: ReaderProgress?,
@@ -6153,7 +6156,7 @@ private fun ReaderSheetHost(
             onOpenReadAloudSetup = onOpenReadAloudSetup,
             syncable = syncable,
             onSyncBook = onSyncBook,
-            rememberTrackerSync = rememberTrackerSync,
+            trackerOnlySync = trackerOnlySync,
             onOpenBookInfo = { onSheetChanged(ReaderSheet.BOOK_INFO) },
             onOpenSettings = {
                 onAdvancedOpenedFromMoreChanged(true)
@@ -6166,6 +6169,7 @@ private fun ReaderSheetHost(
     if (sheet == ReaderSheet.BOOK_INFO) {
         ReaderBookInfoSheet(
             book = book,
+            storedDescription = storedDescription,
             metadata = publicationMetadata,
             displayAuthors = displayAuthors,
             progress = progress,
@@ -6543,8 +6547,8 @@ class ReaderBookSyncActions(
     val start: () -> Unit,
     val registerCapture: (suspend () -> Boolean) -> Unit = {},
     val requestEdition: ((bookUrl: String, push: Boolean) -> Unit)? = null,
-    /** Returns a push action for the build's reading tracker when connected, or null. */
-    val rememberTrackerSync: (@Composable () -> (() -> Unit)?)? = null,
+    /** Direct push action for the build's reading tracker when server sync is unavailable. */
+    val trackerOnlySync: (() -> Unit)? = null,
 )
 
 /** Hides the status and navigation bars while the chrome is hidden. */

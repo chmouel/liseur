@@ -97,14 +97,13 @@ internal fun ReaderMoreSheet(
     onOpenReadAloudSetup: () -> Unit,
     syncable: Boolean,
     onSyncBook: () -> Unit,
-    rememberTrackerSync: (@Composable () -> (() -> Unit)?)?,
+    trackerOnlySync: (() -> Unit)?,
     onOpenBookInfo: () -> Unit,
     onOpenSettings: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     val eInk = LocalEInk.current
-    val trackerSync = rememberTrackerSync?.invoke()
-    val canSync = syncable || trackerSync != null
+    val canSync = syncable || trackerOnlySync != null
     val toolItems = buildList {
         if (codexOrStoryAvailable) {
             add(
@@ -302,8 +301,11 @@ internal fun ReaderMoreSheet(
                         eInk = eInk,
                         onClick = {
                             onDismiss()
-                            if (syncable) onSyncBook()
-                            trackerSync?.invoke()
+                            if (syncable) {
+                                onSyncBook()
+                            } else {
+                                trackerOnlySync?.invoke()
+                            }
                         },
                         modifier = Modifier.weight(1f),
                     )
