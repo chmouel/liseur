@@ -841,23 +841,25 @@ internal class ReadingTracker(context: Context, private val database: LiseurData
         bookUrl: String,
         savePlace: suspend () -> Boolean,
         requestEdition: ((bookUrl: String, push: Boolean) -> Unit)? = null,
-    ): (() -> Unit)? {
+    ): ((savePlaceFirst: Boolean) -> Unit)? {
         if (!remember { used() }) return null
         val account by hardcover.account.collectAsState(initial = null)
         if (account == null) return null
         val link by remember(bookUrl) { hardcover.link(bookUrl) }.collectAsState(initial = null)
-        return {
+        return { savePlaceFirst ->
             if (requestEdition != null && opensEditionPicker(link?.matched == true, link?.excluded == true)) {
                 requestEdition(bookUrl, true)
             } else {
                 scope.launch {
-                    // The place on screen can be ahead of the stored one until it is saved.
-                    val saved = withContext(Dispatchers.Main.immediate) { savePlace() }
-                    if (!saved) {
-                        withContext(Dispatchers.Main) {
-                            Toast.makeText(context, R.string.reader_position_not_saved, Toast.LENGTH_SHORT).show()
+                    if (savePlaceFirst) {
+                        // The place on screen can be ahead of the stored one until it is saved.
+                        val saved = withContext(Dispatchers.Main.immediate) { savePlace() }
+                        if (!saved) {
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(context, R.string.reader_position_not_saved, Toast.LENGTH_SHORT).show()
+                            }
+                            return@launch
                         }
-                        return@launch
                     }
                     when (val outcome = hardcover.push(bookUrl, asked = true)) {
                         HardcoverPushOutcome.NeedsMatch if requestEdition != null -> {

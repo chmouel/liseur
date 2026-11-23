@@ -40,7 +40,7 @@ internal class ReadingTracker(context: Context, database: LiseurDatabase) {
         bookUrl: String,
         savePlace: suspend () -> Boolean,
         requestEdition: ((bookUrl: String, push: Boolean) -> Unit)? = null,
-    ): (() -> Unit)? = null
+    ): ((savePlaceFirst: Boolean) -> Unit)? = null
 
     @Composable
     fun ReaderEditionPicker(

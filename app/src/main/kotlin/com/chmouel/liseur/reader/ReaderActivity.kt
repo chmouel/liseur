@@ -312,18 +312,15 @@ class ReaderActivity : FragmentActivity() {
                             sawServerSyncActive = false
                             return@LaunchedEffect
                         }
-                        when (bookSync) {
-                            ReaderViewModel.BookSync.Asking,
-                            is ReaderViewModel.BookSync.Choice,
-                            is ReaderViewModel.BookSync.BookOrbitChoice,
-                            -> sawServerSyncActive = true
-                            ReaderViewModel.BookSync.Idle,
-                            is ReaderViewModel.BookSync.Note,
-                            -> if (sawServerSyncActive) {
-                                pendingTrackerPush = false
-                                sawServerSyncActive = false
-                                latestTrackerPush?.invoke()
-                            }
+                        if (bookSync != ReaderViewModel.BookSync.Idle) {
+                            sawServerSyncActive = true
+                        } else if (sawServerSyncActive) {
+                            pendingTrackerPush = false
+                            sawServerSyncActive = false
+                            // Server sync already saved or adopted the winning position;
+                            // push it directly instead of re-capturing the WebView before
+                            // any queued jump finishes.
+                            latestTrackerPush?.invoke(false)
                         }
                     }
                     val storedDescription by remember(target?.id) {
@@ -763,7 +760,7 @@ class ReaderActivity : FragmentActivity() {
                                             registerCapture = { viewModel.preparePositionAction = it },
                                             requestEdition = requestEdition,
                                             trackerOnlySync = if (trackerPush != null) {
-                                                { latestTrackerPush?.invoke() }
+                                                { latestTrackerPush?.invoke(true) }
                                             } else {
                                                 null
                                             },
