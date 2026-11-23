@@ -286,6 +286,9 @@ fun LibraryScreen(
     onSetSearchActive: (Boolean) -> Unit = {},
     onSeriesSelected: (SeriesShelf) -> Unit = {},
     onStartWithFreeBooks: () -> Unit = {},
+    onTrySampleBook: () -> Unit = {},
+    openingSample: Boolean = false,
+    onRestoreBackup: () -> Unit = {},
     notice: Notice? = null,
     onNoticeShown: (Long) -> Unit = {},
     widgetBook: Book? = null,
@@ -1043,12 +1046,11 @@ fun LibraryScreen(
                     state.books.isEmpty() && state.libraryIsEmpty -> EmptyLibrary(
                         onAddBook = onAddBook,
                         onAddFolder = onAddFolder,
-                        onConnectServer = onConnectServer,
-                        // One server at a time, so the offer is only
-                        // made where taking it up costs nothing: an
-                        // empty library with nothing connected.
-                        offerFreeBooks = !state.hasServer,
                         onStartWithFreeBooks = onStartWithFreeBooks,
+                        onTrySampleBook = onTrySampleBook,
+                        openingSample = openingSample,
+                        onConnectServer = onConnectServer,
+                        onRestoreBackup = onRestoreBackup,
                         modifier = fillAboveBar,
                     )
 

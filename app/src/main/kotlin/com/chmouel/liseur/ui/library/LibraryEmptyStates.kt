@@ -1,9 +1,18 @@
 package com.chmouel.liseur.ui.library
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -14,6 +23,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -25,27 +36,34 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.Archive
+import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.AutoStories
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.CloudQueue
 import androidx.compose.material.icons.outlined.CreateNewFolder
+import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.LibraryAdd
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -55,16 +73,29 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.chmouel.liseur.R
 import com.chmouel.liseur.ui.BusyIndicator
+import com.chmouel.liseur.ui.LiseurModalBottomSheet
 import com.chmouel.liseur.ui.LocalEInk
 import com.chmouel.liseur.ui.contentWidthCap
+import com.chmouel.liseur.ui.theme.BrandPalette
+import com.chmouel.liseur.ui.theme.LiseurTypography
+import com.chmouel.liseur.ui.theme.MonoPalette
+import com.chmouel.liseur.ui.theme.homePalette
 import com.chmouel.liseur.ui.windowWidth
+import kotlinx.coroutines.delay
 
 /**
  * The shape every one of the library's empty screens takes.
@@ -104,14 +135,14 @@ internal fun LibraryEmptyState(
                 .verticalScroll(rememberScrollState())
                 .fillMaxWidth()
                 .heightIn(min = available)
-                .padding(horizontal = 24.dp, vertical = if (cramped) 16.dp else 32.dp),
+                .padding(horizontal = 24.dp, vertical = if (cramped) 16.dp else 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
+            verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
         ) {
             Column(
                 modifier = Modifier.widthIn(max = cap),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 if (art != null && !cramped) {
                     Box(Modifier.entrance(delayMillis = 0)) { art(available) }
@@ -119,11 +150,13 @@ internal fun LibraryEmptyState(
                 Column(
                     modifier = Modifier.entrance(delayMillis = ENTRANCE_STEP_MS),
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     Text(
                         text = title,
-                        style = MaterialTheme.typography.headlineSmall,
+                        style = MaterialTheme.typography.headlineMedium.copy(
+                            fontWeight = FontWeight.SemiBold,
+                        ),
                         textAlign = TextAlign.Center,
                     )
                     if (subtitle != null) {
@@ -135,11 +168,17 @@ internal fun LibraryEmptyState(
                         )
                     }
                 }
-                if (!cramped) Spacer(Modifier.height(8.dp))
+                if (!cramped) Spacer(Modifier.height(4.dp))
                 actions()
             }
         }
     }
+}
+
+internal enum class ActionCardProminence {
+    PRIMARY,
+    SECONDARY,
+    COMPACT,
 }
 
 /**
@@ -159,23 +198,171 @@ internal fun LibraryActionCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     busy: Boolean = false,
+    prominence: ActionCardProminence = ActionCardProminence.SECONDARY,
 ) {
     val eInk = LocalEInk.current
+    val dark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val palette = homePalette()
     // Held under a second name because the semantics block below has an
     // onClick of its own, and inside it the plain name is the wrong one
     // to reach for.
     val activate = onClick
+
+    val shape = when (prominence) {
+        ActionCardProminence.PRIMARY -> RoundedCornerShape(24.dp)
+        ActionCardProminence.SECONDARY -> RoundedCornerShape(20.dp)
+        ActionCardProminence.COMPACT -> RoundedCornerShape(16.dp)
+    }
+
+    val containerColor = when {
+        eInk -> when (prominence) {
+            ActionCardProminence.PRIMARY -> MaterialTheme.colorScheme.surfaceContainerHigh
+            ActionCardProminence.SECONDARY -> MaterialTheme.colorScheme.surfaceContainer
+            ActionCardProminence.COMPACT -> MaterialTheme.colorScheme.surfaceContainerLow
+        }
+        prominence == ActionCardProminence.PRIMARY ->
+            if (dark) HeroCardDark else HeroCardLight
+        prominence == ActionCardProminence.SECONDARY ->
+            palette?.card ?: MaterialTheme.colorScheme.surfaceContainer
+        else ->
+            if (dark) {
+                palette?.card?.copy(alpha = 0.72f) ?: MaterialTheme.colorScheme.surfaceContainerLow
+            } else {
+                MaterialTheme.colorScheme.surfaceContainerLow
+            }
+    }
+
+    val border = when {
+        eInk -> BorderStroke(
+            width = if (prominence == ActionCardProminence.PRIMARY) 2.dp else 1.dp,
+            color = MaterialTheme.colorScheme.outline,
+        )
+        prominence == ActionCardProminence.PRIMARY ->
+            if (dark) null else BorderStroke(1.dp, HeroBorderLight)
+        palette != null -> BorderStroke(
+            width = 1.dp,
+            color = if (prominence == ActionCardProminence.COMPACT && !dark) {
+                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)
+            } else {
+                palette.cardBorder
+            },
+        )
+        else -> null
+    }
+
+    val badgeColor = when {
+        eInk -> MaterialTheme.colorScheme.secondaryContainer
+        prominence == ActionCardProminence.PRIMARY ->
+            if (dark) HeroBadgeDark else HeroBadgeLight
+        palette != null -> palette.pill
+        else -> MaterialTheme.colorScheme.secondaryContainer
+    }
+
+    val badgeContentColor = when {
+        eInk -> MaterialTheme.colorScheme.onSecondaryContainer
+        prominence == ActionCardProminence.PRIMARY ->
+            if (dark) HeroInkDark else HeroIconLight
+        palette != null -> palette.onPill
+        else -> MaterialTheme.colorScheme.onSecondaryContainer
+    }
+
+    val titleColor = when {
+        eInk -> MaterialTheme.colorScheme.onSurface
+        prominence == ActionCardProminence.PRIMARY ->
+            if (dark) HeroInkDark else HeroInkLight
+        else -> MaterialTheme.colorScheme.onSurface
+    }
+
+    val hintColor = when {
+        eInk -> MaterialTheme.colorScheme.onSurfaceVariant
+        prominence == ActionCardProminence.PRIMARY ->
+            if (dark) HeroSubtitleDark else HeroSubtitleLight
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+
+    val chevronColor = when {
+        eInk -> MaterialTheme.colorScheme.onSurfaceVariant
+        prominence == ActionCardProminence.PRIMARY ->
+            if (dark) HeroInkDark else HeroInkLight
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+
+    val minHeight = when (prominence) {
+        ActionCardProminence.PRIMARY -> 88.dp
+        ActionCardProminence.SECONDARY -> 74.dp
+        ActionCardProminence.COMPACT -> 64.dp
+    }
+
+    val badgeSize = when (prominence) {
+        ActionCardProminence.PRIMARY -> 52.dp
+        ActionCardProminence.SECONDARY -> 44.dp
+        ActionCardProminence.COMPACT -> 38.dp
+    }
+
+    val iconSize = when (prominence) {
+        ActionCardProminence.PRIMARY -> 26.dp
+        ActionCardProminence.SECONDARY -> 22.dp
+        ActionCardProminence.COMPACT -> 20.dp
+    }
+
+    val horizontalPadding = when (prominence) {
+        ActionCardProminence.PRIMARY -> 18.dp
+        ActionCardProminence.SECONDARY -> 16.dp
+        ActionCardProminence.COMPACT -> 14.dp
+    }
+
+    val verticalPadding = when (prominence) {
+        ActionCardProminence.PRIMARY -> 16.dp
+        ActionCardProminence.SECONDARY -> 13.dp
+        ActionCardProminence.COMPACT -> 11.dp
+    }
+
+    val titleStyle = when (prominence) {
+        ActionCardProminence.PRIMARY -> MaterialTheme.typography.titleLarge.copy(
+            fontSize = 19.sp,
+            lineHeight = 24.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+        ActionCardProminence.SECONDARY -> MaterialTheme.typography.titleLarge.copy(
+            fontSize = 17.sp,
+            lineHeight = 22.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+        ActionCardProminence.COMPACT -> MaterialTheme.typography.titleLarge.copy(
+            fontSize = 15.5.sp,
+            lineHeight = 20.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+    }
+
+    val hintStyle = when (prominence) {
+        ActionCardProminence.PRIMARY -> MaterialTheme.typography.bodyMedium.copy(
+            lineHeight = 19.sp,
+        )
+        ActionCardProminence.SECONDARY, ActionCardProminence.COMPACT -> MaterialTheme.typography.bodySmall
+    }
+
     Card(
         onClick = onClick,
         enabled = !busy,
-        shape = RoundedCornerShape(20.dp),
+        shape = shape,
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainer,
+            containerColor = containerColor,
+            contentColor = titleColor,
+            disabledContainerColor = containerColor,
+            disabledContentColor = titleColor,
         ),
         // A shadow is invisible on e-paper, so there the card is drawn
         // with an edge instead of lifted off the page.
-        elevation = CardDefaults.cardElevation(defaultElevation = if (eInk) 0.dp else 1.dp),
-        border = if (eInk) BorderStroke(1.dp, MaterialTheme.colorScheme.outline) else null,
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = when {
+                eInk -> 0.dp
+                prominence == ActionCardProminence.PRIMARY && !dark -> 2.dp
+                prominence == ActionCardProminence.COMPACT -> 0.dp
+                else -> 1.dp
+            },
+        ),
+        border = border,
         // One target, and one thing said about it: read out label by
         // label, the icon and the arrow turn a single choice into three
         // fragments to listen through.
@@ -187,14 +374,16 @@ internal fun LibraryActionCard(
         // it cannot press.
         modifier = modifier
             .fillMaxWidth()
-            .heightIn(min = 76.dp)
+            .heightIn(min = minHeight)
             .clearAndSetSemantics {
                 contentDescription = "$title. $hint"
                 role = Role.Button
                 // Nothing to press while the card is already doing what
                 // pressing it asks for, and offering the action anyway
                 // would let a screen reader start a second one.
-                if (!busy) {
+                if (busy) {
+                    disabled()
+                } else {
                     onClick(label = title) {
                         activate()
                         true
@@ -203,33 +392,37 @@ internal fun LibraryActionCard(
             },
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+            modifier = Modifier.padding(horizontal = horizontalPadding, vertical = verticalPadding),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Surface(
                 shape = CircleShape,
-                color = MaterialTheme.colorScheme.secondaryContainer,
-                contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                modifier = Modifier.size(44.dp),
+                color = badgeColor,
+                contentColor = badgeContentColor,
+                modifier = Modifier.size(badgeSize),
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
                         imageVector = icon,
                         contentDescription = null,
-                        modifier = Modifier.size(24.dp),
+                        modifier = Modifier.size(iconSize),
                     )
                 }
             }
-            Spacer(Modifier.width(16.dp))
-            Column(Modifier.weight(1f)) {
+            Spacer(Modifier.width(if (prominence == ActionCardProminence.COMPACT) 14.dp else 16.dp))
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.titleMedium,
+                    style = titleStyle,
+                    color = titleColor,
                 )
                 Text(
                     text = hint,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = hintStyle,
+                    color = hintColor,
                 )
             }
             Spacer(Modifier.width(8.dp))
@@ -240,13 +433,13 @@ internal fun LibraryActionCard(
                 BusyIndicator(
                     modifier = Modifier.size(20.dp),
                     strokeWidth = 2.dp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = chevronColor,
                 )
             } else {
                 Icon(
                     imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    tint = chevronColor,
                 )
             }
         }
@@ -276,79 +469,341 @@ private fun LibraryEmptyIcon(icon: ImageVector) {
  * The first screen anyone sees, and the only chance the app gets to say
  * what it is for.
  *
- * The routes are laid out rather than listed: a folder to watch, one
- * book to bring in, a server to borrow a whole catalog from, and — for
- * somebody who has none of those — a shelf of free books. The server
- * used to live three taps away under Settings, which is not somewhere a
- * new library looks.
- *
- * The free books come last because they are a particular instance of
- * the card above them rather than a fourth idea: a catalog already
- * chosen, with nothing to fill in. They are offered only while no
- * server is connected, since taking them up would replace one.
+ * The primary hero action opens a sheet for picking a single EPUB or a
+ * watched folder; below it sit free public-domain reads and a bundled
+ * sample book so a new reader can explore Liseur immediately, followed
+ * by quieter cards for connecting a library server or restoring a
+ * backup.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun EmptyLibrary(
     onAddBook: () -> Unit,
     onAddFolder: () -> Unit,
     onConnectServer: () -> Unit,
     modifier: Modifier = Modifier,
-    offerFreeBooks: Boolean = false,
     onStartWithFreeBooks: () -> Unit = {},
+    onTrySampleBook: () -> Unit = {},
+    openingSample: Boolean = false,
+    onRestoreBackup: () -> Unit = {},
 ) {
     // Which cut of the mark to draw is asked of the theme in force
     // here, not of a -night qualifier: those follow the system, and the
     // app's own light/dark setting is allowed to disagree.
     val darkMark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    var addSheetOpen by rememberSaveable { mutableStateOf(false) }
+
+    if (addSheetOpen) {
+        AddFirstBookSheet(
+            onDismiss = { addSheetOpen = false },
+            onPickBook = {
+                addSheetOpen = false
+                onAddBook()
+            },
+            onPickFolder = {
+                addSheetOpen = false
+                onAddFolder()
+            },
+        )
+    }
+
     LibraryEmptyState(
-        title = stringResource(R.string.empty_library_title),
-        subtitle = stringResource(R.string.empty_library_subtitle),
+        title = stringResource(R.string.welcome_title),
+        subtitle = stringResource(R.string.welcome_subtitle),
         art = { available ->
-            Image(
-                painter = painterResource(
-                    if (darkMark) R.drawable.ic_brand_emblem_night_transparent
-                    else R.drawable.ic_brand_emblem_transparent,
-                ),
-                contentDescription = null,
-                // The box is given the full width and only the height is
-                // dictated, because Fit scales to whichever side runs
-                // out first: with the width left at the drawable's own,
-                // the mark would be pinned to its intrinsic size and the
-                // height would buy nothing but padding.
-                contentScale = ContentScale.Fit,
-                modifier = Modifier.fillMaxWidth().height(heroHeight(available)),
+            WelcomeHeroEmblem(
+                darkMark = darkMark,
+                height = heroHeight(available),
             )
         },
         modifier = modifier,
     ) {
         LibraryActionCard(
-            icon = Icons.Outlined.CreateNewFolder,
-            title = stringResource(R.string.add_folder),
-            hint = stringResource(R.string.add_folder_hint),
-            onClick = onAddFolder,
+            icon = Icons.Outlined.LibraryAdd,
+            title = stringResource(R.string.welcome_add_first_book),
+            hint = stringResource(R.string.welcome_add_first_book_hint),
+            onClick = { addSheetOpen = true },
+            prominence = ActionCardProminence.PRIMARY,
             modifier = Modifier.entrance(delayMillis = 2 * ENTRANCE_STEP_MS),
         )
         LibraryActionCard(
-            icon = Icons.Outlined.LibraryAdd,
-            title = stringResource(R.string.add_book),
-            hint = stringResource(R.string.add_book_hint),
-            onClick = onAddBook,
+            icon = Icons.Outlined.AutoStories,
+            title = stringResource(R.string.welcome_browse_free_books),
+            hint = stringResource(R.string.welcome_browse_free_books_hint),
+            onClick = onStartWithFreeBooks,
+            prominence = ActionCardProminence.SECONDARY,
             modifier = Modifier.entrance(delayMillis = 3 * ENTRANCE_STEP_MS),
         )
         LibraryActionCard(
-            icon = Icons.Outlined.CloudQueue,
-            title = stringResource(R.string.connect_server),
-            hint = stringResource(R.string.connect_server_hint),
-            onClick = onConnectServer,
+            icon = Icons.Outlined.AutoAwesome,
+            title = stringResource(R.string.welcome_try_sample_book),
+            hint = stringResource(R.string.welcome_try_sample_book_hint),
+            onClick = onTrySampleBook,
+            busy = openingSample,
+            prominence = ActionCardProminence.SECONDARY,
             modifier = Modifier.entrance(delayMillis = 4 * ENTRANCE_STEP_MS),
         )
-        if (offerFreeBooks) {
+        MoreWaysDivider(
+            text = stringResource(R.string.welcome_more_ways),
+            modifier = Modifier
+                .padding(top = 6.dp)
+                .entrance(delayMillis = 5 * ENTRANCE_STEP_MS),
+        )
+        LibraryActionCard(
+            icon = Icons.Outlined.CloudQueue,
+            title = stringResource(R.string.welcome_connect_library),
+            hint = stringResource(R.string.welcome_connect_library_hint),
+            onClick = onConnectServer,
+            prominence = ActionCardProminence.COMPACT,
+            modifier = Modifier.entrance(delayMillis = 6 * ENTRANCE_STEP_MS),
+        )
+        LibraryActionCard(
+            icon = Icons.Outlined.History,
+            title = stringResource(R.string.welcome_restore_backup),
+            hint = stringResource(R.string.welcome_restore_backup_hint),
+            onClick = onRestoreBackup,
+            prominence = ActionCardProminence.COMPACT,
+            modifier = Modifier.entrance(delayMillis = 7 * ENTRANCE_STEP_MS),
+        )
+        WelcomeReassuranceFooter(
+            text = stringResource(R.string.welcome_footer_reassurance),
+            modifier = Modifier
+                .padding(top = 4.dp)
+                .entrance(delayMillis = 8 * ENTRANCE_STEP_MS),
+        )
+    }
+}
+
+/**
+ * The welcome emblem, with a playful tap Easter egg: tapping the illustration
+ * makes the reader look up, smile, wave, and greet you with a speech bubble
+ * before gently returning to her book.
+ */
+@Composable
+private fun WelcomeHeroEmblem(
+    darkMark: Boolean,
+    height: Dp,
+) {
+    val eInk = LocalEInk.current
+    val palette = homePalette()
+    var sayingHello by remember { mutableStateOf(false) }
+
+    LaunchedEffect(sayingHello) {
+        if (sayingHello) {
+            delay(EMBLEM_HELLO_DURATION_MS)
+            sayingHello = false
+        }
+    }
+
+    val bubbleContainer = when {
+        eInk -> MaterialTheme.colorScheme.surface
+        palette != null -> palette.pill
+        else -> MaterialTheme.colorScheme.secondaryContainer
+    }
+    val bubbleContent = when {
+        eInk -> MaterialTheme.colorScheme.onSurface
+        palette != null -> palette.onPill
+        else -> MaterialTheme.colorScheme.onSecondaryContainer
+    }
+    val bubbleBorder = when {
+        eInk -> BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+        palette != null -> BorderStroke(1.dp, palette.cardBorder)
+        else -> null
+    }
+
+    val appName = stringResource(R.string.app_name)
+    val helloLabel = stringResource(R.string.welcome_emblem_hello)
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(height)
+            .semantics(mergeDescendants = true) {
+                contentDescription = if (sayingHello) "$appName, $helloLabel" else appName
+                role = Role.Button
+            }
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClickLabel = helloLabel,
+                role = Role.Button,
+            ) {
+                sayingHello = !sayingHello
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        AnimatedContent(
+            targetState = sayingHello,
+            transitionSpec = {
+                if (eInk) {
+                    fadeIn(tween(0)) togetherWith fadeOut(tween(0))
+                } else {
+                    (fadeIn(tween(240)) + scaleIn(initialScale = 0.94f, animationSpec = tween(240)))
+                        .togetherWith(fadeOut(tween(180)) + scaleOut(targetScale = 0.96f, animationSpec = tween(180)))
+                }
+            },
+            label = "welcomeHeroEmblem",
+        ) { greeting ->
+            val resId = when {
+                greeting && darkMark -> R.drawable.ic_brand_emblem_hello_night_transparent
+                greeting -> R.drawable.ic_brand_emblem_hello_transparent
+                darkMark -> R.drawable.ic_brand_emblem_night_transparent
+                else -> R.drawable.ic_brand_emblem_transparent
+            }
+            Image(
+                painter = painterResource(resId),
+                contentDescription = if (greeting) stringResource(R.string.welcome_emblem_hello) else null,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.fillMaxWidth().height(height),
+            )
+        }
+
+        AnimatedVisibility(
+            visible = sayingHello,
+            enter = if (eInk) fadeIn(tween(0)) else fadeIn(tween(220)) + scaleIn(initialScale = 0.85f, animationSpec = tween(220)),
+            exit = if (eInk) fadeOut(tween(0)) else fadeOut(tween(180)) + scaleOut(targetScale = 0.9f, animationSpec = tween(180)),
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .offset(x = (-16).dp, y = 8.dp),
+        ) {
+            Surface(
+                shape = RoundedCornerShape(
+                    topStart = 16.dp,
+                    topEnd = 16.dp,
+                    bottomEnd = 16.dp,
+                    bottomStart = 4.dp,
+                ),
+                color = bubbleContainer,
+                contentColor = bubbleContent,
+                border = bubbleBorder,
+                shadowElevation = if (eInk) 0.dp else 2.dp,
+            ) {
+                Text(
+                    text = stringResource(R.string.welcome_emblem_hello),
+                    style = MaterialTheme.typography.titleSmall.copy(
+                        fontFamily = MaterialTheme.typography.headlineSmall.fontFamily,
+                    ),
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                )
+            }
+        }
+    }
+}
+
+private const val EMBLEM_HELLO_DURATION_MS = 4500L
+
+@Composable
+private fun MoreWaysDivider(
+    text: String,
+    modifier: Modifier = Modifier,
+) {
+    val eInk = LocalEInk.current
+    val palette = homePalette()
+    val labelColor = when {
+        eInk -> MaterialTheme.colorScheme.onSurfaceVariant
+        palette != null -> palette.onPill
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    val lineColor = when {
+        eInk -> MaterialTheme.colorScheme.outline
+        palette != null -> palette.onPill.copy(alpha = 0.28f)
+        else -> MaterialTheme.colorScheme.outlineVariant
+    }
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .semantics { heading() },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.titleLarge.copy(
+                fontSize = 15.sp,
+                lineHeight = 20.sp,
+                fontWeight = FontWeight.SemiBold,
+            ),
+            color = labelColor,
+        )
+        HorizontalDivider(
+            modifier = Modifier.weight(1f),
+            color = lineColor,
+        )
+    }
+}
+
+@Composable
+private fun WelcomeReassuranceFooter(
+    text: String,
+    modifier: Modifier = Modifier,
+) {
+    val eInk = LocalEInk.current
+    val palette = homePalette()
+    val sparkleColor = when {
+        eInk -> MaterialTheme.colorScheme.onSurfaceVariant
+        palette != null -> palette.onPill
+        else -> MaterialTheme.colorScheme.primary
+    }
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = Icons.Outlined.AutoAwesome,
+            contentDescription = null,
+            tint = sparkleColor,
+            modifier = Modifier.size(16.dp),
+        )
+        Spacer(Modifier.width(6.dp))
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodySmall,
+            fontStyle = FontStyle.Italic,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AddFirstBookSheet(
+    onDismiss: () -> Unit,
+    onPickBook: () -> Unit,
+    onPickFolder: () -> Unit,
+) {
+    LiseurModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .navigationBarsPadding()
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.welcome_add_first_book),
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.padding(bottom = 4.dp),
+            )
             LibraryActionCard(
-                icon = Icons.Outlined.AutoStories,
-                title = stringResource(R.string.starter_catalog),
-                hint = stringResource(R.string.starter_catalog_hint),
-                onClick = onStartWithFreeBooks,
-                modifier = Modifier.entrance(delayMillis = 5 * ENTRANCE_STEP_MS),
+                icon = Icons.Outlined.LibraryAdd,
+                title = stringResource(R.string.welcome_pick_single_book),
+                hint = stringResource(R.string.add_book_hint),
+                onClick = onPickBook,
+                prominence = ActionCardProminence.SECONDARY,
+            )
+            LibraryActionCard(
+                icon = Icons.Outlined.CreateNewFolder,
+                title = stringResource(R.string.welcome_pick_folder),
+                hint = stringResource(R.string.add_folder_hint),
+                onClick = onPickFolder,
+                prominence = ActionCardProminence.SECONDARY,
             )
         }
     }
@@ -453,6 +908,18 @@ private fun heroHeight(available: Dp): Dp =
 private val ROOM_FOR_ART = 480.dp
 private val HERO_FULL_ROOM = 600.dp
 
+private val HeroCardDark = Color(0xFFCAB8FF)
+private val HeroBadgeDark = Color.White.copy(alpha = 0.35f)
+private val HeroInkDark = Color(0xFF1A1526)
+private val HeroSubtitleDark = Color(0xFF2D2540)
+
+private val HeroCardLight = Color(0xFFE5D9FF)
+private val HeroBorderLight = Color(0xFFD2BFFF)
+private val HeroBadgeLight = Color.White.copy(alpha = 0.65f)
+private val HeroIconLight = Color(0xFF4F2FBF)
+private val HeroInkLight = Color(0xFF1A142B)
+private val HeroSubtitleLight = Color(0xFF3E3459)
+
 /**
  * The screen assembling itself in order, top to bottom.
  *
@@ -478,3 +945,47 @@ private fun Modifier.entrance(delayMillis: Int): Modifier {
 private const val ENTRANCE_MS = 260
 private const val ENTRANCE_STEP_MS = 50
 private val ENTRANCE_RISE = 12.dp
+
+@Preview(name = "Empty Library - Dark", showBackground = true, widthDp = 412, heightDp = 892)
+@Composable
+private fun EmptyLibraryDarkPreview() {
+    MaterialTheme(colorScheme = BrandPalette.dark, typography = LiseurTypography) {
+        Surface(color = MaterialTheme.colorScheme.surface) {
+            EmptyLibrary(
+                onAddBook = {},
+                onAddFolder = {},
+                onConnectServer = {},
+            )
+        }
+    }
+}
+
+@Preview(name = "Empty Library - Light", showBackground = true, widthDp = 412, heightDp = 892)
+@Composable
+private fun EmptyLibraryLightPreview() {
+    MaterialTheme(colorScheme = BrandPalette.light, typography = LiseurTypography) {
+        Surface(color = MaterialTheme.colorScheme.surface) {
+            EmptyLibrary(
+                onAddBook = {},
+                onAddFolder = {},
+                onConnectServer = {},
+            )
+        }
+    }
+}
+
+@Preview(name = "Empty Library - E-Ink", showBackground = true, widthDp = 412, heightDp = 892)
+@Composable
+private fun EmptyLibraryEInkPreview() {
+    androidx.compose.runtime.CompositionLocalProvider(LocalEInk provides true) {
+        MaterialTheme(colorScheme = MonoPalette.light, typography = LiseurTypography) {
+            Surface(color = MaterialTheme.colorScheme.surface) {
+                EmptyLibrary(
+                    onAddBook = {},
+                    onAddFolder = {},
+                    onConnectServer = {},
+                )
+            }
+        }
+    }
+}

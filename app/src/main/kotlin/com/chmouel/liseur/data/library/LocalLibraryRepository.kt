@@ -27,6 +27,7 @@ import com.chmouel.liseur.domain.isSameWork
 import com.chmouel.liseur.domain.workIdOf
 import java.io.File
 import java.security.MessageDigest
+import java.util.Locale
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
@@ -272,6 +273,88 @@ class LocalLibraryRepository(
         indexBook(url, source = null)
             ?.let { ImportResult.Added(it) }
             ?: ImportResult.Failed
+    }
+
+    suspend fun importSampleBook(locale: Locale = Locale.getDefault()): ImportResult {
+        val spec = SampleBooks.specFor(locale)
+        val target = withContext(Dispatchers.IO) {
+            var spool: File? = null
+            try {
+                val dir = File(context.filesDir, "books").apply { mkdirs() }
+                val file = File(dir, spec.targetFileName)
+                if (file.isFile && file.length() > 0L) return@withContext file
+                val temp = File.createTempFile("sample-${spec.code}-", ".part", dir)
+                spool = temp
+                context.assets.open(spec.assetPath).use { input ->
+                    temp.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
+                }
+                if (temp.length() <= 0L) return@withContext null
+                if (!temp.renameTo(file) && !(file.isFile && file.length() > 0L)) {
+                    return@withContext null
+                }
+                file.takeIf { it.isFile && it.length() > 0L }
+            } catch (e: IOException) {
+                Log.w(TAG, "Could not copy bundled sample ${spec.assetPath}", e)
+                null
+            } finally {
+                spool?.takeIf { it.exists() }?.delete()
+            }
+        } ?: return ImportResult.Failed
+
+        val targetUri = Uri.fromFile(target)
+        val result = importBook(targetUri)
+        val book = when (result) {
+            is ImportResult.Added -> result.book
+            is ImportResult.AlreadyShelved -> result.book
+            else -> return result
+        }
+        if (isOpenableUriReadable(book.openableUri())) return result
+
+        // Content deduplication can match a cached fingerprint whose original
+        // file has since been removed; replace that stale binding with the
+        // bundled sample file while keeping the row's URL and reading state.
+        val durable = targetUri.toAbsoluteUrl() ?: return ImportResult.Failed
+        return importLock.withLock {
+            val existing = bookDao.getByUrl(book.url) ?: book
+            if (!reindexBook(
+                    durable,
+                    existing.url,
+                    modifiedAt = null,
+                    previousWorkId = existing.workId,
+                    previousAuthor = existing.author,
+                    previousIdentityAuthor = existing.identityAuthor,
+                    adopt = durable,
+                    replaceStaleBinding = true,
+                )
+            ) {
+                return@withLock ImportResult.Failed
+            }
+            if (existing.hidden) unhide(existing.url)
+            ImportResult.Added(bookDao.getByUrl(existing.url) ?: existing)
+        }
+    }
+
+    private suspend fun isOpenableUriReadable(uriString: String?): Boolean {
+        if (uriString.isNullOrBlank()) return false
+        val uri = Uri.parse(uriString)
+        return withContext(Dispatchers.IO) {
+            when (uri.scheme) {
+                "file" -> {
+                    val path = uri.path ?: return@withContext false
+                    val f = File(path)
+                    f.isFile && f.length() > 0L
+                }
+                else -> try {
+                    context.contentResolver.openInputStream(uri)?.use { true } ?: false
+                } catch (_: IOException) {
+                    false
+                } catch (_: SecurityException) {
+                    false
+                }
+            }
+        }
     }
 
     private suspend fun isPickedWebPage(uri: Uri): Boolean = withContext(Dispatchers.IO) {
@@ -1048,11 +1131,12 @@ class LocalLibraryRepository(
         previousIdentityAuthor: String?,
         sizeBytes: Long? = null,
         adopt: AbsoluteUrl? = null,
+        replaceStaleBinding: Boolean = false,
     ): Boolean {
         val before = bookDao.getByUrl(bookUrl)
-        // Adopting is for the book with no file its caller found. A
-        // download that lands any time before the write keeps the book.
-        val fileBefore = if (adopt != null) null else before?.openableUrl
+        // Adopting is for the book with no file its caller found, unless the
+        // caller explicitly asked to replace a stale binding whose file is gone.
+        val fileBefore = if (adopt != null && !replaceStaleBinding) null else before?.openableUrl
         val downloadedAt = before?.downloadedAt
         val asset = assetRetriever.retrieve(openableUrl).getOrElse { return false }
         val publication = publicationOpener.open(asset, allowUserInteraction = false)
@@ -1108,7 +1192,10 @@ class LocalLibraryRepository(
                 // A restored file is adopted in the same write as its
                 // details, so the read is not refused for a book that
                 // has no file yet.
-                if (adopt != null) bookDao.setDownloadState(bookUrl, DownloadState.DOWNLOADED, adopt.toString())
+                if (adopt != null) {
+                    bookDao.setDownloadState(bookUrl, DownloadState.DOWNLOADED, adopt.toString())
+                    if (replaceStaleBinding) bookDao.setSource(bookUrl, null)
+                }
                 bookRemoval.fileMetadataRead(bookUrl, metadataRow, if (adopt != null) null else downloadedAt)
             }
             // Together, or a crash between the two leaves the new

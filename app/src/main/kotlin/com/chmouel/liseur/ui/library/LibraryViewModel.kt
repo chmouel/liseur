@@ -2035,6 +2035,34 @@ class LibraryViewModel(
         }
     }
 
+    private val _openingSample = MutableStateFlow(false)
+    val openingSample: StateFlow<Boolean> = _openingSample.asStateFlow()
+
+    private val _sampleOpenFailed = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val sampleOpenFailed: SharedFlow<Unit> = _sampleOpenFailed.asSharedFlow()
+
+    fun openSampleBook() {
+        if (_openingSample.value) return
+        _openingSample.value = true
+        viewModelScope.launch {
+            try {
+                val book = when (val result = library.importSampleBook()) {
+                    is ImportResult.Added -> result.book
+                    is ImportResult.AlreadyShelved -> result.book
+                    ImportResult.Failed, ImportResult.WebPage -> null
+                }
+                val openable = book?.openableUri()
+                if (openable != null) {
+                    _openImported.value = ImportedOpen(openable, book.url)
+                } else {
+                    _sampleOpenFailed.tryEmit(Unit)
+                }
+            } finally {
+                _openingSample.value = false
+            }
+        }
+    }
+
     /** Takes a book off the shelf without touching its file. */
     fun removeFromLibrary(
         book: Book,

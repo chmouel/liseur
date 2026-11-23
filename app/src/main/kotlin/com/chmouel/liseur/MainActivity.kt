@@ -534,6 +534,7 @@ private fun LiseurApp(
                                 openFreeCatalogs = true
                                 backStack.push(Route.BrowseLibraries)
                             },
+                            onRestoreBackup = { backStack.push(Route.SettingsBackup) },
                             tabs = tabs,
                         )
                     }
@@ -1178,6 +1179,7 @@ private fun LibraryRoute(
     onConnectServer: () -> Unit,
     onBrowseLibraries: () -> Unit,
     onStartWithFreeBooks: () -> Unit,
+    onRestoreBackup: () -> Unit = {},
     tabs: MainTabsState,
     widgetRequest: LaunchRequest? = null,
     onWidgetHandled: () -> Unit = {},
@@ -1255,9 +1257,15 @@ private fun LibraryRoute(
 
     val snackbarHost = remember { SnackbarHostState() }
     val downloadFailed by rememberUpdatedState(stringResource(R.string.download_failed_open))
+    val sampleOpenFailed by rememberUpdatedState(stringResource(R.string.welcome_sample_failed))
     LaunchedEffect(viewModel, snackbarHost) {
         viewModel.failedOpens.collect { book ->
             snackbarHost.showSnackbar(downloadFailed.format(book.title))
+        }
+    }
+    LaunchedEffect(viewModel, snackbarHost) {
+        viewModel.sampleOpenFailed.collect {
+            snackbarHost.showSnackbar(sampleOpenFailed)
         }
     }
 
@@ -1556,6 +1564,7 @@ private fun LibraryRoute(
     val heroDetail by viewModel.heroDetail.collectAsStateWithLifecycle()
     val homeQuote by viewModel.homeQuote.collectAsStateWithLifecycle()
     val homeVocabulary by viewModel.homeVocabulary.collectAsStateWithLifecycle()
+    val openingSample by viewModel.openingSample.collectAsStateWithLifecycle()
     var editingVocabularyId by rememberSaveable { mutableStateOf<Long?>(null) }
     editingVocabularyId?.let { id ->
         VocabularyWordEditor(context.container.vocabulary, id) { editingVocabularyId = null }
@@ -1630,6 +1639,9 @@ private fun LibraryRoute(
         onConnectServer = onConnectServer,
         onBrowseLibraries = onBrowseLibraries,
         onStartWithFreeBooks = onStartWithFreeBooks,
+        onTrySampleBook = viewModel::openSampleBook,
+        openingSample = openingSample,
+        onRestoreBackup = onRestoreBackup,
         onDownload = viewModel::download,
         onCancelDownload = viewModel::cancelDownload,
         onRemoveDownload = viewModel::removeDownload,
