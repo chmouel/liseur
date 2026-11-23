@@ -1,6 +1,7 @@
 package com.chmouel.liseur.reader.dictionary
 
 import android.icu.util.ULocale
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
@@ -9,6 +10,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.contextmenu.modifier.filterTextContextMenuComponents
 import androidx.compose.runtime.CompositionLocalProvider
@@ -34,20 +37,33 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import com.chmouel.liseur.ui.BusyIndicator
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.outlined.MenuBook
+import androidx.compose.material.icons.automirrored.outlined.OpenInNew
+import androidx.compose.material.icons.automirrored.outlined.Subject
+import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Language
+import androidx.compose.material.icons.outlined.SelectAll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.AssistChip
-import androidx.compose.material3.Button
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -68,6 +84,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.takeOrElse
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -97,6 +115,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
 import com.chmouel.liseur.domain.DictionaryUrl
@@ -104,6 +123,7 @@ import com.chmouel.liseur.domain.WiktionaryEditions
 import com.chmouel.liseur.translate.TranslationLanguages
 import com.chmouel.liseur.tts.VoiceLabel
 import com.chmouel.liseur.ui.LiseurModalBottomSheet
+import com.chmouel.liseur.ui.LocalEInk
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.settings.OfflineDictionaryPickerSheet
 import com.chmouel.liseur.ui.settings.dictionaryLanguageTitle
@@ -147,6 +167,7 @@ fun DefinitionSheet(
     onDismiss: () -> Unit,
     onLookupSuggestion: (String, String?) -> Unit,
     onSelectText: (() -> Unit)? = null,
+    onOpenSelectionToolbar: (() -> Unit)? = null,
     selectionActions: (@Composable () -> Unit)? = null,
     selectedDefinitionActions: (@Composable (String, String?) -> Unit)? = null,
     client: WiktionaryClient = remember { WiktionaryClient() },
@@ -298,48 +319,45 @@ fun DefinitionSheet(
                 val firstPronunciation = offlineEntries?.firstOrNull()
                     ?.takeIf { it.headword == term }
                     ?.pronunciation
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(
-                        text = term,
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    if (firstPronunciation != null) {
-                        Text(
-                            text = firstPronunciation,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                val definition = remember(offlineEntries, found, bookLanguage, offlineResolved) {
+                    val lines = if (offlineResolved) {
+                        vocabularyOfflineDefinitionLines(offlineEntries.orEmpty())
+                    } else {
+                        vocabularyOnlineDefinitionLines(found?.senses.orEmpty(), bookLanguage)
                     }
+                    lines.asSequence().filter { it.isNotBlank() }.distinct().take(50)
+                        .joinToString("\n").take(24000).ifBlank { null }
                 }
-
-                if (vocabularyAction != null || onSelectText != null) {
-                    val definition = remember(offlineEntries, found, bookLanguage) {
-                        val lines = if (offlineResolved) {
-                            vocabularyOfflineDefinitionLines(offlineEntries.orEmpty())
-                        } else {
-                            vocabularyOnlineDefinitionLines(found?.senses.orEmpty(), bookLanguage)
+                val translated = (translations as? TranslationsState.Found)?.first
+                DefinitionHeaderRow(
+                    word = {
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(
+                                text = term,
+                                style = MaterialTheme.typography.headlineMedium,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                            if (firstPronunciation != null) {
+                                Text(
+                                    text = firstPronunciation,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                         }
-                        lines.asSequence().filter { it.isNotBlank() }.distinct().take(50)
-                            .joinToString("\n").take(24000).ifBlank { null }
-                    }
-                    val translated = (translations as? TranslationsState.Found)?.first
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        itemVerticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        vocabularyAction?.invoke(
-                            definition ?: translated,
-                            target.takeIf { definition == null && translated != null },
-                        )
-                        if (onSelectText != null) {
-                            AssistChip(
-                                onClick = onSelectText,
-                                label = { Text(stringResource(R.string.dictionary_select_text)) },
+                    },
+                    badge = vocabularyAction?.let { action ->
+                        {
+                            action(
+                                definition ?: translated,
+                                target.takeIf { definition == null && translated != null },
                             )
                         }
-                    }
+                    },
+                )
+
+                if (onSelectText != null) {
+                    DefinitionModeControl(onSelectText = onSelectText)
                 }
 
                 CompositionLocalProvider(
@@ -396,80 +414,66 @@ fun DefinitionSheet(
                             }
                         }
                     } else when (val current = state) {
-                        DictionaryState.Disabled -> Column(
-                            verticalArrangement = Arrangement.spacedBy(12.dp),
-                        ) {
-                            Text(
-                                text = stringResource(
-                                    R.string.dictionary_disabled_explanation,
-                                    DictionaryUrl.hostOf(baseUrl),
-                                ),
-                                style = MaterialTheme.typography.bodyMedium,
-                            )
-                            Button(onClick = onEnable) {
-                                Text(stringResource(R.string.dictionary_enable))
-                            }
-                            OfflineSetupRow(
-                                operation = offlineState.operation,
-                                onChoose = { choosingOffline = true },
-                            )
-                        }
+                        DictionaryState.Disabled -> DefinitionsDisabledSection(
+                            baseUrl = baseUrl,
+                            operation = offlineState.operation,
+                            onChooseOffline = { choosingOffline = true },
+                            onEnableOnline = onEnable,
+                            onOpenSelectionToolbar = onOpenSelectionToolbar,
+                        )
 
                         else -> LookupResult(current, term) { onOpenInBrowser(it, baseUrl) }
                     }
                 }
 
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    itemVerticalAlignment = Alignment.CenterVertically,
-                ) {
-                    val translated = (translations as? TranslationsState.Found)?.first
-                    if (target != null && translated != null) {
-                        TranslationsPill(target, translated, onClick = { showTranslations = true })
-                    } else if (offlineResolved && target != null) {
-                        DictionaryLink(
-                            label = stringResource(
-                                R.string.dictionary_translations_in,
-                                TranslationLanguages.name(target, LocalConfiguration.current.locales[0]),
-                            ),
-                            onClick = {
-                                // A failed or empty answer is asked for again; a found one is just shown.
-                                if (showTranslations && translations != TranslationsState.Loading) translationAttempt++
-                                showTranslations = true
-                            },
-                        )
-                        val waitingForEntry = site != null && (targetEntry == null || targetEntry == DictionaryState.Loading)
-                        if (showTranslations && (translations == TranslationsState.Loading || waitingForEntry)) {
-                            Loading()
-                        } else if (showTranslations && (translations is TranslationsState.Failed || targetEntry is DictionaryState.Failed)) {
-                            Text(
-                                text = stringResource(R.string.dictionary_failed),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.error,
-                            )
-                        } else if (showTranslations && translations is TranslationsState.Empty) {
-                            Text(
-                                text = stringResource(
-                                    R.string.dictionary_translations_empty,
-                                    entry,
+                if (target != null && (translated != null || offlineResolved)) {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        itemVerticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        if (translated != null) {
+                            TranslationsPill(target, translated, onClick = { showTranslations = true })
+                        } else if (offlineResolved) {
+                            DictionaryLink(
+                                label = stringResource(
+                                    R.string.dictionary_translations_in,
                                     TranslationLanguages.name(target, LocalConfiguration.current.locales[0]),
                                 ),
-                                style = MaterialTheme.typography.bodySmall,
+                                onClick = {
+                                    // A failed or empty answer is asked for again; a found one is just shown.
+                                    if (showTranslations && translations != TranslationsState.Loading) translationAttempt++
+                                    showTranslations = true
+                                },
                             )
+                            val waitingForEntry = site != null && (targetEntry == null || targetEntry == DictionaryState.Loading)
+                            if (showTranslations && (translations == TranslationsState.Loading || waitingForEntry)) {
+                                Loading()
+                            } else if (showTranslations && (translations is TranslationsState.Failed || targetEntry is DictionaryState.Failed)) {
+                                Text(
+                                    text = stringResource(R.string.dictionary_failed),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.error,
+                                )
+                            } else if (showTranslations && translations is TranslationsState.Empty) {
+                                Text(
+                                    text = stringResource(
+                                        R.string.dictionary_translations_empty,
+                                        entry,
+                                        TranslationLanguages.name(target, LocalConfiguration.current.locales[0]),
+                                    ),
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                            }
                         }
                     }
-                    DictionaryLink(
-                        label = stringResource(R.string.dictionary_other_app),
-                        onClick = { onOpenInDictionaryApp(term) },
-                    )
-                    if (enabled || offline == null) {
-                        DictionaryLink(
-                            label = stringResource(R.string.dictionary_open_full_entry),
-                            onClick = { onOpenInBrowser(entry, baseUrl) },
-                        )
-                    }
                 }
+
+                SecondaryActionsRow(
+                    showFullEntry = enabled || offline == null,
+                    onOpenInApp = { onOpenInDictionaryApp(term) },
+                    onOpenFullEntry = { onOpenInBrowser(entry, baseUrl) },
+                )
             }
 
             val selectedText = selection?.second
@@ -540,36 +544,427 @@ private fun LookupResult(state: DictionaryState, term: String, onOpenInBrowser: 
     }
 }
 
-/** The way to an offline dictionary from the card, and how its download is going. */
 @Composable
-private fun OfflineSetupRow(operation: OfflineDictionary.Operation, onChoose: () -> Unit) {
+private fun DefinitionModeControl(onSelectText: () -> Unit) {
+    val eInk = LocalEInk.current
+    Surface(
+        shape = CircleShape,
+        color = if (eInk) Color.Transparent else MaterialTheme.colorScheme.surfaceContainer,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        modifier = Modifier
+            .fillMaxWidth()
+            .selectableGroup(),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            DefinitionModeSegment(
+                label = stringResource(R.string.vocabulary_definition),
+                icon = Icons.AutoMirrored.Outlined.MenuBook,
+                selected = true,
+                eInk = eInk,
+                onClick = {},
+                modifier = Modifier.weight(1f),
+            )
+            DefinitionModeSegment(
+                label = stringResource(R.string.dictionary_select_text),
+                icon = Icons.Outlined.SelectAll,
+                selected = false,
+                eInk = eInk,
+                onClick = onSelectText,
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+}
+
+@Composable
+private fun DefinitionModeSegment(
+    label: String,
+    icon: ImageVector,
+    selected: Boolean,
+    eInk: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val containerColor = when {
+        selected -> MaterialTheme.colorScheme.primary
+        else -> Color.Transparent
+    }
+    val contentColor = when {
+        selected -> MaterialTheme.colorScheme.onPrimary
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    Surface(
+        shape = CircleShape,
+        color = containerColor,
+        contentColor = contentColor,
+        border = if (eInk && selected) BorderStroke(1.dp, MaterialTheme.colorScheme.outline) else null,
+        modifier = modifier
+            .heightIn(min = 48.dp)
+            .selectable(
+                selected = selected,
+                role = Role.Tab,
+                onClick = onClick,
+            ),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+            )
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Medium),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+@Composable
+private fun DefinitionsDisabledSection(
+    baseUrl: String,
+    operation: OfflineDictionary.Operation,
+    onChooseOffline: () -> Unit,
+    onEnableOnline: () -> Unit,
+    onOpenSelectionToolbar: (() -> Unit)?,
+) {
     val context = LocalContext.current
     val ui = LocalConfiguration.current.locales[0]
-    when (operation) {
-        is OfflineDictionary.Operation.Downloading -> Text(
-            text = stringResource(
-                R.string.offline_dictionary_downloading,
-                dictionaryLanguageTitle(operation.language, ui),
-                android.text.format.Formatter.formatShortFileSize(context, operation.downloadedBytes),
-            ),
-            style = MaterialTheme.typography.bodyMedium,
+    val busy = operation is OfflineDictionary.Operation.Downloading ||
+        operation is OfflineDictionary.Operation.Unpacking
+    val offlineBody = when (operation) {
+        is OfflineDictionary.Operation.Downloading -> stringResource(
+            R.string.offline_dictionary_downloading,
+            dictionaryLanguageTitle(operation.language, ui),
+            android.text.format.Formatter.formatShortFileSize(context, operation.downloadedBytes),
         )
-        is OfflineDictionary.Operation.Unpacking -> Text(
-            text = stringResource(R.string.offline_dictionary_working),
-            style = MaterialTheme.typography.bodyMedium,
+        is OfflineDictionary.Operation.Unpacking -> stringResource(R.string.offline_dictionary_working)
+        is OfflineDictionary.Operation.Failed -> stringResource(R.string.offline_dictionary_download_error)
+        OfflineDictionary.Operation.Idle -> stringResource(R.string.dictionary_offline_card_body)
+    }
+    val offlineBodyColor = if (operation is OfflineDictionary.Operation.Failed) {
+        MaterialTheme.colorScheme.error
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    val offlineActionLabel = when (operation) {
+        is OfflineDictionary.Operation.Failed -> stringResource(R.string.offline_dictionary_retry)
+        else -> stringResource(R.string.dictionary_offline_choose)
+    }
+
+    val isWiktionary = WiktionaryEditions.isWiktionaryHost(baseUrl)
+    val host = DictionaryUrl.hostOf(baseUrl)
+    val onlineTitle = if (isWiktionary) {
+        stringResource(R.string.dictionary_online_wiktionary_title)
+    } else {
+        stringResource(R.string.dictionary_online_host_title, host)
+    }
+    val onlineBody = if (isWiktionary) {
+        stringResource(R.string.dictionary_online_wiktionary_body)
+    } else {
+        stringResource(R.string.dictionary_disabled_explanation, host)
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(
+            text = stringResource(R.string.dictionary_disabled_section_label),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        else -> {
-            if (operation is OfflineDictionary.Operation.Failed) {
-                Text(
-                    text = stringResource(R.string.offline_dictionary_download_error),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.error,
-                )
+        DictionarySourceCard(
+            icon = Icons.Outlined.Download,
+            title = stringResource(R.string.dictionary_offline_card_title),
+            body = offlineBody,
+            bodyColor = offlineBodyColor,
+            actionLabel = offlineActionLabel,
+            busy = busy,
+            onAction = {
+                if (operation is OfflineDictionary.Operation.Failed) {
+                    OfflineDictionary.clearFailure()
+                }
+                onChooseOffline()
+            },
+        )
+        DictionarySourceCard(
+            icon = Icons.Outlined.Language,
+            title = onlineTitle,
+            body = onlineBody,
+            bodyColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            actionLabel = stringResource(R.string.dictionary_enable),
+            busy = false,
+            onAction = onEnableOnline,
+        )
+        if (onOpenSelectionToolbar != null) {
+            SelectionToolbarTipRow(onClick = onOpenSelectionToolbar)
+        }
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+    }
+}
+
+@Composable
+private fun DictionarySourceCard(
+    icon: ImageVector,
+    title: String,
+    body: String,
+    bodyColor: Color,
+    actionLabel: String,
+    busy: Boolean,
+    onAction: () -> Unit,
+) {
+    val eInk = LocalEInk.current
+    Surface(
+        shape = RoundedCornerShape(18.dp),
+        color = if (eInk) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceContainer,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = if (eInk) Color.Transparent else MaterialTheme.colorScheme.surfaceContainerHigh,
+                border = if (eInk) BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant) else null,
+                modifier = Modifier.size(40.dp),
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
             }
-            OutlinedButton(onClick = onChoose) {
-                Text(stringResource(R.string.dictionary_download_offline))
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        text = body,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = bodyColor,
+                    )
+                }
+                val buttonContent: @Composable () -> Unit = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        if (busy) {
+                            BusyIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                        }
+                        Text(
+                            text = actionLabel,
+                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Medium),
+                        )
+                    }
+                }
+                if (eInk) {
+                    OutlinedButton(
+                        onClick = onAction,
+                        enabled = !busy,
+                        shape = CircleShape,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                        modifier = Modifier.heightIn(min = 48.dp),
+                    ) {
+                        buttonContent()
+                    }
+                } else {
+                    FilledTonalButton(
+                        onClick = onAction,
+                        enabled = !busy,
+                        shape = CircleShape,
+                        modifier = Modifier.heightIn(min = 48.dp),
+                    ) {
+                        buttonContent()
+                    }
+                }
             }
         }
+    }
+}
+
+@Composable
+private fun SelectionToolbarTipRow(onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Icon(
+            imageVector = Icons.Outlined.Info,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier
+                .padding(top = 2.dp)
+                .size(18.dp),
+        )
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.dictionary_selection_bar_tip),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.dictionary_selection_bar_tip_action),
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        fontWeight = FontWeight.Medium,
+                        textDecoration = TextDecoration.Underline,
+                    ),
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(16.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DefinitionHeaderRow(
+    word: @Composable () -> Unit,
+    badge: (@Composable () -> Unit)?,
+) {
+    Layout(
+        modifier = Modifier.fillMaxWidth(),
+        content = {
+            word()
+            badge?.invoke()
+        },
+    ) { measurables, constraints ->
+        val loose = constraints.copy(minWidth = 0, minHeight = 0)
+        val wordMeasurable = measurables.firstOrNull()
+            ?: return@Layout layout(constraints.minWidth, constraints.minHeight) {}
+        val badgeMeasurable = measurables.getOrNull(1)
+        if (badgeMeasurable == null) {
+            val wordPlaceable = wordMeasurable.measure(loose)
+            return@Layout layout(constraints.maxWidth, wordPlaceable.height) {
+                wordPlaceable.placeRelative(0, 0)
+            }
+        }
+
+        val horizontalGap = 12.dp.roundToPx()
+        val verticalGap = 8.dp.roundToPx()
+        val minWordWidth = minOf(120.dp.roundToPx(), constraints.maxWidth / 2)
+        val badgePlaceable = badgeMeasurable.measure(loose)
+        val remainingForWord = constraints.maxWidth - badgePlaceable.width - horizontalGap
+
+        if (remainingForWord >= minWordWidth) {
+            val wordPlaceable = wordMeasurable.measure(loose.copy(maxWidth = remainingForWord))
+            val height = maxOf(wordPlaceable.height, badgePlaceable.height)
+            layout(constraints.maxWidth, height) {
+                wordPlaceable.placeRelative(0, (height - wordPlaceable.height) / 2)
+                badgePlaceable.placeRelative(
+                    constraints.maxWidth - badgePlaceable.width,
+                    (height - badgePlaceable.height) / 2,
+                )
+            }
+        } else {
+            val wordPlaceable = wordMeasurable.measure(loose)
+            val height = wordPlaceable.height + verticalGap + badgePlaceable.height
+            layout(constraints.maxWidth, height) {
+                wordPlaceable.placeRelative(0, 0)
+                badgePlaceable.placeRelative(0, wordPlaceable.height + verticalGap)
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun SecondaryActionsRow(
+    showFullEntry: Boolean,
+    onOpenInApp: () -> Unit,
+    onOpenFullEntry: () -> Unit,
+) {
+    FlowRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(20.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+        itemVerticalAlignment = Alignment.CenterVertically,
+    ) {
+        SecondaryActionButton(
+            label = stringResource(R.string.dictionary_other_app),
+            icon = Icons.AutoMirrored.Outlined.OpenInNew,
+            onClick = onOpenInApp,
+        )
+        if (showFullEntry) {
+            SecondaryActionButton(
+                label = stringResource(R.string.dictionary_open_full_entry),
+                icon = Icons.AutoMirrored.Outlined.Subject,
+                onClick = onOpenFullEntry,
+            )
+        }
+    }
+}
+
+@Composable
+private fun SecondaryActionButton(
+    label: String,
+    icon: ImageVector,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .heightIn(min = 48.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(horizontal = 4.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(18.dp),
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Medium),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
