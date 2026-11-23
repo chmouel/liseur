@@ -112,8 +112,8 @@ not copy your books anywhere.
 ## Network access
 
 Liseur talks only to addresses you choose. Every build knows the kinds
-below; the Google Play build adds Google Gemini and Google's on-phone
-translator, each used only if you choose it.
+below; the Google Play build adds Google Drive sync, Google Gemini,
+Google's on-phone translator and Hardcover, each used only if you choose it.
 
 ### Your book server
 
@@ -592,6 +592,48 @@ details, or disconnect in Settings, after which no more requests are
 made. What Hardcover keeps is under
 [Hardcover's own terms](https://hardcover.app/pages/privacy-policy).
 
+### Google Drive sync (Google Play build only)
+
+The Google Play build can sync your library and reading data directly
+between your devices using your own Google Drive account. The F-Droid
+and GitHub builds do not contain Google Drive sync or Google Play
+Services Auth at all.
+
+It does nothing until you tap **Connect Google Drive** in Settings and
+grant access through Android's Google Play Services
+(`AuthorizationClient`). Liseur requests only two non-sensitive Google
+Drive scopes:
+
+- `https://www.googleapis.com/auth/drive.appdata` — for private app data
+  stored in your Google Drive `appDataFolder`. This holds your library
+  catalog entries, edition SHA-256 hashes, reading positions and status,
+  highlights, notes, bookmarks, personal ratings and reviews, metadata
+  overrides, size-capped custom covers, series membership and ordering,
+  Vocabulary Builder entries and review history, and reading sessions.
+- `https://www.googleapis.com/auth/drive.file` — for an app-created
+  **Liseur** folder in your Drive holding only the `.epub` files you
+  explicitly choose in **Upload EPUB files**. EPUB upload is opt-in, and
+  Liseur cannot access unrelated files in your Google Drive.
+
+Reading layout settings, cached sentence translations, whole-book
+translations, chapter recaps and server or API credentials are never
+uploaded to Google Drive.
+
+After authorization, Liseur reads your Google account's stable Drive
+`permissionId` and email address from `www.googleapis.com` (`about.get`)
+and partitions all local Drive sync cursors, upload queues and file
+mappings in a separate local database (`drive_sync.db`) by `permissionId`
+rather than email. Switching Google accounts requires confirmation
+before anything is written to the new account, and keeps the previous
+account's local sync state paused so switching back resumes cleanly.
+
+All synced data lives in your own Google Drive account under Google's
+terms and privacy policy. Liseur talks directly to Google's Drive API
+(`www.googleapis.com`) over HTTPS — no developer server receives, relays
+or has access to your Google Drive files, metadata or OAuth tokens. You
+can disconnect Google Drive at any time in Settings, or revoke access
+from your Google Account settings.
+
 Liseur never contacts any other host; under Hardcover, the only extra
 one is `assets.hardcover.app`, for cover images. It requests the `INTERNET` and
 `ACCESS_NETWORK_STATE` permissions for the purposes above and for nothing
@@ -631,6 +673,7 @@ under Google's terms, not the developer's. Liseur has no access to it.
 Downloaded book files, generated covers, saved translations, chapter
 recaps and, in the
 Google Play build, ML Kit's language models and installation identifier
+and local Google Drive sync state (`drive_sync.db`)
 are deliberately excluded.
 Server credentials are included but arrive unreadable on a new device,
 because the key that encrypts them never leaves the old one. Liseur notices

@@ -372,6 +372,30 @@ interface DriveUploadDao {
     )
     suspend fun pendingForAccount(permissionId: String): List<DriveUpload>
 
+    /** Moves one upload from [from] to [to] only if it is still in [from]; returns rows changed. */
+    @Query(
+        "UPDATE drive_upload SET state = :to, updated_at = :now " +
+            "WHERE permission_id = :permissionId AND sha256 = :sha256 AND state = :from",
+    )
+    suspend fun transition(permissionId: String, sha256: String, from: String, to: String, now: Long): Int
+
+    @Query("DELETE FROM drive_upload WHERE permission_id = :permissionId AND sha256 = :sha256 AND state = 'CANCELLED'")
+    suspend fun deleteIfCancelled(permissionId: String, sha256: String): Int
+
+    /** Turns a cleaned-up REQUEUE row into a fresh upload, only if it is still REQUEUE. */
+    @Query(
+        "UPDATE drive_upload SET state = 'PENDING', session_uri = NULL, bytes_sent = 0, file_id = NULL, " +
+            "updated_at = :now WHERE permission_id = :permissionId AND sha256 = :sha256 AND state = 'REQUEUE'",
+    )
+    suspend fun requeueAfterCleanup(permissionId: String, sha256: String, now: Long): Int
+
+    /** Queue entries plus cancelled uploads whose Drive copy still has to be cleaned up. */
+    @Query(
+        "SELECT COUNT(*) FROM drive_upload WHERE permission_id = :permissionId " +
+            "AND state IN ('PENDING', 'UPLOADING', 'FAILED', 'CANCELLED', 'REQUEUE')",
+    )
+    suspend fun workCount(permissionId: String): Int
+
     @Query("SELECT * FROM drive_upload WHERE permission_id = :permissionId ORDER BY selected_at ASC, sha256 ASC")
     suspend fun forAccount(permissionId: String): List<DriveUpload>
 
@@ -408,6 +432,13 @@ interface DriveUploadDao {
             "WHERE permission_id = :permissionId AND sha256 = :sha256",
     )
     suspend fun markUploaded(permissionId: String, sha256: String, fileId: String, updatedAt: Long)
+
+    @Query(
+        "UPDATE drive_upload SET state = 'UPLOADED', file_id = :fileId, session_uri = NULL, " +
+            "bytes_sent = size_bytes, updated_at = :updatedAt " +
+            "WHERE permission_id = :permissionId AND sha256 = :sha256 AND state = 'UPLOADING'",
+    )
+    suspend fun markUploadedIfUploading(permissionId: String, sha256: String, fileId: String, updatedAt: Long): Int
 
     @Query(
         "DELETE FROM drive_upload WHERE permission_id = :permissionId " +

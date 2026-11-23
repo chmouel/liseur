@@ -280,5 +280,15 @@ data class DriveUpload(
         const val STATE_UPLOADING = "UPLOADING"
         const val STATE_UPLOADED = "UPLOADED"
         const val STATE_FAILED = "FAILED"
+
+        /**
+         * Not a queue entry: the reader deselected this edition while its upload had a Drive
+         * session or had created [fileId]; whatever that upload left in Drive is still to be
+         * found (via [sessionUri]) and trashed.
+         */
+        const val STATE_CANCELLED = "CANCELLED"
+
+        /** A [STATE_CANCELLED] edition the reader selected again: cleanup first, then a fresh upload. */
+        const val STATE_REQUEUE = "REQUEUE"
     }
 }

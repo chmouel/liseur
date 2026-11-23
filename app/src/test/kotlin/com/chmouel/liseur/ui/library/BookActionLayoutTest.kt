@@ -93,6 +93,15 @@ class BookActionLayoutTest {
     }
 
     @Test
+    fun `a downloaded copy that cannot be redownloaded offers neither download nor remove copy`() {
+        val state = downloadedFromServer.copy(canRemoveCopy = false)
+        val layout = bookActionLayout(state)
+        assertNull(layout.primaryAction)
+        assertFalse(BookAction.Download in allActions(state))
+        assertFalse(BookAction.RemoveCopy in allManageActions(state))
+    }
+
+    @Test
     fun `a book on the server without a copy offers prominent download`() {
         val state = BookActionState(onServer = true)
         val layout = bookActionLayout(state)

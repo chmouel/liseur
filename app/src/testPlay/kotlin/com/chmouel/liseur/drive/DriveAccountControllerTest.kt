@@ -63,6 +63,8 @@ class DriveAccountControllerTest {
 
     private val workersStopped = AtomicInteger(0)
     private val resumedActive = AtomicInteger(0)
+    private val uploadsScheduled = AtomicInteger(0)
+    private val uploadsCancelled = AtomicInteger(0)
     private var nowMs = 1_000L
 
     @Before
@@ -74,6 +76,8 @@ class DriveAccountControllerTest {
         driveDb = Room.inMemoryDatabaseBuilder(context, DriveSyncDatabase::class.java).build()
         workersStopped.set(0)
         resumedActive.set(0)
+        uploadsScheduled.set(0)
+        uploadsCancelled.set(0)
         nowMs = 1_000L
 
         val removal = BookRemoval(
@@ -131,6 +135,8 @@ class DriveAccountControllerTest {
             switchCoordinator = switchCoordinator,
             stopWorkers = { workersStopped.incrementAndGet() },
             onResumeActive = { resumedActive.incrementAndGet() },
+            scheduleEpubUploadsWork = { _ -> uploadsScheduled.incrementAndGet() },
+            cancelEpubUploadsWork = { uploadsCancelled.incrementAndGet() },
             deviceIdGenerator = { "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee" },
             openStore = { driveDb },
             authClient = fakeAuth,
@@ -1058,6 +1064,56 @@ class DriveAccountControllerTest {
         }
     }
 
+    @Test
+    fun `confirmUploadSelection cancels bulk upload work when no pending uploads remain`() = runTest {
+        fakeAuth.nextAuthorize = DriveAuthResult.Authorized("tok-a")
+        fakeApi.aboutByToken["tok-a"] = DriveUserAbout("perm-A", "alice@example.com")
+        controller.beginConnect()
+
+        val book1 = Book(
+            url = "file:///book-1.epub",
+            title = "Book One",
+            author = "Author",
+            coverPath = null,
+            source = null,
+            addedAt = 100L,
+            lastOpenedAt = null,
+            localUri = "file:///book-1.epub",
+            downloadState = DownloadState.DOWNLOADED,
+        )
+        val book2 = book1.copy(url = "file:///book-2.epub", title = "Book Two", localUri = "file:///book-2.epub")
+        liseurDb.bookDao().upsert(book1)
+        liseurDb.bookDao().upsert(book2)
+        val sha1 = "1".repeat(64)
+        val sha2 = "2".repeat(64)
+        liseurDb.workIdentityDao().upsert(
+            com.chmouel.liseur.data.db.BookFingerprintRow(book1.url, sha1, "md5-1", 1000L, null, 1L),
+        )
+        liseurDb.workIdentityDao().upsert(
+            com.chmouel.liseur.data.db.BookFingerprintRow(book2.url, sha2, "md5-2", 1000L, null, 1L),
+        )
+
+        // Selecting books schedules bulk upload work.
+        controller.confirmUploadSelection(setOf(book1.url, book2.url))
+        assertEquals(1, uploadsScheduled.get())
+        assertEquals(0, uploadsCancelled.get())
+
+        // Clearing selection cancels the running/scheduled bulk upload worker.
+        controller.confirmUploadSelection(emptySet())
+        assertEquals(1, uploadsScheduled.get())
+        assertEquals(1, uploadsCancelled.get())
+        assertTrue(driveDb.uploads().pendingForAccount("perm-A").isEmpty())
+
+        // Leaving only an already-uploaded book selected also cancels bulk upload work.
+        controller.confirmUploadSelection(setOf(book1.url, book2.url))
+        assertEquals(2, uploadsScheduled.get())
+        driveDb.uploads().markUploaded("perm-A", sha1, "drive-file-1", 2_000L)
+        controller.confirmUploadSelection(setOf(book1.url))
+        assertEquals(2, uploadsScheduled.get())
+        assertEquals(2, uploadsCancelled.get())
+        assertTrue(driveDb.uploads().pendingForAccount("perm-A").isEmpty())
+    }
+
     private class FakeDriveRemoteApi : DriveRemoteApi {
         val aboutByToken = mutableMapOf<String, DriveUserAbout>()
         var writeCalls = 0
@@ -1181,5 +1237,17 @@ class DriveAccountControllerTest {
             credentials: RemoteCredentials,
             allowHttp: Boolean,
         ): SetupResult = result
+    }
+
+    @Test
+    fun `the upload picker can confirm an empty selection only when it drops queued books`() {
+        fun candidate(url: String, state: String?) = DriveUploadCandidate(
+            bookUrl = url, title = url, author = null, sizeBytes = 1L, sha256 = null, uploadState = state,
+        )
+        val queued = listOf(candidate("a", DriveUpload.STATE_PENDING), candidate("b", null))
+        assertTrue(canConfirmUploadSelection(queued, emptySet()))
+        assertTrue(canConfirmUploadSelection(listOf(candidate("f", DriveUpload.STATE_FAILED)), emptySet()))
+        assertFalse(canConfirmUploadSelection(listOf(candidate("u", DriveUpload.STATE_UPLOADED), candidate("n", null)), emptySet()))
+        assertTrue(canConfirmUploadSelection(listOf(candidate("n", null)), setOf("n")))
     }
 }

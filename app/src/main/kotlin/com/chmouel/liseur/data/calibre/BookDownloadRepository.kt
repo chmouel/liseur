@@ -170,6 +170,7 @@ class BookDownloadRepository(
     private val inTransaction: suspend (suspend () -> Unit) -> Unit = { it() },
     private val externalDownload: suspend (Book) -> UUID? = { null },
     private val externalCancel: suspend (Book) -> Unit = {},
+    private val externalCanRemoveDownload: suspend (Book) -> Boolean = { true },
 ) {
     private val workManager get() = WorkManager.getInstance(context)
     private val bookLocks = BookDownloadLocks()
@@ -509,17 +510,22 @@ class BookDownloadRepository(
      * were in it, and anything you marked, is still there if you fetch
      * it again.
      */
-    suspend fun removeDownload(book: Book) {
-        val key = fileKey(book)
+    suspend fun removeDownload(book: Book) = bookLocks.withBook(book.url) { removeDownloadLocked(book) }
+
+    /** [removeDownload] for a caller that already holds the book's lock. */
+    internal suspend fun removeDownloadLocked(book: Book) {
+        val current = bookDao.getByUrl(book.url) ?: book
+        val key = fileKey(current)
         if (key != null) {
             fileFor(key).delete()
             File(booksDir(), "$key.epub.part").delete()
             File(booksDir(), "$key.epub.etag").delete()
         }
-        val owned = ownedCopyOf(book)
+        val owned = ownedCopyOf(current)
         if (key == null && owned == null) return
+        if (key == null && !externalCanRemoveDownload(current)) return
         owned?.delete()
-        bookRemoval.downloadRemoved(book.url)
+        bookRemoval.downloadRemoved(current.url)
     }
 
     /** Files a finished download under its book. */
