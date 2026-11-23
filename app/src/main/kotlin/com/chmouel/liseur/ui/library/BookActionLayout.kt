@@ -31,6 +31,7 @@ internal enum class ManageBookSectionId {
 internal data class BookActionState(
     val downloading: Boolean = false,
     val downloadedCopy: Boolean = false,
+    val canRemoveCopy: Boolean = downloadedCopy,
     val onServer: Boolean = false,
     val inLibrary: Boolean = false,
     val finished: Boolean = false,
@@ -95,7 +96,7 @@ internal fun bookActionLayout(state: BookActionState): BookActionLayout {
             BookAction.Translation.takeIf { state.inLibrary || state.hasTranslation },
             // BookDownloadWorker marks the book downloaded before indexing finishes, so hide
             // remove-copy while downloading is still active
-            BookAction.RemoveCopy.takeIf { state.downloadedCopy && !state.downloading },
+            BookAction.RemoveCopy.takeIf { state.downloadedCopy && state.canRemoveCopy && !state.downloading },
             BookAction.RemoveFromLibrary.takeIf { state.inLibrary },
             BookAction.DeleteFile.takeIf { !state.onServer },
         )

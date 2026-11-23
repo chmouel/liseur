@@ -729,6 +729,7 @@ class AppContainer(
             inTransaction = { work -> bookRemoval.together(work) },
             externalDownload = { book -> librarySync.enqueueDownload(book) },
             externalCancel = { book -> librarySync.cancelDownload(book) },
+            externalCanRemoveDownload = { book -> !librarySync.ownsBook(book) || librarySync.canDownloadAgain(book) },
         )
 
     val bookUploads = BookUploadRepository(context.applicationContext)

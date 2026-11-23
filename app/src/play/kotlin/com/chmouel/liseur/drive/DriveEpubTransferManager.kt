@@ -16,7 +16,6 @@ import com.chmouel.liseur.domain.BookFingerprints
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
-import java.io.IOException
 import java.io.InputStream
 import java.net.URI
 import java.util.Locale
@@ -85,6 +84,7 @@ internal class DriveEpubTransferManager(
             }
         }
     },
+    private val stagingDirProvider: () -> File = { defaultStagingDir(context) },
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
     private val books get() = database.bookDao()
@@ -137,20 +137,45 @@ internal class DriveEpubTransferManager(
                 author = book.author,
                 sizeBytes = size.coerceAtLeast(0L),
                 sha256 = sha,
-                uploadState = upload?.state,
+                uploadState = when (upload?.state) {
+                    DriveUpload.STATE_CANCELLED -> null
+                    DriveUpload.STATE_REQUEUE -> DriveUpload.STATE_PENDING
+                    else -> upload?.state
+                },
             )
         }
     }
 
     /**
-     * Queues the selected local books into `drive_upload` for [permissionId].
-     * Already-uploaded editions are preserved without re-uploading.
+     * Makes the `drive_upload` queue for [permissionId] match the picker selection:
+     * selected local books are queued, and any not-yet-uploaded entry the reader
+     * left unchecked is dropped with its staged copy. Already-uploaded editions are
+     * preserved without re-uploading.
      */
     suspend fun queueSelectedBooks(
         permissionId: String,
         selectedBookUrls: Set<String>,
     ): Int = withContext(Dispatchers.IO) {
         val now = clock()
+        for (upload in uploads.forAccount(permissionId)) {
+            if (upload.state == DriveUpload.STATE_UPLOADED || upload.state == DriveUpload.STATE_CANCELLED) continue
+            if (upload.bookUrl in selectedBookUrls) continue
+            // Every transition is conditional on the state just read, so a concurrent cleanup or
+            // upload that moved the row on is never overwritten from this stale copy.
+            if (upload.state == DriveUpload.STATE_REQUEUE) {
+                // Deselected again before its cleanup ran: just the cleanup remains.
+                uploads.transition(permissionId, upload.sha256, upload.state, DriveUpload.STATE_CANCELLED, now)
+                continue
+            }
+            if (upload.state == DriveUpload.STATE_UPLOADING || upload.sessionUri != null) {
+                // Recorded before any worker is cancelled: its session may already have created the
+                // file, so cleanup resolves that session instead of forgetting it.
+                uploads.transition(permissionId, upload.sha256, upload.state, DriveUpload.STATE_CANCELLED, now)
+            } else {
+                uploads.delete(permissionId, upload.sha256)
+            }
+            discardStaged(permissionId, upload.sha256)
+        }
         var queued = 0
         for (bookUrl in selectedBookUrls) {
             val book = books.getByUrl(bookUrl) ?: continue
@@ -166,6 +191,23 @@ internal class DriveEpubTransferManager(
             if (existing?.state == DriveUpload.STATE_UPLOADED && !existing.fileId.isNullOrBlank()) {
                 continue
             }
+            // Re-selecting a cancelled edition never adopts its old session or file, which cleanup
+            // may already be trashing: cleanup finishes first, then turns the row into a fresh upload.
+            if (existing?.state == DriveUpload.STATE_REQUEUE) {
+                queued++
+                continue
+            }
+            if (existing?.state == DriveUpload.STATE_CANCELLED) {
+                if (uploads.transition(permissionId, sha, existing.state, DriveUpload.STATE_REQUEUE, now) > 0) {
+                    queued++
+                    continue
+                }
+                // Cleanup finished meanwhile and removed the row: queue a fresh upload below.
+            }
+            val reuse = uploads.get(permissionId, sha)?.takeIf {
+                it.state == DriveUpload.STATE_PENDING || it.state == DriveUpload.STATE_UPLOADING ||
+                    it.state == DriveUpload.STATE_FAILED
+            }
             uploads.upsert(
                 DriveUpload(
                     permissionId = permissionId,
@@ -173,16 +215,72 @@ internal class DriveEpubTransferManager(
                     bookUrl = book.url,
                     sizeBytes = fp.size.coerceAtLeast(0L),
                     state = DriveUpload.STATE_PENDING,
-                    sessionUri = existing?.sessionUri,
-                    bytesSent = existing?.bytesSent ?: 0L,
+                    sessionUri = reuse?.sessionUri,
+                    bytesSent = reuse?.bytesSent ?: 0L,
                     fileId = null,
-                    selectedAt = existing?.selectedAt ?: now,
+                    selectedAt = reuse?.selectedAt ?: now,
                     updatedAt = now,
                 ),
             )
             queued++
         }
         queued
+    }
+
+    /**
+     * Removes whatever deselected uploads left in Drive: a created file is trashed, a session is
+     * asked whether it completed (and its file trashed if so). `clean` is false when a transient
+     * failure or a still-running request leaves rows for a later run; `requeued` when a
+     * re-selected edition became pending again.
+     */
+    private suspend fun trashCancelledUploads(permissionId: String, accessToken: String): CleanupResult {
+        var clean = true
+        var requeued = false
+        for (upload in uploads.forAccount(permissionId)) {
+            if (upload.state != DriveUpload.STATE_CANCELLED && upload.state != DriveUpload.STATE_REQUEUE) continue
+            // A cancelled worker's request may still be running: until it returns, an unfinished
+            // session can yet complete, so its obligation stays.
+            if (upload.fileId == null && upload.sessionUri in inFlightSessions) {
+                clean = false
+                continue
+            }
+            val resolved = try {
+                val fileId = upload.fileId ?: upload.sessionUri?.let { session ->
+                    when (val status = driveApi.queryResumableUploadOffset(accessToken, session, upload.sizeBytes)) {
+                        is ResumableUploadStatus.Completed -> status.file.id
+                        // An unfinished or expired session never created a visible file.
+                        else -> null
+                    }
+                }
+                if (fileId != null) {
+                    try {
+                        driveApi.trashFile(accessToken, fileId)
+                    } catch (_: DriveNotFoundException) {
+                        // Already gone.
+                    }
+                    driveFiles.setTrashed(permissionId, fileId, true)
+                }
+                true
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: DriveAuthExpiredException) {
+                throw e
+            } catch (_: Exception) {
+                false
+            }
+            if (!resolved) {
+                clean = false
+                continue
+            }
+            // Conditional on the current state: the reader may have re-selected or deselected
+            // the edition while the session was probed or the file trashed.
+            if (uploads.deleteIfCancelled(permissionId, upload.sha256) == 0 &&
+                uploads.requeueAfterCleanup(permissionId, upload.sha256, clock()) > 0
+            ) {
+                requeued = true
+            }
+        }
+        return CleanupResult(clean, requeued)
     }
 
     /**
@@ -204,10 +302,23 @@ internal class DriveEpubTransferManager(
 
         var accessToken = initialToken
         var retriedAuth = false
+        var initialCleanupDone = false
         while (true) {
-            val pending = uploads.pendingForAccount(permissionId)
-            if (pending.isEmpty()) return DriveEpubUploadSummary()
+            if (!isActive(permissionId)) return DriveEpubUploadSummary()
+            var pending: List<DriveUpload> = emptyList()
             try {
+                if (!initialCleanupDone) {
+                    trashCancelledUploads(permissionId, accessToken)
+                    initialCleanupDone = true
+                }
+                pending = uploads.pendingForAccount(permissionId)
+                if (pending.isEmpty()) {
+                    // Cleanup-only work still asks to be retried until every cancelled copy is gone.
+                    val cleanup = trashCancelledUploads(permissionId, accessToken)
+                    // Cleanup may have turned a re-selected edition back into pending work: drain it.
+                    if (cleanup.requeued) continue
+                    return DriveEpubUploadSummary(retryableFailure = !cleanup.clean)
+                }
                 return uploadPendingWithToken(permissionId, accessToken, pending)
             } catch (e: CancellationException) {
                 throw e
@@ -274,16 +385,26 @@ internal class DriveEpubTransferManager(
         var anyRetryable = false
 
         for (item in pending) {
+            if (!isActive(permissionId)) break
             val sha = item.sha256.lowercase(Locale.ROOT)
-            val book = books.getByUrl(item.bookUrl)
+            val queuedBeforeStage = currentQueuedUpload(permissionId, sha, item.bookUrl)
+            if (queuedBeforeStage == null) {
+                discardStaged(permissionId, sha)
+                continue
+            }
+            val book = books.getByUrl(queuedBeforeStage.bookUrl)
             if (book == null || book.openableUrl == null) {
-                uploads.updateState(
-                    permissionId = permissionId,
-                    sha256 = sha,
-                    state = DriveUpload.STATE_FAILED,
-                    updatedAt = clock(),
-                )
-                failedCount++
+                if (currentQueuedUpload(permissionId, sha, item.bookUrl) != null) {
+                    uploads.updateState(
+                        permissionId = permissionId,
+                        sha256 = sha,
+                        state = DriveUpload.STATE_FAILED,
+                        updatedAt = clock(),
+                    )
+                    failedCount++
+                } else {
+                    discardStaged(permissionId, sha)
+                }
                 continue
             }
 
@@ -318,6 +439,7 @@ internal class DriveEpubTransferManager(
                         }
                     }
                 }
+                discardStaged(permissionId, sha)
                 anyRetryable = true
                 continue
             }
@@ -330,7 +452,56 @@ internal class DriveEpubTransferManager(
                 continue
             }
 
-            val totalBytes = item.sizeBytes.takeIf { it > 0L } ?: measureBookBytes(book)
+            val staged = when (val staging = stageUpload(permissionId, sha, book)) {
+                is StagingResult.Staged -> staging.file
+                StagingResult.Unreadable -> {
+                    if (currentQueuedUpload(permissionId, sha, item.bookUrl) != null) {
+                        uploads.updateState(
+                            permissionId = permissionId,
+                            sha256 = sha,
+                            state = DriveUpload.STATE_FAILED,
+                            updatedAt = clock(),
+                        )
+                        failedCount++
+                        anyRetryable = true
+                    } else {
+                        discardStaged(permissionId, sha)
+                    }
+                    continue
+                }
+                StagingResult.Changed -> {
+                    // The file at this book's location is no longer the one the reader chose,
+                    // so the selection and any resumable session for it are dropped.
+                    if (currentQueuedUpload(permissionId, sha, item.bookUrl) != null) {
+                        uploads.delete(permissionId, sha)
+                        failedCount++
+                    }
+                    discardStaged(permissionId, sha)
+                    continue
+                }
+            }
+            if (!isActive(permissionId)) break
+            val queuedBeforeUpload = currentQueuedUpload(permissionId, sha, item.bookUrl)
+            if (queuedBeforeUpload == null) {
+                discardStaged(permissionId, sha)
+                continue
+            }
+            if (!staged.isFile) {
+                if (currentQueuedUpload(permissionId, sha, item.bookUrl) != null) {
+                    uploads.updateState(
+                        permissionId = permissionId,
+                        sha256 = sha,
+                        state = DriveUpload.STATE_FAILED,
+                        updatedAt = clock(),
+                    )
+                    failedCount++
+                    anyRetryable = true
+                } else {
+                    discardStaged(permissionId, sha)
+                }
+                continue
+            }
+            val totalBytes = staged.length()
             val alias = workIdentity.resolveBook(permissionId, book, computeFingerprintIfMissing = false)
             val workKey = alias?.workId?.let { workIdentity.canonicalWorkKey(permissionId, it) } ?: "sha:$sha"
             val fileName = DriveCatalogSync.sanitizeEpubFileName(book.stableTitle ?: book.title)
@@ -343,41 +514,83 @@ internal class DriveEpubTransferManager(
             )
 
             try {
-                val remoteFile = driveApi.uploadResumableFile(
-                    accessToken = accessToken,
-                    name = fileName,
-                    mimeType = EPUB_MIME_TYPE,
-                    totalBytes = totalBytes,
-                    parents = listOf(resolution.canonical.id),
-                    appProperties = DriveWireCodec.epubAppProperties(sha, workKey),
-                    existingSessionUri = item.sessionUri,
-                    openStream = {
-                        openBookStream(book)
-                            ?: throw IOException("Could not open local book stream for ${book.url}")
-                    },
-                    onSessionUri = { sessionUri ->
-                        val latest = uploads.get(permissionId, sha)
-                        val bytes = if (latest?.sessionUri == sessionUri) latest.bytesSent else 0L
-                        uploads.updateProgress(
+                var activeSession: String? = null
+                // A resumed session can complete while its request runs: cleanup must not race it.
+                val resumedSession = queuedBeforeUpload.sessionUri
+                resumedSession?.let(inFlightSessions::add)
+                val remoteFile = try {
+                    driveApi.uploadResumableFile(
+                        accessToken = accessToken,
+                        name = fileName,
+                        mimeType = EPUB_MIME_TYPE,
+                        totalBytes = totalBytes,
+                        parents = listOf(resolution.canonical.id),
+                        appProperties = DriveWireCodec.epubAppProperties(sha, workKey),
+                        existingSessionUri = queuedBeforeUpload.sessionUri,
+                        openStream = { FileInputStream(staged) },
+                        onSessionUri = { sessionUri ->
+                            activeSession?.let(inFlightSessions::remove)
+                            activeSession = sessionUri
+                            inFlightSessions.add(sessionUri)
+                            val latest = currentQueuedUpload(permissionId, sha, item.bookUrl)
+                                ?: throw UploadDeselectedException()
+                            val bytes = if (latest.sessionUri == sessionUri) latest.bytesSent else 0L
+                            uploads.updateProgress(
+                                permissionId = permissionId,
+                                sha256 = sha,
+                                state = DriveUpload.STATE_UPLOADING,
+                                sessionUri = sessionUri,
+                                bytesSent = bytes,
+                                updatedAt = clock(),
+                            )
+                        },
+                        onProgress = { bytesSent, sessionUri ->
+                            if (currentQueuedUpload(permissionId, sha, item.bookUrl) == null) {
+                                // Only abort while bytes remain; if the final PUT already created the
+                                // remote file, let uploadResumableFile return its ID so we can trash it.
+                                if (bytesSent < totalBytes) {
+                                    throw UploadDeselectedException()
+                                }
+                            } else {
+                                uploads.updateProgress(
+                                    permissionId = permissionId,
+                                    sha256 = sha,
+                                    state = DriveUpload.STATE_UPLOADING,
+                                    sessionUri = sessionUri,
+                                    bytesSent = bytesSent,
+                                    updatedAt = clock(),
+                                )
+                            }
+                        },
+                    )
+                } finally {
+                    // The request has returned (even when cancelled): its session can no longer complete.
+                    activeSession?.let(inFlightSessions::remove)
+                    resumedSession?.let(inFlightSessions::remove)
+                }
+                // Deselected during the final PUT: record the created file before trying to
+                // trash it, so a failed or interrupted cleanup is retried and never advertised.
+                suspend fun cleanUpDeselectedCompletion() {
+                    val requeued = uploads.get(permissionId, sha)?.state == DriveUpload.STATE_REQUEUE
+                    uploads.upsert(
+                        DriveUpload(
                             permissionId = permissionId,
                             sha256 = sha,
-                            state = DriveUpload.STATE_UPLOADING,
-                            sessionUri = sessionUri,
-                            bytesSent = bytes,
+                            bookUrl = item.bookUrl,
+                            sizeBytes = totalBytes,
+                            state = if (requeued) DriveUpload.STATE_REQUEUE else DriveUpload.STATE_CANCELLED,
+                            fileId = remoteFile.id,
+                            selectedAt = clock(),
                             updatedAt = clock(),
-                        )
-                    },
-                    onProgress = { bytesSent, sessionUri ->
-                        uploads.updateProgress(
-                            permissionId = permissionId,
-                            sha256 = sha,
-                            state = DriveUpload.STATE_UPLOADING,
-                            sessionUri = sessionUri,
-                            bytesSent = bytesSent,
-                            updatedAt = clock(),
-                        )
-                    },
-                )
+                        ),
+                    )
+                    discardStaged(permissionId, sha)
+                    trashCancelledUploads(permissionId, accessToken)
+                }
+                if (currentQueuedUpload(permissionId, sha, item.bookUrl) == null) {
+                    cleanUpDeselectedCompletion()
+                    continue
+                }
                 val finishedAt = clock()
                 driveFiles.upsert(
                     DriveFile(
@@ -392,31 +605,48 @@ internal class DriveEpubTransferManager(
                         createdTime = remoteFile.createdTime,
                     ),
                 )
-                uploads.markUploaded(permissionId, sha, remoteFile.id, finishedAt)
+                // Conditional: the reader may have deselected the edition since the check above.
+                if (uploads.markUploadedIfUploading(permissionId, sha, remoteFile.id, finishedAt) == 0) {
+                    driveFiles.setTrashed(permissionId, remoteFile.id, true)
+                    cleanUpDeselectedCompletion()
+                    continue
+                }
+                discardStaged(permissionId, sha)
                 uploadedCount++
+            } catch (_: UploadDeselectedException) {
+                discardStaged(permissionId, sha)
+                continue
             } catch (e: CancellationException) {
                 throw e
             } catch (e: DriveAuthExpiredException) {
                 throw e
             } catch (e: DriveQuotaException) {
                 // Preserve latest persisted resumable sessionUri and bytesSent across retries.
-                uploads.updateState(
-                    permissionId = permissionId,
-                    sha256 = sha,
-                    state = DriveUpload.STATE_FAILED,
-                    updatedAt = clock(),
-                )
+                if (currentQueuedUpload(permissionId, sha, item.bookUrl) != null) {
+                    uploads.updateState(
+                        permissionId = permissionId,
+                        sha256 = sha,
+                        state = DriveUpload.STATE_FAILED,
+                        updatedAt = clock(),
+                    )
+                } else {
+                    discardStaged(permissionId, sha)
+                }
                 throw e
             } catch (e: Exception) {
                 // Preserve latest persisted resumable sessionUri and bytesSent across retries.
-                uploads.updateState(
-                    permissionId = permissionId,
-                    sha256 = sha,
-                    state = DriveUpload.STATE_FAILED,
-                    updatedAt = clock(),
-                )
-                failedCount++
-                anyRetryable = true
+                if (currentQueuedUpload(permissionId, sha, item.bookUrl) != null) {
+                    uploads.updateState(
+                        permissionId = permissionId,
+                        sha256 = sha,
+                        state = DriveUpload.STATE_FAILED,
+                        updatedAt = clock(),
+                    )
+                    failedCount++
+                    anyRetryable = true
+                } else {
+                    discardStaged(permissionId, sha)
+                }
             }
         }
 
@@ -424,11 +654,80 @@ internal class DriveEpubTransferManager(
         if (uploadedCount > 0) {
             onCatalogAvailabilityChanged()
         }
+        // Uploads cancelled during this batch are cleaned up now; a failure asks for a retry.
+        val cleanupDone = trashCancelledUploads(permissionId, accessToken)
         return DriveEpubUploadSummary(
             uploadedCount = uploadedCount,
             failedCount = failedCount,
-            retryableFailure = anyRetryable,
+            // Pending work that cleanup re-queued also needs another run.
+            retryableFailure = anyRetryable || !cleanupDone.clean || cleanupDone.requeued,
         )
+    }
+
+    private suspend fun isActive(permissionId: String): Boolean =
+        accounts.get(permissionId)?.state == DriveAccount.STATE_ACTIVE
+
+    private suspend fun currentQueuedUpload(
+        permissionId: String,
+        sha: String,
+        bookUrl: String,
+    ): DriveUpload? = uploads.get(permissionId, sha)?.takeIf {
+        it.bookUrl == bookUrl &&
+            (it.state == DriveUpload.STATE_PENDING || it.state == DriveUpload.STATE_UPLOADING || it.state == DriveUpload.STATE_FAILED)
+    }
+
+    private class UploadDeselectedException : Exception()
+
+    private data class CleanupResult(val clean: Boolean, val requeued: Boolean)
+
+    private sealed interface StagingResult {
+        data class Staged(val file: File) : StagingResult
+        data object Unreadable : StagingResult
+        data object Changed : StagingResult
+    }
+
+    private fun stagedFile(permissionId: String, sha: String): File =
+        Companion.stagedFile(stagingDirProvider(), permissionId, sha)
+
+    /**
+     * Copies the selected EPUB into private storage once and checks that the copy still
+     * hashes to [sha], so the bytes sent (and any resumed session) are exactly the file
+     * the reader chose even if the book's location is later overwritten.
+     */
+    private suspend fun stageUpload(permissionId: String, sha: String, book: Book): StagingResult =
+        withContext(Dispatchers.IO) {
+            val target = stagedFile(permissionId, sha)
+            if (target.isFile) return@withContext StagingResult.Staged(target)
+            target.parentFile?.mkdirs()
+            val part = File(target.path + ".part")
+            try {
+                val input = openBookStream(book) ?: run {
+                    part.delete()
+                    return@withContext StagingResult.Unreadable
+                }
+                input.use { src -> FileOutputStream(part).use { out -> src.copyTo(out) } }
+                val actual = FileInputStream(part).use(BookFingerprints::of).sha256
+                if (!actual.equals(sha, ignoreCase = true)) {
+                    part.delete()
+                    return@withContext StagingResult.Changed
+                }
+                if (!part.renameTo(target)) {
+                    part.delete()
+                    return@withContext StagingResult.Unreadable
+                }
+                StagingResult.Staged(target)
+            } catch (e: CancellationException) {
+                part.delete()
+                throw e
+            } catch (_: Exception) {
+                part.delete()
+                StagingResult.Unreadable
+            }
+        }
+
+    /** Drops the private copy kept for a finished or cancelled upload of [sha]. */
+    suspend fun discardStaged(permissionId: String, sha: String) {
+        Companion.discardStaged(stagingDirProvider(), permissionId, sha)
     }
 
     /**
@@ -607,7 +906,25 @@ internal class DriveEpubTransferManager(
     }
 
     companion object {
+        /** Upload sessions whose HTTP request is still running in this process. */
+        private val inFlightSessions: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+
         const val EPUB_MIME_TYPE = "application/epub+zip"
+        private const val STAGING_DIR_NAME = "drive_upload_staging"
+
+        internal fun defaultStagingDir(context: Context): File =
+            File(context.applicationContext.noBackupFilesDir, STAGING_DIR_NAME)
+
+        internal fun stagedFile(stagingDir: File, permissionId: String, sha: String): File =
+            File(stagingDir, "${permissionId.hashCode().toUInt()}_${sha.lowercase(Locale.ROOT)}.epub")
+
+        internal suspend fun discardStaged(stagingDir: File, permissionId: String, sha: String) {
+            withContext(Dispatchers.IO) {
+                val file = stagedFile(stagingDir, permissionId, sha)
+                file.delete()
+                File(file.path + ".part").delete()
+            }
+        }
 
         /** Per-book download path so two catalog rows sharing an edition never collide on disk. */
         internal fun downloadTargetFile(dir: File, bookUrl: String, expectedSha: String): File {

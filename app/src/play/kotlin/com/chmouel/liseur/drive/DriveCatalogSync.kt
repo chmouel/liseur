@@ -7,6 +7,7 @@ import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.data.db.WorkAlias
 import com.chmouel.liseur.data.library.BookRemoval
 import com.chmouel.liseur.domain.MetadataSource
+import com.chmouel.liseur.domain.WorkIdentifiers
 import java.util.Locale
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
@@ -30,6 +31,7 @@ internal class DriveCatalogSync(
     private val store: DriveSyncDatabase,
     private val workIdentity: DriveWorkIdentity,
     bookRemoval: BookRemoval? = null,
+    private val onUploadDiscarded: suspend (permissionId: String, sha256: String) -> Unit = { _, _ -> },
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
     private val books get() = database.bookDao()
@@ -102,8 +104,17 @@ internal class DriveCatalogSync(
                     driveFiles.get(permissionId, it.fileId)?.trashed != true
             }
             .associateBy { it.sha256.lowercase(Locale.ROOT) }
+        // A deselected upload's file awaiting trash is never advertised as available; while only
+        // its session is known, no Drive copy of that edition is.
+        val awaitingCleanup = uploads.forAccount(permissionId)
+            .filter { it.state == DriveUpload.STATE_CANCELLED || it.state == DriveUpload.STATE_REQUEUE }
+        val cancelledFileIds = awaitingCleanup.mapNotNull { it.fileId }.toSet()
+        val unresolvedShas = awaitingCleanup.filter { it.fileId == null }.map { it.sha256.lowercase(Locale.ROOT) }.toSet()
         val remoteEpubsBySha = driveFiles.byKind(permissionId, DriveFile.KIND_EPUB)
-            .filter { !it.trashed && !it.sha256.isNullOrBlank() }
+            .filter {
+                !it.trashed && !it.sha256.isNullOrBlank() && it.fileId !in cancelledFileIds &&
+                    it.sha256!!.lowercase(Locale.ROOT) !in unresolvedShas
+            }
             .groupBy { it.sha256!!.lowercase(Locale.ROOT) }
 
         val grouped = linkedMapOf<String, MutableList<Pair<Book, WorkAlias>>>()
@@ -313,7 +324,12 @@ internal class DriveCatalogSync(
             if (existing != null && existing.versionOp == DriveRecordState.OP_DEL && record.hlc <= existing.lastHlc) {
                 return
             }
-            val shasToClear = removeLocalWorkCopies(permissionId, peerId, canonical, selected = null)
+            val shasToClear = removeLocalWorkCopies(permissionId, peerId, canonical, selected = null).toMutableSet()
+            existing?.bodyJson?.let { raw ->
+                runCatching { DriveWireCodec.decodeCatalogBody(JSONObject(raw)) }.getOrNull()
+            }?.editions?.forEach { ed ->
+                shasToClear.add(ed.sha256.lowercase(Locale.ROOT))
+            }
             store.withTransaction {
                 for (sha in shasToClear) {
                     uploads.delete(permissionId, sha)
@@ -344,6 +360,9 @@ internal class DriveCatalogSync(
                     ),
                 )
             }
+            for (sha in shasToClear) {
+                onUploadDiscarded(permissionId, sha)
+            }
             return
         }
 
@@ -361,11 +380,39 @@ internal class DriveCatalogSync(
         val existingBody = existingState?.bodyJson?.let {
             runCatching { DriveWireCodec.decodeCatalogBody(JSONObject(it)) }.getOrNull()
         }
-        val incomingNewerHlc = existingState == null || record.hlc > existingState.lastHlc
+        val incomingCanonical = incoming.copy(workKey = canonicalKey)
+        val now = clock()
+        // Evaluate local alias conflicts against the unmerged incoming catalog before edition union,
+        // so pre-existing local catalog state under a colliding ISBN cannot hide the conflict.
+        val matchResult = findMatchingLocalBookUrls(permissionId, canonicalKey, incomingCanonical, now)
+        val localPublishedEarlier = existingState != null &&
+            !existingState.publishedFp.isNullOrBlank() &&
+            existingState.lastHlc.isNotBlank() &&
+            existingState.lastHlc < record.hlc
+        if (matchResult.rekeyedAliases.isNotEmpty() && matchResult.matchedUrls.isEmpty() && localPublishedEarlier) {
+            // Both devices independently published unrelated works under the same identifier key;
+            // keep the earlier-published local work on canonicalKey while the later device re-keys to sha:<sha>.
+            return
+        }
+
+        val filteredExistingBody = if (existingBody != null && matchResult.conflictingShas.isNotEmpty()) {
+            val remainingEditions = existingBody.editions.filter {
+                it.sha256.lowercase(Locale.ROOT) !in matchResult.conflictingShas
+            }
+            if (remainingEditions.isEmpty()) {
+                null
+            } else {
+                existingBody.copy(editions = remainingEditions)
+            }
+        } else {
+            existingBody
+        }
+        val replacedConflictingExisting = existingBody != null && filteredExistingBody == null
+        val incomingNewerHlc = existingState == null || replacedConflictingExisting || record.hlc > existingState.lastHlc
 
         val merged = mergeCatalogBodies(
-            existing = existingBody,
-            incoming = incoming.copy(workKey = canonicalKey),
+            existing = filteredExistingBody,
+            incoming = incomingCanonical,
             incomingNewerHlc = incomingNewerHlc,
         )
         val mergedMap = DriveWireCodec.encodeCatalogBody(merged)
@@ -392,12 +439,13 @@ internal class DriveCatalogSync(
         val primaryEdition = uploadedEdition ?: merged.editions.firstOrNull()
         val downloadHref = uploadedEdition?.driveFileId?.let(::downloadHrefFor)
 
-        // Check if any local book already matches by workKey or exact edition SHA-256.
-        val matchingBookUrls = findMatchingLocalBookUrls(permissionId, canonicalKey, merged.editions)
-        val now = clock()
+        val matchingBookUrls = matchResult.matchedUrls
 
-        // Transaction 1 (`liseur.db`): insert stub or update existing book metadata.
+        // Transaction 1 (`liseur.db`): re-key conflicting local aliases and insert stub or update existing book metadata.
         database.withTransaction {
+            for (rekeyed in matchResult.rekeyedAliases) {
+                identities.upsert(rekeyed)
+            }
             if (matchingBookUrls.isEmpty()) {
                 val stubUrl = DriveWorkIdentity.driveBookUrl(canonicalKey)
                 val existingStub = books.getByUrl(stubUrl)
@@ -477,14 +525,13 @@ internal class DriveCatalogSync(
                     }
                     // A local archive choice that differs from the last agreed catalog value is an
                     // unpublished edit; keep it so collectDirtyRecords publishes it over the pull.
-                    val localArchiveUnpublished = existingBody != null &&
-                        (book.archivedAt != null) != (existingBody.archivedAt != null)
+                    val localArchiveUnpublished = filteredExistingBody != null &&
+                        (book.archivedAt != null) != (filteredExistingBody.archivedAt != null)
                     val archivedAt = if (localArchiveUnpublished) book.archivedAt else merged.archivedAt
                     if (book.archivedAt != archivedAt) {
                         books.setArchived(url, archivedAt)
                     }
-                    if (book.openableUrl == null) {
-                        // A fileless stub has no file of its own: the catalog is its baseline metadata.
+                    if (isFilelessUnownedRow(book)) {
                         val refreshed = if (incomingNewerHlc && book.url.startsWith(DriveWorkIdentity.DRIVE_BOOK_URL_PREFIX)) {
                             book.withCatalogBaseline(merged)
                         } else book
@@ -718,6 +765,9 @@ internal class DriveCatalogSync(
             // Every local copy of the work is cleaned, not only the selected edition.
             removeLocalWorkCopies(permissionId, peerId, canonicalKey, selected = book to alias?.workId)
             clearCleanupPending(permissionId, canonicalKey)
+            for (sha in shasToRemove) {
+                onUploadDiscarded(permissionId, sha)
+            }
         }
 
         // Best-effort trash immediately after the tombstone is durable; any remaining IDs
@@ -878,6 +928,7 @@ internal class DriveCatalogSync(
     suspend fun resolveDownloadSource(
         permissionId: String,
         book: Book,
+        requiredSha256: String? = null,
     ): Pair<String, String>? {
         val workKey = workIdentity.resolveBook(permissionId, book, computeFingerprintIfMissing = false)
             ?.workId
@@ -887,10 +938,14 @@ internal class DriveCatalogSync(
             ?: return null
 
         val catalogState = recordStates.get(permissionId, DriveWireCodec.DOMAIN_CATALOG, workKey)
+            ?.takeIf { it.versionOp != DriveRecordState.OP_DEL }
         val body = catalogState?.bodyJson?.let {
             runCatching { DriveWireCodec.decodeCatalogBody(JSONObject(it)) }.getOrNull()
         }
-        val editions = body?.editions.orEmpty()
+        val required = requiredSha256?.lowercase(Locale.ROOT)
+        val editions = body?.editions.orEmpty().filter { ed ->
+            required == null || ed.sha256.equals(required, ignoreCase = true)
+        }
         for (ed in editions) {
             val fid = ed.driveFileId ?: continue
             val known = driveFiles.get(permissionId, fid)
@@ -907,28 +962,80 @@ internal class DriveCatalogSync(
         return null
     }
 
+    /**
+     * A row with no file that no server owns: a `drive:` stub or a stub preserved
+     * from a retired main server. Drive sets its availability.
+     */
+    private fun isFilelessUnownedRow(book: Book): Boolean =
+        book.localUri == null &&
+            book.remoteUuid == null &&
+            book.browseServerId == null &&
+            book.downloadState != DownloadState.DOWNLOADED
+
+    private data class LocalBookMatchResult(
+        val matchedUrls: List<String>,
+        val rekeyedAliases: List<WorkAlias>,
+        val conflictingShas: Set<String> = emptySet(),
+    )
+
     private suspend fun findMatchingLocalBookUrls(
         permissionId: String,
         canonicalWorkKey: String,
-        editions: List<DriveCatalogEdition>,
-    ): List<String> {
+        catalog: DriveCatalogBody,
+        now: Long,
+    ): LocalBookMatchResult {
+        val editions = catalog.editions
         val peerId = DriveLibrarySync.accountPeerId(permissionId)
         val matched = linkedSetOf<String>()
+        val rekeyedAliases = mutableListOf<WorkAlias>()
+        val conflictingShas = linkedSetOf<String>()
+        val shas = editions.map { it.sha256.lowercase(Locale.ROOT) }.toSet()
+        val remoteTa = WorkIdentifiers.titleAuthor(catalog.title, catalog.author)
         for (alias in identities.aliasesFor(peerId)) {
             if (!alias.usable) continue
-            if (workIdentity.canonicalWorkKey(permissionId, alias.workId) == canonicalWorkKey) {
-                matched.add(alias.bookUrl)
+            if (workIdentity.canonicalWorkKey(permissionId, alias.workId) != canonicalWorkKey) continue
+            // A local book that only shares an identifier with an unrelated file stays separate,
+            // and its conflicting alias is re-keyed to its own sha:<localSha> work key.
+            if (
+                !alias.bookUrl.startsWith(DriveWorkIdentity.DRIVE_BOOK_URL_PREFIX) &&
+                !canonicalWorkKey.startsWith("sha:") &&
+                remoteTa != null &&
+                shas.isNotEmpty()
+            ) {
+                val book = books.getByUrl(alias.bookUrl)
+                val localSha = identities.fingerprint(alias.bookUrl)?.sha256?.lowercase(Locale.ROOT)
+                    ?: alias.editionSha?.lowercase(Locale.ROOT)
+                val localTa = book?.let {
+                    WorkIdentifiers.titleAuthor(it.stableTitle ?: it.title, it.identityAuthor ?: it.stableAuthor)
+                }
+                if (localSha != null && localSha !in shas && localTa != null && localTa != remoteTa) {
+                    val fallbackKey = workIdentity.canonicalWorkKey(permissionId, "sha:$localSha")
+                    rekeyedAliases.add(
+                        alias.copy(
+                            workId = fallbackKey,
+                            seeded = false,
+                            editionSha = localSha,
+                            resolvedAt = now,
+                        ),
+                    )
+                    conflictingShas.add(localSha)
+                    continue
+                }
             }
+            matched.add(alias.bookUrl)
         }
         if (matched.isEmpty() && editions.isNotEmpty()) {
-            val shas = editions.map { it.sha256.lowercase(Locale.ROOT) }.toSet()
             for (book in books.allOnce()) {
                 if (book.browseServerId != null) continue
                 val fp = workIdentity.editionSha(book) ?: continue
                 if (fp in shas) matched.add(book.url)
             }
         }
-        return matched.toList()
+        return LocalBookMatchResult(
+            matchedUrls = matched.toList(),
+            rekeyedAliases = rekeyedAliases,
+            conflictingShas = conflictingShas,
+        )
     }
 
     private fun mergeCatalogBodies(

@@ -123,6 +123,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -1681,9 +1682,14 @@ internal fun BookActionsSheet(
     val container = (LocalContext.current.applicationContext as LiseurApplication).container
     val translations by container.wholeBookRecords.collectAsStateWithLifecycle(initialValue = emptyList())
     val externalOwned = container.librarySync.ownsBook(book)
+    // Removing the copy is only safe while the backend can still hand the file back.
+    val externalRedownloadable by produceState(false, book) {
+        value = externalOwned && container.librarySync.canDownloadAgain(book)
+    }
     val actionState = BookActionState(
         downloading = downloading,
         downloadedCopy = book.downloadState == DownloadState.DOWNLOADED && (book.remoteUuid != null || externalOwned),
+        canRemoveCopy = book.downloadState == DownloadState.DOWNLOADED && (book.remoteUuid != null || externalRedownloadable),
         onServer = book.remoteUuid != null || (externalOwned && book.downloadHref != null),
         inLibrary = book.openableUrl != null,
         finished = book.finished,

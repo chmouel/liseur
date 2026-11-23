@@ -239,6 +239,11 @@ internal object DriveSyncWorkers {
         )
     }
 
+    fun cancelEpubUploads(context: Context) {
+        WorkManager.getInstance(context.applicationContext)
+            .cancelUniqueWork(EPUB_UPLOAD_WORK_NAME)
+    }
+
     suspend fun enqueueEpubDownload(
         context: Context,
         bookUrl: String,
