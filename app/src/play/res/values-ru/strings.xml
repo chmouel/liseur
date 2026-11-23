@@ -93,7 +93,7 @@
     <string name="hardcover_error_offline">Не удалось связаться с Hardcover. Проверьте соединение и повторите попытку.</string>
     <string name="hardcover_error_other">Сейчас не удалось обновить Hardcover. Повторите попытку позже.</string>
     <string name="hardcover_privacy">Чтобы найти каждую книгу, Liseur отправляет в Hardcover её название, автора и ISBN. Затем он отправляет статус, прочитанные страницы, даты чтения и синхронизирует вашу оценку и публичный отзыв. Когда вы выбираете издание вручную, он также отправляет ваш поисковый запрос и загружает обложки с сервера изображений Hardcover.</string>
-    <string name="hardcover_push">Отправить в Hardcover</string>
+    <string name="hardcover_push">Синхронизировать Hardcover</string>
     <string name="hardcover_pushed">Отправлено в Hardcover</string>
     <string name="hardcover_up_to_date">В Hardcover уже всё актуально</string>
     <string name="hardcover_needs_match">Сначала выберите издание этой книги в Hardcover на экране «О книге»</string>

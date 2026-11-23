@@ -1284,6 +1284,17 @@
     <string name="reader_translate_into">翻译成%1$s</string>
     <string name="reader_translate_book">翻译本书</string>
     <string name="reader_narrate_from_here">从这里开始讲述</string>
+    <string name="reader_menu_scroll_mode">滚动模式</string>
+    <string name="reader_menu_auto_scroll">自动滚动</string>
+    <string name="reader_menu_translate">翻译</string>
+    <string name="reader_menu_whole_book">整本书</string>
+    <string name="reader_menu_read_aloud">朗读</string>
+    <string name="reader_menu_sync">同步</string>
+    <string name="reader_menu_book_info">书籍信息</string>
+    <string name="reader_menu_reading_settings">设置</string>
+    <string name="reader_menu_companion_detail">人物、地点与回顾</string>
+    <string name="reader_menu_translate_detail">从当前页开始翻译</string>
+    <string name="reader_menu_read_aloud_detail">语音朗读</string>
     <string name="read_aloud_pause">暂停朗读</string>
     <string name="read_aloud_resume">继续朗读</string>
     <string name="read_aloud_resume_listening">继续收听</string>

@@ -835,27 +835,21 @@ internal class ReadingTracker(context: Context, private val database: LiseurData
         }
     }
 
-    /** "Send to Hardcover" in the reader's menu, while an account is connected. */
+    /** Action to push the current book's place to Hardcover, or null when no account is connected. */
     @Composable
-    fun ReaderMenuItem(
+    fun rememberReaderPushAction(
         bookUrl: String,
         savePlace: suspend () -> Boolean,
-        close: () -> Unit,
         requestEdition: ((bookUrl: String, push: Boolean) -> Unit)? = null,
-    ) {
-        if (!remember { used() }) return
+    ): (() -> Unit)? {
+        if (!remember { used() }) return null
         val account by hardcover.account.collectAsState(initial = null)
-        if (account == null) return
+        if (account == null) return null
         val link by remember(bookUrl) { hardcover.link(bookUrl) }.collectAsState(initial = null)
-        DropdownMenuItem(
-            text = { Text(stringResource(R.string.hardcover_push)) },
-            leadingIcon = { Icon(Icons.Outlined.Sync, contentDescription = null) },
-            onClick = {
-                close()
-                if (requestEdition != null && opensEditionPicker(link?.matched == true, link?.excluded == true)) {
-                    requestEdition(bookUrl, true)
-                    return@DropdownMenuItem
-                }
+        return {
+            if (requestEdition != null && opensEditionPicker(link?.matched == true, link?.excluded == true)) {
+                requestEdition(bookUrl, true)
+            } else {
                 scope.launch {
                     // The place on screen can be ahead of the stored one until it is saved.
                     val saved = withContext(Dispatchers.Main.immediate) { savePlace() }
@@ -877,8 +871,8 @@ internal class ReadingTracker(context: Context, private val database: LiseurData
                         }
                     }
                 }
-            },
-        )
+            }
+        }
     }
 
     @Composable

@@ -1475,6 +1475,17 @@
     <string name="reader_translate_into">Перевести на %1$s</string>
     <string name="reader_translate_book">Перевести книгу</string>
     <string name="reader_narrate_from_here">Озвучить отсюда</string>
+    <string name="reader_menu_scroll_mode">Режим прокрутки</string>
+    <string name="reader_menu_auto_scroll">Автопрокрутка</string>
+    <string name="reader_menu_translate">Перевести</string>
+    <string name="reader_menu_whole_book">Вся книга</string>
+    <string name="reader_menu_read_aloud">Читать вслух</string>
+    <string name="reader_menu_sync">Синхронизировать</string>
+    <string name="reader_menu_book_info">О книге</string>
+    <string name="reader_menu_reading_settings">Настройки</string>
+    <string name="reader_menu_companion_detail">Персонажи, места, пересказы</string>
+    <string name="reader_menu_translate_detail">Перевести с этой страницы</string>
+    <string name="reader_menu_read_aloud_detail">Слушать синтез речи</string>
     <string name="read_aloud_pause">Приостановить чтение вслух</string>
     <string name="read_aloud_resume">Продолжить чтение вслух</string>
     <string name="read_aloud_resume_listening">Продолжить прослушивание</string>

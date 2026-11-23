@@ -564,6 +564,7 @@ class ReaderActivity : FragmentActivity() {
                                     jumpBackFlow = viewModel.jumpBack,
                                     catchUpFlow = viewModel.catchUp,
                                     continuationFlow = viewModel.continuation,
+                                    currentBookFlow = viewModel.currentBook,
                                     onContinueNext = viewModel::onContinueNext,
                                     onReachedEndpaper = viewModel::onReachedEndpaper,
                                     onLeftEndpaper = viewModel::onLeftEndpaper,
@@ -714,11 +715,10 @@ class ReaderActivity : FragmentActivity() {
                                             start = viewModel::syncThisBook,
                                             registerCapture = { viewModel.preparePositionAction = it },
                                             requestEdition = requestEdition,
-                                            tracker = { close ->
-                                                container.readingTracker.ReaderMenuItem(
+                                            rememberTrackerSync = {
+                                                container.readingTracker.rememberReaderPushAction(
                                                     bookUrl = checkNotNull(target).id,
                                                     savePlace = viewModel::savePlaceNow,
-                                                    close = close,
                                                     requestEdition = requestEdition,
                                                 )
                                             },

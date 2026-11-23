@@ -1507,6 +1507,17 @@
     <string name="reader_translate_into">Přeložit do jazyka %1$s</string>
     <string name="reader_translate_book">Přeložit knihu</string>
     <string name="reader_narrate_from_here">Předčítat odtud</string>
+    <string name="reader_menu_scroll_mode">Posouvání</string>
+    <string name="reader_menu_auto_scroll">Automatický posun</string>
+    <string name="reader_menu_translate">Přeložit</string>
+    <string name="reader_menu_whole_book">Celá kniha</string>
+    <string name="reader_menu_read_aloud">Číst nahlas</string>
+    <string name="reader_menu_sync">Synchronizovat</string>
+    <string name="reader_menu_book_info">Informace o knize</string>
+    <string name="reader_menu_reading_settings">Nastavení</string>
+    <string name="reader_menu_companion_detail">Postavy, místa, shrnutí</string>
+    <string name="reader_menu_translate_detail">Přeložit od této stránky</string>
+    <string name="reader_menu_read_aloud_detail">Poslouchat převodem textu na řeč</string>
     <string name="read_aloud_pause">Pozastavit předčítání</string>
     <string name="read_aloud_resume">Pokračovat v předčítání</string>
     <string name="read_aloud_resume_listening">Pokračovat v poslechu</string>

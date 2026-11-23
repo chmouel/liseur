@@ -411,6 +411,10 @@ class ReaderViewModel(
         .map { it?.canDownload == true }
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
+    val currentBook: StateFlow<com.chmouel.liseur.data.db.Book?> = bookDao.observeAll()
+        .map { books -> books.firstOrNull { it.url == bookId } }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
     val continuation: StateFlow<EndpaperContinuation?> = combine(
         combine(
             // A book taken off the shelf is not offered as what to read

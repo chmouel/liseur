@@ -93,7 +93,7 @@
     <string name="hardcover_error_offline">Hardcover ist nicht erreichbar. Prüfe deine Verbindung und versuche es erneut.</string>
     <string name="hardcover_error_other">Hardcover konnte gerade nicht aktualisiert werden. Versuche es später erneut.</string>
     <string name="hardcover_privacy">Um jedes Buch zu finden, sendet Liseur Titel, Autor und ISBN an Hardcover. Danach sendet es Status, gelesene Seiten, Lesedaten und synchronisiert deine Bewertung und öffentliche Rezension. Wenn du eine Ausgabe von Hand auswählst, sendet es außerdem deine Suche und lädt Cover vom Bilderserver von Hardcover.</string>
-    <string name="hardcover_push">An Hardcover senden</string>
+    <string name="hardcover_push">Mit Hardcover synchronisieren</string>
     <string name="hardcover_pushed">An Hardcover gesendet</string>
     <string name="hardcover_up_to_date">Hardcover ist bereits aktuell</string>
     <string name="hardcover_needs_match">Wähle zuerst in den Buchdetails die Hardcover-Ausgabe dieses Buchs</string>

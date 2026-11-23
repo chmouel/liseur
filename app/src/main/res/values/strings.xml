@@ -1399,6 +1399,17 @@
     <string name="reader_translate_into">Translate into %1$s</string>
     <string name="reader_translate_book">Translate book</string>
     <string name="reader_narrate_from_here">Narrate from here</string>
+    <string name="reader_menu_scroll_mode">Scroll mode</string>
+    <string name="reader_menu_auto_scroll">Auto-scroll</string>
+    <string name="reader_menu_translate">Translate</string>
+    <string name="reader_menu_whole_book">Whole book</string>
+    <string name="reader_menu_read_aloud">Read aloud</string>
+    <string name="reader_menu_sync">Sync</string>
+    <string name="reader_menu_book_info">Book info</string>
+    <string name="reader_menu_reading_settings">Settings</string>
+    <string name="reader_menu_companion_detail">Characters, places, recaps</string>
+    <string name="reader_menu_translate_detail">Translate from this page</string>
+    <string name="reader_menu_read_aloud_detail">Listen with text-to-speech</string>
     <string name="read_aloud_pause">Pause reading aloud</string>
     <string name="read_aloud_resume">Resume reading aloud</string>
     <string name="read_aloud_resume_listening">Resume listening</string>

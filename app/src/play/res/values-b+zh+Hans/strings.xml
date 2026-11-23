@@ -93,7 +93,7 @@
     <string name="hardcover_error_offline">无法连接 Hardcover。请检查网络后重试。</string>
     <string name="hardcover_error_other">暂时无法更新 Hardcover。请稍后重试。</string>
     <string name="hardcover_privacy">为了找到每本书，Liseur 会向 Hardcover 发送书名、作者和 ISBN，然后发送阅读状态、已读页数、阅读日期，并同步你的评分和公开书评。手动选择版本时，还会发送你的搜索内容，并从 Hardcover 的图片服务器加载封面。</string>
-    <string name="hardcover_push">推送到 Hardcover</string>
+    <string name="hardcover_push">同步到 Hardcover</string>
     <string name="hardcover_pushed">已发送到 Hardcover</string>
     <string name="hardcover_up_to_date">Hardcover 已是最新</string>
     <string name="hardcover_needs_match">请先在图书详情中选择此书的 Hardcover 版本</string>
