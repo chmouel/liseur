@@ -115,6 +115,18 @@ class OpensEditionPickerTest {
     }
 
     @Test
+    fun `a linked edition without a title says linked instead of a bare placeholder`() {
+        listOf(null, " ").forEach { title ->
+            val view = hardcoverBookDetailsView(
+                HardcoverBookLink(bookUrl = "calibre:1", hardcoverBookId = 10L, editionId = 20L, editionTitle = title),
+                connectedAccount,
+            )
+            assertEquals(R.string.hardcover_book_linked, view.subtitleRes)
+            assertNull(view.matchedEditionTitle)
+        }
+    }
+
+    @Test
     fun `linked book with sync off disables push and keeps update, change edition and unlink`() {
         val view = hardcoverBookDetailsView(
             HardcoverBookLink(

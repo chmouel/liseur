@@ -86,8 +86,11 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -1063,6 +1066,10 @@ internal data class HardcoverBookDetailsView(
     val showUpdateDetails: Boolean = false,
 )
 
+/** An edition Hardcover gave no title says only that it is linked. */
+private fun matchedSubtitle(title: String?): Int =
+    if (title.isNullOrBlank()) R.string.hardcover_book_linked else R.string.hardcover_book_matched
+
 internal fun hardcoverBookDetailsView(
     link: HardcoverBookLink?,
     account: HardcoverAccount? = HardcoverAccount(
@@ -1116,8 +1123,8 @@ internal fun hardcoverBookDetailsView(
             showUpdateDetails = false,
         )
         matched && !excluded -> HardcoverBookDetailsView(
-            subtitleRes = R.string.hardcover_book_matched,
-            matchedEditionTitle = link.editionTitle,
+            subtitleRes = matchedSubtitle(link.editionTitle),
+            matchedEditionTitle = link.editionTitle?.takeIf { it.isNotBlank() },
             statusChip = HardcoverStatusChip.LINKED,
             showSyncSwitch = true,
             syncSwitchChecked = true,
@@ -1127,8 +1134,8 @@ internal fun hardcoverBookDetailsView(
             showUpdateDetails = true,
         )
         else -> HardcoverBookDetailsView(
-            subtitleRes = R.string.hardcover_book_matched,
-            matchedEditionTitle = link.editionTitle,
+            subtitleRes = matchedSubtitle(link.editionTitle),
+            matchedEditionTitle = link.editionTitle?.takeIf { it.isNotBlank() },
             statusChip = HardcoverStatusChip.LINKED,
             showSyncSwitch = true,
             syncSwitchChecked = false,
@@ -1146,6 +1153,8 @@ private sealed interface CoverFetch {
     data object Unchanged : CoverFetch
     data object Failed : CoverFetch
 }
+
+private const val EINK_BUSY_FRACTION = 0.3f
 
 /** A button's icon, icon gap and horizontal padding around its label. */
 private val BUTTON_CHROME_WIDTH = 18.dp + 6.dp + 14.dp * 2 + 2.dp
@@ -1229,10 +1238,16 @@ private fun HardcoverBookPanel(
             }
 
             if (busy) {
-                LinearProgressIndicator(
-                    modifier = Modifier.fillMaxWidth().height(2.dp),
-                    trackColor = dividerColor,
-                )
+                val barModifier = Modifier
+                    .fillMaxWidth()
+                    .height(2.dp)
+                    .clearAndSetSemantics { progressBarRangeInfo = ProgressBarRangeInfo.Indeterminate }
+                if (eInk) {
+                    // Held still: an animated bar would make electronic paper repaint until the work ends.
+                    LinearProgressIndicator(progress = { EINK_BUSY_FRACTION }, modifier = barModifier, trackColor = dividerColor)
+                } else {
+                    LinearProgressIndicator(modifier = barModifier, trackColor = dividerColor)
+                }
             } else {
                 HorizontalDivider(color = dividerColor)
             }
