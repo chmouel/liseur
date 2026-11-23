@@ -1079,6 +1079,7 @@ fun LibraryScreen(
                                 HomeShelfKind.READING -> onSetReadingFilter(setOf(LibraryFilterOption.IN_PROGRESS))
                                 HomeShelfKind.TO_READ -> onSetReadingFilter(setOf(LibraryFilterOption.UNREAD))
                                 HomeShelfKind.FINISHED -> onSetReadingFilter(setOf(LibraryFilterOption.FINISHED))
+                                HomeShelfKind.ALL -> onSetReadingFilter(ALL_READING_STATES)
                                 HomeShelfKind.SERIES -> {
                                     onSetReadingFilter(ALL_READING_STATES)
                                     // With the tabs, the Series tab groups them.

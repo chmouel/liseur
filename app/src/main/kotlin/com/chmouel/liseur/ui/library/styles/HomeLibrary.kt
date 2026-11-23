@@ -37,6 +37,7 @@ import androidx.compose.material.icons.outlined.ChevronLeft
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.Layers
+import androidx.compose.material.icons.outlined.LocalLibrary
 import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.material.icons.outlined.School
 import androidx.compose.material.icons.outlined.Shuffle
@@ -970,6 +971,7 @@ private val HomeShelfKind.label: Int
         HomeShelfKind.TO_READ -> R.string.home_tile_to_read
         HomeShelfKind.SERIES -> R.string.home_tile_series
         HomeShelfKind.FINISHED -> R.string.home_tile_finished
+        HomeShelfKind.ALL -> R.string.home_tile_all
     }
 
 private val HomeShelfKind.note: Int
@@ -978,6 +980,7 @@ private val HomeShelfKind.note: Int
         HomeShelfKind.TO_READ -> R.plurals.home_note_added_lately
         HomeShelfKind.SERIES -> R.plurals.home_note_series_underway
         HomeShelfKind.FINISHED -> R.plurals.home_note_this_month
+        HomeShelfKind.ALL -> R.plurals.home_note_added_lately
     }
 
 internal val HomeShelfKind.icon: ImageVector
@@ -986,12 +989,14 @@ internal val HomeShelfKind.icon: ImageVector
         HomeShelfKind.TO_READ -> Icons.Outlined.BookmarkBorder
         HomeShelfKind.SERIES -> Icons.Outlined.Layers
         HomeShelfKind.FINISHED -> Icons.Outlined.TaskAlt
+        HomeShelfKind.ALL -> Icons.Outlined.LocalLibrary
     }
 
 private fun HomePalette.tint(kind: HomeShelfKind): TileTint = when (kind) {
     HomeShelfKind.READING -> reading
     HomeShelfKind.TO_READ -> toRead
-    HomeShelfKind.SERIES -> series
+    // Only ever shown in the Series tile's place, so it borrows its colours.
+    HomeShelfKind.SERIES, HomeShelfKind.ALL -> series
     HomeShelfKind.FINISHED -> finished
 }
 
@@ -1011,7 +1016,7 @@ private fun ShelfTiles(
             onAction = onSeeAll,
         )
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            tiles.filter { it.kind != HomeShelfKind.SERIES || it.count > 0 }.chunked(2).forEach { row ->
+            tiles.chunked(2).forEach { row ->
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     row.forEach { tile ->
                         ShelfTile(

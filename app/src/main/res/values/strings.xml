@@ -2240,6 +2240,7 @@
     <string name="home_tile_to_read">To read</string>
     <string name="home_tile_series">Series</string>
     <string name="home_tile_finished">Finished</string>
+    <string name="home_tile_all">All books</string>
     <string name="home_your_shelves">Shelves</string>
     <string name="home_recently_added">New on the shelf</string>
     <string name="home_quote_title">From your reading</string>

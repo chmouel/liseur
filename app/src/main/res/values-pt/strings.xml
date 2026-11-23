@@ -2228,6 +2228,7 @@
     <string name="home_tile_to_read">Para ler</string>
     <string name="home_tile_series">Séries</string>
     <string name="home_tile_finished">Concluídos</string>
+    <string name="home_tile_all">Todos os livros</string>
     <string name="home_your_shelves">Estantes</string>
     <string name="home_recently_added">Novos na estante</string>
     <string name="home_quote_title">Das suas leituras</string>
