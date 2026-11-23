@@ -763,8 +763,11 @@ internal class ReadingTracker(context: Context, private val database: LiseurData
                     TextButton(
                         onClick = {
                             confirmingUnlink = false
-                            message = null
-                            scope.launch { runCatching { hardcover.unlink(bookUrl) } }
+                            busyWhile {
+                                // Long-lived scope: the unlink finishes even if Book details closes meanwhile.
+                                val done = runCatching { scope.async { hardcover.unlink(bookUrl) }.await() }.isSuccess
+                                if (!done) message = HardcoverNotice(R.string.hardcover_error_other, isError = true)
+                            }
                         },
                     ) {
                         Text(stringResource(R.string.hardcover_book_unlink))
