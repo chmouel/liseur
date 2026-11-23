@@ -312,7 +312,13 @@ class ReaderActivity : FragmentActivity() {
                             sawServerSyncActive = false
                             return@LaunchedEffect
                         }
-                        if (bookSync != ReaderViewModel.BookSync.Idle) {
+                        val currentSync = bookSync
+                        if (currentSync is ReaderViewModel.BookSync.Note &&
+                            currentSync.messageRes == R.string.reader_position_not_saved
+                        ) {
+                            pendingTrackerPush = false
+                            sawServerSyncActive = false
+                        } else if (currentSync != ReaderViewModel.BookSync.Idle) {
                             sawServerSyncActive = true
                         } else if (sawServerSyncActive) {
                             pendingTrackerPush = false
