@@ -411,9 +411,8 @@ class ReaderViewModel(
         .map { it?.canDownload == true }
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
-    val currentBook: StateFlow<com.chmouel.liseur.data.db.Book?> = bookDao.observeAll()
-        .map { books -> books.firstOrNull { it.url == bookId } }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+    val currentBook: StateFlow<com.chmouel.liseur.data.db.Book?> = bookDao.observeByUrl(bookId)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     val continuation: StateFlow<EndpaperContinuation?> = combine(
         combine(

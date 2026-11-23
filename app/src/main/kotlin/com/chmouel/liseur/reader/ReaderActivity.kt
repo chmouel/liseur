@@ -18,7 +18,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
+import com.chmouel.liseur.domain.MetadataSource
+import com.chmouel.liseur.domain.resolveMetadata
 import com.chmouel.liseur.companion.CharacterPane
 import com.chmouel.liseur.companion.CompanionSettingsScreen
 import com.chmouel.liseur.companion.CompanionViewModel
@@ -290,6 +293,48 @@ class ReaderActivity : FragmentActivity() {
                     )
                     var editionAsk by rememberSaveable { mutableStateOf<String?>(null) }
                     var editionAskPushes by rememberSaveable { mutableStateOf(false) }
+                    val requestEdition: (String, Boolean) -> Unit = remember {
+                        { bookUrl, push ->
+                            editionAsk = bookUrl
+                            editionAskPushes = push
+                        }
+                    }
+                    val trackerPush = container.readingTracker.rememberReaderPushAction(
+                        bookUrl = checkNotNull(target).id,
+                        savePlace = viewModel::savePlaceNow,
+                        requestEdition = requestEdition,
+                    )
+                    var pendingTrackerPush by remember { mutableStateOf(false) }
+                    var sawServerSyncActive by remember { mutableStateOf(false) }
+                    val latestTrackerPush by rememberUpdatedState(trackerPush)
+                    LaunchedEffect(bookSync, pendingTrackerPush) {
+                        if (!pendingTrackerPush) {
+                            sawServerSyncActive = false
+                            return@LaunchedEffect
+                        }
+                        when (bookSync) {
+                            ReaderViewModel.BookSync.Asking,
+                            is ReaderViewModel.BookSync.Choice,
+                            is ReaderViewModel.BookSync.BookOrbitChoice,
+                            -> sawServerSyncActive = true
+                            ReaderViewModel.BookSync.Idle,
+                            is ReaderViewModel.BookSync.Note,
+                            -> if (sawServerSyncActive) {
+                                pendingTrackerPush = false
+                                sawServerSyncActive = false
+                                latestTrackerPush?.invoke()
+                            }
+                        }
+                    }
+                    val storedDescription by remember(target?.id) {
+                        container.database.bookMetadataDao().observe(checkNotNull(target).id).map { rows ->
+                            rows
+                                .mapNotNull { row -> MetadataSource.of(row.source)?.let { it to row.toSnapshot() } }
+                                .toMap()
+                                .let(::resolveMetadata)
+                                ?.description
+                        }
+                    }.collectAsStateWithLifecycle(initialValue = null)
                     container.readingTracker.ReaderEditionPicker(
                         ask = editionAsk,
                         pushes = editionAskPushes,
@@ -565,6 +610,7 @@ class ReaderActivity : FragmentActivity() {
                                     catchUpFlow = viewModel.catchUp,
                                     continuationFlow = viewModel.continuation,
                                     currentBookFlow = viewModel.currentBook,
+                                    storedDescription = storedDescription,
                                     onContinueNext = viewModel::onContinueNext,
                                     onReachedEndpaper = viewModel::onReachedEndpaper,
                                     onLeftEndpaper = viewModel::onLeftEndpaper,
@@ -706,21 +752,20 @@ class ReaderActivity : FragmentActivity() {
                                     goTo = viewModel.goTo,
                                     bookOrbitGoTo = viewModel.bookOrbitGoTo,
                                     onBookOrbitCatchUpArrived = viewModel::onBookOrbitCatchUpArrived,
-                                    onBookSyncAction = remember {
-                                        val requestEdition: (String, Boolean) -> Unit = { bookUrl, push ->
-                                            editionAsk = bookUrl
-                                            editionAskPushes = push
-                                        }
+                                    onBookSyncAction = remember(trackerPush != null) {
                                         ReaderBookSyncActions(
-                                            start = viewModel::syncThisBook,
+                                            start = {
+                                                if (latestTrackerPush != null) {
+                                                    pendingTrackerPush = true
+                                                }
+                                                viewModel.syncThisBook()
+                                            },
                                             registerCapture = { viewModel.preparePositionAction = it },
                                             requestEdition = requestEdition,
-                                            rememberTrackerSync = {
-                                                container.readingTracker.rememberReaderPushAction(
-                                                    bookUrl = checkNotNull(target).id,
-                                                    savePlace = viewModel::savePlaceNow,
-                                                    requestEdition = requestEdition,
-                                                )
+                                            trackerOnlySync = if (trackerPush != null) {
+                                                { latestTrackerPush?.invoke() }
+                                            } else {
+                                                null
                                             },
                                         )
                                     },
