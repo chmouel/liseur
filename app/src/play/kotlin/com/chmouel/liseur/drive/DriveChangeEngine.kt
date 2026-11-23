@@ -23,6 +23,10 @@ internal data class DriveSyncRunSummary(
     val pausedBySchemaVersion: Boolean = false,
     /** `domain:key` of records too large for any batch; they stay unpublished until they shrink. */
     val oversizedRecords: List<String> = emptyList(),
+    val compacted: Boolean = false,
+    val prunedDeltaCount: Int = 0,
+    val prunedSnapshotPartCount: Int = 0,
+    val compactionError: String? = null,
 )
 
 private const val OVERSIZED_REPORT_LIMIT = 5
@@ -63,10 +67,21 @@ internal class DriveChangeEngine(
             }
         }
     },
+    private val compactionDeltaThreshold: Int = DriveCompactor.DEFAULT_DELTA_COUNT_THRESHOLD,
+    private val compactionBytesThreshold: Long = DriveCompactor.DEFAULT_DELTA_BYTES_THRESHOLD,
+    private val compactionMaxPartBytes: Int = DriveWireCodec.MAX_SNAPSHOT_PART_BYTES,
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
     private val runMutex = Mutex()
     private val activeJobs: MutableSet<Job> = ConcurrentHashMap.newKeySet()
+    internal val compactor = DriveCompactor(
+        store = store,
+        driveApi = driveApi,
+        deltaCountThreshold = compactionDeltaThreshold,
+        deltaBytesThreshold = compactionBytesThreshold,
+        maxPartBytes = compactionMaxPartBytes,
+        clock = clock,
+    )
 
     private val accounts get() = store.accounts()
     private val devices get() = store.devices()
@@ -298,6 +313,19 @@ internal class DriveChangeEngine(
             return DriveSyncRunSummary(SyncOutcome.NotApplicable)
         }
 
+        // 1b. Reconcile any interrupted pending snapshot publication against the remote manifest
+        // BEFORE `publishPending` rewrites the manifest, so a crash between remote manifest
+        // publication and local state commit is adopted cleanly even if new local edits exist.
+        val pendingRecovery = compactor.reconcilePublishedStateIfPending(
+            permissionId = permissionId,
+            localDeviceId = localDeviceId,
+            accessToken = accessToken,
+        )
+
+        if (!isAccountActive(permissionId)) {
+            return DriveSyncRunSummary(SyncOutcome.NotApplicable)
+        }
+
         // 2. Publish outgoing batches (first draining any frozen in-flight outbox entry).
         val published = publishPending(
             permissionId = permissionId,
@@ -310,7 +338,35 @@ internal class DriveChangeEngine(
             return DriveSyncRunSummary(SyncOutcome.NotApplicable)
         }
 
+        // 3. Compact per-device snapshot & prune superseded deltas/snapshots on full sync runs.
+        val compaction = if (bookUrlFilter == null) {
+            compactor.compactIfNeeded(
+                permissionId = permissionId,
+                localDeviceId = localDeviceId,
+                accessToken = accessToken,
+                nextHlc = { nextHlc(permissionId) },
+                publishManifest = { snap, prevSnap ->
+                    publishManifest(
+                        permissionId = permissionId,
+                        localDeviceId = localDeviceId,
+                        accessToken = accessToken,
+                        snapshotOverride = snap,
+                        previousSnapshotOverride = prevSnap,
+                    )
+                },
+            )
+        } else {
+            DriveCompactionResult()
+        }
+
+        if (!isAccountActive(permissionId)) {
+            return DriveSyncRunSummary(SyncOutcome.NotApplicable)
+        }
+
         val paused = cursors.pausedForAccount(permissionId).isNotEmpty()
+        val compacted = compaction.compacted || (pendingRecovery?.compacted == true)
+        val prunedDeltas = compaction.prunedDeltaCount + (pendingRecovery?.prunedDeltaCount ?: 0)
+        val prunedParts = compaction.prunedSnapshotPartCount + (pendingRecovery?.prunedSnapshotPartCount ?: 0)
         if (published.oversized.isNotEmpty()) {
             accounts.recordError(
                 permissionId,
@@ -324,14 +380,25 @@ internal class DriveChangeEngine(
                 publishedBatches = published.batches,
                 pausedBySchemaVersion = paused,
                 oversizedRecords = published.oversized,
+                compacted = compacted,
+                prunedDeltaCount = prunedDeltas,
+                prunedSnapshotPartCount = prunedParts,
+                compactionError = compaction.failureReason,
             )
         }
         accounts.recordSuccess(permissionId, clock())
+        if (compaction.failureReason != null) {
+            accounts.recordError(permissionId, compaction.failureReason)
+        }
         return DriveSyncRunSummary(
             outcome = SyncOutcome.Success,
             appliedDeltas = appliedDeltas,
             publishedBatches = published.batches,
             pausedBySchemaVersion = paused,
+            compacted = compacted,
+            prunedDeltaCount = prunedDeltas,
+            prunedSnapshotPartCount = prunedParts,
+            compactionError = compaction.failureReason,
         )
     }
 
@@ -354,12 +421,20 @@ internal class DriveChangeEngine(
         // Step 1: capture startPageToken BEFORE listing so concurrent writes aren't missed.
         val pendingStartPageToken = driveApi.getStartPageToken(accessToken)
 
-        // Step 2: enumerate appDataFolder files.
+        // Step 2: enumerate appDataFolder files and reconcile pruned deltas/snapshots.
         val appDataFiles = driveApi.listAppDataFiles(accessToken)
         store.withTransaction {
+            val presentAppDataIds = appDataFiles.filter { !it.trashed }.map { it.id }.toSet()
             for (remote in appDataFiles) {
                 if (remote.trashed) continue
                 indexRemoteFile(permissionId, remote)
+            }
+            for (kind in listOf(DriveFile.KIND_DELTA, DriveFile.KIND_SNAPSHOT)) {
+                for (indexed in files.byKind(permissionId, kind)) {
+                    if (!indexed.trashed && indexed.fileId !in presentAppDataIds) {
+                        files.setTrashed(permissionId, indexed.fileId, true)
+                    }
+                }
             }
         }
 
@@ -465,7 +540,49 @@ internal class DriveChangeEngine(
         val appliedAnyRecord: Boolean = false,
         val advancedAnyCursor: Boolean = false,
         val hasDeferredDomains: Boolean = false,
+        val notFound: Boolean = false,
     )
+
+    private suspend fun fetchRemoteManifest(
+        permissionId: String,
+        remoteDeviceId: String,
+        manifestFile: DriveFile,
+        accessToken: String,
+    ): DriveManifest? {
+        val bytes = try {
+            driveApi.downloadMedia(accessToken, manifestFile.fileId)
+        } catch (_: DriveNotFoundException) {
+            files.setTrashed(permissionId, manifestFile.fileId, true)
+            return null
+        }
+        val parsed = runCatching { DriveWireCodec.decodeManifest(bytes.toString(Charsets.UTF_8)) }.getOrNull()
+            ?: return null
+        observeRemoteHlc(permissionId, parsed.updatedHlc)
+        devices.upsert(
+            DriveDevice(
+                permissionId = permissionId,
+                deviceId = remoteDeviceId,
+                label = parsed.deviceLabel,
+                manifestFileId = manifestFile.fileId,
+                appVersionCode = parsed.appVersionCode,
+                snapshotThroughSeq = parsed.snapshot?.throughSeq ?: 0L,
+                lastSeenAt = clock(),
+            ),
+        )
+        when (val check = DriveWireCodec.checkSchema(parsed.schemaVersion, parsed.domains, parsed.deviceLabel)) {
+            is DriveSchemaCheck.UnsupportedStream -> {
+                pauseDeviceStream(permissionId, remoteDeviceId, check.schemaVersion)
+            }
+            is DriveSchemaCheck.UnsupportedDomains -> {
+                pauseUnsupportedDomains(permissionId, remoteDeviceId, check.unsupported)
+                clearStreamPause(permissionId, remoteDeviceId)
+            }
+            DriveSchemaCheck.Supported -> {
+                clearStreamPause(permissionId, remoteDeviceId)
+            }
+        }
+        return parsed
+    }
 
     private suspend fun processDiscoveredRemoteDevices(
         permissionId: String,
@@ -496,40 +613,12 @@ internal class DriveChangeEngine(
 
             for (remoteDeviceId in devicesToVisit) {
                 var manifest = parsedManifests[remoteDeviceId]
-                if (isFirstPass) {
-                    val manifestFile = manifestsByDevice[remoteDeviceId]
-                    if (manifestFile != null) {
-                        val bytes = driveApi.downloadMedia(accessToken, manifestFile.fileId)
-                        val parsed = runCatching { DriveWireCodec.decodeManifest(bytes.toString(Charsets.UTF_8)) }.getOrNull()
-                        if (parsed != null) {
-                            manifest = parsed
-                            parsedManifests[remoteDeviceId] = parsed
-                            observeRemoteHlc(permissionId, parsed.updatedHlc)
-                            devices.upsert(
-                                DriveDevice(
-                                    permissionId = permissionId,
-                                    deviceId = remoteDeviceId,
-                                    label = parsed.deviceLabel,
-                                    manifestFileId = manifestFile.fileId,
-                                    appVersionCode = parsed.appVersionCode,
-                                    snapshotThroughSeq = parsed.snapshot?.throughSeq ?: 0L,
-                                    lastSeenAt = clock(),
-                                ),
-                            )
-                            when (val check = DriveWireCodec.checkSchema(parsed.schemaVersion, parsed.domains, parsed.deviceLabel)) {
-                                is DriveSchemaCheck.UnsupportedStream -> {
-                                    pauseDeviceStream(permissionId, remoteDeviceId, check.schemaVersion)
-                                    continue
-                                }
-                                is DriveSchemaCheck.UnsupportedDomains -> {
-                                    pauseUnsupportedDomains(permissionId, remoteDeviceId, check.unsupported)
-                                    clearStreamPause(permissionId, remoteDeviceId)
-                                }
-                                DriveSchemaCheck.Supported -> {
-                                    clearStreamPause(permissionId, remoteDeviceId)
-                                }
-                            }
-                        }
+                val manifestFile = manifestsByDevice[remoteDeviceId]
+                if (isFirstPass && manifestFile != null) {
+                    val parsed = fetchRemoteManifest(permissionId, remoteDeviceId, manifestFile, accessToken)
+                    if (parsed != null) {
+                        manifest = parsed
+                        parsedManifests[remoteDeviceId] = parsed
                     }
                 }
 
@@ -538,17 +627,43 @@ internal class DriveChangeEngine(
                 if (streamCursor?.pausedSchemaVersion != null) continue
 
                 // If manifest advertises a snapshot ahead of our cursor, ingest it idempotently.
-                val snap = manifest?.snapshot
+                // If a snapshot part returns 404 (pruned concurrently), re-read the manifest once and retry.
+                var snap = manifest?.snapshot
                 if (snap != null && snap.throughSeq > minAppliedSeq(permissionId, remoteDeviceId)) {
-                    val snapOutcome = applySnapshot(
+                    var snapOutcome = applySnapshot(
                         permissionId = permissionId,
                         localDeviceId = localDeviceId,
                         remoteDeviceId = remoteDeviceId,
                         snapshot = snap,
                         accessToken = accessToken,
                     )
+                    if (snapOutcome.notFound && manifestFile != null) {
+                        val refreshed = fetchRemoteManifest(permissionId, remoteDeviceId, manifestFile, accessToken)
+                        if (refreshed != null) {
+                            manifest = refreshed
+                            parsedManifests[remoteDeviceId] = refreshed
+                            val refreshedSnap = refreshed.snapshot
+                            if (refreshedSnap != null &&
+                                refreshedSnap != snap &&
+                                refreshedSnap.throughSeq > minAppliedSeq(permissionId, remoteDeviceId) &&
+                                cursors.get(permissionId, remoteDeviceId, DriveWireCodec.STREAM_PAUSE_DOMAIN)?.pausedSchemaVersion == null
+                            ) {
+                                snap = refreshedSnap
+                                snapOutcome = applySnapshot(
+                                    permissionId = permissionId,
+                                    localDeviceId = localDeviceId,
+                                    remoteDeviceId = remoteDeviceId,
+                                    snapshot = refreshedSnap,
+                                    accessToken = accessToken,
+                                )
+                            }
+                        }
+                    }
                     if (snapOutcome.appliedAnyRecord) appliedAnyRecordThisPass = true
-                    if (snapOutcome.advancedAnyCursor) advancedAnyCursorThisPass = true
+                    if (snapOutcome.advancedAnyCursor) {
+                        advancedAnyCursorThisPass = true
+                        appliedCount++
+                    }
                     if (snapOutcome.hasDeferredDomains) deferredDevices.add(remoteDeviceId)
                 }
 
@@ -562,16 +677,53 @@ internal class DriveChangeEngine(
                     .sortedBy { it.seq }
                 if (deltaFiles.isEmpty()) continue
 
-                val startingCursor = minAppliedSeq(permissionId, remoteDeviceId)
+                var startingCursor = minAppliedSeq(permissionId, remoteDeviceId)
                 var expectedNextSeq = startingCursor + 1L
                 val deviceDeferredDomains = mutableSetOf<String>()
+                var refreshedManifestOnDelta404 = false
                 for (deltaFile in deltaFiles) {
                     val seq = deltaFile.seq ?: continue
                     if (seq <= startingCursor) continue
                     // Enforce contiguous seq order: if there is a gap, stop and wait (or fall back to snapshot).
                     if (seq > expectedNextSeq) break
 
-                    val bytes = driveApi.downloadMedia(accessToken, deltaFile.fileId)
+                    val bytes = try {
+                        driveApi.downloadMedia(accessToken, deltaFile.fileId)
+                    } catch (_: DriveNotFoundException) {
+                        // Delta was pruned by the remote device's compaction; re-read its manifest and apply snapshot.
+                        files.setTrashed(permissionId, deltaFile.fileId, true)
+                        if (!refreshedManifestOnDelta404 && manifestFile != null) {
+                            refreshedManifestOnDelta404 = true
+                            val refreshed = fetchRemoteManifest(permissionId, remoteDeviceId, manifestFile, accessToken)
+                            if (refreshed != null) {
+                                manifest = refreshed
+                                parsedManifests[remoteDeviceId] = refreshed
+                                val refreshedSnap = refreshed.snapshot
+                                if (refreshedSnap != null &&
+                                    refreshedSnap.throughSeq > minAppliedSeq(permissionId, remoteDeviceId) &&
+                                    cursors.get(permissionId, remoteDeviceId, DriveWireCodec.STREAM_PAUSE_DOMAIN)?.pausedSchemaVersion == null
+                                ) {
+                                    val snapOutcome = applySnapshot(
+                                        permissionId = permissionId,
+                                        localDeviceId = localDeviceId,
+                                        remoteDeviceId = remoteDeviceId,
+                                        snapshot = refreshedSnap,
+                                        accessToken = accessToken,
+                                    )
+                                    if (snapOutcome.appliedAnyRecord) appliedAnyRecordThisPass = true
+                                    if (snapOutcome.advancedAnyCursor) {
+                                        advancedAnyCursorThisPass = true
+                                        appliedCount++
+                                    }
+                                    if (snapOutcome.hasDeferredDomains) deferredDevices.add(remoteDeviceId)
+                                    startingCursor = minAppliedSeq(permissionId, remoteDeviceId)
+                                    expectedNextSeq = startingCursor + 1L
+                                    continue
+                                }
+                            }
+                        }
+                        break
+                    }
                     val batch = runCatching { DriveWireCodec.decodeDeltaBatch(bytes.toString(Charsets.UTF_8)) }.getOrNull()
                         ?: break
                     observeRemoteHlc(permissionId, batch.createdHlc)
@@ -683,16 +835,27 @@ internal class DriveChangeEngine(
         snapshot: DriveSnapshotRef,
         accessToken: String,
     ): SnapshotApplyOutcome {
-        val allRecords = mutableListOf<DriveWireRecord>()
-        val allResolutions = mutableListOf<DriveSnapshotResolution>()
+        if (snapshot.parts.isEmpty()) return SnapshotApplyOutcome()
+        val decodedParts = mutableListOf<DriveSnapshotPart>()
         for (partRef in snapshot.parts) {
-            val bytes = driveApi.downloadMedia(accessToken, partRef.fileId)
+            val bytes = try {
+                driveApi.downloadMedia(accessToken, partRef.fileId)
+            } catch (_: DriveNotFoundException) {
+                return SnapshotApplyOutcome(notFound = true)
+            }
             val actualSha = DriveCanonicalJson.sha256Hex(bytes)
             if (partRef.sha256.isNotBlank() && !actualSha.equals(partRef.sha256, ignoreCase = true)) {
                 return SnapshotApplyOutcome()
             }
             val part = runCatching { DriveWireCodec.decodeSnapshotPart(bytes.toString(Charsets.UTF_8)) }.getOrNull()
                 ?: return SnapshotApplyOutcome()
+            if (part.partCount > 0 && part.partCount != snapshot.parts.size) {
+                return SnapshotApplyOutcome()
+            }
+            if (part.throughSeq > 0L && snapshot.throughSeq > 0L && part.throughSeq != snapshot.throughSeq) {
+                return SnapshotApplyOutcome()
+            }
+            observeRemoteHlc(permissionId, part.createdHlc)
             val effectiveDomains = buildMap {
                 putAll(part.domains)
                 for (record in part.records) {
@@ -711,9 +874,15 @@ internal class DriveChangeEngine(
                 }
                 DriveSchemaCheck.Supported -> Unit
             }
-            allResolutions.addAll(part.resolutions)
-            allRecords.addAll(part.records)
+            decodedParts.add(part)
         }
+        val expectedIndices = (0 until snapshot.parts.size).toSet()
+        if (decodedParts.map { it.partIndex }.toSet() != expectedIndices) {
+            return SnapshotApplyOutcome()
+        }
+        val orderedParts = decodedParts.sortedBy { it.partIndex }
+        val allResolutions = orderedParts.flatMap { it.resolutions }
+        val allRecords = orderedParts.flatMap { it.records }
 
         val deviceCursors = cursors.forDevice(permissionId, remoteDeviceId)
         val pausedDomains = deviceCursors
@@ -921,15 +1090,16 @@ internal class DriveChangeEngine(
                     permissionId = permissionId,
                     record = record,
                     remoteDeviceId = remoteDeviceId,
-                    remoteSeq = remoteSeq,
+                    // A snapshot record keeps its own publication seq; throughSeq only drives cursors.
+                    remoteSeq = record.seq ?: remoteSeq,
                 ) ?: true
             DriveWireCodec.DOMAIN_VOCAB_REVIEW -> {
                 vocabularySync?.applyRemoteReview(
                     permissionId = permissionId,
                     record = record,
                     remoteDeviceId = remoteDeviceId,
-                    remoteSeq = remoteSeq,
-                    provenanceKnown = batchObserved != null,
+                    remoteSeq = record.seq ?: remoteSeq,
+                    provenanceKnown = batchObserved != null || record.seq != null,
                 )
                 true
             }
@@ -1064,6 +1234,18 @@ internal class DriveChangeEngine(
                     seriesSync?.markPublished(permissionId, recoveredRecords)
                 }
                 outbox.markAcked(permissionId, existingInFlight.seq, fileId)
+                files.upsert(
+                    DriveFile(
+                        permissionId = permissionId,
+                        fileId = fileId,
+                        name = DriveWireCodec.deltaFileName(localDeviceId, existingInFlight.seq),
+                        kind = DriveFile.KIND_DELTA,
+                        deviceId = localDeviceId,
+                        seq = existingInFlight.seq,
+                        size = existingInFlight.payload.toByteArray(Charsets.UTF_8).size.toLong(),
+                        trashed = false,
+                    ),
+                )
                 val acct = accounts.get(permissionId)
                 if (acct != null) {
                     accounts.updateManifest(
@@ -1273,6 +1455,20 @@ internal class DriveChangeEngine(
                 catalogSync.markPublished(permissionId, chunk)
                 seriesSync?.markPublished(permissionId, chunk)
                 outbox.markAcked(permissionId, frozen.seq, uploaded.id)
+                files.upsert(
+                    DriveFile(
+                        permissionId = permissionId,
+                        fileId = uploaded.id,
+                        name = DriveWireCodec.deltaFileName(localDeviceId, frozen.seq),
+                        kind = DriveFile.KIND_DELTA,
+                        deviceId = localDeviceId,
+                        seq = frozen.seq,
+                        size = frozen.payload.toByteArray(Charsets.UTF_8).size.toLong(),
+                        md5 = uploaded.md5Checksum,
+                        trashed = false,
+                        createdTime = uploaded.createdTime,
+                    ),
+                )
                 val acct = accounts.get(permissionId)
                 if (acct != null) {
                     accounts.updateManifest(
@@ -1315,13 +1511,22 @@ internal class DriveChangeEngine(
         permissionId: String,
         localDeviceId: String,
         accessToken: String,
-    ) {
-        val account = accounts.get(permissionId) ?: return
+        snapshotOverride: DriveSnapshotRef? = null,
+        previousSnapshotOverride: DriveSnapshotRef? = null,
+        useCompactionStateDefaults: Boolean = snapshotOverride == null && previousSnapshotOverride == null,
+    ): String? {
+        val account = accounts.get(permissionId) ?: return null
         val hlc = nextHlc(permissionId)
         val appliedVector = currentObservedVector(permissionId, localDeviceId)
         val folderRef = account.folderId?.let { fid ->
             val file = files.get(permissionId, fid)
             DriveEpubFolderRef(fileId = fid, createdTime = file?.createdTime)
+        }
+        val (snapshotRef, previousSnapshotRef) = if (useCompactionStateDefaults) {
+            val cs = compactor.currentCompactionState(permissionId)
+            cs.snapshot to cs.previousSnapshot
+        } else {
+            snapshotOverride to previousSnapshotOverride
         }
         val manifest = DriveManifest(
             schemaVersion = DriveWireCodec.SCHEMA_VERSION,
@@ -1329,8 +1534,8 @@ internal class DriveChangeEngine(
             deviceLabel = deviceLabelProvider(),
             appVersionCode = appVersionCodeProvider(),
             updatedHlc = hlc,
-            snapshot = null,
-            previousSnapshot = null,
+            snapshot = snapshotRef,
+            previousSnapshot = previousSnapshotRef,
             domains = DriveWireCodec.SUPPORTED_DOMAIN_VERSIONS,
             epubFolder = folderRef,
             appliedVector = appliedVector,
@@ -1373,6 +1578,7 @@ internal class DriveChangeEngine(
             snapshotThroughSeq = account.snapshotThroughSeq,
             deltasSinceSnapshot = account.deltasSinceSnapshot,
         )
+        return resultFile.id
     }
 
     private suspend fun findExistingOwnManifestFileId(
@@ -1409,7 +1615,7 @@ internal class DriveChangeEngine(
             name = remote.name,
             kind = kind,
             deviceId = props["deviceId"]?.takeIf { it.isNotBlank() },
-            seq = props["seq"]?.toLongOrNull(),
+            seq = props["seq"]?.toLongOrNull() ?: props["throughSeq"]?.toLongOrNull(),
             sha256 = props["sha256"]?.trim()?.lowercase(Locale.ROOT)?.takeIf { it.isNotBlank() },
             size = remote.size,
             md5 = remote.md5Checksum,
