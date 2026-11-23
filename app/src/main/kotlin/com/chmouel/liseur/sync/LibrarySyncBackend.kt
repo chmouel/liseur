@@ -31,9 +31,13 @@ interface LibrarySyncBackend {
      */
     val positionPeer: PeerPositionSync?
 
-    /** Optional flavor-provided entry in sync settings. */
+    /** Optional flavor-provided entry in Settings > Library. */
     @Composable
     fun SettingsEntry(onOpen: () -> Unit) = Unit
+
+    /** Optional flavor-provided section on the Services page. */
+    @Composable
+    fun SettingsSection() = Unit
 
     /** No-op backend for builds without an external library-sync provider. */
     object None : LibrarySyncBackend {

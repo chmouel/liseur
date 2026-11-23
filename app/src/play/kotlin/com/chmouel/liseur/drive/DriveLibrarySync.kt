@@ -1,6 +1,7 @@
 package com.chmouel.liseur.drive
 
 import android.content.Context
+import androidx.compose.runtime.Composable
 import androidx.room.withTransaction
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.LiseurDatabase
@@ -53,6 +54,9 @@ internal class DriveLibrarySync(
     private val onResumeActive: () -> Unit = {},
     private val deviceIdGenerator: () -> String = { UUID.randomUUID().toString().lowercase(Locale.ROOT) },
     private val openStore: (() -> DriveSyncDatabase)? = null,
+    authClient: DriveAuthClient? = null,
+    driveApi: DriveRemoteApi? = null,
+    private val clock: () -> Long = System::currentTimeMillis,
 ) : LibrarySyncBackend {
 
     private val appContext = context.applicationContext
@@ -69,12 +73,33 @@ internal class DriveLibrarySync(
     internal val store: DriveSyncDatabase
         get() = storeLazy.value
 
-    private fun hasStore(): Boolean = storeLazy.isInitialized() || openStore != null || storeFile.exists()
+    internal val authClient: DriveAuthClient by lazy {
+        authClient ?: PlayServicesDriveAuthClient(appContext)
+    }
 
-    @OptIn(ExperimentalCoroutinesApi::class)
-    override val active: Flow<Boolean> = storeOpened
+    internal val driveApi: DriveRemoteApi by lazy {
+        driveApi ?: DriveRestClient()
+    }
+
+    internal val accountController: DriveAccountController by lazy {
+        DriveAccountController(
+            database = database,
+            remoteAccount = remoteAccount,
+            driveSync = this,
+            authClient = this.authClient,
+            driveApi = this.driveApi,
+            clock = clock,
+        )
+    }
+
+    internal fun hasStore(): Boolean = storeLazy.isInitialized() || openStore != null || storeFile.exists()
+
+    internal val storeAvailable: Flow<Boolean> = storeOpened
         .map { opened -> opened || storeFile.exists() }
         .distinctUntilChanged()
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    override val active: Flow<Boolean> = storeAvailable
         .flatMapLatest { exists ->
             if (exists) store.accounts().observeActive().map { it != null } else flowOf(false)
         }
@@ -101,6 +126,51 @@ internal class DriveLibrarySync(
     }
 
     override val positionPeer: PeerPositionSync = DrivePositionPeer()
+
+    @Composable
+    override fun SettingsEntry(onOpen: () -> Unit) {
+        DriveSettingsEntry(controller = accountController, onOpen = onOpen)
+    }
+
+    @Composable
+    override fun SettingsSection() {
+        DriveSettingsSection(controller = accountController)
+    }
+
+    /** Stops background workers and transitions [permissionId] to `NEEDS_RECONNECT` while preserving all state. */
+    internal suspend fun markNeedsReconnect(permissionId: String, reason: String) {
+        stopWorkers()
+        if (!hasStore()) return
+        store.withTransaction {
+            store.accounts().setState(permissionId, DriveAccount.STATE_NEEDS_RECONNECT)
+            store.accounts().recordError(permissionId, reason)
+        }
+    }
+
+    /**
+     * Restores a previously saved account state after cancelling a pending switch,
+     * while upholding the mutual exclusion invariant with any connected main server.
+     */
+    internal suspend fun restoreAccountState(permissionId: String, state: String) {
+        if (!hasStore()) return
+        val restoredActive = switchCoordinator.withSwitchLock {
+            if (state == DriveAccount.STATE_ACTIVE && remoteAccount.current() != null) {
+                return@withSwitchLock false
+            }
+            store.withTransaction {
+                if (state == DriveAccount.STATE_ACTIVE) {
+                    store.accounts().pauseAllActive()
+                }
+                store.accounts().setState(permissionId, state)
+            }
+            state == DriveAccount.STATE_ACTIVE
+        }
+        if (restoredActive) onResumeActive()
+    }
+
+    internal fun notifyActivated() {
+        onResumeActive()
+    }
 
     /**
      * Activates Google Drive for [permissionId] while upholding the mutual
@@ -135,6 +205,7 @@ internal class DriveLibrarySync(
                 val updated = existing?.copy(
                     email = email,
                     state = DriveAccount.STATE_ACTIVE,
+                    connectedAt = now,
                     lastError = null,
                 ) ?: DriveAccount(
                     permissionId = permissionId,

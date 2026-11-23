@@ -32,6 +32,8 @@ robolectric = "4.17"
 rhino = "1.9.2"
 # Play build only: on-device translation (see DEVELOPER.md, F-Droid readiness).
 mlkitTranslate = "17.0.3"
+# Play build only: Google Drive OAuth via AuthorizationClient (ADR-0078).
+playServicesAuth = "21.6.0"
 junit = "4.13.2"
 
 [libraries]
@@ -82,6 +84,7 @@ desugar-jdk-libs = { module = "com.android.tools:desugar_jdk_libs", version.ref 
 json = { module = "org.json:json", version.ref = "json" }
 jsoup = { module = "org.jsoup:jsoup", version.ref = "jsoup" }
 mlkit-translate = { module = "com.google.mlkit:translate", version.ref = "mlkitTranslate" }
+play-services-auth = { module = "com.google.android.gms:play-services-auth", version.ref = "playServicesAuth" }
 coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
 junit = { module = "junit:junit", version.ref = "junit" }
 mockwebserver = { module = "com.squareup.okhttp3:mockwebserver3-junit4", version.ref = "okhttp" }

@@ -765,6 +765,7 @@ private fun LiseurApp(
                                 }
                             },
                             flavorLibraryRows = {
+                                context.container.librarySync.SettingsEntry(onOpen = { openPage(Route.Services) })
                                 context.container.readingTracker.SettingsEntry(onOpen = { openPage(Route.Services) })
                             },
                             intelligenceRows = {
@@ -850,7 +851,10 @@ private fun LiseurApp(
                                     context.container.serverConnections,
                                     context.container.serviceAccounts,
                                     leave,
-                                    trackers = { context.container.readingTracker.Rows() },
+                                    trackers = {
+                                        context.container.librarySync.SettingsSection()
+                                        context.container.readingTracker.Rows()
+                                    },
                                 )
                             },
                         )
@@ -861,7 +865,10 @@ private fun LiseurApp(
                             connections = context.container.serverConnections,
                             accounts = context.container.serviceAccounts,
                             onBack = back,
-                            trackers = { context.container.readingTracker.Rows() },
+                            trackers = {
+                                context.container.librarySync.SettingsSection()
+                                context.container.readingTracker.Rows()
+                            },
                         )
                     }
 

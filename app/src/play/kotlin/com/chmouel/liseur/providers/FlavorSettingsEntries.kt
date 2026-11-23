@@ -34,6 +34,27 @@ internal object PlaySettingsEntries {
         summary = R.string.hardcover_settings_summary,
         section = R.string.settings_library,
     )
+    val GoogleDriveSettings = SettingsEntry(
+        key = "google_drive_settings",
+        page = Route.Settings,
+        title = R.string.drive_sync_title,
+        summary = R.string.drive_sync_settings_summary,
+        section = R.string.settings_library,
+    )
+    val GoogleDrive = SettingsEntry(
+        key = "google_drive",
+        page = Route.Services,
+        title = R.string.drive_sync_title,
+        summary = R.string.drive_sync_settings_summary,
+        section = R.string.drive_sync_title,
+    )
 }
 
-internal val flavorSettingsEntries: List<SettingsEntry> = listOf(PlaySettingsEntries.GeminiKey, PlaySettingsEntries.ReadingServices, PlaySettingsEntries.Hardcover, PlaySettingsEntries.Reporting)
+internal val flavorSettingsEntries: List<SettingsEntry> = listOf(
+    PlaySettingsEntries.GeminiKey,
+    PlaySettingsEntries.GoogleDriveSettings,
+    PlaySettingsEntries.GoogleDrive,
+    PlaySettingsEntries.ReadingServices,
+    PlaySettingsEntries.Hardcover,
+    PlaySettingsEntries.Reporting,
+)
