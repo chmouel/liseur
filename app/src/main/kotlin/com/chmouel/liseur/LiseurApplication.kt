@@ -61,6 +61,7 @@ class LiseurApplication : Application(), SingletonImageLoader.Factory {
             container.bookOrbitSession.prime()
         }
         container.readingTracker.resume()
+        container.librarySync.resume()
         PositionSyncWorker.schedulePeriodic(this)
         WidgetUpdater.retireLegacyWork(this)
         syncWhenBroughtToTheFore()

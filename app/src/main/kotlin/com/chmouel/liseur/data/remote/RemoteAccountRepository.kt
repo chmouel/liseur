@@ -7,6 +7,7 @@ import com.chmouel.liseur.data.calibre.CalibreParsing
 import com.chmouel.liseur.data.calibre.CalibreSetupClient
 import com.chmouel.liseur.data.calibre.CredentialCipher
 import com.chmouel.liseur.data.db.AnnotationSyncDao
+import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.UploadRefusalDao
 import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.db.SeriesExtraDao
@@ -27,6 +28,7 @@ import com.chmouel.liseur.data.opds.OpdsScope
 import com.chmouel.liseur.data.opds.OpdsSetupClient
 import com.chmouel.liseur.data.opds.StarterCatalog
 import com.chmouel.liseur.data.liseursync.LiseurSyncServerSetup
+import com.chmouel.liseur.sync.LibrarySyncSwitchCoordinator
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.runBlocking
 import java.util.concurrent.atomic.AtomicLong
@@ -161,6 +163,17 @@ class RemoteAccountRepository(
      * for and be sure the answer is still true when they write.
      */
     private val inTransaction: suspend (suspend () -> Unit) -> Unit = { it() },
+    /**
+     * Invoked before a main server (`id = 1`) connection is published or
+     * restored, so any mutually exclusive external library-sync backend
+     * can deactivate cleanly before the server row is written.
+     */
+    private val beforeMainServerChange: suspend () -> Unit = {},
+    /**
+     * Shared lock serialized with any mutually exclusive external
+     * library-sync backend across deactivation and server publication.
+     */
+    private val switchCoordinator: LibrarySyncSwitchCoordinator = LibrarySyncSwitchCoordinator(),
 ) {
     val server: Flow<RemoteServer?> = dao.observe()
 
@@ -220,6 +233,18 @@ class RemoteAccountRepository(
 
     /** Replaces the saved account offline, retiring even the same account's old agreements. */
     internal suspend fun restoreBackup(server: RemoteServer?) {
+        if (server != null) {
+            switchCoordinator.withSwitchLock {
+                beforeMainServerChange()
+                restoreBackupLocked(server)
+            }
+        } else {
+            restoreBackupLocked(null)
+        }
+        relinkUploads()
+    }
+
+    private suspend fun restoreBackupLocked(server: RemoteServer?) {
         changingAccount {
             inTransaction {
                 val previous = dao.get()
@@ -232,7 +257,6 @@ class RemoteAccountRepository(
             val restored = dao.get()
             if (restored == null) bookOrbit?.clear() else adoptBookOrbit(restored)
         }
-        relinkUploads()
     }
 
     suspend fun credentials(): RemoteCredentials? = dao.get()?.credentials
@@ -582,22 +606,27 @@ class RemoteAccountRepository(
         pairing: ProvedKosyncPairing?,
         syncOnlyUser: String?,
         speaksForKosync: Boolean,
-    ) = changingAccount {
-        inTransaction {
-            storeLocked(
-                ServerKind.CUSTOM,
-                credentials,
-                capabilities,
-                keepsPairing = true,
-                signedInAs = syncOnlyUser,
-            )
-            when {
-                pairing != null -> kosync().adopt(pairing)
-                // A submission that covers the whole connection says by
-                // its empty sync half that there is to be no partner.
-                // One that covers only the catalog address says nothing
-                // about it, and must leave the pairing where it is.
-                speaksForKosync -> kosync().forget()
+    ) {
+        switchCoordinator.withSwitchLock {
+            beforeMainServerChange()
+            changingAccount {
+                inTransaction {
+                    storeLocked(
+                        ServerKind.CUSTOM,
+                        credentials,
+                        capabilities,
+                        keepsPairing = true,
+                        signedInAs = syncOnlyUser,
+                    )
+                    when {
+                        pairing != null -> kosync().adopt(pairing)
+                        // A submission that covers the whole connection says by
+                        // its empty sync half that there is to be no partner.
+                        // One that covers only the catalog address says nothing
+                        // about it, and must leave the pairing where it is.
+                        speaksForKosync -> kosync().forget()
+                    }
+                }
             }
         }
     }
@@ -654,7 +683,10 @@ class RemoteAccountRepository(
         credentials: RemoteCredentials,
         capabilities: ServerCapabilities,
     ) {
-        changingAccount { inTransaction { storeLocked(kind, credentials, capabilities) } }
+        switchCoordinator.withSwitchLock {
+            beforeMainServerChange()
+            changingAccount { inTransaction { storeLocked(kind, credentials, capabilities) } }
+        }
         relinkUploads()
     }
 
@@ -1080,8 +1112,20 @@ class RemoteAccountRepository(
      * with it, including its local statistics; anything downloaded stays
      * on the device as an ordinary book with its statistics intact, cut
      * loose so it cannot be synced against a different server later on.
+     *
+     * When [preserveHistoryStubs] is true (switching to an external
+     * library-sync backend), undownloaded stubs carrying local reading
+     * history, reader-authored metadata/cover overrides, manual series
+     * choices, or shelf/status decisions are kept and unlinked instead of
+     * deleted, while only genuinely untouched preview stubs are removed.
+     * [beforePeerForget] runs inside the transaction before the retiring
+     * server's peer rows and catalog metadata are cleared so the caller
+     * can capture retained work identities for those preserved stubs.
      */
-    suspend fun disconnect() {
+    suspend fun disconnect(
+        preserveHistoryStubs: Boolean = false,
+        beforePeerForget: suspend (retiringServer: RemoteServer, preservedFilelessStubs: List<Book>) -> Unit = { _, _ -> },
+    ) {
         // The session is ended on the server before the row that names
         // it goes, because afterwards there is nothing left to log out
         // with. Best effort: a server that cannot be reached must not
@@ -1089,12 +1133,29 @@ class RemoteAccountRepository(
         runCatching { bookOrbit?.close() }
         changingAccount {
             inTransaction {
-                forgetSyncPeer(dao.get())
+                val retiringServer = dao.get()
+                val preservedStubs = if (preserveHistoryStubs) {
+                    bookDao.remoteNotDownloadedPreservedStubs()
+                } else {
+                    emptyList()
+                }
+                if (preserveHistoryStubs && retiringServer != null) {
+                    beforePeerForget(retiringServer, preservedStubs)
+                }
+                forgetSyncPeer(retiringServer)
                 // No server row survives to trigger account retirement on a
                 // reconnect, so a retained book would keep owing the
                 // previous account's choice to whoever signs in next.
                 progressDao.retireStatusDebt()
-                bookRemoval.deleteRemoteNotDownloaded()
+                if (preserveHistoryStubs) {
+                    val preservedUrls = preservedStubs.mapTo(HashSet()) { it.url }
+                    val untouchedUrls = bookDao.remoteNotDownloadedUrls()
+                        .filterNot { it in preservedUrls }
+                    bookRemoval.deleteByUrls(untouchedUrls)
+                    bookDao.unlinkPreservedHistoryStubsFromRemote()
+                } else {
+                    bookRemoval.deleteRemoteNotDownloaded()
+                }
                 bookDao.unlinkDownloadedFromRemote()
                 bookOrbitBindingDao?.clearOrphans()
                 // Series summaries belong to the server that wrote them.

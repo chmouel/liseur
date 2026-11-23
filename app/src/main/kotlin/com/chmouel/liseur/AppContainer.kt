@@ -71,6 +71,7 @@ import com.chmouel.liseur.data.settings.SessionStateRepository
 import com.chmouel.liseur.data.settings.SettingsSyncRepository
 import com.chmouel.liseur.data.settings.UserFontRepository
 import com.chmouel.liseur.data.settings.syncableSettings
+import com.chmouel.liseur.providers.LibrarySyncBackendFactory
 import com.chmouel.liseur.providers.ServerConnections
 import com.chmouel.liseur.providers.ReadingTracker
 import com.chmouel.liseur.providers.ServiceAccounts
@@ -80,6 +81,8 @@ import com.chmouel.liseur.readaloud.ReadAloudFeatureFactory
 import com.chmouel.liseur.reader.OpenBookHandles
 import com.chmouel.liseur.reader.ReaderPresence
 import com.chmouel.liseur.sync.LatestPositionSync
+import com.chmouel.liseur.sync.LibrarySyncBackend
+import com.chmouel.liseur.sync.LibrarySyncSwitchCoordinator
 import com.chmouel.liseur.sync.LiveSyncConnector
 import com.chmouel.liseur.sync.PositionSyncCoordinator
 import com.chmouel.liseur.sync.PositionSyncWorker
@@ -653,6 +656,8 @@ class AppContainer(
                     .OpdsSetupClient(),
         )
 
+    private val librarySyncSwitchCoordinator = LibrarySyncSwitchCoordinator()
+
     val remoteAccount =
         RemoteAccountRepository(
             furthestDao = database.furthestPositionDao(),
@@ -707,6 +712,8 @@ class AppContainer(
             bookOrbitStatusAgreementDao = database.bookOrbitStatusAgreementDao(),
             setups = serverSetups,
             inTransaction = { work -> bookRemoval.together(work) },
+            beforeMainServerChange = { librarySync.deactivate() },
+            switchCoordinator = librarySyncSwitchCoordinator,
         )
 
     val bookDownloads =
@@ -1026,7 +1033,25 @@ class AppContainer(
                             },
                         ),
                 ),
+            externalLibrarySync = { librarySync },
         )
+
+    /**
+     * Flavor-registered automatic library-sync backend, built with narrow
+     * dependencies before [positionSync] so the eager composite can attach
+     * its peer without depending back on [AppContainer].
+     */
+    val librarySync: LibrarySyncBackend by lazy {
+        LibrarySyncBackendFactory.create(
+            context = context.applicationContext,
+            database = database,
+            remoteAccount = remoteAccount,
+            switchCoordinator = librarySyncSwitchCoordinator,
+            beforeServerDisconnect = {
+                bookDownloads.cancelAll(com.chmouel.liseur.data.calibre.BulkStopReason.ACCOUNT_CHANGED)
+            },
+        )
+    }
 
     /**
      * Every partner reading positions are kept in step with.
@@ -1045,7 +1070,7 @@ class AppContainer(
     val positionSync =
         PositionSyncCoordinator(
             CompositePositionSync(
-                listOf(
+                listOfNotNull(
                     LocalNetworkGuardedSync(
                         delegate =
                             RoutedPositionSync(remoteRouter) { url ->
@@ -1059,6 +1084,7 @@ class AppContainer(
                         access = localNetwork,
                         reporting = syncReporting,
                     ),
+                    librarySync.positionPeer,
                 ),
             ),
             carryOn = { PositionSyncWorker.continueBootstrap(context.applicationContext) },
