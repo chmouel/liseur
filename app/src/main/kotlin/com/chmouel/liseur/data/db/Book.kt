@@ -483,6 +483,80 @@ interface BookDao {
     suspend fun remoteNotDownloadedUrls(): List<String>
 
     /**
+     * Undownloaded main-server stubs carrying reading history, reader-authored
+     * metadata/cover overrides, manual series choices, or shelf/status decisions.
+     * Kept and unlinked rather than deleted when switching to an external sync backend.
+     */
+    @Query(
+        """
+        SELECT * FROM books
+        WHERE remote_uuid IS NOT NULL
+          AND browse_server_id IS NULL
+          AND local_uri IS NULL
+          AND (
+              title_override = 1
+              OR author_override = 1
+              OR description_override = 1
+              OR cover_override = 1
+              OR series_override = 1
+              OR series_index_override = 1
+              OR series_claim_pending = 1
+              OR series_claim_reset = 1
+              OR archived_at IS NOT NULL
+              OR finished_at IS NOT NULL
+              OR last_opened_at IS NOT NULL
+              OR hidden_at IS NOT NULL
+              OR EXISTS (SELECT 1 FROM reading_sessions WHERE book_url = books.url)
+              OR EXISTS (SELECT 1 FROM annotations WHERE book_id = books.url)
+              OR EXISTS (SELECT 1 FROM annotation_sync WHERE book_id = books.url)
+              OR EXISTS (SELECT 1 FROM book_evaluation WHERE book_url = books.url)
+              OR EXISTS (SELECT 1 FROM reading_progress WHERE book_url = books.url)
+              OR EXISTS (SELECT 1 FROM metadata_override_revision WHERE book_url = books.url)
+          )
+        ORDER BY url
+        """,
+    )
+    suspend fun remoteNotDownloadedPreservedStubs(): List<Book>
+
+    /**
+     * Unlinks preserved fileless history stubs from the retiring main server
+     * without wiping their source title/author (`catalog_title`,
+     * `catalog_author`, `title`, `author`) or series baseline
+     * (`catalog_series_name`, `catalog_series_index`, `series_name`,
+     * `series_index`).
+     *
+     * Unlike downloaded books, these stubs have no local file metadata to fall
+     * back on; running [unlinkDownloadedFromRemoteRows] on them would clear
+     * `stableTitle`/`stableAuthor` when overridden and erase the series name
+     * anchoring an index-only manual reorder.
+     */
+    @Query(
+        "UPDATE books SET remote_uuid = NULL, remote_book_id = NULL, cover_url = NULL, " +
+            "link_generation = link_generation + 1, " +
+            "download_href = NULL, download_formats = NULL, remote_updated_at = NULL, remote_page_count = NULL, " +
+            "download_state = 'REMOTE', " +
+            "catalog_folder_id = NULL, catalog_series_source = NULL, " +
+            "catalog_missing_since = NULL, " +
+            "title = CASE WHEN title_override = 1 THEN COALESCE(user_title, '') " +
+            "ELSE COALESCE(catalog_title, file_title, title) END, " +
+            "author = CASE WHEN author_override = 1 THEN NULLIF(user_author, '') " +
+            "ELSE COALESCE(catalog_author, file_author, author) END, " +
+            "series_name = CASE WHEN series_override = 1 THEN user_series_name " +
+            "ELSE COALESCE(catalog_series_name, file_series_name, series_name) END, " +
+            "series_index = CASE " +
+            "WHEN series_override = 1 THEN CASE " +
+            "WHEN user_series_name IS NOT NULL AND series_index_override = 1 " +
+            "THEN user_series_index ELSE NULL END " +
+            "WHEN COALESCE(catalog_series_name, file_series_name, series_name) IS NULL THEN NULL " +
+            "WHEN series_index_override = 1 THEN user_series_index " +
+            "ELSE COALESCE(catalog_series_index, file_series_index, series_index) END, " +
+            "series_id = NULL " +
+            "WHERE remote_uuid IS NOT NULL AND browse_server_id IS NULL " +
+            "AND local_uri IS NULL AND download_state != 'DOWNLOADED'",
+    )
+    suspend fun unlinkPreservedHistoryStubsFromRemote()
+
+    /**
      * Cuts downloaded books loose from the server they came from. The file
      * is yours now, so it stays; what goes is the link that would make it
      * sync against whichever server is connected next.

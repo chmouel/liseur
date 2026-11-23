@@ -1,6 +1,7 @@
 package com.chmouel.liseur.data.remote
 
 import com.chmouel.liseur.data.db.RemoteServerDao
+import com.chmouel.liseur.sync.LibrarySyncBackend
 
 /**
  * Sends a request to whichever implementation matches the connected
@@ -28,6 +29,12 @@ class RemoteRouter(
      */
     private val uploaders: Map<ServerKind, BookUploader> = emptyMap(),
     private val live: Map<ServerKind, LiveChanges> = emptyMap(),
+    /**
+     * Flavor-registered automatic library-sync backend. While active,
+     * main-server automatic position sync is suppressed while browse-only
+     * catalog and file routes (`catalogFor`, `filesFor`) stay untouched.
+     */
+    private val externalLibrarySync: () -> LibrarySyncBackend = { LibrarySyncBackend.None },
 ) {
     private suspend fun kind(): ServerKind? = serverDao.get()?.kind
 
@@ -43,13 +50,23 @@ class RemoteRouter(
     /** The downloader for a server already in hand. See [catalogFor]. */
     fun filesFor(kind: ServerKind): FileSource? = files[kind]
 
-    suspend fun positionSync(): PositionSync? = kind()?.let(positions::get)
+    suspend fun positionSync(): PositionSync? {
+        if (externalLibrarySync().isActive()) return null
+        return kind()?.let(positions::get)
+    }
 
-    /** Whether the currently connected server supports Vocabulary Builder sync. */
-    suspend fun supportsVocabularySync(): Boolean = positionSync()?.supportsVocabularySync == true
+    /** Whether the currently active sync backend supports Vocabulary Builder sync. */
+    suspend fun supportsVocabularySync(): Boolean {
+        val external = externalLibrarySync()
+        if (external.isActive()) return external.positionPeer?.supportsVocabularySync == true
+        return positionSync()?.supportsVocabularySync == true
+    }
 
     /** liseur-sync can identify a downloaded book by its bytes, regardless of origin. */
-    suspend fun maySyncBrowseBook(): Boolean = kind() == ServerKind.LISEUR_SYNC
+    suspend fun maySyncBrowseBook(): Boolean {
+        if (externalLibrarySync().isActive()) return false
+        return kind() == ServerKind.LISEUR_SYNC
+    }
 
     fun liveFor(kind: ServerKind): LiveChanges? = live[kind]
 
