@@ -9,6 +9,7 @@ import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.data.db.RemoteServer
 import com.chmouel.liseur.data.db.WorkAlias
 import com.chmouel.liseur.data.library.BookFingerprintStore
+import com.chmouel.liseur.data.library.BookRemoval
 import com.chmouel.liseur.data.library.FinishedState
 import com.chmouel.liseur.data.remote.PeerPositionSync
 import com.chmouel.liseur.data.remote.RemoteAccountRepository
@@ -19,6 +20,7 @@ import com.chmouel.liseur.domain.WorkIdentifiers
 import com.chmouel.liseur.hardcover.Isbn
 import com.chmouel.liseur.sync.LibrarySyncBackend
 import com.chmouel.liseur.sync.LibrarySyncSwitchCoordinator
+import java.io.File
 import java.security.MessageDigest
 import java.util.Locale
 import java.util.UUID
@@ -46,6 +48,7 @@ internal class DriveLibrarySync(
     context: Context,
     private val database: LiseurDatabase,
     private val remoteAccount: RemoteAccountRepository,
+    private val bookRemoval: BookRemoval? = null,
     private val switchCoordinator: LibrarySyncSwitchCoordinator = LibrarySyncSwitchCoordinator(),
     private val beforeServerDisconnect: suspend () -> Unit = {},
     private val stopWorkers: () -> Unit = {},
@@ -57,6 +60,8 @@ internal class DriveLibrarySync(
     private val openStore: (() -> DriveSyncDatabase)? = null,
     authClient: DriveAuthClient? = null,
     driveApi: DriveRemoteApi? = null,
+    private val coversDirProvider: () -> File = { File(context.applicationContext.filesDir, "covers") },
+    private val coverEncoder: DriveWebpEncoder = AndroidBitmapWebpEncoder,
     private val clock: () -> Long = System::currentTimeMillis,
 ) : LibrarySyncBackend {
 
@@ -120,6 +125,53 @@ internal class DriveLibrarySync(
             database = database,
             store = store,
             workIdentity = workIdentity,
+            bookRemoval = bookRemoval,
+            clock = clock,
+        )
+    }
+
+    internal val coverCodec: DriveCoverCodec by lazy {
+        DriveCoverCodec(
+            coversDir = coversDirProvider(),
+            store = store,
+            driveApi = this.driveApi,
+            encoder = coverEncoder,
+        )
+    }
+
+    internal val annotationSync: DriveAnnotationSync by lazy {
+        DriveAnnotationSync(
+            database = database,
+            store = store,
+            workIdentity = workIdentity,
+            clock = clock,
+        )
+    }
+
+    internal val evaluationSync: DriveEvaluationSync by lazy {
+        DriveEvaluationSync(
+            database = database,
+            store = store,
+            workIdentity = workIdentity,
+            clock = clock,
+        )
+    }
+
+    internal val metadataSync: DriveMetadataSync by lazy {
+        DriveMetadataSync(
+            database = database,
+            store = store,
+            workIdentity = workIdentity,
+            coverCodec = coverCodec,
+            clock = clock,
+        )
+    }
+
+    internal val seriesSync: DriveSeriesSync by lazy {
+        DriveSeriesSync(
+            database = database,
+            store = store,
+            workIdentity = workIdentity,
             clock = clock,
         )
     }
@@ -148,6 +200,10 @@ internal class DriveLibrarySync(
             positionSync = positionSync,
             acquireToken = { stale -> accountController.acquireSilentAccessToken(stale) },
             ensureDeviceId = { ensureInstall().deviceId },
+            annotationSync = annotationSync,
+            evaluationSync = evaluationSync,
+            metadataSync = metadataSync,
+            seriesSync = seriesSync,
             clock = clock,
         )
     }
@@ -231,6 +287,88 @@ internal class DriveLibrarySync(
         cancelEpubDownloadWork(book.url)
     }
 
+    override suspend fun canDeleteFromSyncedLibrary(book: Book): Boolean {
+        if (book.browseServerId != null) return false
+        return isActive()
+    }
+
+    override suspend fun deleteFromSyncedLibrary(book: Book): Boolean {
+        if (book.browseServerId != null || !hasStore()) return false
+        val active = store.accounts().active() ?: return false
+        val token = when (val t = accountController.acquireSilentAccessToken()) {
+            is SilentTokenResult.Token -> t.accessToken
+            else -> null
+        }
+        val deleted = catalogSync.deleteFromSyncedLibrary(
+            permissionId = active.permissionId,
+            book = book,
+            nextHlc = { changeEngine.nextHlc(active.permissionId) },
+            driveApi = driveApi,
+            accessToken = token,
+        )
+        if (deleted) {
+            runCatching { changeEngine.sync() }
+        }
+        return deleted
+    }
+
+    /** Resolves one or more conflicts (e.g. a shelf-grouped series conflict) and triggers sync. */
+    internal suspend fun resolveConflicts(
+        conflictsToResolve: List<DriveConflict>,
+        choice: DriveConflictChoice,
+        syncAfter: Boolean = true,
+    ) {
+        if (!hasStore() || conflictsToResolve.isEmpty()) return
+        val active = store.accounts().active() ?: return
+        val localDeviceId = ensureInstall().deviceId
+        val tokenProvider: suspend () -> String? = {
+            when (val res = accountController.acquireSilentAccessToken()) {
+                is SilentTokenResult.Token -> res.accessToken
+                else -> null
+            }
+        }
+        for (conflict in conflictsToResolve) {
+            when (conflict.domain) {
+                DriveWireCodec.DOMAIN_ANNOTATION ->
+                    annotationSync.resolveLocalConflict(
+                        permissionId = active.permissionId,
+                        conflict = conflict,
+                        choice = choice,
+                        localDeviceId = localDeviceId,
+                        nextHlc = { changeEngine.nextHlc(active.permissionId) },
+                    )
+                DriveWireCodec.DOMAIN_EVALUATION ->
+                    evaluationSync.resolveLocalConflict(
+                        permissionId = active.permissionId,
+                        conflict = conflict,
+                        choice = choice,
+                        localDeviceId = localDeviceId,
+                        nextHlc = { changeEngine.nextHlc(active.permissionId) },
+                    )
+                DriveWireCodec.DOMAIN_METADATA ->
+                    metadataSync.resolveLocalConflict(
+                        permissionId = active.permissionId,
+                        conflict = conflict,
+                        choice = choice,
+                        localDeviceId = localDeviceId,
+                        nextHlc = { changeEngine.nextHlc(active.permissionId) },
+                        accessTokenProvider = tokenProvider,
+                    )
+                DriveWireCodec.DOMAIN_SERIES ->
+                    seriesSync.resolveLocalConflict(
+                        permissionId = active.permissionId,
+                        conflict = conflict,
+                        choice = choice,
+                        localDeviceId = localDeviceId,
+                        nextHlc = { changeEngine.nextHlc(active.permissionId) },
+                    )
+            }
+        }
+        if (syncAfter) {
+            runCatching { changeEngine.sync() }
+        }
+    }
+
     internal fun triggerEpubUploads(allowMetered: Boolean) {
         scheduleEpubUploadsWork(allowMetered)
     }
@@ -246,6 +384,11 @@ internal class DriveLibrarySync(
     @Composable
     override fun SettingsSection() {
         DriveSettingsSection(controller = accountController)
+    }
+
+    @Composable
+    override fun BookManageAction(book: Book, onDone: () -> Unit) {
+        DriveBookManageAction(controller = accountController, book = book, onDone = onDone)
     }
 
     /** Stops background workers and transitions [permissionId] to `NEEDS_RECONNECT` while preserving all state. */

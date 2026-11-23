@@ -56,6 +56,9 @@ internal data class DrivePeakAckMeta(
 internal data class DriveOutboxAckMetadata(
     val positionAcks: List<DrivePositionAckMeta> = emptyList(),
     val peakAcks: List<DrivePeakAckMeta> = emptyList(),
+    val annotationAcks: List<DriveAnnotationAckMeta> = emptyList(),
+    val evaluationAcks: List<DriveEvaluationAckMeta> = emptyList(),
+    val metadataAcks: List<DriveMetadataAckMeta> = emptyList(),
 )
 
 /**

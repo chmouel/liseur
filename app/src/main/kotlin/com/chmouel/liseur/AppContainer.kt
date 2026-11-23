@@ -1046,6 +1046,7 @@ class AppContainer(
             context = context.applicationContext,
             database = database,
             remoteAccount = remoteAccount,
+            bookRemoval = bookRemoval,
             switchCoordinator = librarySyncSwitchCoordinator,
             beforeServerDisconnect = {
                 bookDownloads.cancelAll(com.chmouel.liseur.data.calibre.BulkStopReason.ACCOUNT_CHANGED)

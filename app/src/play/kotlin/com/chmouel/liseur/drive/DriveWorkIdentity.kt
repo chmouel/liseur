@@ -108,6 +108,10 @@ internal class DriveWorkIdentity(
             val metadataRows = metadata.forBook(book.url)
             val derived = deriveLocalWorkKey(book, metadataRows, fpRow)
             val canonical = canonicalWorkKey(permissionId, derived)
+            // Never silently re-link or resurrect a local book unlinked by a catalog tombstone.
+            if (recordStates.get(permissionId, DriveWireCodec.DOMAIN_CATALOG, canonical)?.versionOp == DriveRecordState.OP_DEL) {
+                return null
+            }
             val alias = WorkAlias(
                 bookUrl = book.url,
                 peerId = peerId,
@@ -127,6 +131,9 @@ internal class DriveWorkIdentity(
         val metadataRows = metadata.forBook(book.url)
         val derived = DriveLibrarySync.preservedStubWorkKey(book, metadataRows, existing?.editionSha)
         val canonical = canonicalWorkKey(permissionId, derived)
+        if (recordStates.get(permissionId, DriveWireCodec.DOMAIN_CATALOG, canonical)?.versionOp == DriveRecordState.OP_DEL) {
+            return null
+        }
         val alias = WorkAlias(
             bookUrl = book.url,
             peerId = peerId,

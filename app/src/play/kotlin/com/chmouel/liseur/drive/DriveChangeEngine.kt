@@ -4,6 +4,7 @@ import android.os.Build
 import androidx.room.withTransaction
 import com.chmouel.liseur.data.remote.SyncFailure
 import com.chmouel.liseur.data.remote.SyncOutcome
+import java.io.IOException
 import java.util.Locale
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
@@ -32,6 +33,10 @@ internal class DriveChangeEngine(
     private val positionSync: DrivePositionSync,
     private val acquireToken: suspend (staleToken: String?) -> SilentTokenResult,
     private val ensureDeviceId: suspend () -> String,
+    private val annotationSync: DriveAnnotationSync? = null,
+    private val evaluationSync: DriveEvaluationSync? = null,
+    private val metadataSync: DriveMetadataSync? = null,
+    private val seriesSync: DriveSeriesSync? = null,
     private val deviceLabelProvider: () -> String = {
         listOfNotNull(Build.MANUFACTURER?.takeIf { it.isNotBlank() }, Build.MODEL?.takeIf { it.isNotBlank() })
             .joinToString(" ")
@@ -47,6 +52,8 @@ internal class DriveChangeEngine(
     private val cursors get() = store.cursors()
     private val files get() = store.files()
     private val outbox get() = store.outbox()
+    private val resolutions get() = store.resolutions()
+    private val conflicts get() = store.conflicts()
 
     /**
      * Runs a full or single-book `drive.appdata` sync cycle:
@@ -150,6 +157,9 @@ internal class DriveChangeEngine(
             } catch (e: DriveApiException) {
                 accounts.recordError(permissionId, e.message)
                 return DriveSyncRunSummary(SyncOutcome.Failure(SyncFailure.Offline))
+            } catch (e: IOException) {
+                accounts.recordError(permissionId, e.message)
+                return DriveSyncRunSummary(SyncOutcome.Failure(SyncFailure.Offline))
             }
         }
     }
@@ -171,12 +181,31 @@ internal class DriveChangeEngine(
         // BEFORE applying incoming remote catalog/position records.
         workIdentity.resolveAllLocalBooks(permissionId)
 
+        // Clear any persisted domain/stream pauses whose advertised schema versions
+        // are now supported by this build, preserving appliedSeq for replay.
+        val unpausedDevices = clearNowSupportedDomainPauses(permissionId)
+
+        // Recover any interrupted `RESOLVING` local conflict resolutions & drain offline EPUB trashes.
+        recoverResolvingConflicts(permissionId, localDeviceId, accessToken)
+        catalogSync.drainPendingEpubTrashes(permissionId, driveApi, accessToken)
+
+        val needsBootstrapForUnpaused = unpausedDevices.any { devId ->
+            files.byDeviceAndKind(permissionId, devId, DriveFile.KIND_DELTA).isEmpty() &&
+                files.byDeviceAndKind(permissionId, devId, DriveFile.KIND_MANIFEST).isEmpty()
+        }
+
         // 1. Pull remote state (bootstrap or incremental changes.list).
-        val appliedDeltas = if (account.startPageToken.isNullOrBlank() || forceManifestRescan) {
+        val appliedDeltas = if (account.startPageToken.isNullOrBlank() || forceManifestRescan || needsBootstrapForUnpaused) {
             bootstrapPull(permissionId, localDeviceId, accessToken)
         } else {
             try {
-                incrementalPull(permissionId, localDeviceId, accessToken, account.startPageToken)
+                incrementalPull(
+                    permissionId = permissionId,
+                    localDeviceId = localDeviceId,
+                    accessToken = accessToken,
+                    startToken = account.startPageToken,
+                    extraDevices = unpausedDevices,
+                )
             } catch (_: DriveInvalidPageTokenException) {
                 // Expired or invalid pageToken: clear and fall back to idempotent full rescan.
                 accounts.updateStartPageToken(permissionId, null)
@@ -284,6 +313,7 @@ internal class DriveChangeEngine(
         localDeviceId: String,
         accessToken: String,
         startToken: String,
+        extraDevices: Set<String> = emptySet(),
     ): Int {
         var pageToken: String? = startToken
         var newStartPageToken: String? = null
@@ -333,12 +363,18 @@ internal class DriveChangeEngine(
             }
         }
 
-        val applied = if (changedDevices.isNotEmpty() || changedManifestFileIds.isNotEmpty()) {
+        val pendingDevices = devicesWithPendingIndexedWork(permissionId, localDeviceId)
+        val devicesToProcess = linkedSetOf<String>().apply {
+            addAll(changedDevices)
+            addAll(extraDevices)
+            addAll(pendingDevices)
+        }
+        val applied = if (devicesToProcess.isNotEmpty() || changedManifestFileIds.isNotEmpty()) {
             processDiscoveredRemoteDevices(
                 permissionId = permissionId,
                 localDeviceId = localDeviceId,
                 accessToken = accessToken,
-                deviceFilter = changedDevices.takeIf { it.isNotEmpty() },
+                deviceFilter = devicesToProcess.takeIf { it.isNotEmpty() },
             )
         } else {
             0
@@ -426,8 +462,9 @@ internal class DriveChangeEngine(
                 .sortedBy { it.seq }
             if (deltaFiles.isEmpty()) continue
 
-            val startingCursor = currentDeviceSeq(permissionId, remoteDeviceId)
+            val startingCursor = minAppliedSeq(permissionId, remoteDeviceId)
             var expectedNextSeq = startingCursor + 1L
+            val deviceDeferredDomains = mutableSetOf<String>()
             for (deltaFile in deltaFiles) {
                 val seq = deltaFile.seq ?: continue
                 if (seq <= startingCursor) continue
@@ -458,28 +495,44 @@ internal class DriveChangeEngine(
                     DriveSchemaCheck.Supported -> Unit
                 }
 
-                val pausedDomains = cursors.forDevice(permissionId, remoteDeviceId)
+                val deviceCursors = cursors.forDevice(permissionId, remoteDeviceId)
+                val pausedDomains = deviceCursors
                     .filter { it.pausedSchemaVersion != null }
                     .map { it.domain }
                     .toSet()
+                val appliedSeqByDomain = deviceCursors.associate { it.domain to it.appliedSeq }
 
                 val orderedRecords = batch.records
-                    .filter { it.d !in pausedDomains && it.d in DriveWireCodec.SUPPORTED_DOMAIN_VERSIONS }
+                    .filter {
+                        it.d !in pausedDomains &&
+                            it.d !in deviceDeferredDomains &&
+                            it.d in DriveWireCodec.SUPPORTED_DOMAIN_VERSIONS &&
+                            seq > (appliedSeqByDomain[it.d] ?: 0L)
+                    }
                     .sortedBy { DriveWireCodec.domainRank(it.d) }
 
                 for (record in orderedRecords) {
-                    applySingleRecord(
+                    if (record.d in deviceDeferredDomains) continue
+                    val recordApplied = applySingleRecord(
                         permissionId = permissionId,
                         localDeviceId = localDeviceId,
                         remoteDeviceId = remoteDeviceId,
                         remoteSeq = seq,
+                        accessToken = accessToken,
                         record = record,
                     )
+                    if (!recordApplied) {
+                        deviceDeferredDomains.add(record.d)
+                    }
                 }
 
-                // Advance per-domain cursors ONLY for implemented, non-paused domains.
+                // Advance per-domain cursors ONLY for implemented, non-paused, non-deferred domains.
                 val domainsToAdvance = DriveWireCodec.SUPPORTED_DOMAIN_VERSIONS.keys
-                    .filter { it !in pausedDomains && it != DriveWireCodec.STREAM_PAUSE_DOMAIN }
+                    .filter {
+                        it !in pausedDomains &&
+                            it !in deviceDeferredDomains &&
+                            it != DriveWireCodec.STREAM_PAUSE_DOMAIN
+                    }
                 store.withTransaction {
                     for (domain in domainsToAdvance) {
                         val existing = cursors.get(permissionId, remoteDeviceId, domain)
@@ -510,6 +563,7 @@ internal class DriveChangeEngine(
         accessToken: String,
     ) {
         val allRecords = mutableListOf<DriveWireRecord>()
+        val allResolutions = mutableListOf<DriveSnapshotResolution>()
         for (partRef in snapshot.parts) {
             val bytes = driveApi.downloadMedia(accessToken, partRef.fileId)
             val actualSha = DriveCanonicalJson.sha256Hex(bytes)
@@ -536,30 +590,67 @@ internal class DriveChangeEngine(
                 }
                 DriveSchemaCheck.Supported -> Unit
             }
+            allResolutions.addAll(part.resolutions)
             allRecords.addAll(part.records)
         }
 
-        val pausedDomains = cursors.forDevice(permissionId, remoteDeviceId)
+        val deviceCursors = cursors.forDevice(permissionId, remoteDeviceId)
+        val pausedDomains = deviceCursors
             .filter { it.pausedSchemaVersion != null }
             .map { it.domain }
             .toSet()
+        val appliedSeqByDomain = deviceCursors.associate { it.domain to it.appliedSeq }
 
+        // Per docs/DRIVE_SYNC.md §2.4: ingest ALL snapshot `resolutions` across all parts
+        // BEFORE reconciling `records` so `resRefs`-bridged supersession works across compaction.
+        val now = clock()
+        if (allResolutions.isNotEmpty()) {
+            store.withTransaction {
+                for (res in allResolutions) {
+                    if (res.d in pausedDomains || res.d !in DriveWireCodec.SUPPORTED_DOMAIN_VERSIONS) continue
+                    resolutions.upsert(
+                        DriveResolution(
+                            permissionId = permissionId,
+                            domain = res.d,
+                            recordKey = res.k,
+                            resolutionFp = res.resolutionFp,
+                            resolvedFpsJson = DriveCanonicalJson.encode(res.resolvedFps.distinct().sorted()),
+                            outcome = res.outcome,
+                            hlc = res.hlc,
+                            authorDeviceId = remoteDeviceId,
+                            createdAt = now,
+                        ),
+                    )
+                }
+            }
+        }
+
+        val deferredDomains = mutableSetOf<String>()
         val ordered = allRecords
-            .filter { it.d !in pausedDomains && it.d in DriveWireCodec.SUPPORTED_DOMAIN_VERSIONS }
+            .filter {
+                it.d !in pausedDomains &&
+                    it.d in DriveWireCodec.SUPPORTED_DOMAIN_VERSIONS &&
+                    snapshot.throughSeq > (appliedSeqByDomain[it.d] ?: 0L)
+            }
             .sortedBy { DriveWireCodec.domainRank(it.d) }
         for (record in ordered) {
-            applySingleRecord(
+            if (record.d in deferredDomains) continue
+            val recordApplied = applySingleRecord(
                 permissionId = permissionId,
                 localDeviceId = localDeviceId,
                 remoteDeviceId = remoteDeviceId,
                 remoteSeq = snapshot.throughSeq,
+                accessToken = accessToken,
                 record = record,
             )
+            if (!recordApplied) {
+                deferredDomains.add(record.d)
+            }
         }
 
         store.withTransaction {
             for (domain in DriveWireCodec.SUPPORTED_DOMAIN_VERSIONS.keys) {
-                if (domain in pausedDomains) continue
+                if (domain in pausedDomains || domain in deferredDomains) continue
                 val existing = cursors.get(permissionId, remoteDeviceId, domain)
                 cursors.upsert(
                     DriveCursor(
@@ -579,15 +670,59 @@ internal class DriveChangeEngine(
         localDeviceId: String,
         remoteDeviceId: String,
         remoteSeq: Long,
+        accessToken: String,
         record: DriveWireRecord,
-    ) {
+    ): Boolean {
         observeRemoteHlc(permissionId, record.hlc)
-        when (record.d) {
-            DriveWireCodec.DOMAIN_WORK_ALIAS ->
+        return when (record.d) {
+            DriveWireCodec.DOMAIN_WORK_ALIAS -> {
                 workIdentity.applyRemoteRecord(permissionId, record, remoteDeviceId, remoteSeq)
-            DriveWireCodec.DOMAIN_CATALOG ->
+                true
+            }
+            DriveWireCodec.DOMAIN_CATALOG -> {
                 catalogSync.applyRemoteRecord(permissionId, record, remoteDeviceId, remoteSeq)
-            DriveWireCodec.DOMAIN_POSITION ->
+                true
+            }
+            DriveWireCodec.DOMAIN_METADATA ->
+                metadataSync?.applyRemoteRecord(
+                    permissionId = permissionId,
+                    accessToken = accessToken,
+                    record = record,
+                    remoteDeviceId = remoteDeviceId,
+                    remoteSeq = remoteSeq,
+                    nextHlc = { nextHlc(permissionId) },
+                ) ?: true
+            DriveWireCodec.DOMAIN_SERIES -> {
+                seriesSync?.applyRemoteRecord(
+                    permissionId = permissionId,
+                    record = record,
+                    remoteDeviceId = remoteDeviceId,
+                    remoteSeq = remoteSeq,
+                    nextHlc = { nextHlc(permissionId) },
+                )
+                true
+            }
+            DriveWireCodec.DOMAIN_EVALUATION -> {
+                evaluationSync?.applyRemoteRecord(
+                    permissionId = permissionId,
+                    record = record,
+                    remoteDeviceId = remoteDeviceId,
+                    remoteSeq = remoteSeq,
+                    nextHlc = { nextHlc(permissionId) },
+                )
+                true
+            }
+            DriveWireCodec.DOMAIN_ANNOTATION -> {
+                annotationSync?.applyRemoteRecord(
+                    permissionId = permissionId,
+                    record = record,
+                    remoteDeviceId = remoteDeviceId,
+                    remoteSeq = remoteSeq,
+                    nextHlc = { nextHlc(permissionId) },
+                )
+                true
+            }
+            DriveWireCodec.DOMAIN_POSITION -> {
                 positionSync.applyRemotePosition(
                     permissionId = permissionId,
                     localDeviceId = localDeviceId,
@@ -595,7 +730,9 @@ internal class DriveChangeEngine(
                     remoteDeviceId = remoteDeviceId,
                     remoteSeq = remoteSeq,
                 )
-            DriveWireCodec.DOMAIN_FURTHEST ->
+                true
+            }
+            DriveWireCodec.DOMAIN_FURTHEST -> {
                 positionSync.applyRemoteFurthest(
                     permissionId = permissionId,
                     localDeviceId = localDeviceId,
@@ -603,8 +740,36 @@ internal class DriveChangeEngine(
                     remoteDeviceId = remoteDeviceId,
                     remoteSeq = remoteSeq,
                 )
-            // Unimplemented domains are paused before dispatch so their cursors never advance.
-            else -> Unit
+                true
+            }
+            // Unimplemented domains (Phase 5 vocab/sessions) are paused before dispatch so cursors never advance.
+            else -> true
+        }
+    }
+
+    private suspend fun recoverResolvingConflicts(
+        permissionId: String,
+        localDeviceId: String,
+        accessToken: String,
+    ) {
+        val resolving = conflicts.resolvingForAccount(permissionId)
+        for (conflict in resolving) {
+            when (conflict.domain) {
+                DriveWireCodec.DOMAIN_ANNOTATION ->
+                    annotationSync?.recoverResolvingConflict(permissionId, conflict, localDeviceId) { nextHlc(permissionId) }
+                DriveWireCodec.DOMAIN_EVALUATION ->
+                    evaluationSync?.recoverResolvingConflict(permissionId, conflict, localDeviceId) { nextHlc(permissionId) }
+                DriveWireCodec.DOMAIN_METADATA ->
+                    metadataSync?.recoverResolvingConflict(
+                        permissionId = permissionId,
+                        conflict = conflict,
+                        localDeviceId = localDeviceId,
+                        nextHlc = { nextHlc(permissionId) },
+                        accessTokenProvider = { accessToken },
+                    )
+                DriveWireCodec.DOMAIN_SERIES ->
+                    seriesSync?.recoverResolvingConflict(permissionId, conflict, localDeviceId) { nextHlc(permissionId) }
+            }
         }
     }
 
@@ -652,10 +817,26 @@ internal class DriveChangeEngine(
                 positionAcks = ackMeta.positionAcks,
                 peakAcks = ackMeta.peakAcks,
             )
+            annotationSync?.acknowledgePublished(
+                permissionId = permissionId,
+                records = recoveredRecords,
+                acks = ackMeta.annotationAcks,
+            )
+            evaluationSync?.acknowledgePublished(
+                permissionId = permissionId,
+                records = recoveredRecords,
+                acks = ackMeta.evaluationAcks,
+            )
+            metadataSync?.acknowledgePublished(
+                permissionId = permissionId,
+                records = recoveredRecords,
+                acks = ackMeta.metadataAcks,
+            )
             store.withTransaction {
                 if (recoveredRecords.isNotEmpty()) {
                     workIdentity.markPublished(permissionId, recoveredRecords)
                     catalogSync.markPublished(permissionId, recoveredRecords)
+                    seriesSync?.markPublished(permissionId, recoveredRecords)
                 }
                 outbox.markAcked(permissionId, existingInFlight.seq, fileId)
                 val acct = accounts.get(permissionId)
@@ -671,13 +852,34 @@ internal class DriveChangeEngine(
             publishedCount++
         }
 
-        // Step 2: collect dirty records from Phase 3 domains.
+        // Step 2: collect dirty records from Phase 3 + Phase 4 domains in canonical order.
         val aliasRecords = workIdentity.collectDirtyRecords(permissionId)
         val catalogRecords = if (bookUrlFilter == null) {
             catalogSync.collectDirtyRecords(permissionId) { nextHlc(permissionId) }
         } else {
             emptyList()
         }
+        val metaBundle = metadataSync?.collectDirtyRecords(
+            permissionId = permissionId,
+            accessToken = accessToken,
+            bookUrlFilter = bookUrlFilter,
+            nextHlc = { nextHlc(permissionId) },
+        ) ?: DriveMetadataOutboundBundle(emptyList(), emptyList())
+        val seriesRecords = seriesSync?.collectDirtyRecords(
+            permissionId = permissionId,
+            bookUrlFilter = bookUrlFilter,
+            nextHlc = { nextHlc(permissionId) },
+        ).orEmpty()
+        val evalBundle = evaluationSync?.collectDirtyRecords(
+            permissionId = permissionId,
+            bookUrlFilter = bookUrlFilter,
+            nextHlc = { nextHlc(permissionId) },
+        ) ?: DriveEvaluationOutboundBundle(emptyList(), emptyList())
+        val annBundle = annotationSync?.collectDirtyRecords(
+            permissionId = permissionId,
+            bookUrlFilter = bookUrlFilter,
+            nextHlc = { nextHlc(permissionId) },
+        ) ?: DriveAnnotationOutboundBundle(emptyList(), emptyList())
         val posBundle = positionSync.collectDirtyRecords(
             permissionId = permissionId,
             deviceId = localDeviceId,
@@ -685,7 +887,8 @@ internal class DriveChangeEngine(
             nextHlc = { nextHlc(permissionId) },
         )
 
-        val allRecords = aliasRecords + catalogRecords + posBundle.records
+        val allRecords = aliasRecords + catalogRecords + metaBundle.records + seriesRecords +
+            evalBundle.records + annBundle.records + posBundle.records
         if (allRecords.isEmpty()) {
             if (publishedCount > 0) {
                 publishManifest(permissionId, localDeviceId, accessToken)
@@ -702,11 +905,26 @@ internal class DriveChangeEngine(
             val chunkPeakAcks = posBundle.peakAcks.filter { ack ->
                 ack.recordKey.isEmpty() || (DriveWireCodec.DOMAIN_FURTHEST to ack.recordKey) in chunkKeys
             }
-            val ackMetadataJson = if (chunkPosAcks.isNotEmpty() || chunkPeakAcks.isNotEmpty()) {
+            val chunkAnnAcks = annBundle.acks.filter { ack ->
+                (DriveWireCodec.DOMAIN_ANNOTATION to ack.id) in chunkKeys
+            }
+            val chunkEvalAcks = evalBundle.acks.filter { ack ->
+                (DriveWireCodec.DOMAIN_EVALUATION to ack.recordKey) in chunkKeys
+            }
+            val chunkMetaAcks = metaBundle.acks.filter { ack ->
+                (DriveWireCodec.DOMAIN_METADATA to ack.recordKey) in chunkKeys
+            }
+            val ackMetadataJson = if (
+                chunkPosAcks.isNotEmpty() || chunkPeakAcks.isNotEmpty() ||
+                chunkAnnAcks.isNotEmpty() || chunkEvalAcks.isNotEmpty() || chunkMetaAcks.isNotEmpty()
+            ) {
                 DriveWireCodec.encodeOutboxAckMetadata(
                     DriveOutboxAckMetadata(
                         positionAcks = chunkPosAcks,
                         peakAcks = chunkPeakAcks,
+                        annotationAcks = chunkAnnAcks,
+                        evaluationAcks = chunkEvalAcks,
+                        metadataAcks = chunkMetaAcks,
                     ),
                 )
             } else {
@@ -762,9 +980,25 @@ internal class DriveChangeEngine(
                 positionAcks = chunkPosAcks,
                 peakAcks = chunkPeakAcks,
             )
+            annotationSync?.acknowledgePublished(
+                permissionId = permissionId,
+                records = chunk,
+                acks = chunkAnnAcks,
+            )
+            evaluationSync?.acknowledgePublished(
+                permissionId = permissionId,
+                records = chunk,
+                acks = chunkEvalAcks,
+            )
+            metadataSync?.acknowledgePublished(
+                permissionId = permissionId,
+                records = chunk,
+                acks = chunkMetaAcks,
+            )
             store.withTransaction {
                 workIdentity.markPublished(permissionId, chunk)
                 catalogSync.markPublished(permissionId, chunk)
+                seriesSync?.markPublished(permissionId, chunk)
                 outbox.markAcked(permissionId, frozen.seq, uploaded.id)
                 val acct = accounts.get(permissionId)
                 if (acct != null) {
@@ -808,7 +1042,7 @@ internal class DriveChangeEngine(
             updatedHlc = hlc,
             snapshot = null,
             previousSnapshot = null,
-            domains = DriveWireCodec.PHASE3_DOMAINS,
+            domains = DriveWireCodec.PHASE4_DOMAINS,
             epubFolder = folderRef,
             appliedVector = appliedVector,
         )
@@ -936,10 +1170,52 @@ internal class DriveChangeEngine(
         }
     }
 
-    private suspend fun currentDeviceSeq(permissionId: String, remoteDeviceId: String): Long {
-        val deviceCursors = cursors.forDevice(permissionId, remoteDeviceId)
-            .filter { it.domain != DriveWireCodec.STREAM_PAUSE_DOMAIN && it.pausedSchemaVersion == null }
-        return deviceCursors.maxOfOrNull { it.appliedSeq } ?: 0L
+    private suspend fun clearNowSupportedDomainPauses(permissionId: String): Set<String> {
+        val pausedCursors = cursors.pausedForAccount(permissionId)
+        if (pausedCursors.isEmpty()) return emptySet()
+        val unpausedDevices = linkedSetOf<String>()
+        store.withTransaction {
+            for (cursor in pausedCursors) {
+                val pausedVersion = cursor.pausedSchemaVersion ?: continue
+                val nowSupported = if (cursor.domain == DriveWireCodec.STREAM_PAUSE_DOMAIN) {
+                    pausedVersion <= DriveWireCodec.SCHEMA_VERSION
+                } else {
+                    (DriveWireCodec.SUPPORTED_DOMAIN_VERSIONS[cursor.domain] ?: 0) >= pausedVersion
+                }
+                if (nowSupported) {
+                    cursors.upsert(cursor.copy(pausedSchemaVersion = null))
+                    unpausedDevices.add(cursor.deviceId)
+                }
+            }
+        }
+        return unpausedDevices
+    }
+
+    private suspend fun devicesWithPendingIndexedWork(
+        permissionId: String,
+        localDeviceId: String,
+    ): Set<String> {
+        val pending = linkedSetOf<String>()
+        val deltaDevices = files.byKind(permissionId, DriveFile.KIND_DELTA)
+            .filter { !it.trashed && it.deviceId != null && it.deviceId != localDeviceId && it.seq != null && it.seq > 0L }
+            .groupBy { it.deviceId!! }
+        for ((remoteDeviceId, deviceDeltas) in deltaDevices) {
+            val streamCursor = cursors.get(permissionId, remoteDeviceId, DriveWireCodec.STREAM_PAUSE_DOMAIN)
+            if (streamCursor?.pausedSchemaVersion != null) continue
+            val minSeq = minAppliedSeq(permissionId, remoteDeviceId)
+            if (deviceDeltas.any { (it.seq ?: 0L) > minSeq }) {
+                pending.add(remoteDeviceId)
+            }
+        }
+        for (device in devices.forAccount(permissionId)) {
+            if (device.deviceId == localDeviceId) continue
+            val streamCursor = cursors.get(permissionId, device.deviceId, DriveWireCodec.STREAM_PAUSE_DOMAIN)
+            if (streamCursor?.pausedSchemaVersion != null) continue
+            if (device.snapshotThroughSeq > minAppliedSeq(permissionId, device.deviceId)) {
+                pending.add(device.deviceId)
+            }
+        }
+        return pending
     }
 
     private suspend fun minAppliedSeq(permissionId: String, remoteDeviceId: String): Long {

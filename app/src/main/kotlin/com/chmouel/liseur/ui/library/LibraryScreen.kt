@@ -1677,10 +1677,11 @@ internal fun BookActionsSheet(
 ) {
     val container = (LocalContext.current.applicationContext as LiseurApplication).container
     val translations by container.wholeBookRecords.collectAsStateWithLifecycle(initialValue = emptyList())
+    val externalOwned = container.librarySync.ownsBook(book)
     val actionState = BookActionState(
         downloading = downloading,
-        downloadedCopy = book.downloadState == DownloadState.DOWNLOADED && book.remoteUuid != null,
-        onServer = book.remoteUuid != null,
+        downloadedCopy = book.downloadState == DownloadState.DOWNLOADED && (book.remoteUuid != null || externalOwned),
+        onServer = book.remoteUuid != null || (externalOwned && book.downloadHref != null),
         inLibrary = book.openableUrl != null,
         finished = book.finished,
         canMarkUnread = canMarkUnread,
@@ -1732,6 +1733,9 @@ internal fun BookActionsSheet(
                     sections = layout.manageSections,
                     onBack = { managing = false },
                     onAction = onAction,
+                    externalManageAction = {
+                        container.librarySync.BookManageAction(book = book, onDone = onDismiss)
+                    },
                 )
             } else {
                 InitialBookActionsContent(
@@ -1839,6 +1843,7 @@ private fun ManageBookSheetContent(
     sections: List<ManageBookSection>,
     onBack: () -> Unit,
     onAction: (BookAction) -> Unit,
+    externalManageAction: @Composable () -> Unit = {},
 ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         IconButton(onClick = onBack, modifier = Modifier.padding(end = 4.dp)) {
@@ -1877,6 +1882,7 @@ private fun ManageBookSheetContent(
             )
         }
     }
+    externalManageAction()
 }
 
 @Composable

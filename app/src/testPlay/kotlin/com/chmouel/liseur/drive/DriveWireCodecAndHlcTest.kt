@@ -189,12 +189,12 @@ class DriveWireCodecAndHlcTest {
     @Test
     fun `schemaVersion guard flags unsupported stream version, per-domain versions, and unimplemented domains`() {
         assertEquals(
-            setOf("workAlias", "catalog", "position", "furthest"),
+            setOf("workAlias", "catalog", "metadata", "series", "position", "furthest", "annotation", "evaluation"),
             DriveWireCodec.SUPPORTED_DOMAIN_VERSIONS.keys,
         )
         assertEquals(
             DriveSchemaCheck.Supported,
-            DriveWireCodec.checkSchema(1, mapOf("catalog" to 1, "position" to 1)),
+            DriveWireCodec.checkSchema(1, mapOf("catalog" to 1, "position" to 1, "annotation" to 1, "metadata" to 1, "series" to 1, "evaluation" to 1)),
         )
         val streamCheck = DriveWireCodec.checkSchema(2, mapOf("catalog" to 1), deviceLabel = "Future Tablet")
         assertTrue(streamCheck is DriveSchemaCheck.UnsupportedStream)
@@ -205,10 +205,10 @@ class DriveWireCodecAndHlcTest {
         assertTrue(domainCheck is DriveSchemaCheck.UnsupportedDomains)
         assertEquals(mapOf("catalog" to 2), (domainCheck as DriveSchemaCheck.UnsupportedDomains).unsupported)
 
-        val unimplementedCheck = DriveWireCodec.checkSchema(1, mapOf("position" to 1, "annotation" to 1, "session" to 1))
+        val unimplementedCheck = DriveWireCodec.checkSchema(1, mapOf("position" to 1, "vocabWord" to 1, "session" to 1))
         assertTrue(unimplementedCheck is DriveSchemaCheck.UnsupportedDomains)
         assertEquals(
-            mapOf("annotation" to 1, "session" to 1),
+            mapOf("vocabWord" to 1, "session" to 1),
             (unimplementedCheck as DriveSchemaCheck.UnsupportedDomains).unsupported,
         )
         assertNotNull(DriveWireCodec.deltaAppProperties("dev-a", 1L, "batch-1"))

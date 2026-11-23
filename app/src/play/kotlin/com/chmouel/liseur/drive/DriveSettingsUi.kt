@@ -23,11 +23,13 @@ import androidx.compose.material.icons.outlined.CloudSync
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -45,8 +47,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
+import com.chmouel.liseur.data.db.Book
+import com.chmouel.liseur.data.db.MetadataOverrideFields
+import com.chmouel.liseur.domain.PersonalEvaluation
 import com.chmouel.liseur.providers.PlaySettingsEntries
 import com.chmouel.liseur.ui.BusyIndicator
 import com.chmouel.liseur.ui.settings.ConnectionRow
@@ -66,7 +72,21 @@ internal fun DriveSettingsEntry(
     val account = state.account
     val subtitle = if (account != null) {
         val statusLabel = statusLabelFor(account.state)
-        stringResource(R.string.drive_sync_account_summary, account.email, statusLabel)
+        if (state.unresolvedConflictsCount > 0) {
+            val conflictsLabel = pluralStringResource(
+                R.plurals.drive_sync_conflicts_count,
+                state.unresolvedConflictsCount,
+                state.unresolvedConflictsCount,
+            )
+            stringResource(
+                R.string.drive_sync_account_summary_conflicts,
+                account.email,
+                statusLabel,
+                conflictsLabel,
+            )
+        } else {
+            stringResource(R.string.drive_sync_account_summary, account.email, statusLabel)
+        }
     } else {
         stringResource(R.string.drive_sync_settings_summary)
     }
@@ -127,6 +147,17 @@ internal fun DriveSettingsSection(controller: DriveAccountController) {
                 scope.launch { controller.confirmUploadSelection(selected) }
             },
             onDismiss = { controller.closeUploadPicker() },
+        )
+    }
+
+    if (state.conflictsDialogVisible) {
+        DriveConflictsDialog(
+            groups = state.unresolvedConflictGroups,
+            resolving = state.resolvingConflict,
+            onResolve = { group, choice ->
+                scope.launch { controller.resolveConflictGroup(group, choice) }
+            },
+            onDismiss = { controller.closeConflictsDialog() },
         )
     }
 
@@ -299,6 +330,13 @@ internal fun DriveSettingsSection(controller: DriveAccountController) {
                             }
                         }
                         DriveAccount.STATE_ACTIVE -> {
+                            if (state.unresolvedConflictsCount > 0) {
+                                Button(onClick = { controller.openConflictsDialog() }) {
+                                    Text(
+                                        "${stringResource(R.string.drive_sync_resolve_conflicts)} (${state.unresolvedConflictsCount})",
+                                    )
+                                }
+                            }
                             Button(onClick = { scope.launch { controller.openUploadPicker() } }) {
                                 Text(stringResource(R.string.drive_sync_upload_epubs))
                             }
@@ -572,6 +610,231 @@ private fun DriveUploadFilesDialog(
             }
         },
     )
+}
+
+@Composable
+private fun DriveConflictsDialog(
+    groups: List<DriveConflictUiGroup>,
+    resolving: Boolean,
+    onResolve: (DriveConflictUiGroup, DriveConflictChoice) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = { if (!resolving) onDismiss() },
+        title = { Text(stringResource(R.string.drive_sync_conflicts_dialog_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = stringResource(R.string.drive_sync_conflicts_dialog_intro),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 360.dp),
+                ) {
+                    items(groups, key = { it.groupId }) { group ->
+                        Surface(
+                            tonalElevation = 2.dp,
+                            shape = MaterialTheme.shapes.medium,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Column(
+                                verticalArrangement = Arrangement.spacedBy(6.dp),
+                                modifier = Modifier.padding(12.dp),
+                            ) {
+                                val domainLabel = conflictDomainLabel(group.domain)
+                                val fieldLabel = conflictFieldLabel(group.domain, group.fieldLabel)
+                                val subtitle = listOfNotNull(domainLabel, fieldLabel).joinToString(" · ")
+                                Text(
+                                    text = group.bookTitle,
+                                    style = MaterialTheme.typography.titleSmall,
+                                )
+                                Text(
+                                    text = subtitle,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                                val localValue = if (group.localDeleted) {
+                                    stringResource(R.string.drive_sync_conflict_deleted_value)
+                                } else {
+                                    group.localSummary
+                                }
+                                val remoteValue = if (group.remoteDeleted) {
+                                    stringResource(R.string.drive_sync_conflict_deleted_value)
+                                } else {
+                                    group.remoteSummary
+                                }
+                                Text(
+                                    text = "${stringResource(R.string.drive_sync_conflict_local_label)}: $localValue",
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                                Text(
+                                    text = "${stringResource(R.string.drive_sync_conflict_remote_label)}: $remoteValue",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.padding(top = 4.dp),
+                                ) {
+                                    if (group.kind == DriveConflict.KIND_DELETE_EDIT) {
+                                        val keepLabel = if (group.domain == DriveWireCodec.DOMAIN_ANNOTATION) {
+                                            stringResource(R.string.drive_sync_conflict_keep_edited_note)
+                                        } else {
+                                            stringResource(R.string.drive_sync_conflict_keep_edited)
+                                        }
+                                        val deleteLabel = if (group.domain == DriveWireCodec.DOMAIN_ANNOTATION) {
+                                            stringResource(R.string.drive_sync_conflict_delete_note)
+                                        } else {
+                                            stringResource(R.string.drive_sync_conflict_delete_value)
+                                        }
+                                        Button(
+                                            onClick = { onResolve(group, DriveConflictChoice.KEEP_EDITED) },
+                                            enabled = !resolving,
+                                        ) {
+                                            Text(keepLabel)
+                                        }
+                                        OutlinedButton(
+                                            onClick = { onResolve(group, DriveConflictChoice.DELETE) },
+                                            enabled = !resolving,
+                                        ) {
+                                            Text(deleteLabel, color = MaterialTheme.colorScheme.error)
+                                        }
+                                    } else {
+                                        val keepMineLabel = if (group.domain == DriveWireCodec.DOMAIN_SERIES) {
+                                            stringResource(R.string.drive_sync_conflict_series_keep_mine)
+                                        } else {
+                                            stringResource(R.string.drive_sync_conflict_keep_mine)
+                                        }
+                                        val keepOtherLabel = if (group.domain == DriveWireCodec.DOMAIN_SERIES) {
+                                            stringResource(R.string.drive_sync_conflict_series_keep_other)
+                                        } else {
+                                            stringResource(R.string.drive_sync_conflict_keep_other)
+                                        }
+                                        Button(
+                                            onClick = { onResolve(group, DriveConflictChoice.KEEP_LOCAL) },
+                                            enabled = !resolving,
+                                        ) {
+                                            Text(keepMineLabel)
+                                        }
+                                        OutlinedButton(
+                                            onClick = { onResolve(group, DriveConflictChoice.KEEP_REMOTE) },
+                                            enabled = !resolving,
+                                        ) {
+                                            Text(keepOtherLabel)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss, enabled = !resolving) {
+                Text(stringResource(R.string.drive_sync_conflicts_dialog_close))
+            }
+        },
+    )
+}
+
+/** Play-only "Delete from synced library" row inside a book's Manage sheet when Drive is active. */
+@Composable
+internal fun DriveBookManageAction(
+    controller: DriveAccountController,
+    book: Book,
+    onDone: () -> Unit,
+) {
+    if (book.browseServerId != null) return
+    val state by controller.uiState.collectAsState(initial = DriveSettingsUiState())
+    if (state.account?.state != DriveAccount.STATE_ACTIVE) return
+
+    val scope = rememberCoroutineScope()
+    var confirmVisible by remember(book.url) { mutableStateOf(false) }
+
+    if (confirmVisible) {
+        val isDriveRemoteRow = book.url.startsWith(DriveWorkIdentity.DRIVE_BOOK_URL_PREFIX)
+        AlertDialog(
+            onDismissRequest = { confirmVisible = false },
+            title = { Text(stringResource(R.string.drive_sync_delete_from_library_title)) },
+            text = {
+                Text(
+                    text = stringResource(
+                        if (isDriveRemoteRow) {
+                            R.string.drive_sync_delete_from_library_warning_remote
+                        } else {
+                            R.string.drive_sync_delete_from_library_warning_local
+                        },
+                        book.title,
+                    ),
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmVisible = false
+                        scope.launch {
+                            controller.deleteFromSyncedLibrary(book)
+                            onDone()
+                        }
+                    },
+                ) {
+                    Text(
+                        text = stringResource(R.string.drive_sync_delete_from_library_confirm),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmVisible = false }) {
+                    Text(stringResource(R.string.drive_sync_switch_cancel))
+                }
+            },
+        )
+    }
+
+    HorizontalDivider(modifier = Modifier.padding(top = 8.dp))
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .clickable(role = Role.Button) { confirmVisible = true }
+            .padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = stringResource(R.string.drive_sync_delete_from_library),
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.error,
+        )
+    }
+}
+
+@Composable
+private fun conflictDomainLabel(domain: String): String = when (domain) {
+    DriveWireCodec.DOMAIN_ANNOTATION -> stringResource(R.string.drive_sync_conflict_domain_annotation)
+    DriveWireCodec.DOMAIN_EVALUATION -> stringResource(R.string.drive_sync_conflict_domain_evaluation)
+    DriveWireCodec.DOMAIN_METADATA -> stringResource(R.string.drive_sync_conflict_domain_metadata)
+    DriveWireCodec.DOMAIN_SERIES -> stringResource(R.string.drive_sync_conflict_domain_series)
+    else -> domain
+}
+
+@Composable
+private fun conflictFieldLabel(domain: String, field: String?): String? {
+    if (field.isNullOrBlank() || domain == DriveWireCodec.DOMAIN_SERIES) return null
+    return when (field) {
+        PersonalEvaluation.RATING -> stringResource(R.string.drive_sync_conflict_field_rating)
+        PersonalEvaluation.REVIEW -> stringResource(R.string.drive_sync_conflict_field_review)
+        MetadataOverrideFields.TITLE -> stringResource(R.string.drive_sync_conflict_field_title)
+        MetadataOverrideFields.AUTHOR -> stringResource(R.string.drive_sync_conflict_field_author)
+        MetadataOverrideFields.DESCRIPTION -> stringResource(R.string.drive_sync_conflict_field_description)
+        MetadataOverrideFields.COVER -> stringResource(R.string.drive_sync_conflict_field_cover)
+        else -> field
+    }
 }
 
 @Composable

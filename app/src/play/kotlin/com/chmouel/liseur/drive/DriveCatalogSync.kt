@@ -5,8 +5,12 @@ import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.DownloadState
 import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.data.db.WorkAlias
+import com.chmouel.liseur.data.library.BookRemoval
 import com.chmouel.liseur.domain.MetadataSource
+import java.io.File
+import java.net.URI
 import java.util.Locale
+import org.json.JSONArray
 import org.json.JSONObject
 
 /**
@@ -25,6 +29,7 @@ internal class DriveCatalogSync(
     private val database: LiseurDatabase,
     private val store: DriveSyncDatabase,
     private val workIdentity: DriveWorkIdentity,
+    bookRemoval: BookRemoval? = null,
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
     private val books get() = database.bookDao()
@@ -34,14 +39,48 @@ internal class DriveCatalogSync(
     private val uploads get() = store.uploads()
     private val driveFiles get() = store.files()
 
+    private val removal: BookRemoval = bookRemoval ?: BookRemoval(
+        bookDao = database.bookDao(),
+        sessionDao = database.readingSessionDao(),
+        peerStateDao = database.syncPeerStateDao(),
+        identityDao = database.workIdentityDao(),
+        progressDao = database.readingProgressDao(),
+        annotationDao = database.annotationDao(),
+        annotationSyncDao = database.annotationSyncDao(),
+        inTransaction = { work -> database.withTransaction { work() } },
+        metadataDao = database.bookMetadataDao(),
+        evaluationDao = database.bookEvaluationDao(),
+    )
+
     /**
      * Collects dirty `catalog` records for every eligible library book whose
-     * canonical catalog representation changed since last publish.
+     * canonical catalog representation changed since last publish, plus any
+     * unpublished library deletion tombstones (`op: "del"`).
      */
     suspend fun collectDirtyRecords(
         permissionId: String,
         nextHlc: suspend () -> String,
     ): List<DriveWireRecord> {
+        val out = mutableListOf<DriveWireRecord>()
+        val deletedWorkKeys = mutableSetOf<String>()
+
+        // 1. Emit any unpublished durable `catalog` deletion tombstones first.
+        for (state in recordStates.forDomain(permissionId, DriveWireCodec.DOMAIN_CATALOG)) {
+            if (state.versionOp != DriveRecordState.OP_DEL) continue
+            deletedWorkKeys.add(state.recordKey)
+            if (state.publishedFp == state.versionFp) continue
+            out.add(
+                DriveWireCodec.delRecord(
+                    domain = DriveWireCodec.DOMAIN_CATALOG,
+                    key = state.recordKey,
+                    hlc = state.lastHlc.ifBlank { nextHlc() },
+                    ancestors = DriveWorkIdentity.decodeStringArray(state.ancestorsJson),
+                    resRefs = DriveWorkIdentity.decodeStringArray(state.resRefsJson),
+                    explicitFp = state.versionFp,
+                ),
+            )
+        }
+
         val eligibleBooks = books.allOnce().filter { it.browseServerId == null }
         val uploadedBySha = uploads.forAccount(permissionId)
             .filter {
@@ -62,10 +101,11 @@ internal class DriveCatalogSync(
             grouped.getOrPut(canonical) { mutableListOf() }.add(book to alias)
         }
 
-        val out = mutableListOf<DriveWireRecord>()
         for ((workKey, entries) in grouped) {
+            if (workKey in deletedWorkKeys) continue
             val primaryBook = entries.firstOrNull { it.first.openableUrl != null }?.first ?: entries.first().first
             val existingState = recordStates.get(permissionId, DriveWireCodec.DOMAIN_CATALOG, workKey)
+            if (existingState?.versionOp == DriveRecordState.OP_DEL) continue
             val existingBody = existingState?.bodyJson?.let {
                 runCatching { DriveWireCodec.decodeCatalogBody(JSONObject(it)) }.getOrNull()
             }
@@ -242,21 +282,54 @@ internal class DriveCatalogSync(
         if (record.op == DriveRecordState.OP_DEL) {
             val canonical = workIdentity.canonicalWorkKey(permissionId, record.k)
             val existing = recordStates.get(permissionId, DriveWireCodec.DOMAIN_CATALOG, canonical)
-            if (existing != null && record.hlc <= existing.lastHlc) return
-            // Unlink local copies; remove remote-only Drive stub without touching local files.
-            database.withTransaction {
-                val matchingAliases = identities.aliasesFor(peerId).filter {
-                    workIdentity.canonicalWorkKey(permissionId, it.workId) == canonical
+            if (existing != null && existing.versionOp == DriveRecordState.OP_DEL && record.hlc <= existing.lastHlc) {
+                return
+            }
+            val matchingAliases = identities.aliasesFor(peerId).filter {
+                workIdentity.canonicalWorkKey(permissionId, it.workId) == canonical
+            }
+            val remoteOnlyUrls = mutableListOf<String>()
+            val unlinkBookUrls = mutableListOf<Pair<String, String>>()
+            val shasToClear = mutableSetOf<String>()
+
+            for (alias in matchingAliases) {
+                val book = books.getByUrl(alias.bookUrl) ?: continue
+                alias.editionSha?.lowercase(Locale.ROOT)?.let(shasToClear::add)
+                identities.fingerprint(book.url)?.sha256?.lowercase(Locale.ROOT)?.let(shasToClear::add)
+                if (book.url.startsWith(DriveWorkIdentity.DRIVE_BOOK_URL_PREFIX) && book.localUri == null) {
+                    remoteOnlyUrls.add(book.url)
+                } else {
+                    // Local file present: keep local file and book entry, unlink from Drive only.
+                    unlinkBookUrls.add(book.url to alias.workId)
                 }
-                for (alias in matchingAliases) {
-                    val book = books.getByUrl(alias.bookUrl) ?: continue
-                    if (book.url.startsWith(DriveWorkIdentity.DRIVE_BOOK_URL_PREFIX) && book.localUri == null) {
-                        books.deleteByUrls(listOf(book.url))
+            }
+            // Also check canonical drive:<workKey> stub even if alias was missing.
+            val stubUrl = DriveWorkIdentity.driveBookUrl(canonical)
+            val stubBook = books.getByUrl(stubUrl)
+            if (stubBook != null && stubBook.localUri == null && stubUrl !in remoteOnlyUrls) {
+                remoteOnlyUrls.add(stubUrl)
+            }
+
+            // Remove remote-only `drive:<workKey>` rows via BookRemoval (preserves annotations & retains evaluations).
+            if (remoteOnlyUrls.isNotEmpty()) {
+                removal.deleteByUrls(remoteOnlyUrls)
+            }
+            if (unlinkBookUrls.isNotEmpty()) {
+                database.withTransaction {
+                    for ((bookUrl, staleWorkId) in unlinkBookUrls) {
+                        identities.deleteAliasIfStale(bookUrl, peerId, staleWorkId)
+                        identities.clearAmbiguity(bookUrl, peerId)
+                        val book = books.getByUrl(bookUrl) ?: continue
+                        if (fileIdFromHref(book.downloadHref) != null) {
+                            books.upsert(book.copy(downloadHref = null))
+                        }
                     }
-                    identities.forgetAliases(listOf(book.url))
                 }
             }
             store.withTransaction {
+                for (sha in shasToClear) {
+                    uploads.delete(permissionId, sha)
+                }
                 val anc = (listOfNotNull(existing?.versionFp) +
                     DriveWorkIdentity.decodeStringArray(existing?.ancestorsJson) + record.anc)
                     .distinct()
@@ -286,6 +359,13 @@ internal class DriveCatalogSync(
         val incoming = DriveWireCodec.decodeCatalogBody(bodyJson) ?: return
         val canonicalKey = workIdentity.canonicalWorkKey(permissionId, incoming.workKey)
         val existingState = recordStates.get(permissionId, DriveWireCodec.DOMAIN_CATALOG, canonicalKey)
+        if (existingState != null && existingState.versionOp == DriveRecordState.OP_DEL) {
+            val existingAnc = DriveWorkIdentity.decodeStringArray(existingState.ancestorsJson)
+            val supersedesDeletion = existingState.versionFp in record.anc && record.fp !in existingAnc
+            if (!supersedesDeletion) {
+                return
+            }
+        }
         val existingBody = existingState?.bodyJson?.let {
             runCatching { DriveWireCodec.decodeCatalogBody(JSONObject(it)) }.getOrNull()
         }
@@ -457,6 +537,164 @@ internal class DriveCatalogSync(
     }
 
     /**
+     * Explicit **Delete from synced library** (`docs/DRIVE_SYNC.md` §4.2 & ADR-0078):
+     * 1. Writes a durable `catalog` `op: "del"` tombstone in `drive_record_state`.
+     * 2. Trashes any uploaded Drive EPUB in `Liseur/` (or queues pending trash if offline).
+     * 3. Removes `drive:<workKey>` rows via [BookRemoval] (preserving annotations) or
+     *    unlinks local-file books from Drive without deleting the reader's local file.
+     */
+    suspend fun deleteFromSyncedLibrary(
+        permissionId: String,
+        book: Book,
+        nextHlc: suspend () -> String,
+        driveApi: DriveRemoteApi? = null,
+        accessToken: String? = null,
+    ): Boolean {
+        if (book.browseServerId != null) return false
+        val peerId = DriveLibrarySync.accountPeerId(permissionId)
+        val alias = workIdentity.resolveBook(permissionId, book, computeFingerprintIfMissing = false)
+        val rawWorkKey = alias?.workId
+            ?: book.url.takeIf { it.startsWith(DriveWorkIdentity.DRIVE_BOOK_URL_PREFIX) }
+                ?.removePrefix(DriveWorkIdentity.DRIVE_BOOK_URL_PREFIX)
+            ?: return false
+        val canonicalKey = workIdentity.canonicalWorkKey(permissionId, rawWorkKey)
+
+        val existingState = recordStates.get(permissionId, DriveWireCodec.DOMAIN_CATALOG, canonicalKey)
+        val existingBody = existingState?.bodyJson?.let {
+            runCatching { DriveWireCodec.decodeCatalogBody(JSONObject(it)) }.getOrNull()
+        }
+
+        // Collect all Drive EPUB file IDs & edition SHAs tied to this work.
+        val fileIdsToTrash = linkedSetOf<String>()
+        val shasToRemove = linkedSetOf<String>()
+        existingBody?.editions?.forEach { ed ->
+            shasToRemove.add(ed.sha256.lowercase(Locale.ROOT))
+            ed.driveFileId?.takeIf { it.isNotBlank() }?.let(fileIdsToTrash::add)
+        }
+        fileIdFromHref(book.downloadHref)?.let(fileIdsToTrash::add)
+        alias?.editionSha?.lowercase(Locale.ROOT)?.let(shasToRemove::add)
+        identities.fingerprint(book.url)?.sha256?.lowercase(Locale.ROOT)?.let(shasToRemove::add)
+        for (sha in shasToRemove) {
+            uploads.get(permissionId, sha)?.fileId?.takeIf { it.isNotBlank() }?.let(fileIdsToTrash::add)
+            driveFiles.byKindAndSha256(permissionId, DriveFile.KIND_EPUB, sha).forEach { fileIdsToTrash.add(it.fileId) }
+        }
+
+        // Best-effort trash immediately when online; keep any remaining IDs queued for next sync.
+        val pendingTrashIds = mutableListOf<String>()
+        for (fid in fileIdsToTrash) {
+            val trashedNow = if (driveApi != null && !accessToken.isNullOrBlank()) {
+                runCatching {
+                    driveApi.trashFile(accessToken, fid)
+                    true
+                }.recoverCatching { err ->
+                    err is DriveNotFoundException
+                }.getOrDefault(false)
+            } else {
+                false
+            }
+            if (!trashedNow) {
+                pendingTrashIds.add(fid)
+            }
+        }
+
+        val hlc = nextHlc()
+        val delFp = DriveCanonicalJson.delFp(DriveWireCodec.DOMAIN_CATALOG, canonicalKey, hlc)
+        val anc = buildList {
+            existingState?.versionFp?.let(::add)
+            addAll(DriveWorkIdentity.decodeStringArray(existingState?.ancestorsJson))
+        }.distinct().take(DriveWireCodec.MAX_ANCESTORS)
+        val pendingTrashPayload = if (pendingTrashIds.isNotEmpty()) {
+            DriveCanonicalJson.encode(mapOf("pendingTrashFileIds" to pendingTrashIds.distinct().sorted()))
+        } else {
+            null
+        }
+
+        // Persist tombstone & mark Drive files trashed / clear upload queue.
+        store.withTransaction {
+            for (fid in fileIdsToTrash) {
+                if (driveFiles.get(permissionId, fid) != null) {
+                    driveFiles.setTrashed(permissionId, fid, true)
+                }
+            }
+            for (sha in shasToRemove) {
+                uploads.delete(permissionId, sha)
+            }
+            recordStates.upsert(
+                DriveRecordState(
+                    permissionId = permissionId,
+                    domain = DriveWireCodec.DOMAIN_CATALOG,
+                    recordKey = canonicalKey,
+                    versionFp = delFp,
+                    versionOp = DriveRecordState.OP_DEL,
+                    publishedFp = null, // unpublished -> emitted in next delta batch
+                    contentFp = null,
+                    originDeviceId = null,
+                    originSeq = null,
+                    ancestorsJson = DriveCanonicalJson.encode(anc),
+                    resRefsJson = existingState?.resRefsJson ?: "[]",
+                    lastHlc = hlc,
+                    bodyJson = pendingTrashPayload,
+                ),
+            )
+        }
+
+        // Local cleanup: Drive stub goes via BookRemoval (preserving annotations); local file is unlinked only.
+        if (book.url.startsWith(DriveWorkIdentity.DRIVE_BOOK_URL_PREFIX)) {
+            val ownedFile = book.localUri?.takeIf { it.startsWith("file:") }?.let { uri ->
+                runCatching { File(URI(uri)) }.getOrNull()
+            }
+            removal.deleteByUrls(listOf(book.url))
+            ownedFile?.takeIf { it.name.startsWith("drive_") && it.isFile }?.delete()
+        } else {
+            database.withTransaction {
+                if (alias != null) {
+                    identities.deleteAliasIfStale(book.url, peerId, alias.workId)
+                }
+                identities.clearAmbiguity(book.url, peerId)
+                val latest = books.getByUrl(book.url)
+                if (latest != null && fileIdFromHref(latest.downloadHref) != null) {
+                    books.upsert(latest.copy(downloadHref = null))
+                }
+            }
+        }
+        return true
+    }
+
+    /** Drains any Drive EPUB trash operations queued while offline during `deleteFromSyncedLibrary`. */
+    suspend fun drainPendingEpubTrashes(
+        permissionId: String,
+        driveApi: DriveRemoteApi,
+        accessToken: String,
+    ) {
+        for (state in recordStates.forDomain(permissionId, DriveWireCodec.DOMAIN_CATALOG)) {
+            if (state.versionOp != DriveRecordState.OP_DEL) continue
+            val raw = state.bodyJson ?: continue
+            val obj = runCatching { JSONObject(raw) }.getOrNull() ?: continue
+            val arr = obj.optJSONArray("pendingTrashFileIds") ?: continue
+            val remaining = mutableListOf<String>()
+            for (i in 0 until arr.length()) {
+                val fid = arr.optString(i).trim()
+                if (fid.isEmpty()) continue
+                val trashed = runCatching {
+                    driveApi.trashFile(accessToken, fid)
+                    true
+                }.recoverCatching { err ->
+                    err is DriveNotFoundException
+                }.getOrDefault(false)
+                if (!trashed) remaining.add(fid)
+            }
+            val nextBody = if (remaining.isEmpty()) {
+                null
+            } else {
+                DriveCanonicalJson.encode(mapOf("pendingTrashFileIds" to remaining.distinct().sorted()))
+            }
+            if (nextBody != state.bodyJson) {
+                recordStates.upsert(state.copy(bodyJson = nextBody))
+            }
+        }
+    }
+
+    /**
      * Marks a Drive-side EPUB file unavailable when `changes.list` or a full
      * bootstrap rescan reports it removed or trashed in Google Drive, retaining
      * the catalog entry and all local reading history while invalidating any
@@ -474,6 +712,7 @@ internal class DriveCatalogSync(
             uploads.deleteUploadedByFileId(permissionId, fileId)
             val states = recordStates.forDomain(permissionId, DriveWireCodec.DOMAIN_CATALOG)
             for (state in states) {
+                if (state.versionOp == DriveRecordState.OP_DEL) continue
                 val bodyJson = state.bodyJson ?: continue
                 val body = runCatching { DriveWireCodec.decodeCatalogBody(JSONObject(bodyJson)) }.getOrNull() ?: continue
                 if (body.editions.none { it.driveFileId == fileId }) continue
