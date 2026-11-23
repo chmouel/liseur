@@ -61,8 +61,8 @@ android {
         applicationId = "com.chmouel.liseur"
         minSdk = 26
         targetSdk = 37
-        versionCode = 85
-        versionName = "0.32.0"
+        versionCode = 92
+        versionName = "0.33.0"
     }
 
     signingConfigs {

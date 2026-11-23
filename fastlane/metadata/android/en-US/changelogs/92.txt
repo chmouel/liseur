@@ -1,0 +1,1 @@
+New fancy onboarding. The Home tab shows an All books tile when you have no series. Reader controls and book details are easier to reach, and word lookup offers offline and online choices. You can export books as a Goodreads CSV, sync vocabulary and review progress with liseur-sync, and see footnotes more clearly. Reading positions restore more reliably.
