@@ -494,7 +494,7 @@ class AppContainer(
             report = usageReporting::capture,
             onChanged = {
                 applicationScope.launch {
-                    if (remoteRouter.supportsVocabularySync()) requestFullSync()
+                    if (remoteRouter.supportsVocabularySync() || librarySync.isActive()) requestFullSync()
                 }
             },
         )

@@ -64,7 +64,7 @@ import com.chmouel.liseur.vocabulary.VocabularyWord
         VocabularyReviewSync::class,
         VocabularyStagedReview::class,
     ],
-    version = 84,
+    version = 85,
     autoMigrations = [AutoMigration(from = 80, to = 81)],
     exportSchema = true,
 )
@@ -113,6 +113,22 @@ abstract class LiseurDatabase : RoomDatabase() {
     abstract fun vocabularySyncDao(): VocabularySyncDao
 
     companion object {
+        val MIGRATION_84_85 = object : Migration(84, 85) {
+            override fun migrate(connection: SQLiteConnection) {
+                val cols = connection.columnsOf("reading_sessions")
+                if ("remote_session_id" !in cols) {
+                    connection.execSQL("ALTER TABLE reading_sessions ADD COLUMN remote_session_id TEXT")
+                }
+                if ("origin_device_id" !in cols) {
+                    connection.execSQL("ALTER TABLE reading_sessions ADD COLUMN origin_device_id TEXT")
+                }
+                connection.execSQL(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS `index_reading_sessions_remote_session_id` " +
+                        "ON `reading_sessions` (`remote_session_id`)",
+                )
+            }
+        }
+
         val MIGRATION_83_84 = object : Migration(83, 84) {
             override fun migrate(connection: SQLiteConnection) {
                 if ("vocabulary_cursor_seq" !in connection.columnsOf("remote_server")) {
@@ -2509,6 +2525,7 @@ abstract class LiseurDatabase : RoomDatabase() {
             MIGRATION_81_82,
             MIGRATION_82_83,
             MIGRATION_83_84,
+            MIGRATION_84_85,
         )
     }
 }

@@ -47,6 +47,8 @@ internal class DriveChangeEngine(
     private val evaluationSync: DriveEvaluationSync? = null,
     private val metadataSync: DriveMetadataSync? = null,
     private val seriesSync: DriveSeriesSync? = null,
+    private val vocabularySync: DriveVocabularySync? = null,
+    private val sessionSync: DriveSessionSync? = null,
     private val deviceLabelProvider: () -> String = {
         listOfNotNull(Build.MANUFACTURER?.takeIf { it.isNotBlank() }, Build.MODEL?.takeIf { it.isNotBlank() })
             .joinToString(" ")
@@ -247,8 +249,9 @@ internal class DriveChangeEngine(
         catalogSync.recoverPendingCleanups(permissionId)
 
         // Ensure local books with fingerprints & metadata have deterministic Drive aliases
-        // BEFORE applying incoming remote catalog/position records.
+        // and eligible local sessions have content-derived remote_session_id BEFORE pulling.
         workIdentity.resolveAllLocalBooks(permissionId)
+        sessionSync?.ensureLocalRemoteSessionIds(permissionId)
 
         // Finish forgets interrupted after their reset was persisted, before pulls can restore the peak.
         positionSync.reapplyPendingResets(permissionId, localDeviceId)
@@ -458,6 +461,12 @@ internal class DriveChangeEngine(
         return applied
     }
 
+    private data class SnapshotApplyOutcome(
+        val appliedAnyRecord: Boolean = false,
+        val advancedAnyCursor: Boolean = false,
+        val hasDeferredDomains: Boolean = false,
+    )
+
     private suspend fun processDiscoveredRemoteDevices(
         permissionId: String,
         localDeviceId: String,
@@ -476,153 +485,193 @@ internal class DriveChangeEngine(
         val remoteDeviceIds = (manifestsByDevice.keys + deltaDeviceIds)
             .sorted()
 
-        for (remoteDeviceId in remoteDeviceIds) {
-            val manifestFile = manifestsByDevice[remoteDeviceId]
-            var manifest: DriveManifest? = null
+        val parsedManifests = mutableMapOf<String, DriveManifest>()
+        var devicesToVisit = remoteDeviceIds
+        var isFirstPass = true
 
-            if (manifestFile != null) {
-                val bytes = driveApi.downloadMedia(accessToken, manifestFile.fileId)
-                val parsed = runCatching { DriveWireCodec.decodeManifest(bytes.toString(Charsets.UTF_8)) }.getOrNull()
-                if (parsed != null) {
-                    manifest = parsed
-                    observeRemoteHlc(permissionId, parsed.updatedHlc)
-                    devices.upsert(
-                        DriveDevice(
-                            permissionId = permissionId,
-                            deviceId = remoteDeviceId,
-                            label = parsed.deviceLabel,
-                            manifestFileId = manifestFile.fileId,
-                            appVersionCode = parsed.appVersionCode,
-                            snapshotThroughSeq = parsed.snapshot?.throughSeq ?: 0L,
-                            lastSeenAt = clock(),
-                        ),
-                    )
-                    when (val check = DriveWireCodec.checkSchema(parsed.schemaVersion, parsed.domains, parsed.deviceLabel)) {
-                        is DriveSchemaCheck.UnsupportedStream -> {
-                            pauseDeviceStream(permissionId, remoteDeviceId, check.schemaVersion)
-                            continue
-                        }
-                        is DriveSchemaCheck.UnsupportedDomains -> {
-                            pauseUnsupportedDomains(permissionId, remoteDeviceId, check.unsupported)
-                            clearStreamPause(permissionId, remoteDeviceId)
-                        }
-                        DriveSchemaCheck.Supported -> {
-                            clearStreamPause(permissionId, remoteDeviceId)
-                        }
-                    }
+        while (devicesToVisit.isNotEmpty()) {
+            val deferredDevices = linkedSetOf<String>()
+            var appliedAnyRecordThisPass = false
+            var advancedAnyCursorThisPass = false
 
-                    // If manifest advertises a snapshot ahead of our cursor, ingest it idempotently.
-                    val snap = parsed.snapshot
-                    if (snap != null && snap.throughSeq > minAppliedSeq(permissionId, remoteDeviceId)) {
-                        applySnapshot(
-                            permissionId = permissionId,
-                            localDeviceId = localDeviceId,
-                            remoteDeviceId = remoteDeviceId,
-                            snapshot = snap,
-                            accessToken = accessToken,
-                        )
-                    }
-                }
-            }
-
-            // Skip downloading deltas if the whole device stream is paused due to schemaVersion.
-            val streamCursor = cursors.get(permissionId, remoteDeviceId, DriveWireCodec.STREAM_PAUSE_DOMAIN)
-            if (streamCursor?.pausedSchemaVersion != null) continue
-
-            val deltaFiles = files.byDeviceAndKind(permissionId, remoteDeviceId, DriveFile.KIND_DELTA)
-                .filter { !it.trashed && it.seq != null && it.seq > 0L }
-                .sortedBy { it.seq }
-            if (deltaFiles.isEmpty()) continue
-
-            val startingCursor = minAppliedSeq(permissionId, remoteDeviceId)
-            var expectedNextSeq = startingCursor + 1L
-            val deviceDeferredDomains = mutableSetOf<String>()
-            for (deltaFile in deltaFiles) {
-                val seq = deltaFile.seq ?: continue
-                if (seq <= startingCursor) continue
-                // Enforce contiguous seq order: if there is a gap, stop and wait (or fall back to snapshot).
-                if (seq > expectedNextSeq) break
-
-                val bytes = driveApi.downloadMedia(accessToken, deltaFile.fileId)
-                val batch = runCatching { DriveWireCodec.decodeDeltaBatch(bytes.toString(Charsets.UTF_8)) }.getOrNull()
-                    ?: break
-                observeRemoteHlc(permissionId, batch.createdHlc)
-
-                val effectiveDomains = buildMap {
-                    putAll(batch.domains)
-                    for (record in batch.records) {
-                        if (record.d !in this) {
-                            put(record.d, 1)
+            for (remoteDeviceId in devicesToVisit) {
+                var manifest = parsedManifests[remoteDeviceId]
+                if (isFirstPass) {
+                    val manifestFile = manifestsByDevice[remoteDeviceId]
+                    if (manifestFile != null) {
+                        val bytes = driveApi.downloadMedia(accessToken, manifestFile.fileId)
+                        val parsed = runCatching { DriveWireCodec.decodeManifest(bytes.toString(Charsets.UTF_8)) }.getOrNull()
+                        if (parsed != null) {
+                            manifest = parsed
+                            parsedManifests[remoteDeviceId] = parsed
+                            observeRemoteHlc(permissionId, parsed.updatedHlc)
+                            devices.upsert(
+                                DriveDevice(
+                                    permissionId = permissionId,
+                                    deviceId = remoteDeviceId,
+                                    label = parsed.deviceLabel,
+                                    manifestFileId = manifestFile.fileId,
+                                    appVersionCode = parsed.appVersionCode,
+                                    snapshotThroughSeq = parsed.snapshot?.throughSeq ?: 0L,
+                                    lastSeenAt = clock(),
+                                ),
+                            )
+                            when (val check = DriveWireCodec.checkSchema(parsed.schemaVersion, parsed.domains, parsed.deviceLabel)) {
+                                is DriveSchemaCheck.UnsupportedStream -> {
+                                    pauseDeviceStream(permissionId, remoteDeviceId, check.schemaVersion)
+                                    continue
+                                }
+                                is DriveSchemaCheck.UnsupportedDomains -> {
+                                    pauseUnsupportedDomains(permissionId, remoteDeviceId, check.unsupported)
+                                    clearStreamPause(permissionId, remoteDeviceId)
+                                }
+                                DriveSchemaCheck.Supported -> {
+                                    clearStreamPause(permissionId, remoteDeviceId)
+                                }
+                            }
                         }
                     }
                 }
-                when (val check = DriveWireCodec.checkSchema(batch.schemaVersion, effectiveDomains, manifest?.deviceLabel)) {
-                    is DriveSchemaCheck.UnsupportedStream -> {
-                        pauseDeviceStream(permissionId, remoteDeviceId, check.schemaVersion)
-                        break
-                    }
-                    is DriveSchemaCheck.UnsupportedDomains -> {
-                        pauseUnsupportedDomains(permissionId, remoteDeviceId, check.unsupported)
-                    }
-                    DriveSchemaCheck.Supported -> Unit
-                }
 
-                val deviceCursors = cursors.forDevice(permissionId, remoteDeviceId)
-                val pausedDomains = deviceCursors
-                    .filter { it.pausedSchemaVersion != null }
-                    .map { it.domain }
-                    .toSet()
-                val appliedSeqByDomain = deviceCursors.associate { it.domain to it.appliedSeq }
+                // Skip downloading snapshot/deltas if the whole device stream is paused due to schemaVersion.
+                val streamCursor = cursors.get(permissionId, remoteDeviceId, DriveWireCodec.STREAM_PAUSE_DOMAIN)
+                if (streamCursor?.pausedSchemaVersion != null) continue
 
-                val orderedRecords = batch.records
-                    .filter {
-                        it.d !in pausedDomains &&
-                            it.d !in deviceDeferredDomains &&
-                            it.d in DriveWireCodec.SUPPORTED_DOMAIN_VERSIONS &&
-                            seq > (appliedSeqByDomain[it.d] ?: 0L)
-                    }
-                    .sortedBy { DriveWireCodec.domainRank(it.d) }
-
-                for (record in orderedRecords) {
-                    if (record.d in deviceDeferredDomains) continue
-                    val recordApplied = applySingleRecord(
+                // If manifest advertises a snapshot ahead of our cursor, ingest it idempotently.
+                val snap = manifest?.snapshot
+                if (snap != null && snap.throughSeq > minAppliedSeq(permissionId, remoteDeviceId)) {
+                    val snapOutcome = applySnapshot(
                         permissionId = permissionId,
                         localDeviceId = localDeviceId,
                         remoteDeviceId = remoteDeviceId,
-                        remoteSeq = seq,
+                        snapshot = snap,
                         accessToken = accessToken,
-                        record = record,
                     )
-                    if (!recordApplied) {
-                        deviceDeferredDomains.add(record.d)
-                    }
+                    if (snapOutcome.appliedAnyRecord) appliedAnyRecordThisPass = true
+                    if (snapOutcome.advancedAnyCursor) advancedAnyCursorThisPass = true
+                    if (snapOutcome.hasDeferredDomains) deferredDevices.add(remoteDeviceId)
                 }
 
-                // Advance per-domain cursors ONLY for implemented, non-paused, non-deferred domains.
-                val domainsToAdvance = DriveWireCodec.SUPPORTED_DOMAIN_VERSIONS.keys
-                    .filter {
-                        it !in pausedDomains &&
-                            it !in deviceDeferredDomains &&
-                            it != DriveWireCodec.STREAM_PAUSE_DOMAIN
-                    }
-                store.withTransaction {
-                    for (domain in domainsToAdvance) {
-                        val existing = cursors.get(permissionId, remoteDeviceId, domain)
-                        val nextApplied = maxOf(existing?.appliedSeq ?: 0L, seq)
-                        cursors.upsert(
-                            DriveCursor(
-                                permissionId = permissionId,
-                                deviceId = remoteDeviceId,
-                                domain = domain,
-                                appliedSeq = nextApplied,
-                                pausedSchemaVersion = existing?.pausedSchemaVersion,
-                            ),
-                        )
-                    }
+                // Re-check stream pause in case snapshot triggered it.
+                if (cursors.get(permissionId, remoteDeviceId, DriveWireCodec.STREAM_PAUSE_DOMAIN)?.pausedSchemaVersion != null) {
+                    continue
                 }
-                expectedNextSeq = seq + 1L
-                appliedCount++
+
+                val deltaFiles = files.byDeviceAndKind(permissionId, remoteDeviceId, DriveFile.KIND_DELTA)
+                    .filter { !it.trashed && it.seq != null && it.seq > 0L }
+                    .sortedBy { it.seq }
+                if (deltaFiles.isEmpty()) continue
+
+                val startingCursor = minAppliedSeq(permissionId, remoteDeviceId)
+                var expectedNextSeq = startingCursor + 1L
+                val deviceDeferredDomains = mutableSetOf<String>()
+                for (deltaFile in deltaFiles) {
+                    val seq = deltaFile.seq ?: continue
+                    if (seq <= startingCursor) continue
+                    // Enforce contiguous seq order: if there is a gap, stop and wait (or fall back to snapshot).
+                    if (seq > expectedNextSeq) break
+
+                    val bytes = driveApi.downloadMedia(accessToken, deltaFile.fileId)
+                    val batch = runCatching { DriveWireCodec.decodeDeltaBatch(bytes.toString(Charsets.UTF_8)) }.getOrNull()
+                        ?: break
+                    observeRemoteHlc(permissionId, batch.createdHlc)
+
+                    val effectiveDomains = buildMap {
+                        putAll(batch.domains)
+                        for (record in batch.records) {
+                            if (record.d !in this) {
+                                put(record.d, 1)
+                            }
+                        }
+                    }
+                    when (val check = DriveWireCodec.checkSchema(batch.schemaVersion, effectiveDomains, manifest?.deviceLabel)) {
+                        is DriveSchemaCheck.UnsupportedStream -> {
+                            pauseDeviceStream(permissionId, remoteDeviceId, check.schemaVersion)
+                            break
+                        }
+                        is DriveSchemaCheck.UnsupportedDomains -> {
+                            pauseUnsupportedDomains(permissionId, remoteDeviceId, check.unsupported)
+                        }
+                        DriveSchemaCheck.Supported -> Unit
+                    }
+
+                    val deviceCursors = cursors.forDevice(permissionId, remoteDeviceId)
+                    val pausedDomains = deviceCursors
+                        .filter { it.pausedSchemaVersion != null }
+                        .map { it.domain }
+                        .toSet()
+                    val appliedSeqByDomain = deviceCursors.associate { it.domain to it.appliedSeq }
+
+                    val orderedRecords = batch.records
+                        .filter {
+                            it.d !in pausedDomains &&
+                                it.d !in deviceDeferredDomains &&
+                                it.d in DriveWireCodec.SUPPORTED_DOMAIN_VERSIONS &&
+                                seq > (appliedSeqByDomain[it.d] ?: 0L)
+                        }
+                        .sortedBy { DriveWireCodec.domainRank(it.d) }
+
+                    for (record in orderedRecords) {
+                        if (record.d in deviceDeferredDomains) continue
+                        val recordApplied = applySingleRecord(
+                            permissionId = permissionId,
+                            localDeviceId = localDeviceId,
+                            remoteDeviceId = remoteDeviceId,
+                            remoteSeq = seq,
+                            accessToken = accessToken,
+                            record = record,
+                            batchObserved = batch.observed,
+                        )
+                        if (recordApplied) {
+                            appliedAnyRecordThisPass = true
+                        } else {
+                            deviceDeferredDomains.add(record.d)
+                        }
+                    }
+
+                    // Advance per-domain cursors ONLY for implemented, non-paused, non-deferred domains.
+                    val domainsToAdvance = DriveWireCodec.SUPPORTED_DOMAIN_VERSIONS.keys
+                        .filter {
+                            it !in pausedDomains &&
+                                it !in deviceDeferredDomains &&
+                                it != DriveWireCodec.STREAM_PAUSE_DOMAIN
+                        }
+                    var batchAdvancedAnyCursor = false
+                    store.withTransaction {
+                        for (domain in domainsToAdvance) {
+                            val existing = cursors.get(permissionId, remoteDeviceId, domain)
+                            val prevApplied = existing?.appliedSeq ?: 0L
+                            val nextApplied = maxOf(prevApplied, seq)
+                            if (nextApplied > prevApplied) {
+                                batchAdvancedAnyCursor = true
+                            }
+                            cursors.upsert(
+                                DriveCursor(
+                                    permissionId = permissionId,
+                                    deviceId = remoteDeviceId,
+                                    domain = domain,
+                                    appliedSeq = nextApplied,
+                                    pausedSchemaVersion = existing?.pausedSchemaVersion,
+                                ),
+                            )
+                        }
+                    }
+                    if (batchAdvancedAnyCursor) {
+                        advancedAnyCursorThisPass = true
+                        appliedCount++
+                    }
+                    expectedNextSeq = seq + 1L
+                }
+                if (deviceDeferredDomains.isNotEmpty()) {
+                    deferredDevices.add(remoteDeviceId)
+                }
             }
+
+            if (deferredDevices.isEmpty() || !appliedAnyRecordThisPass || !advancedAnyCursorThisPass) {
+                break
+            }
+            isFirstPass = false
+            devicesToVisit = deferredDevices.sorted()
         }
         return appliedCount
     }
@@ -633,17 +682,17 @@ internal class DriveChangeEngine(
         remoteDeviceId: String,
         snapshot: DriveSnapshotRef,
         accessToken: String,
-    ) {
+    ): SnapshotApplyOutcome {
         val allRecords = mutableListOf<DriveWireRecord>()
         val allResolutions = mutableListOf<DriveSnapshotResolution>()
         for (partRef in snapshot.parts) {
             val bytes = driveApi.downloadMedia(accessToken, partRef.fileId)
             val actualSha = DriveCanonicalJson.sha256Hex(bytes)
             if (partRef.sha256.isNotBlank() && !actualSha.equals(partRef.sha256, ignoreCase = true)) {
-                return
+                return SnapshotApplyOutcome()
             }
             val part = runCatching { DriveWireCodec.decodeSnapshotPart(bytes.toString(Charsets.UTF_8)) }.getOrNull()
-                ?: return
+                ?: return SnapshotApplyOutcome()
             val effectiveDomains = buildMap {
                 putAll(part.domains)
                 for (record in part.records) {
@@ -655,7 +704,7 @@ internal class DriveChangeEngine(
             when (val check = DriveWireCodec.checkSchema(part.schemaVersion, effectiveDomains)) {
                 is DriveSchemaCheck.UnsupportedStream -> {
                     pauseDeviceStream(permissionId, remoteDeviceId, check.schemaVersion)
-                    return
+                    return SnapshotApplyOutcome()
                 }
                 is DriveSchemaCheck.UnsupportedDomains -> {
                     pauseUnsupportedDomains(permissionId, remoteDeviceId, check.unsupported)
@@ -674,6 +723,7 @@ internal class DriveChangeEngine(
         val appliedSeqByDomain = deviceCursors.associate { it.domain to it.appliedSeq }
 
         val deferredDomains = mutableSetOf<String>()
+        var appliedAnyRecord = false
         val ordered = allRecords
             .filter {
                 it.d !in pausedDomains &&
@@ -688,7 +738,9 @@ internal class DriveChangeEngine(
         val now = clock()
         for (record in aliasRecords) {
             if (record.d in deferredDomains) continue
-            if (!applySingleRecord(permissionId, localDeviceId, remoteDeviceId, snapshot.throughSeq, accessToken, record)) {
+            if (applySingleRecord(permissionId, localDeviceId, remoteDeviceId, snapshot.throughSeq, accessToken, record)) {
+                appliedAnyRecord = true
+            } else {
                 deferredDomains.add(record.d)
             }
         }
@@ -722,27 +774,41 @@ internal class DriveChangeEngine(
                 remoteSeq = snapshot.throughSeq,
                 accessToken = accessToken,
                 record = record,
+                batchObserved = null,
             )
-            if (!recordApplied) {
+            if (recordApplied) {
+                appliedAnyRecord = true
+            } else {
                 deferredDomains.add(record.d)
             }
         }
 
+        var advancedAnyCursor = false
         store.withTransaction {
             for (domain in DriveWireCodec.SUPPORTED_DOMAIN_VERSIONS.keys) {
                 if (domain in pausedDomains || domain in deferredDomains) continue
                 val existing = cursors.get(permissionId, remoteDeviceId, domain)
+                val prevApplied = existing?.appliedSeq ?: 0L
+                val nextApplied = maxOf(prevApplied, snapshot.throughSeq)
+                if (nextApplied > prevApplied) {
+                    advancedAnyCursor = true
+                }
                 cursors.upsert(
                     DriveCursor(
                         permissionId = permissionId,
                         deviceId = remoteDeviceId,
                         domain = domain,
-                        appliedSeq = maxOf(existing?.appliedSeq ?: 0L, snapshot.throughSeq),
+                        appliedSeq = nextApplied,
                         pausedSchemaVersion = existing?.pausedSchemaVersion,
                     ),
                 )
             }
         }
+        return SnapshotApplyOutcome(
+            appliedAnyRecord = appliedAnyRecord,
+            advancedAnyCursor = advancedAnyCursor,
+            hasDeferredDomains = deferredDomains.isNotEmpty(),
+        )
     }
 
     private suspend fun canonicalResolutionKey(permissionId: String, domain: String, key: String): String {
@@ -764,6 +830,7 @@ internal class DriveChangeEngine(
         remoteSeq: Long,
         accessToken: String,
         record: DriveWireRecord,
+        batchObserved: Map<String, Long>? = null,
     ): Boolean {
         observeRemoteHlc(permissionId, record.hlc)
         // A malformed record is dropped, not deferred: replaying it would never make it valid.
@@ -836,7 +903,41 @@ internal class DriveChangeEngine(
                 )
                 true
             }
-            // Unimplemented domains (Phase 5 vocab/sessions) are paused before dispatch so cursors never advance.
+            DriveWireCodec.DOMAIN_VOCAB_WORD -> {
+                val effectiveObserved = record.observed ?: batchObserved
+                vocabularySync?.applyRemoteWord(
+                    permissionId = permissionId,
+                    record = record,
+                    remoteDeviceId = remoteDeviceId,
+                    remoteSeq = remoteSeq,
+                    localDeviceId = localDeviceId,
+                    remoteObserved = effectiveObserved,
+                )
+                true
+            }
+            DriveWireCodec.DOMAIN_VOCAB_OCCURRENCE ->
+                vocabularySync?.applyRemoteOccurrence(
+                    permissionId = permissionId,
+                    record = record,
+                    remoteDeviceId = remoteDeviceId,
+                    remoteSeq = remoteSeq,
+                ) ?: true
+            DriveWireCodec.DOMAIN_VOCAB_REVIEW -> {
+                vocabularySync?.applyRemoteReview(
+                    permissionId = permissionId,
+                    record = record,
+                    remoteDeviceId = remoteDeviceId,
+                    remoteSeq = remoteSeq,
+                )
+                true
+            }
+            DriveWireCodec.DOMAIN_SESSION ->
+                sessionSync?.applyRemoteRecord(
+                    permissionId = permissionId,
+                    record = record,
+                    remoteDeviceId = remoteDeviceId,
+                    remoteSeq = remoteSeq,
+                ) ?: true
             else -> true
         }
     }
@@ -941,6 +1042,19 @@ internal class DriveChangeEngine(
                 records = recoveredRecords,
                 acks = ackMeta.metadataAcks,
             )
+            vocabularySync?.acknowledgePublished(
+                permissionId = permissionId,
+                batchSeq = existingInFlight.seq,
+                records = recoveredRecords,
+                wordAcks = ackMeta.vocabWordAcks,
+                reviewAcks = ackMeta.vocabReviewAcks,
+            )
+            sessionSync?.acknowledgePublished(
+                permissionId = permissionId,
+                batchSeq = existingInFlight.seq,
+                records = recoveredRecords,
+                acks = ackMeta.sessionAcks,
+            )
             store.withTransaction {
                 if (recoveredRecords.isNotEmpty()) {
                     workIdentity.markPublished(permissionId, recoveredRecords)
@@ -991,9 +1105,25 @@ internal class DriveChangeEngine(
             bookUrlFilter = bookUrlFilter,
             nextHlc = { nextHlc(permissionId) },
         )
+        val vocabBundle = if (bookUrlFilter == null) {
+            vocabularySync?.collectDirtyRecords(
+                permissionId = permissionId,
+                localDeviceId = localDeviceId,
+                nextHlc = { nextHlc(permissionId) },
+            ) ?: DriveVocabularyOutboundBundle(emptyList(), emptyList(), emptyList())
+        } else {
+            DriveVocabularyOutboundBundle(emptyList(), emptyList(), emptyList())
+        }
+        val sessionBundle = sessionSync?.collectDirtyRecords(
+            permissionId = permissionId,
+            localDeviceId = localDeviceId,
+            bookUrlFilter = bookUrlFilter,
+            nextHlc = { nextHlc(permissionId) },
+        ) ?: DriveSessionOutboundBundle(emptyList(), emptyList())
 
         val allRecords = aliasRecords + catalogRecords + metaBundle.records + seriesRecords +
-            evalBundle.records + annBundle.records + posBundle.records
+            evalBundle.records + annBundle.records + posBundle.records +
+            vocabBundle.records + sessionBundle.records
         if (allRecords.isEmpty()) {
             if (publishedCount > 0) {
                 publishManifest(permissionId, localDeviceId, accessToken)
@@ -1022,9 +1152,19 @@ internal class DriveChangeEngine(
             val chunkMetaAcks = metaBundle.acks.filter { ack ->
                 (DriveWireCodec.DOMAIN_METADATA to ack.recordKey) in chunkKeys
             }
+            val chunkVocabWordAcks = vocabBundle.wordAcks.filter { ack ->
+                (DriveWireCodec.DOMAIN_VOCAB_WORD to ack.recordKey) in chunkKeys
+            }
+            val chunkVocabReviewAcks = vocabBundle.reviewAcks.filter { ack ->
+                (DriveWireCodec.DOMAIN_VOCAB_REVIEW to ack.reviewId) in chunkKeys
+            }
+            val chunkSessionAcks = sessionBundle.acks.filter { ack ->
+                (DriveWireCodec.DOMAIN_SESSION to ack.remoteSessionId) in chunkKeys
+            }
             val ackMetadataJson = if (
                 chunkPosAcks.isNotEmpty() || chunkPeakAcks.isNotEmpty() ||
-                chunkAnnAcks.isNotEmpty() || chunkEvalAcks.isNotEmpty() || chunkMetaAcks.isNotEmpty()
+                chunkAnnAcks.isNotEmpty() || chunkEvalAcks.isNotEmpty() || chunkMetaAcks.isNotEmpty() ||
+                chunkVocabWordAcks.isNotEmpty() || chunkVocabReviewAcks.isNotEmpty() || chunkSessionAcks.isNotEmpty()
             ) {
                 DriveWireCodec.encodeOutboxAckMetadata(
                     DriveOutboxAckMetadata(
@@ -1033,6 +1173,9 @@ internal class DriveChangeEngine(
                         annotationAcks = chunkAnnAcks,
                         evaluationAcks = chunkEvalAcks,
                         metadataAcks = chunkMetaAcks,
+                        vocabWordAcks = chunkVocabWordAcks,
+                        vocabReviewAcks = chunkVocabReviewAcks,
+                        sessionAcks = chunkSessionAcks,
                     ),
                 )
             } else {
@@ -1044,6 +1187,7 @@ internal class DriveChangeEngine(
                 val seq = account.nextSeq
                 val batchId = DriveCanonicalJson.batchId(localDeviceId, seq)
                 val domains = chunk.map { it.d }.distinct().associateWith { 1 }
+                val observed = currentObservedVector(permissionId, localDeviceId)
                 val batch = DriveDeltaBatch(
                     schemaVersion = DriveWireCodec.SCHEMA_VERSION,
                     batchId = batchId,
@@ -1052,6 +1196,7 @@ internal class DriveChangeEngine(
                     createdHlc = createdHlc,
                     domains = domains,
                     records = chunk,
+                    observed = observed,
                 )
                 val payload = DriveWireCodec.encodeDeltaBatch(batch)
                 if (payload.toByteArray(Charsets.UTF_8).size > DriveWireCodec.MAX_BATCH_BYTES) return@withTransaction null
@@ -1108,6 +1253,19 @@ internal class DriveChangeEngine(
                 records = chunk,
                 acks = chunkMetaAcks,
             )
+            vocabularySync?.acknowledgePublished(
+                permissionId = permissionId,
+                batchSeq = frozen.seq,
+                records = chunk,
+                wordAcks = chunkVocabWordAcks,
+                reviewAcks = chunkVocabReviewAcks,
+            )
+            sessionSync?.acknowledgePublished(
+                permissionId = permissionId,
+                batchSeq = frozen.seq,
+                records = chunk,
+                acks = chunkSessionAcks,
+            )
             store.withTransaction {
                 workIdentity.markPublished(permissionId, chunk)
                 catalogSync.markPublished(permissionId, chunk)
@@ -1132,6 +1290,25 @@ internal class DriveChangeEngine(
         return PublishResult(publishedCount, oversized)
     }
 
+    private suspend fun currentObservedVector(
+        permissionId: String,
+        localDeviceId: String,
+    ): Map<String, Long> {
+        val byDevice = cursors.forAccount(permissionId)
+            .filter { it.deviceId != localDeviceId && it.domain != DriveWireCodec.STREAM_PAUSE_DOMAIN }
+            .groupBy { it.deviceId }
+        val allDomains = DriveWireCodec.SUPPORTED_DOMAIN_VERSIONS.keys
+        return buildMap {
+            for ((deviceId, list) in byDevice) {
+                val byDomain = list.associateBy { it.domain }
+                val minSeq = allDomains.minOf { domain -> byDomain[domain]?.appliedSeq ?: 0L }
+                if (minSeq > 0L) {
+                    put(deviceId, minSeq)
+                }
+            }
+        }
+    }
+
     private suspend fun publishManifest(
         permissionId: String,
         localDeviceId: String,
@@ -1139,10 +1316,7 @@ internal class DriveChangeEngine(
     ) {
         val account = accounts.get(permissionId) ?: return
         val hlc = nextHlc(permissionId)
-        val appliedVector = cursors.forAccount(permissionId)
-            .filter { it.deviceId != localDeviceId && it.domain != DriveWireCodec.STREAM_PAUSE_DOMAIN }
-            .groupBy { it.deviceId }
-            .mapValues { (_, list) -> list.minOfOrNull { it.appliedSeq } ?: 0L }
+        val appliedVector = currentObservedVector(permissionId, localDeviceId)
         val folderRef = account.folderId?.let { fid ->
             val file = files.get(permissionId, fid)
             DriveEpubFolderRef(fileId = fid, createdTime = file?.createdTime)
@@ -1155,7 +1329,7 @@ internal class DriveChangeEngine(
             updatedHlc = hlc,
             snapshot = null,
             previousSnapshot = null,
-            domains = DriveWireCodec.PHASE4_DOMAINS,
+            domains = DriveWireCodec.SUPPORTED_DOMAIN_VERSIONS,
             epubFolder = folderRef,
             appliedVector = appliedVector,
         )

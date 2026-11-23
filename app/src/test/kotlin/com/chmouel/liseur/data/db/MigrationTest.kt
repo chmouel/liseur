@@ -166,7 +166,7 @@ class MigrationTest {
         helper.runMigrationsAndValidate(TEST_DB, 66, true, LiseurDatabase.MIGRATION_65_66).close()
         val context = ApplicationProvider.getApplicationContext<android.app.Application>()
         val db = Room.databaseBuilder(context, LiseurDatabase::class.java, TEST_DB)
-            .addMigrations(LiseurDatabase.MIGRATION_66_67, LiseurDatabase.MIGRATION_67_68, LiseurDatabase.MIGRATION_68_69, LiseurDatabase.MIGRATION_69_70, LiseurDatabase.MIGRATION_70_71, LiseurDatabase.MIGRATION_71_72, LiseurDatabase.MIGRATION_72_73, LiseurDatabase.MIGRATION_73_74, LiseurDatabase.MIGRATION_74_75, LiseurDatabase.MIGRATION_75_76, LiseurDatabase.MIGRATION_76_77, LiseurDatabase.MIGRATION_77_78, LiseurDatabase.MIGRATION_78_79, LiseurDatabase.MIGRATION_79_80, LiseurDatabase.MIGRATION_81_82, LiseurDatabase.MIGRATION_82_83, LiseurDatabase.MIGRATION_83_84, LiseurDatabase.MIGRATION_83_84)
+            .addMigrations(LiseurDatabase.MIGRATION_66_67, LiseurDatabase.MIGRATION_67_68, LiseurDatabase.MIGRATION_68_69, LiseurDatabase.MIGRATION_69_70, LiseurDatabase.MIGRATION_70_71, LiseurDatabase.MIGRATION_71_72, LiseurDatabase.MIGRATION_72_73, LiseurDatabase.MIGRATION_73_74, LiseurDatabase.MIGRATION_74_75, LiseurDatabase.MIGRATION_75_76, LiseurDatabase.MIGRATION_76_77, LiseurDatabase.MIGRATION_77_78, LiseurDatabase.MIGRATION_78_79, LiseurDatabase.MIGRATION_79_80, LiseurDatabase.MIGRATION_81_82, LiseurDatabase.MIGRATION_82_83, LiseurDatabase.MIGRATION_83_84, LiseurDatabase.MIGRATION_84_85)
             .build()
         try {
             val dao = db.readingProgressDao()
@@ -243,7 +243,7 @@ class MigrationTest {
         helper.runMigrationsAndValidate(TEST_DB, 67, true, LiseurDatabase.MIGRATION_66_67).close()
         val context = ApplicationProvider.getApplicationContext<android.app.Application>()
         val db = Room.databaseBuilder(context, LiseurDatabase::class.java, TEST_DB)
-            .addMigrations(LiseurDatabase.MIGRATION_67_68, LiseurDatabase.MIGRATION_68_69, LiseurDatabase.MIGRATION_69_70, LiseurDatabase.MIGRATION_70_71, LiseurDatabase.MIGRATION_71_72, LiseurDatabase.MIGRATION_72_73, LiseurDatabase.MIGRATION_73_74, LiseurDatabase.MIGRATION_74_75, LiseurDatabase.MIGRATION_75_76, LiseurDatabase.MIGRATION_76_77, LiseurDatabase.MIGRATION_77_78, LiseurDatabase.MIGRATION_78_79, LiseurDatabase.MIGRATION_79_80, LiseurDatabase.MIGRATION_81_82, LiseurDatabase.MIGRATION_82_83, LiseurDatabase.MIGRATION_83_84, LiseurDatabase.MIGRATION_83_84)
+            .addMigrations(LiseurDatabase.MIGRATION_67_68, LiseurDatabase.MIGRATION_68_69, LiseurDatabase.MIGRATION_69_70, LiseurDatabase.MIGRATION_70_71, LiseurDatabase.MIGRATION_71_72, LiseurDatabase.MIGRATION_72_73, LiseurDatabase.MIGRATION_73_74, LiseurDatabase.MIGRATION_74_75, LiseurDatabase.MIGRATION_75_76, LiseurDatabase.MIGRATION_76_77, LiseurDatabase.MIGRATION_77_78, LiseurDatabase.MIGRATION_78_79, LiseurDatabase.MIGRATION_79_80, LiseurDatabase.MIGRATION_81_82, LiseurDatabase.MIGRATION_82_83, LiseurDatabase.MIGRATION_83_84, LiseurDatabase.MIGRATION_84_85)
             .allowMainThreadQueries()
             .build()
         try {
@@ -278,7 +278,7 @@ class MigrationTest {
         }
         val context = ApplicationProvider.getApplicationContext<android.app.Application>()
         val db = Room.databaseBuilder(context, LiseurDatabase::class.java, TEST_DB)
-            .addMigrations(LiseurDatabase.MIGRATION_67_68, LiseurDatabase.MIGRATION_68_69, LiseurDatabase.MIGRATION_69_70, LiseurDatabase.MIGRATION_70_71, LiseurDatabase.MIGRATION_71_72, LiseurDatabase.MIGRATION_72_73, LiseurDatabase.MIGRATION_73_74, LiseurDatabase.MIGRATION_74_75, LiseurDatabase.MIGRATION_75_76, LiseurDatabase.MIGRATION_76_77, LiseurDatabase.MIGRATION_77_78, LiseurDatabase.MIGRATION_78_79, LiseurDatabase.MIGRATION_79_80, LiseurDatabase.MIGRATION_81_82, LiseurDatabase.MIGRATION_82_83, LiseurDatabase.MIGRATION_83_84, LiseurDatabase.MIGRATION_83_84)
+            .addMigrations(LiseurDatabase.MIGRATION_67_68, LiseurDatabase.MIGRATION_68_69, LiseurDatabase.MIGRATION_69_70, LiseurDatabase.MIGRATION_70_71, LiseurDatabase.MIGRATION_71_72, LiseurDatabase.MIGRATION_72_73, LiseurDatabase.MIGRATION_73_74, LiseurDatabase.MIGRATION_74_75, LiseurDatabase.MIGRATION_75_76, LiseurDatabase.MIGRATION_76_77, LiseurDatabase.MIGRATION_77_78, LiseurDatabase.MIGRATION_78_79, LiseurDatabase.MIGRATION_79_80, LiseurDatabase.MIGRATION_81_82, LiseurDatabase.MIGRATION_82_83, LiseurDatabase.MIGRATION_83_84, LiseurDatabase.MIGRATION_84_85)
             .allowMainThreadQueries()
             .build()
         try {
@@ -1863,7 +1863,7 @@ class MigrationTest {
             LiseurDatabase.MIGRATION_77_78,
             LiseurDatabase.MIGRATION_78_79,
             LiseurDatabase.MIGRATION_79_80,
-            LiseurDatabase.MIGRATION_81_82, LiseurDatabase.MIGRATION_82_83, LiseurDatabase.MIGRATION_83_84,
+            LiseurDatabase.MIGRATION_81_82, LiseurDatabase.MIGRATION_82_83, LiseurDatabase.MIGRATION_83_84, LiseurDatabase.MIGRATION_84_85,
         ).use { db ->
             db.query(
                 "SELECT total_progression, finished_override, coverage, status_revision " +
@@ -1913,7 +1913,7 @@ class MigrationTest {
             LiseurDatabase.MIGRATION_77_78,
             LiseurDatabase.MIGRATION_78_79,
             LiseurDatabase.MIGRATION_79_80,
-            LiseurDatabase.MIGRATION_81_82, LiseurDatabase.MIGRATION_82_83, LiseurDatabase.MIGRATION_83_84,
+            LiseurDatabase.MIGRATION_81_82, LiseurDatabase.MIGRATION_82_83, LiseurDatabase.MIGRATION_83_84, LiseurDatabase.MIGRATION_84_85,
         ).use { db ->
             db.query(
                 "SELECT peak_progression, peak_revision, coverage, peak_coverage FROM reading_progress",
@@ -1936,7 +1936,7 @@ class MigrationTest {
                     "VALUES ('book:1', '{}', 1.0, 100, 1, 4)",
             )
         }
-        helper.runMigrationsAndValidate(TEST_DB, LATEST, true, LiseurDatabase.MIGRATION_77_78, LiseurDatabase.MIGRATION_78_79, LiseurDatabase.MIGRATION_79_80, LiseurDatabase.MIGRATION_81_82, LiseurDatabase.MIGRATION_82_83, LiseurDatabase.MIGRATION_83_84, LiseurDatabase.MIGRATION_83_84).use { db ->
+        helper.runMigrationsAndValidate(TEST_DB, LATEST, true, LiseurDatabase.MIGRATION_77_78, LiseurDatabase.MIGRATION_78_79, LiseurDatabase.MIGRATION_79_80, LiseurDatabase.MIGRATION_81_82, LiseurDatabase.MIGRATION_82_83, LiseurDatabase.MIGRATION_83_84, LiseurDatabase.MIGRATION_84_85).use { db ->
             db.query(
                 "SELECT status_revision, status_retired_revision FROM reading_progress",
             ).use {
@@ -1957,7 +1957,7 @@ class MigrationTest {
                     "VALUES ('book:1', 'serif', 1.2, 1.5, 1.2)",
             )
         }
-        helper.runMigrationsAndValidate(TEST_DB, LATEST, true, LiseurDatabase.MIGRATION_79_80, LiseurDatabase.MIGRATION_81_82, LiseurDatabase.MIGRATION_82_83, LiseurDatabase.MIGRATION_83_84, LiseurDatabase.MIGRATION_83_84).use { db ->
+        helper.runMigrationsAndValidate(TEST_DB, LATEST, true, LiseurDatabase.MIGRATION_79_80, LiseurDatabase.MIGRATION_81_82, LiseurDatabase.MIGRATION_82_83, LiseurDatabase.MIGRATION_83_84, LiseurDatabase.MIGRATION_84_85).use { db ->
             db.query(
                 "SELECT page_margins, top_margin, bottom_margin, sync_vertical_margins FROM book_typography",
             ).use {
@@ -2153,10 +2153,132 @@ class MigrationTest {
         }
     }
 
+    @Test
+    fun `migration 84 to 85 adds remote session identity and origin device columns with unique index`() = runTest {
+        helper.createDatabase(TEST_DB, 84).use { db ->
+            db.execSQL(
+                "INSERT INTO reading_sessions (id, book_url, started_at, ended_at, last_checkpoint_at, " +
+                    "duration_ms, start_progression, end_progression, idle_ms, legacy_evidence_unknown) " +
+                    "VALUES (1, 'file:///book.epub', 1000, 2000, 2000, 1000, 0.1, 0.2, 0, 0)",
+            )
+            db.execSQL(
+                "INSERT INTO reading_sessions (id, book_url, started_at, ended_at, last_checkpoint_at, " +
+                    "duration_ms, start_progression, end_progression, idle_ms, legacy_evidence_unknown) " +
+                    "VALUES (2, 'file:///book.epub', 3000, 4000, 4000, 1000, 0.2, 0.3, 0, 0)",
+            )
+        }
+
+        helper.runMigrationsAndValidate(TEST_DB, 85, true, LiseurDatabase.MIGRATION_84_85).use { db ->
+            // Existing local rows retain NULL remote_session_id and NULL origin_device_id (multiple NULLs allowed).
+            db.query("SELECT id, remote_session_id, origin_device_id FROM reading_sessions ORDER BY id").use {
+                assertTrue(it.moveToFirst())
+                assertEquals(1L, it.getLong(0))
+                assertTrue(it.isNull(1))
+                assertTrue(it.isNull(2))
+                assertTrue(it.moveToNext())
+                assertEquals(2L, it.getLong(0))
+                assertTrue(it.isNull(1))
+                assertTrue(it.isNull(2))
+                assertFalse(it.moveToNext())
+            }
+
+            // UNIQUE index on remote_session_id enforces idempotent INSERT OR IGNORE.
+            db.execSQL(
+                "INSERT OR IGNORE INTO reading_sessions (book_url, started_at, ended_at, last_checkpoint_at, " +
+                    "duration_ms, start_progression, end_progression, idle_ms, legacy_evidence_unknown, " +
+                    "remote_session_id, origin_device_id) " +
+                    "VALUES ('file:///book.epub', 5000, 6000, 6000, 900, 0.3, 0.4, 100, 0, 'sess-uuid-1', 'dev-other')",
+            )
+            db.execSQL(
+                "INSERT OR IGNORE INTO reading_sessions (book_url, started_at, ended_at, last_checkpoint_at, " +
+                    "duration_ms, start_progression, end_progression, idle_ms, legacy_evidence_unknown, " +
+                    "remote_session_id, origin_device_id) " +
+                    "VALUES ('file:///book.epub', 5000, 6000, 6000, 900, 0.3, 0.4, 100, 0, 'sess-uuid-1', 'dev-other')",
+            )
+            db.query("SELECT COUNT(*) FROM reading_sessions WHERE remote_session_id = 'sess-uuid-1'").use {
+                assertTrue(it.moveToFirst())
+                assertEquals(1, it.getInt(0))
+            }
+        }
+
+        // Verify DAO queries: awaitingUpload / awaitingUploadTo exclude origin_device_id IS NOT NULL,
+        // while observeAll / observeTotalDuration include both local and pulled remote sessions.
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val roomDb = Room.inMemoryDatabaseBuilder(context, LiseurDatabase::class.java)
+            .allowMainThreadQueries()
+            .build()
+        try {
+            val sessionDao = roomDb.readingSessionDao()
+            val identityDao = roomDb.workIdentityDao()
+            val bookUrl = "file:///book.epub"
+            identityDao.upsert(
+                WorkAlias(
+                    bookUrl = bookUrl,
+                    peerId = "peer-1",
+                    workId = "work-1",
+                    confidence = WorkAlias.HIGH,
+                    confirmed = true,
+                    resolvedAt = 1L,
+                ),
+            )
+            sessionDao.insert(
+                ReadingSession(
+                    bookUrl = bookUrl,
+                    startedAt = 1_000L,
+                    endedAt = 2_000L,
+                    lastCheckpointAt = 2_000L,
+                    durationMs = 1_000L,
+                    startProgression = 0.1,
+                    endProgression = 0.2,
+                    idleMs = 0L,
+                    remoteSessionId = "local-sess-1",
+                    originDeviceId = null,
+                ),
+            )
+            val pulled = ReadingSession(
+                bookUrl = bookUrl,
+                startedAt = 3_000L,
+                endedAt = 5_000L,
+                lastCheckpointAt = 5_000L,
+                durationMs = 1_800L,
+                startProgression = 0.2,
+                endProgression = 0.4,
+                idleMs = 200L,
+                remoteSessionId = "remote-sess-1",
+                originDeviceId = "dev-tablet",
+            )
+            assertTrue(sessionDao.insertIgnoringConflicts(pulled) > 0L)
+            assertEquals(-1L, sessionDao.insertIgnoringConflicts(pulled))
+
+            val uploadable = sessionDao.awaitingUpload(100)
+            assertEquals(1, uploadable.size)
+            assertEquals("local-sess-1", uploadable.single().remoteSessionId)
+
+            val uploadableToPeer = sessionDao.awaitingUploadTo("peer-1", 100)
+            assertEquals(1, uploadableToPeer.size)
+            assertEquals("local-sess-1", uploadableToPeer.single().remoteSessionId)
+
+            assertNull(
+                com.chmouel.liseur.data.liseursync.SessionUploads.toJson(
+                    session = pulled,
+                    deviceKey = "dev-local",
+                    workId = "work-1",
+                    editionSha = null,
+                ),
+            )
+
+            // Combined local + remote totals include both sessions without double counting.
+            assertEquals(2, sessionDao.allOnce().size)
+            assertEquals(2_800L, sessionDao.allOnce().sumOf { it.durationMs })
+        } finally {
+            roomDb.close()
+        }
+    }
+
     private companion object {
         const val TEST_DB = "migration-test.db"
 
         /** Kept in step with the `version` on [LiseurDatabase]. */
-        const val LATEST = 84
+        const val LATEST = 85
     }
 }

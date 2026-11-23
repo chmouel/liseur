@@ -244,12 +244,39 @@ class DriveWireCodecAndHlcTest {
     @Test
     fun `schemaVersion guard flags unsupported stream version, per-domain versions, and unimplemented domains`() {
         assertEquals(
-            setOf("workAlias", "catalog", "metadata", "series", "position", "furthest", "annotation", "evaluation"),
+            setOf(
+                "workAlias",
+                "catalog",
+                "metadata",
+                "series",
+                "position",
+                "furthest",
+                "annotation",
+                "evaluation",
+                "vocabWord",
+                "vocabOccurrence",
+                "vocabReview",
+                "session",
+            ),
             DriveWireCodec.SUPPORTED_DOMAIN_VERSIONS.keys,
         )
         assertEquals(
             DriveSchemaCheck.Supported,
-            DriveWireCodec.checkSchema(1, mapOf("catalog" to 1, "position" to 1, "annotation" to 1, "metadata" to 1, "series" to 1, "evaluation" to 1)),
+            DriveWireCodec.checkSchema(
+                1,
+                mapOf(
+                    "catalog" to 1,
+                    "position" to 1,
+                    "annotation" to 1,
+                    "metadata" to 1,
+                    "series" to 1,
+                    "evaluation" to 1,
+                    "vocabWord" to 1,
+                    "vocabOccurrence" to 1,
+                    "vocabReview" to 1,
+                    "session" to 1,
+                ),
+            ),
         )
         val streamCheck = DriveWireCodec.checkSchema(2, mapOf("catalog" to 1), deviceLabel = "Future Tablet")
         assertTrue(streamCheck is DriveSchemaCheck.UnsupportedStream)
@@ -260,10 +287,10 @@ class DriveWireCodecAndHlcTest {
         assertTrue(domainCheck is DriveSchemaCheck.UnsupportedDomains)
         assertEquals(mapOf("catalog" to 2), (domainCheck as DriveSchemaCheck.UnsupportedDomains).unsupported)
 
-        val unimplementedCheck = DriveWireCodec.checkSchema(1, mapOf("position" to 1, "vocabWord" to 1, "session" to 1))
+        val unimplementedCheck = DriveWireCodec.checkSchema(1, mapOf("position" to 1, "futureStats" to 1, "session" to 2))
         assertTrue(unimplementedCheck is DriveSchemaCheck.UnsupportedDomains)
         assertEquals(
-            mapOf("vocabWord" to 1, "session" to 1),
+            mapOf("futureStats" to 1, "session" to 2),
             (unimplementedCheck as DriveSchemaCheck.UnsupportedDomains).unsupported,
         )
         assertNotNull(DriveWireCodec.deltaAppProperties("dev-a", 1L, "batch-1"))
@@ -287,6 +314,33 @@ class DriveWireCodecAndHlcTest {
                     peakRevision = 3L,
                     recordKey = "peak/isbn:9780547928227/sha/dev-a",
                     recordFp = "b".repeat(64),
+                ),
+            ),
+            vocabWordAcks = listOf(
+                DriveVocabWordAckMeta(
+                    language = "fr",
+                    normalized = "ephemere",
+                    wordId = 7L,
+                    recordKey = "2:fr:ephemere",
+                    recordFp = "c".repeat(64),
+                    baseJson = """{"word":"éphémère"}""",
+                    isDelete = false,
+                ),
+            ),
+            vocabReviewAcks = listOf(
+                DriveVocabReviewAckMeta(
+                    reviewId = "rev-1",
+                    localReviewId = 11L,
+                    language = "fr",
+                    normalized = "ephemere",
+                    recordFp = "d".repeat(64),
+                    isDelete = false,
+                ),
+            ),
+            sessionAcks = listOf(
+                DriveSessionAckMeta(
+                    remoteSessionId = "sess-1",
+                    recordFp = "e".repeat(64),
                 ),
             ),
         )
@@ -314,5 +368,123 @@ class DriveWireCodecAndHlcTest {
                 record(DriveWireCodec.DOMAIN_POSITION, "isbn:1/dev-b", mapOf("workKey" to "isbn:1", "deviceId" to "dev-a")),
             ),
         )
+        val word = mapOf("language" to "fr", "normalized" to "nuit")
+        assertTrue(DriveWireCodec.bodyMatchesKey(record(DriveWireCodec.DOMAIN_VOCAB_WORD, "2:fr:nuit", word)))
+        assertFalse(DriveWireCodec.bodyMatchesKey(record(DriveWireCodec.DOMAIN_VOCAB_WORD, "2:fr:jour", word)))
+        val occurrence = mapOf("wordKey" to "2:fr:nuit", "occurrenceKey" to "occ-1")
+        assertTrue(DriveWireCodec.bodyMatchesKey(record(DriveWireCodec.DOMAIN_VOCAB_OCCURRENCE, "2:fr:nuit/occ-1", occurrence)))
+        assertFalse(DriveWireCodec.bodyMatchesKey(record(DriveWireCodec.DOMAIN_VOCAB_OCCURRENCE, "2:fr:nuit/occ-2", occurrence)))
+        val review = mapOf("syncId" to "rev-1", "wordKey" to "2:fr:nuit", "language" to "fr", "normalized" to "nuit")
+        assertTrue(DriveWireCodec.bodyMatchesKey(record(DriveWireCodec.DOMAIN_VOCAB_REVIEW, "rev-1", review)))
+        assertFalse(DriveWireCodec.bodyMatchesKey(record(DriveWireCodec.DOMAIN_VOCAB_REVIEW, "rev-2", review)))
+        assertFalse(
+            DriveWireCodec.bodyMatchesKey(
+                record(DriveWireCodec.DOMAIN_VOCAB_REVIEW, "rev-1", review + ("wordKey" to "2:fr:jour")),
+            ),
+        )
+        assertTrue(DriveWireCodec.bodyMatchesKey(record(DriveWireCodec.DOMAIN_SESSION, "s-1", mapOf("sessionId" to "s-1"))))
+        assertFalse(DriveWireCodec.bodyMatchesKey(record(DriveWireCodec.DOMAIN_SESSION, "s-2", mapOf("sessionId" to "s-1"))))
+    }
+
+    @Test
+    fun `Phase 5 vocabulary and session domain bodies roundtrip cleanly`() {
+        val wordBody = DriveVocabWordBody(
+            language = "fr",
+            normalized = "ephemere",
+            word = "éphémère",
+            definition = "short-lived",
+            translationLanguage = "en",
+            notes = "From chapter 3",
+            definitionEdited = true,
+            definitionUpdatedAt = 1_745_000_000_000L,
+            notesUpdatedAt = 1_745_000_001_000L,
+            addedAt = 1_745_000_000_000L,
+            baseline = DriveVocabBaselineBody(
+                dueAt = 1_745_086_400_000L,
+                reviewedAt = 1_745_000_000_000L,
+                streak = 2,
+                intervalMinutes = 1440,
+                repetitions = 2,
+            ),
+        )
+        val encodedWord = DriveCanonicalJson.encode(DriveWireCodec.encodeVocabWordBody(wordBody))
+        assertEquals(wordBody, DriveWireCodec.decodeVocabWordBody(JSONObject(encodedWord)))
+
+        val occBody = DriveVocabOccurrenceBody(
+            wordKey = "2:fr:ephemere",
+            occurrenceKey = "occ-key-1",
+            workKey = "isbn:9780547928227",
+            bookTitle = "Le Petit Prince",
+            locationKey = "ch03#p12",
+            locator = """{"href":"ch03.xhtml","locations":{"progression":0.25}}""",
+            sentence = "Cette fleur est éphémère.",
+            sentenceEdited = false,
+            sentenceUpdatedAt = 1_745_000_000_000L,
+            lastSeenAt = 1_745_000_000_000L,
+            encounters = 2,
+        )
+        val encodedOcc = DriveCanonicalJson.encode(DriveWireCodec.encodeVocabOccurrenceBody(occBody))
+        assertEquals(occBody, DriveWireCodec.decodeVocabOccurrenceBody(JSONObject(encodedOcc)))
+
+        val reviewBody = DriveVocabReviewBody(
+            syncId = "rev-uuid-1",
+            wordKey = "2:fr:ephemere",
+            language = "fr",
+            normalized = "ephemere",
+            rating = "GOOD",
+            reviewedAt = 1_745_000_000_000L,
+            intervalMinutes = 1440,
+            dueAt = 1_745_086_400_000L,
+        )
+        val encodedReview = DriveCanonicalJson.encode(DriveWireCodec.encodeVocabReviewBody(reviewBody))
+        assertEquals(reviewBody, DriveWireCodec.decodeVocabReviewBody(JSONObject(encodedReview)))
+
+        val sessionBody = DriveSessionBody(
+            sessionId = "sess-uuid-1",
+            workKey = "isbn:9780547928227",
+            startedAt = 1_745_000_000_000L,
+            endedAt = 1_745_001_800_000L,
+            durationMs = 1_750_000L,
+            idleMs = 50_000L,
+            startProgression = 0.1,
+            endProgression = 0.185,
+            originDeviceId = "dev-a",
+        )
+        val encodedSession = DriveCanonicalJson.encode(DriveWireCodec.encodeSessionBody(sessionBody))
+        assertEquals(sessionBody, DriveWireCodec.decodeSessionBody(JSONObject(encodedSession)))
+
+        val delWithObserved = DriveWireCodec.delRecord(
+            domain = DriveWireCodec.DOMAIN_VOCAB_WORD,
+            key = "2:fr:ephemere",
+            hlc = "0017450000000-0004-dev-a",
+            observed = mapOf("dev-b" to 3L),
+        )
+        val delWithEmptyObserved = DriveWireCodec.delRecord(
+            domain = DriveWireCodec.DOMAIN_VOCAB_WORD,
+            key = "2:fr:soleil",
+            hlc = "0017450000000-0005-dev-a",
+            observed = emptyMap(),
+        )
+        val batchWithObserved = DriveDeltaBatch(
+            batchId = DriveCanonicalJson.batchId("dev-a", 2L),
+            deviceId = "dev-a",
+            seq = 2L,
+            createdHlc = "0017450000000-0005-dev-a",
+            domains = mapOf(DriveWireCodec.DOMAIN_VOCAB_WORD to 1),
+            records = listOf(delWithObserved, delWithEmptyObserved),
+            observed = mapOf("dev-b" to 3L, "dev-c" to 1L),
+        )
+        val decodedWithObserved = DriveWireCodec.decodeDeltaBatch(DriveWireCodec.encodeDeltaBatch(batchWithObserved))
+        assertEquals(mapOf("dev-b" to 3L, "dev-c" to 1L), decodedWithObserved.observed)
+        assertEquals(mapOf("dev-b" to 3L), decodedWithObserved.records[0].observed)
+        assertEquals(emptyMap<String, Long>(), decodedWithObserved.records[1].observed)
+    }
+
+    @Test
+    fun `word keys with impossible language lengths are rejected without throwing`() {
+        assertEquals("fr" to "nuit", DriveVocabularySync.parseWordKey("2:fr:nuit"))
+        for (bad in listOf("2147483647:fr:nuit", "99999999999:fr:nuit", "3:fr", "2:frnuit", "2:fr:", ":fr:nuit", "0::x", "-1:fr:x")) {
+            assertNull(bad, DriveVocabularySync.parseWordKey(bad))
+        }
     }
 }

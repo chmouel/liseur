@@ -1,0 +1,1552 @@
+package com.chmouel.liseur.drive
+
+import android.app.Application
+import android.content.Intent
+import androidx.room.Room
+import androidx.room.withTransaction
+import androidx.test.core.app.ApplicationProvider
+import com.chmouel.liseur.data.calibre.CredentialCipher
+import com.chmouel.liseur.data.db.Book
+import com.chmouel.liseur.data.db.BookFingerprintRow
+import com.chmouel.liseur.data.db.BookMetadata
+import com.chmouel.liseur.data.db.DownloadState
+import com.chmouel.liseur.data.db.LiseurDatabase
+import com.chmouel.liseur.data.db.ReadingSession
+import com.chmouel.liseur.data.db.WorkAlias
+import com.chmouel.liseur.data.library.BookRemoval
+import com.chmouel.liseur.data.liseursync.SessionUploads
+import com.chmouel.liseur.data.remote.RemoteAccountRepository
+import com.chmouel.liseur.data.remote.SyncOutcome
+import com.chmouel.liseur.domain.BookFingerprints
+import com.chmouel.liseur.domain.Identifier
+import com.chmouel.liseur.domain.MetadataSnapshot
+import com.chmouel.liseur.domain.MetadataSource
+import com.chmouel.liseur.domain.SessionSpan
+import com.chmouel.liseur.domain.StatsBook
+import com.chmouel.liseur.domain.StatsRange
+import com.chmouel.liseur.domain.VocabularyMerge
+import com.chmouel.liseur.domain.readingStats
+import com.chmouel.liseur.sync.LibrarySyncSwitchCoordinator
+import com.chmouel.liseur.vocabulary.Recall
+import com.chmouel.liseur.vocabulary.VocabularyLookup
+import com.chmouel.liseur.vocabulary.VocabularyOccurrence
+import com.chmouel.liseur.vocabulary.VocabularyRepository
+import com.chmouel.liseur.vocabulary.VocabularyReview
+import com.chmouel.liseur.vocabulary.VocabularyWord
+import java.io.ByteArrayInputStream
+import java.io.File
+import java.io.InputStream
+import java.io.OutputStream
+import java.time.DayOfWeek
+import java.time.Instant
+import java.time.ZoneOffset
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
+import javax.crypto.KeyGenerator
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.test.runTest
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+
+/**
+ * Deterministic two-device end-to-end verification suite for Phase 5 Google Drive sync:
+ * - Vocabulary words, occurrences, legacy SRS `baseline`, and `VocabularyMerge.reconcileSchedule`
+ * - Concurrent word metadata edits, provisional/canonical occurrence dedupe, retired `ownerAccount`
+ * - Word `del` on untouched copy (silent) vs. concurrent edit or review (add-wins silently)
+ * - Event-ID-deduplicated review history, duplicate/reordered replay idempotency,
+ *   out-of-order staged review attachment, legacy null-`syncId` backfill, and final undo tombstones
+ * - Reading sessions: deterministic content-derived `remote_session_id`, per-account
+ *   `drive_session_ack` eligibility (Account A -> Account B seeding & backup restore),
+ *   `INSERT OR IGNORE` duplicate/crash replay idempotency, `liseur-sync` upload exclusion,
+ *   and identical local cross-device statistics on both devices
+ * - Seamless upgrade unpausing of pre-existing Phase 4 paused Phase 5 cursors
+ */
+@Config(sdk = [35], application = Application::class)
+@RunWith(RobolectricTestRunner::class)
+class DrivePhase5EndToEndTest {
+
+    private lateinit var context: Application
+    private lateinit var serverA: Phase5FakeDriveServer
+    private lateinit var deviceA: Phase5Device
+    private lateinit var deviceB: Phase5Device
+    private lateinit var tempDir: File
+
+    @Before
+    fun setUp() {
+        CredentialCipher.keyForTesting =
+            KeyGenerator.getInstance("AES").apply { init(256) }.generateKey()
+        context = ApplicationProvider.getApplicationContext()
+        tempDir = File(context.cacheDir, "drive-p5-test-${System.nanoTime()}").apply { mkdirs() }
+        serverA = Phase5FakeDriveServer()
+        deviceA = createDevice("dev-a", File(tempDir, "a"), serverA)
+        deviceB = createDevice("dev-b", File(tempDir, "b"), serverA)
+    }
+
+    @After
+    fun tearDown() {
+        deviceA.close()
+        deviceB.close()
+        tempDir.deleteRecursively()
+    }
+
+    @Test
+    fun `vocabulary words, occurrences, legacy baseline, and retired ownerAccount sync and merge cleanly`() = runTest {
+        deviceA.connect(PERM_A, "a@example.com")
+        deviceB.connect(PERM_A, "a@example.com")
+        val bookA = seedBook(deviceA, "prince.epub", "9780156012195", "Le Petit Prince", "Antoine de Saint-Exupery")
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+
+        // 1. Seed a word with legacy pre-event-log baseline + retired liseur-sync ownerAccount + book occurrence.
+        val addedAt = 1_745_000_000_000L
+        val baselineReviewedAt = addedAt + 60_000L
+        val baselineDueAt = baselineReviewedAt + 86_400_000L
+        val wordIdA = deviceA.liseurDb.vocabularyDao().insertWord(
+            VocabularyWord(
+                word = "éphémère",
+                normalized = "ephemere",
+                language = "fr",
+                definition = "short-lived",
+                translationLanguage = "en",
+                notes = "Chapter 3 note",
+                addedAt = addedAt,
+                dueAt = baselineDueAt,
+                reviewedAt = baselineReviewedAt,
+                streak = 2,
+                intervalMinutes = 1440,
+                repetitions = 2,
+                definitionEdited = true,
+                ownerAccount = "liseursync|https://old.example|acct-1",
+                definitionUpdatedAt = addedAt + 10L,
+                notesUpdatedAt = addedAt + 20L,
+                baselineDueAt = baselineDueAt,
+                baselineReviewedAt = baselineReviewedAt,
+                baselineStreak = 2,
+                baselineIntervalMinutes = 1440,
+                baselineRepetitions = 2,
+            ),
+        )
+        deviceA.liseurDb.vocabularyDao().insertOccurrence(
+            VocabularyOccurrence(
+                wordId = wordIdA,
+                bookUrl = bookA.url,
+                bookTitle = "Le Petit Prince",
+                locationKey = "ch03#p12",
+                locator = """{"href":"ch03.xhtml","locations":{"progression":0.25}}""",
+                sentence = "Cette fleur est éphémère.",
+                lastSeenAt = addedAt + 30L,
+                encounters = 2,
+            ),
+        )
+
+        // Sync A -> B.
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+
+        val wordB = deviceB.liseurDb.vocabularyDao().findWord("ephemere", "fr")
+        assertNotNull(wordB)
+        assertEquals("éphémère", wordB!!.word)
+        assertEquals("short-lived", wordB.definition)
+        assertEquals("Chapter 3 note", wordB.notes)
+        assertEquals("", wordB.ownerAccount) // newly pulled words insert with ownerAccount = ""
+        // Baseline + derived schedule match exactly!
+        assertEquals(baselineDueAt, wordB.dueAt)
+        assertEquals(baselineReviewedAt, wordB.reviewedAt)
+        assertEquals(2, wordB.streak)
+        assertEquals(1440, wordB.intervalMinutes)
+        assertEquals(2, wordB.repetitions)
+        assertEquals(baselineDueAt, wordB.baselineDueAt)
+        assertEquals(2, wordB.baselineRepetitions)
+
+        val occsB = deviceB.liseurDb.vocabularyDao().occurrencesList(wordB.id)
+        assertEquals(1, occsB.size)
+        assertEquals("isbn:9780156012195", occsB.single().workId)
+        assertEquals(
+            VocabularyMerge.canonicalOccurrenceKey("isbn:9780156012195", "ch03#p12"),
+            occsB.single().occurrenceKey,
+        )
+        assertEquals("Cette fleur est éphémère.", occsB.single().sentence)
+        assertEquals(2, occsB.single().encounters)
+
+        // 2. Concurrent edits: A edits definition while B edits notes offline -> 3-way merge converges!
+        val repoA = VocabularyRepository(deviceA.liseurDb)
+        val repoB = VocabularyRepository(deviceB.liseurDb)
+        repoA.edit(wordIdA, definition = "fleeting, transitory", notes = "Chapter 3 note", now = addedAt + 100L)
+        repoB.edit(wordB.id, definition = "short-lived", notes = "Updated note from tablet", now = addedAt + 110L)
+
+        serverA.hideOtherDeviceDeltasFor("dev-a")
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        serverA.hideOtherDeviceDeltasFor("dev-b")
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+        serverA.unhideAll()
+
+        // Pull + republish merge -> both converge with BOTH edits preserved!
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+
+        val convergedA = deviceA.liseurDb.vocabularyDao().findWord("ephemere", "fr")!!
+        val convergedB = deviceB.liseurDb.vocabularyDao().findWord("ephemere", "fr")!!
+        assertEquals("fleeting, transitory", convergedA.definition)
+        assertEquals("Updated note from tablet", convergedA.notes)
+        assertEquals(convergedA.definition, convergedB.definition)
+        assertEquals(convergedA.notes, convergedB.notes)
+    }
+
+    @Test
+    fun `vocabulary reviews dedupe by syncId across duplicate and reordered replays, stage out of order, and honor final undo tombstones`() = runTest {
+        deviceA.connect(PERM_A, "a@example.com")
+        deviceB.connect(PERM_A, "a@example.com")
+
+        val baseTime = 1_745_100_000_000L
+        val repoA = VocabularyRepository(deviceA.liseurDb)
+        val repoB = VocabularyRepository(deviceB.liseurDb)
+
+        val wordIdA = repoA.collect(
+            lookup = VocabularyLookup("lumière", "fr", null),
+            definition = "light",
+            translationLanguage = "en",
+            now = baseTime,
+        )!!
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+
+        // Record a legacy review with null syncId on A -> deterministic UUID assigned once before publish.
+        val legacyReviewedAt = baseTime + 10_000L
+        deviceA.liseurDb.vocabularyDao().addReview(
+            VocabularyReview(
+                wordId = wordIdA,
+                rating = Recall.GOOD.name,
+                reviewedAt = legacyReviewedAt,
+                intervalMinutes = 60,
+                dueAt = legacyReviewedAt + 3_600_000L,
+                firstReview = true,
+                syncId = null,
+            ),
+        )
+        deviceA.driveSync.vocabularySync.reconcileWordSchedule(wordIdA)
+
+        // Sync A -> B.
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+
+        val expectedLegacyId = DriveVocabularySync.deterministicLegacyReviewId(
+            language = "fr",
+            normalized = "lumière",
+            reviewedAt = legacyReviewedAt,
+            rating = Recall.GOOD.name,
+        )
+        val wordB1 = deviceB.liseurDb.vocabularyDao().findWord("lumière", "fr")!!
+        val reviewsB1 = deviceB.liseurDb.vocabularyDao().reviews(wordB1.id)
+        assertEquals(1, reviewsB1.size)
+        assertEquals(expectedLegacyId, reviewsB1.single().syncId)
+        assertEquals(1, wordB1.repetitions)
+        assertEquals(1, wordB1.streak)
+        assertTrue(reviewsB1.single().firstReview)
+
+        // Duplicate replay: reset B's vocabReview cursor to 0 and re-sync -> schedule MUST NOT advance twice!
+        deviceB.driveDb.cursors().upsert(
+            DriveCursor(PERM_A, "dev-a", DriveWireCodec.DOMAIN_VOCAB_REVIEW, appliedSeq = 0L),
+        )
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+        val wordBAfterDup = deviceB.liseurDb.vocabularyDao().findWord("lumière", "fr")!!
+        assertEquals(1, deviceB.liseurDb.vocabularyDao().reviews(wordBAfterDup.id).size)
+        assertEquals(wordB1.repetitions, wordBAfterDup.repetitions)
+        assertEquals(wordB1.streak, wordBAfterDup.streak)
+        assertEquals(wordB1.dueAt, wordBAfterDup.dueAt)
+        assertEquals(wordB1.intervalMinutes, wordBAfterDup.intervalMinutes)
+
+        // Concurrent reviews on A and B -> union by syncId and converge identically!
+        val reviewTimeA = wordB1.dueAt + 5_000L
+        val reviewTimeB = wordB1.dueAt + 15_000L
+        val undoA = repoA.review(
+            card = deviceA.liseurDb.vocabularyDao().word(wordIdA)!!,
+            rating = Recall.GOOD,
+            newLimit = 0,
+            reviewLimit = 0,
+            now = reviewTimeA,
+        )!!
+        repoB.review(
+            card = deviceB.liseurDb.vocabularyDao().word(wordB1.id)!!,
+            rating = Recall.EASY,
+            newLimit = 0,
+            reviewLimit = 0,
+            now = reviewTimeB,
+        )!!
+
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+
+        val convergedA = deviceA.liseurDb.vocabularyDao().findWord("lumière", "fr")!!
+        val convergedB = deviceB.liseurDb.vocabularyDao().findWord("lumière", "fr")!!
+        assertEquals(3, convergedA.repetitions)
+        assertEquals(convergedA.repetitions, convergedB.repetitions)
+        assertEquals(convergedA.streak, convergedB.streak)
+        assertEquals(convergedA.dueAt, convergedB.dueAt)
+        assertEquals(convergedA.intervalMinutes, convergedB.intervalMinutes)
+        assertEquals(3, deviceA.liseurDb.vocabularyDao().reviews(convergedA.id).size)
+        assertEquals(3, deviceB.liseurDb.vocabularyDao().reviews(convergedB.id).size)
+
+        // Undo a review on B (`op: "del"` final tombstone): add one more review on B and undo it after syncing!
+        val reviewToUndoTime = convergedB.dueAt + 10_000L
+        val undoable = repoB.review(
+            card = deviceB.liseurDb.vocabularyDao().word(convergedB.id)!!,
+            rating = Recall.HARD,
+            newLimit = 0,
+            reviewLimit = 0,
+            now = reviewToUndoTime,
+        )!!
+        val undoneSyncId = deviceB.liseurDb.vocabularyDao().review(undoable.reviewId)!!.syncId!!
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        assertEquals(4, deviceA.liseurDb.vocabularyDao().reviews(convergedA.id).size)
+
+        // Now undo on B and sync -> final tombstone removes it on A and recomputes schedule!
+        assertTrue(repoB.undoReview(undoable))
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+
+        val afterUndoA = deviceA.liseurDb.vocabularyDao().findWord("lumière", "fr")!!
+        val afterUndoB = deviceB.liseurDb.vocabularyDao().findWord("lumière", "fr")!!
+        assertEquals(3, afterUndoA.repetitions)
+        assertEquals(afterUndoB.repetitions, afterUndoA.repetitions)
+        assertEquals(afterUndoB.streak, afterUndoA.streak)
+        assertEquals(afterUndoB.dueAt, afterUndoA.dueAt)
+        assertNull(deviceA.liseurDb.vocabularyDao().reviewBySyncIdAnyOwner(undoneSyncId))
+
+        // Replaying the undone review's old `put` MUST be ignored permanently!
+        val replayPut = DriveWireCodec.putRecord(
+            domain = DriveWireCodec.DOMAIN_VOCAB_REVIEW,
+            key = undoneSyncId,
+            hlc = "0017459000000-0001-dev-b",
+            bodyMap = DriveWireCodec.encodeVocabReviewBody(
+                DriveVocabReviewBody(
+                    syncId = undoneSyncId,
+                    wordKey = DriveVocabularySync.wordKey("fr", "lumière"),
+                    language = "fr",
+                    normalized = "lumière",
+                    rating = Recall.HARD.name,
+                    reviewedAt = reviewToUndoTime,
+                    intervalMinutes = 60,
+                    dueAt = reviewToUndoTime + 3_600_000L,
+                ),
+            ),
+        )
+        deviceA.driveSync.vocabularySync.applyRemoteReview(PERM_A, replayPut, "dev-b", 99L)
+        assertNull(deviceA.liseurDb.vocabularyDao().reviewBySyncIdAnyOwner(undoneSyncId))
+        assertEquals(3, deviceA.liseurDb.vocabularyDao().findWord("lumière", "fr")!!.repetitions)
+
+        // Out-of-order arrival: review arrives BEFORE parent vocabWord -> staged, then attached when word arrives!
+        val stagedReviewId = "staged-review-uuid-1"
+        val outOfOrderReview = DriveWireCodec.putRecord(
+            domain = DriveWireCodec.DOMAIN_VOCAB_REVIEW,
+            key = stagedReviewId,
+            hlc = "0017459000001-0001-dev-c",
+            bodyMap = DriveWireCodec.encodeVocabReviewBody(
+                DriveVocabReviewBody(
+                    syncId = stagedReviewId,
+                    wordKey = DriveVocabularySync.wordKey("es", "alba"),
+                    language = "es",
+                    normalized = "alba",
+                    rating = Recall.GOOD.name,
+                    reviewedAt = baseTime + 50_000L,
+                    intervalMinutes = 60,
+                    dueAt = baseTime + 3_650_000L,
+                ),
+            ),
+        )
+        deviceB.driveSync.vocabularySync.applyRemoteReview(PERM_A, outOfOrderReview, "dev-c", 1L)
+        assertNull(deviceB.liseurDb.vocabularyDao().findWord("alba", "es"))
+        assertEquals(
+            1,
+            deviceB.liseurDb.vocabularySyncDao()
+                .stagedForWord(DriveLibrarySync.accountPeerId(PERM_A), "es", "alba", 0L).size,
+        )
+
+        val delayedWord = DriveWireCodec.putRecord(
+            domain = DriveWireCodec.DOMAIN_VOCAB_WORD,
+            key = DriveVocabularySync.wordKey("es", "alba"),
+            hlc = "0017459000002-0001-dev-c",
+            bodyMap = DriveWireCodec.encodeVocabWordBody(
+                DriveVocabWordBody(
+                    language = "es",
+                    normalized = "alba",
+                    word = "alba",
+                    definition = "dawn",
+                    translationLanguage = "en",
+                    notes = "",
+                    definitionEdited = false,
+                    definitionUpdatedAt = baseTime,
+                    notesUpdatedAt = 0L,
+                    addedAt = baseTime,
+                    baseline = null,
+                ),
+            ),
+        )
+        deviceB.driveSync.vocabularySync.applyRemoteWord(PERM_A, delayedWord, "dev-c", 2L)
+        val attachedWord = deviceB.liseurDb.vocabularyDao().findWord("alba", "es")!!
+        assertEquals(1, attachedWord.repetitions)
+        assertEquals(1, attachedWord.streak)
+        assertEquals(1, deviceB.liseurDb.vocabularyDao().reviews(attachedWord.id).size)
+        assertTrue(deviceB.liseurDb.vocabularyDao().reviews(attachedWord.id).single().firstReview)
+        assertTrue(
+            deviceB.liseurDb.vocabularySyncDao()
+                .stagedForWord(DriveLibrarySync.accountPeerId(PERM_A), "es", "alba", 0L).isEmpty(),
+        )
+    }
+
+    @Test
+    fun `vocabulary word delete is silent on untouched copy and add-wins on concurrent edit or review`() = runTest {
+        deviceA.connect(PERM_A, "a@example.com")
+        deviceB.connect(PERM_A, "a@example.com")
+        val repoA = VocabularyRepository(deviceA.liseurDb)
+        val repoB = VocabularyRepository(deviceB.liseurDb)
+        val now = 1_745_200_000_000L
+
+        val untouchedIdA = repoA.collect(VocabularyLookup("ombre", "fr", null), "shadow", "en", now)!!
+        val editedIdA = repoA.collect(VocabularyLookup("soleil", "fr", null), "sun", "en", now)!!
+        val reviewedIdA = repoA.collect(VocabularyLookup("lune", "fr", null), "moon", "en", now)!!
+
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+
+        // 1. Stale delete on untouched copy ("ombre") -> silent delete on B!
+        repoA.deleteWord(untouchedIdA)
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+        assertNull(deviceB.liseurDb.vocabularyDao().findWord("ombre", "fr"))
+
+        // 2. Concurrent delete on A vs. edit on B ("soleil") -> add-wins silently!
+        val soleilB = deviceB.liseurDb.vocabularyDao().findWord("soleil", "fr")!!
+        repoA.deleteWord(editedIdA)
+        repoB.edit(soleilB.id, definition = "bright sun", notes = "keep me", now = now + 500L)
+
+        serverA.hideOtherDeviceDeltasFor("dev-a")
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        serverA.hideOtherDeviceDeltasFor("dev-b")
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+        serverA.unhideAll()
+
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+
+        val keptA = deviceA.liseurDb.vocabularyDao().findWord("soleil", "fr")
+        val keptB = deviceB.liseurDb.vocabularyDao().findWord("soleil", "fr")
+        assertNotNull("Add-wins must resurrect soleil on deleter A", keptA)
+        assertNotNull(keptB)
+        assertEquals("bright sun", keptA!!.definition)
+        assertEquals("keep me", keptA.notes)
+        assertEquals(keptA.definition, keptB!!.definition)
+
+        // 3. Concurrent delete on A vs. live review on B ("lune"), BOTH uploaded before pulling -> add-wins silently!
+        val luneB = deviceB.liseurDb.vocabularyDao().findWord("lune", "fr")!!
+        repoA.deleteWord(reviewedIdA)
+        repoB.review(luneB, Recall.GOOD, newLimit = 0, reviewLimit = 0, now = now + 1_000L)!!
+
+        serverA.hideOtherDeviceDeltasFor("dev-a")
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        serverA.hideOtherDeviceDeltasFor("dev-b")
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+        serverA.unhideAll()
+
+        // Pull + republish -> both devices converge with "lune" alive AND its review preserved!
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+
+        val luneResA = deviceA.liseurDb.vocabularyDao().findWord("lune", "fr")
+        val luneResB = deviceB.liseurDb.vocabularyDao().findWord("lune", "fr")
+        assertNotNull("Add-wins must resurrect lune on deleter A after concurrent review", luneResA)
+        assertNotNull(luneResB)
+        assertEquals(1, luneResA!!.repetitions)
+        assertEquals(1, luneResB!!.repetitions)
+        assertEquals(luneResB.dueAt, luneResA.dueAt)
+    }
+
+    @Test
+    fun `reading sessions sync idempotently, exclude pulled rows from liseur-sync, and produce identical cross-device stats`() = runTest {
+        deviceA.connect(PERM_A, "a@example.com")
+        deviceB.connect(PERM_A, "a@example.com")
+
+        val bookA = seedBook(deviceA, "dune.epub", "9780441172719", "Dune", "Frank Herbert")
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+        val stubUrlB = "drive:isbn:9780441172719"
+
+        val dayStart = Instant.parse("2026-04-10T10:00:00Z").toEpochMilli()
+        // Closed eligible session on A.
+        val sessIdA1 = deviceA.liseurDb.readingSessionDao().insert(
+            ReadingSession(
+                bookUrl = bookA.url,
+                startedAt = dayStart,
+                endedAt = dayStart + 1_800_000L,
+                lastCheckpointAt = dayStart + 1_800_000L,
+                durationMs = 1_750_000L,
+                startProgression = 0.10,
+                endProgression = 0.25,
+                idleMs = 50_000L,
+            ),
+        )
+        // Ineligible sessions on A that MUST NOT upload:
+        // (a) open session (ended_at == null)
+        deviceA.liseurDb.readingSessionDao().insert(
+            ReadingSession(
+                bookUrl = bookA.url,
+                startedAt = dayStart + 2_000_000L,
+                endedAt = null,
+                lastCheckpointAt = dayStart + 2_100_000L,
+                durationMs = 100_000L,
+                startProgression = 0.25,
+                endProgression = 0.26,
+            ),
+        )
+        // (b) imported backup session (imported_at != null)
+        deviceA.liseurDb.readingSessionDao().insert(
+            ReadingSession(
+                bookUrl = bookA.url,
+                startedAt = dayStart - 3_600_000L,
+                endedAt = dayStart - 3_000_000L,
+                lastCheckpointAt = dayStart - 3_000_000L,
+                durationMs = 600_000L,
+                startProgression = 0.0,
+                endProgression = 0.05,
+                importedAt = dayStart - 1_000L,
+            ),
+        )
+        // (c) progression-less session
+        deviceA.liseurDb.readingSessionDao().insert(
+            ReadingSession(
+                bookUrl = bookA.url,
+                startedAt = dayStart - 7_200_000L,
+                endedAt = dayStart - 7_000_000L,
+                lastCheckpointAt = dayStart - 7_000_000L,
+                durationMs = 200_000L,
+                startProgression = null,
+                endProgression = null,
+            ),
+        )
+
+        // Closed eligible session on B.
+        deviceB.liseurDb.readingSessionDao().insert(
+            ReadingSession(
+                bookUrl = stubUrlB,
+                startedAt = dayStart + 4_000_000L,
+                endedAt = dayStart + 5_200_000L,
+                lastCheckpointAt = dayStart + 5_200_000L,
+                durationMs = 1_100_000L,
+                startProgression = 0.25,
+                endProgression = 0.40,
+                idleMs = 100_000L,
+            ),
+        )
+
+        // Sync both ways.
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+
+        // Verify deterministic remote_session_id persisted on A's local session.
+        val expectedIdA = DriveSessionSync.deterministicSessionId(
+            workKey = "isbn:9780441172719",
+            startedAt = dayStart,
+            endedAt = dayStart + 1_800_000L,
+            durationMs = 1_750_000L,
+            startProgression = 0.10,
+            endProgression = 0.25,
+        )
+        val localRowA = deviceA.liseurDb.readingSessionDao().get(sessIdA1)!!
+        assertEquals(expectedIdA, localRowA.remoteSessionId)
+        assertNull(localRowA.originDeviceId)
+
+        // Device B received ONLY A's eligible session (with origin_device_id = "dev-a", imported_at = null).
+        val sessionsOnB = deviceB.liseurDb.readingSessionDao().allOnce()
+        assertEquals(2, sessionsOnB.size)
+        val pulledOnB = sessionsOnB.single { it.remoteSessionId == expectedIdA }
+        assertEquals("dev-a", pulledOnB.originDeviceId)
+        assertNull(pulledOnB.importedAt)
+
+        // Pulled remote session is NEVER uploaded to liseur-sync (`awaitingUpload` / `awaitingUploadTo` / `SessionUploads.toJson`).
+        val awaitingOnB = deviceB.liseurDb.readingSessionDao().awaitingUpload(100)
+        assertEquals(1, awaitingOnB.size)
+        assertNull(awaitingOnB.single().originDeviceId)
+        assertNull(SessionUploads.toJson(pulledOnB, "dev-b", "work-1", null))
+
+        // Duplicate / Tx1-Tx2 crash replay: rewind B's session cursor to 0 and re-sync -> 0 duplicate rows!
+        deviceB.driveDb.cursors().upsert(
+            DriveCursor(PERM_A, "dev-a", DriveWireCodec.DOMAIN_SESSION, appliedSeq = 0L),
+        )
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+        assertEquals(2, deviceB.liseurDb.readingSessionDao().allOnce().size)
+
+        // Local cross-device statistics agree identically on both devices for the combined synced sessions!
+        val syncedSessionsA = deviceA.liseurDb.readingSessionDao().allOnce()
+            .filter { it.endedAt != null && it.importedAt == null && it.startProgression != null }
+        val syncedSessionsB = deviceB.liseurDb.readingSessionDao().allOnce()
+        assertEquals(2, syncedSessionsA.size)
+        assertEquals(2, syncedSessionsB.size)
+        assertEquals(2_850_000L, syncedSessionsA.sumOf { it.durationMs })
+        assertEquals(2_850_000L, syncedSessionsB.sumOf { it.durationMs })
+        assertEquals(2_850_000L, deviceB.liseurDb.readingSessionDao().observeTotalDuration(stubUrlB).first())
+
+        val toSpans: (List<ReadingSession>) -> List<SessionSpan> = { list ->
+            list.map {
+                SessionSpan(
+                    bookUrl = it.bookUrl,
+                    startedAt = it.startedAt,
+                    durationMs = it.durationMs,
+                    lastReadAt = it.endedAt ?: it.lastCheckpointAt,
+                    startProgression = it.startProgression,
+                    endProgression = it.endProgression,
+                )
+            }
+        }
+        val today = Instant.ofEpochMilli(dayStart).atZone(ZoneOffset.UTC).toLocalDate()
+        val statsA = readingStats(
+            sessions = toSpans(syncedSessionsA),
+            books = mapOf(bookA.url to StatsBook(bookA.url, "Dune", "Frank Herbert", 0.4, false, null, null)),
+            zone = ZoneOffset.UTC,
+            today = today,
+            range = StatsRange.ALL_TIME,
+            weekStart = DayOfWeek.MONDAY,
+        )
+        val statsB = readingStats(
+            sessions = toSpans(syncedSessionsB),
+            books = mapOf(stubUrlB to StatsBook(stubUrlB, "Dune", "Frank Herbert", 0.4, false, null, null)),
+            zone = ZoneOffset.UTC,
+            today = today,
+            range = StatsRange.ALL_TIME,
+            weekStart = DayOfWeek.MONDAY,
+        )
+        assertEquals(2_850_000L, statsA.totalMs)
+        assertEquals(statsA.totalMs, statsB.totalMs)
+        assertEquals(statsA.sessions, statsB.sessions)
+        assertEquals(2, statsA.sessions)
+        assertEquals(statsA.books.single().totalMs, statsB.books.single().totalMs)
+        assertEquals(statsA.books.single().sessions, statsB.books.single().sessions)
+    }
+
+    @Test
+    fun `switching to Account B seeds all eligible local sessions via missing drive_session_ack despite existing remote_session_id`() = runTest {
+        val serverB = Phase5FakeDriveServer(PERM_B, "b@example.com")
+        val deviceOnB = createDevice("dev-b-acct", File(tempDir, "b-acct"), serverB)
+        try {
+            // 1. Device A syncs local session to Account A -> assigns remote_session_id and records drive_session_ack(PERM_A).
+            deviceA.connect(PERM_A, "a@example.com")
+            val bookA = seedBook(deviceA, "hobbit.epub", "9780547928227", "The Hobbit", "J.R.R. Tolkien")
+            val started = 1_745_300_000_000L
+            val sessRowId = deviceA.liseurDb.readingSessionDao().insert(
+                ReadingSession(
+                    bookUrl = bookA.url,
+                    startedAt = started,
+                    endedAt = started + 900_000L,
+                    lastCheckpointAt = started + 900_000L,
+                    durationMs = 850_000L,
+                    startProgression = 0.0,
+                    endProgression = 0.15,
+                    idleMs = 50_000L,
+                ),
+            )
+            assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+            val assignedId = deviceA.liseurDb.readingSessionDao().get(sessRowId)!!.remoteSessionId
+            assertNotNull(assignedId)
+            assertTrue(deviceA.driveDb.sessionAcks().isAcked(PERM_A, assignedId!!))
+
+            // 2. Switch Device A to Account B (keeping Account A paused; Account B has empty drive_session_ack).
+            deviceA.driveSync.deactivate()
+            val switchedDriveSync = DriveLibrarySync(
+                context = context,
+                database = deviceA.liseurDb,
+                remoteAccount = RemoteAccountRepository(
+                    dao = deviceA.liseurDb.remoteServerDao(),
+                    bookDao = deviceA.liseurDb.bookDao(),
+                    progressDao = deviceA.liseurDb.readingProgressDao(),
+                    seriesExtraDao = deviceA.liseurDb.seriesExtraDao(),
+                    bookRemoval = BookRemoval(
+                        bookDao = deviceA.liseurDb.bookDao(),
+                        sessionDao = deviceA.liseurDb.readingSessionDao(),
+                        peerStateDao = deviceA.liseurDb.syncPeerStateDao(),
+                        identityDao = deviceA.liseurDb.workIdentityDao(),
+                        progressDao = deviceA.liseurDb.readingProgressDao(),
+                        annotationDao = deviceA.liseurDb.annotationDao(),
+                        annotationSyncDao = deviceA.liseurDb.annotationSyncDao(),
+                        inTransaction = { work -> deviceA.liseurDb.withTransaction { work() } },
+                        metadataDao = deviceA.liseurDb.bookMetadataDao(),
+                        evaluationDao = deviceA.liseurDb.bookEvaluationDao(),
+                    ),
+                    inTransaction = { work -> deviceA.liseurDb.withTransaction { work() } },
+                ),
+                switchCoordinator = LibrarySyncSwitchCoordinator(),
+                deviceIdGenerator = { "dev-a" },
+                openStore = { deviceA.driveDb },
+                authClient = alwaysAuthClient("token-b"),
+                driveApi = serverB.clientFor("dev-a"),
+            )
+            switchedDriveSync.activateAccount(PERM_B, "b@example.com", now = 2_000L)
+            assertEquals(SyncOutcome.Success, switchedDriveSync.changeEngine.sync().outcome)
+
+            // Account B received the already-identified local session cleanly!
+            assertTrue(deviceA.driveDb.sessionAcks().isAcked(PERM_B, assignedId))
+
+            // Second device connected to Account B pulls the session with identical ID & duration!
+            deviceOnB.connect(PERM_B, "b@example.com")
+            assertEquals(SyncOutcome.Success, deviceOnB.changeEngine.sync().outcome)
+            val pulledOnB = deviceOnB.liseurDb.readingSessionDao().byRemoteSessionId(assignedId)
+            assertNotNull(pulledOnB)
+            assertEquals(850_000L, pulledOnB!!.durationMs)
+            assertEquals("dev-a", pulledOnB.originDeviceId)
+        } finally {
+            deviceOnB.close()
+        }
+    }
+
+    @Test
+    fun `backup restore without drive_sync_db deduplicates identical local sitting and prevents double counting`() = runTest {
+        // Phone A records a local sitting and syncs to Drive.
+        deviceA.connect(PERM_A, "a@example.com")
+        val bookA = seedBook(deviceA, "foundation.epub", "9780553293357", "Foundation", "Isaac Asimov")
+        val started = 1_745_400_000_000L
+        deviceA.liseurDb.readingSessionDao().insert(
+            ReadingSession(
+                bookUrl = bookA.url,
+                startedAt = started,
+                endedAt = started + 1_200_000L,
+                lastCheckpointAt = started + 1_200_000L,
+                durationMs = 1_200_000L,
+                startProgression = 0.0,
+                endProgression = 0.2,
+                idleMs = 0L,
+            ),
+        )
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+
+        // Simulate Tablet B restored from Android Auto Backup of liseur.db BEFORE A's sync
+        // (same local sitting with remote_session_id == NULL, brand-new drive_sync.db with deviceId = "dev-b").
+        val bookB = seedBook(deviceB, "foundation.epub", "9780553293357", "Foundation", "Isaac Asimov")
+        deviceB.liseurDb.readingSessionDao().insert(
+            ReadingSession(
+                bookUrl = bookB.url,
+                startedAt = started,
+                endedAt = started + 1_200_000L,
+                lastCheckpointAt = started + 1_200_000L,
+                durationMs = 1_200_000L,
+                startProgression = 0.0,
+                endProgression = 0.2,
+                idleMs = 0L,
+                remoteSessionId = null,
+                originDeviceId = null,
+            ),
+        )
+        deviceB.connect(PERM_A, "a@example.com")
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+
+        // Pre-pull deterministic ID assignment prevents double counting on restore!
+        val allOnB = deviceB.liseurDb.readingSessionDao().allOnce()
+        assertEquals(1, allOnB.size)
+        assertEquals(1_200_000L, allOnB.single().durationMs)
+        assertNotNull(allOnB.single().remoteSessionId)
+    }
+
+    @Test
+    fun `pre-existing paused Phase 5 cursors unpause cleanly on upgrade and replay skipped deltas`() = runTest {
+        deviceA.connect(PERM_A, "a@example.com")
+        val bookA = seedBook(deviceA, "upgrade.epub", "9780345391803", "Hitchhiker", "Douglas Adams")
+        val repoA = VocabularyRepository(deviceA.liseurDb)
+        repoA.collect(VocabularyLookup("galaxie", "fr", null), "galaxy", "en", 1_745_500_000_000L)
+        deviceA.liseurDb.readingSessionDao().insert(
+            ReadingSession(
+                bookUrl = bookA.url,
+                startedAt = 1_745_500_000_000L,
+                endedAt = 1_745_500_600_000L,
+                lastCheckpointAt = 1_745_500_600_000L,
+                durationMs = 600_000L,
+                startProgression = 0.0,
+                endProgression = 0.1,
+                idleMs = 0L,
+            ),
+        )
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+
+        // Simulate Device B previously running Phase 4: catalog applied at seq 1,
+        // while Phase 5 domains were paused at appliedSeq = 0, pausedSchemaVersion = 1.
+        deviceB.connect(PERM_A, "a@example.com")
+        deviceB.driveDb.cursors().upsert(DriveCursor(PERM_A, "dev-a", DriveWireCodec.DOMAIN_CATALOG, appliedSeq = 0L))
+        for (domain in listOf(
+            DriveWireCodec.DOMAIN_VOCAB_WORD,
+            DriveWireCodec.DOMAIN_VOCAB_OCCURRENCE,
+            DriveWireCodec.DOMAIN_VOCAB_REVIEW,
+            DriveWireCodec.DOMAIN_SESSION,
+        )) {
+            deviceB.driveDb.cursors().upsert(
+                DriveCursor(PERM_A, "dev-a", domain, appliedSeq = 0L, pausedSchemaVersion = 1),
+            )
+        }
+
+        // Phase 5 build syncs -> pauses clear automatically and skipped vocab + session records replay!
+        val summary = deviceB.changeEngine.sync()
+        assertEquals(SyncOutcome.Success, summary.outcome)
+        assertFalse(summary.pausedBySchemaVersion)
+        assertNotNull(deviceB.liseurDb.vocabularyDao().findWord("galaxie", "fr"))
+        assertEquals(1, deviceB.liseurDb.readingSessionDao().allOnce().size)
+        assertEquals(600_000L, deviceB.liseurDb.readingSessionDao().allOnce().single().durationMs)
+        assertTrue(deviceB.driveDb.cursors().pausedForAccount(PERM_A).isEmpty())
+    }
+
+    @Test
+    fun `occurrences arriving before their parent word are deferred and applied once the word arrives`() = runTest {
+        val isolatedServer = Phase5FakeDriveServer()
+        // Note device ID ordering: "dev-b-editor" sorts lexicographically BEFORE "dev-z-creator".
+        val creatorA = createDevice("dev-z-creator", File(tempDir, "occ-a"), isolatedServer)
+        val editorB = createDevice("dev-b-editor", File(tempDir, "occ-b"), isolatedServer)
+        val freshC = createDevice("dev-c-fresh", File(tempDir, "occ-c"), isolatedServer)
+        val staggeredD = createDevice("dev-d-staggered", File(tempDir, "occ-d"), isolatedServer)
+        try {
+            creatorA.connect(PERM_A, "a@example.com")
+            editorB.connect(PERM_A, "a@example.com")
+
+            val now = 1_745_600_000_000L
+            val repoA = VocabularyRepository(creatorA.liseurDb)
+            repoA.collect(VocabularyLookup("aurore", "fr", null), "dawn", "en", now)!!
+            assertEquals(SyncOutcome.Success, creatorA.changeEngine.sync().outcome)
+
+            // Editor B pulls the word from A, then publishes an occurrence-only delta batch.
+            assertEquals(SyncOutcome.Success, editorB.changeEngine.sync().outcome)
+            val wordOnB = editorB.liseurDb.vocabularyDao().findWord("aurore", "fr")!!
+            editorB.liseurDb.vocabularyDao().insertOccurrence(
+                VocabularyOccurrence(
+                    wordId = wordOnB.id,
+                    bookUrl = "file:///aurora.epub",
+                    bookTitle = "L'Aurore",
+                    locationKey = "ch01#p1",
+                    locator = """{"href":"ch01.xhtml","locations":{"progression":0.05}}""",
+                    sentence = "L'aurore se lève doucement.",
+                    lastSeenAt = now + 500L,
+                    encounters = 1,
+                ),
+            )
+            assertEquals(SyncOutcome.Success, editorB.changeEngine.sync().outcome)
+
+            // 1. Fresh receiver C sees both devices on initial sync: "dev-b-editor" is processed
+            // BEFORE "dev-z-creator", defers vocabOccurrence, then replays it once A's word arrives.
+            freshC.connect(PERM_A, "a@example.com")
+            assertEquals(SyncOutcome.Success, freshC.changeEngine.sync().outcome)
+            val wordOnC = freshC.liseurDb.vocabularyDao().findWord("aurore", "fr")
+            assertNotNull(wordOnC)
+            val occsOnC = freshC.liseurDb.vocabularyDao().occurrencesList(wordOnC!!.id)
+            assertEquals(1, occsOnC.size)
+            assertEquals("L'aurore se lève doucement.", occsOnC.single().sentence)
+            assertEquals(
+                1L,
+                freshC.driveDb.cursors().get(PERM_A, "dev-b-editor", DriveWireCodec.DOMAIN_VOCAB_OCCURRENCE)?.appliedSeq,
+            )
+
+            // 2. Staggered receiver D sees ONLY editor B's occurrence-only batch on sync 1:
+            // cursor for vocabOccurrence must remain unadvanced (0), then apply once A's word arrives.
+            staggeredD.connect(PERM_A, "a@example.com")
+            isolatedServer.hideSourceDeviceFrom(sourceDeviceId = "dev-z-creator", viewerDeviceId = "dev-d-staggered")
+            assertEquals(SyncOutcome.Success, staggeredD.changeEngine.sync().outcome)
+            assertNull(staggeredD.liseurDb.vocabularyDao().findWord("aurore", "fr"))
+            val deferredOccCursor = staggeredD.driveDb.cursors()
+                .get(PERM_A, "dev-b-editor", DriveWireCodec.DOMAIN_VOCAB_OCCURRENCE)
+            assertEquals(0L, deferredOccCursor?.appliedSeq ?: 0L)
+
+            isolatedServer.unhideAll()
+            assertEquals(SyncOutcome.Success, staggeredD.changeEngine.sync(forceManifestRescan = true).outcome)
+            val wordOnD = staggeredD.liseurDb.vocabularyDao().findWord("aurore", "fr")
+            assertNotNull(wordOnD)
+            val occsOnD = staggeredD.liseurDb.vocabularyDao().occurrencesList(wordOnD!!.id)
+            assertEquals(1, occsOnD.size)
+            assertEquals("L'aurore se lève doucement.", occsOnD.single().sentence)
+            assertEquals(
+                1L,
+                staggeredD.driveDb.cursors().get(PERM_A, "dev-b-editor", DriveWireCodec.DOMAIN_VOCAB_OCCURRENCE)?.appliedSeq,
+            )
+        } finally {
+            creatorA.close()
+            editorB.close()
+            freshC.close()
+            staggeredD.close()
+        }
+    }
+
+    @Test
+    fun `sessions arriving before their catalog entry are deferred and applied once catalog arrives`() = runTest {
+        val isolatedServer = Phase5FakeDriveServer()
+        // Note device ID ordering: "dev-b-reader" sorts lexicographically BEFORE "dev-z-catalog".
+        val catalogA = createDevice("dev-z-catalog", File(tempDir, "sess-a"), isolatedServer)
+        val readerB = createDevice("dev-b-reader", File(tempDir, "sess-b"), isolatedServer)
+        val freshC = createDevice("dev-c-fresh", File(tempDir, "sess-c"), isolatedServer)
+        val staggeredD = createDevice("dev-d-staggered", File(tempDir, "sess-d"), isolatedServer)
+        try {
+            catalogA.connect(PERM_A, "a@example.com")
+            readerB.connect(PERM_A, "a@example.com")
+
+            seedBook(catalogA, "solaris.epub", "9780156027601", "Solaris", "Stanislaw Lem")
+            assertEquals(SyncOutcome.Success, catalogA.changeEngine.sync().outcome)
+
+            // Reader B pulls the catalog stub, records a closed session, and uploads a session-only batch.
+            assertEquals(SyncOutcome.Success, readerB.changeEngine.sync().outcome)
+            val stubUrl = "drive:isbn:9780156027601"
+            val started = 1_745_700_000_000L
+            readerB.liseurDb.readingSessionDao().insert(
+                ReadingSession(
+                    bookUrl = stubUrl,
+                    startedAt = started,
+                    endedAt = started + 1_600_000L,
+                    lastCheckpointAt = started + 1_600_000L,
+                    durationMs = 1_500_000L,
+                    startProgression = 0.05,
+                    endProgression = 0.22,
+                    idleMs = 100_000L,
+                ),
+            )
+            assertEquals(SyncOutcome.Success, readerB.changeEngine.sync().outcome)
+
+            // 1. Fresh receiver C processes "dev-b-reader" BEFORE "dev-z-catalog":
+            // session defers until catalog imports, then applies and matches reading totals.
+            freshC.connect(PERM_A, "a@example.com")
+            assertEquals(SyncOutcome.Success, freshC.changeEngine.sync().outcome)
+            val sessionsOnC = freshC.liseurDb.readingSessionDao().allOnce()
+            assertEquals(1, sessionsOnC.size)
+            assertEquals(1_500_000L, sessionsOnC.single().durationMs)
+            assertEquals(1_500_000L, freshC.liseurDb.readingSessionDao().observeTotalDuration(stubUrl).first())
+            assertEquals(
+                1L,
+                freshC.driveDb.cursors().get(PERM_A, "dev-b-reader", DriveWireCodec.DOMAIN_SESSION)?.appliedSeq,
+            )
+
+            // 2. Staggered receiver D sees ONLY reader B's session-only batch on sync 1:
+            // session cursor stays at 0, then replays and matches totals once A's catalog arrives.
+            staggeredD.connect(PERM_A, "a@example.com")
+            isolatedServer.hideSourceDeviceFrom(sourceDeviceId = "dev-z-catalog", viewerDeviceId = "dev-d-staggered")
+            assertEquals(SyncOutcome.Success, staggeredD.changeEngine.sync().outcome)
+            assertTrue(staggeredD.liseurDb.readingSessionDao().allOnce().isEmpty())
+            val deferredSessionCursor = staggeredD.driveDb.cursors()
+                .get(PERM_A, "dev-b-reader", DriveWireCodec.DOMAIN_SESSION)
+            assertEquals(0L, deferredSessionCursor?.appliedSeq ?: 0L)
+
+            isolatedServer.unhideAll()
+            assertEquals(SyncOutcome.Success, staggeredD.changeEngine.sync(forceManifestRescan = true).outcome)
+            val sessionsOnD = staggeredD.liseurDb.readingSessionDao().allOnce()
+            assertEquals(1, sessionsOnD.size)
+            assertEquals(1_500_000L, sessionsOnD.single().durationMs)
+            assertEquals(1_500_000L, staggeredD.liseurDb.readingSessionDao().observeTotalDuration(stubUrl).first())
+            assertEquals(
+                1L,
+                staggeredD.driveDb.cursors().get(PERM_A, "dev-b-reader", DriveWireCodec.DOMAIN_SESSION)?.appliedSeq,
+            )
+        } finally {
+            catalogA.close()
+            readerB.close()
+            freshC.close()
+            staggeredD.close()
+        }
+    }
+
+    @Test
+    fun `a word deleted after a crash between its pull transactions stays deleted on replay`() = runTest {
+        deviceA.connect(PERM_A, "a@example.com")
+        deviceB.connect(PERM_A, "a@example.com")
+        val repoA = VocabularyRepository(deviceA.liseurDb)
+        val now = 1_745_900_000_000L
+        repoA.collect(VocabularyLookup("nuit", "fr", null), "night", "en", now)!!
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+        val nuitB = deviceB.liseurDb.vocabularyDao().findWord("nuit", "fr")!!
+
+        // Crash after Tx1 (word + receipt in liseur.db) and before Tx2: drive_sync.db never saw it.
+        val key = DriveVocabularySync.wordKey("fr", "nuit")
+        deviceB.driveDb.recordStates().delete(PERM_A, DriveWireCodec.DOMAIN_VOCAB_WORD, key)
+        deviceB.driveDb.cursors().upsert(DriveCursor(PERM_A, "dev-a", DriveWireCodec.DOMAIN_VOCAB_WORD, appliedSeq = 0L))
+        // The reader deletes the word before sync runs again.
+        VocabularyRepository(deviceB.liseurDb).deleteWord(nuitB.id)
+
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+        assertNull(deviceB.liseurDb.vocabularyDao().findWord("nuit", "fr"))
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        assertNull(deviceA.liseurDb.vocabularyDao().findWord("nuit", "fr"))
+    }
+
+    @Test
+    fun `a delete that never saw a third device's review keeps the word on a device that did`() = runTest {
+        val deviceC = createDevice("dev-c", File(tempDir, "c"), serverA)
+        try {
+            deviceA.connect(PERM_A, "a@example.com")
+            deviceB.connect(PERM_A, "a@example.com")
+            deviceC.connect(PERM_A, "a@example.com")
+            val now = 1_745_950_000_000L
+            VocabularyRepository(deviceA.liseurDb).collect(VocabularyLookup("etoile", "fr", null), "star", "en", now)!!
+            assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+            assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+            assertEquals(SyncOutcome.Success, deviceC.changeEngine.sync().outcome)
+
+            // C reviews and publishes; A receives the review; B deletes without ever seeing it.
+            val etoileC = deviceC.liseurDb.vocabularyDao().findWord("etoile", "fr")!!
+            VocabularyRepository(deviceC.liseurDb).review(etoileC, Recall.GOOD, newLimit = 0, reviewLimit = 0, now = now + 1_000L)!!
+            assertEquals(SyncOutcome.Success, deviceC.changeEngine.sync().outcome)
+            assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+            assertEquals(1, deviceA.liseurDb.vocabularyDao().findWord("etoile", "fr")!!.repetitions)
+
+            val etoileB = deviceB.liseurDb.vocabularyDao().findWord("etoile", "fr")!!
+            VocabularyRepository(deviceB.liseurDb).deleteWord(etoileB.id)
+            serverA.hideOtherDeviceDeltasFor("dev-b")
+            assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+            serverA.unhideAll()
+
+            // A saw C's review, which B's delete vector does not cover: add-wins keeps the word.
+            assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+            assertNotNull(deviceA.liseurDb.vocabularyDao().findWord("etoile", "fr"))
+        } finally {
+            deviceC.close()
+        }
+    }
+
+    @Test
+    fun `a delete whose observing review has no provenance row is treated as unobserved and keeps the word`() = runTest {
+        val deviceC = createDevice("dev-c", File(tempDir, "c-prov"), serverA)
+        try {
+            deviceA.connect(PERM_A, "a@example.com")
+            deviceB.connect(PERM_A, "a@example.com")
+            deviceC.connect(PERM_A, "a@example.com")
+            val now = 1_745_960_000_000L
+            VocabularyRepository(deviceA.liseurDb).collect(VocabularyLookup("soleil", "fr", null), "sun", "en", now)!!
+            assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+            assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+            assertEquals(SyncOutcome.Success, deviceC.changeEngine.sync().outcome)
+
+            val soleilC = deviceC.liseurDb.vocabularyDao().findWord("soleil", "fr")!!
+            VocabularyRepository(deviceC.liseurDb).review(soleilC, Recall.GOOD, newLimit = 0, reviewLimit = 0, now = now + 1_000L)!!
+            assertEquals(SyncOutcome.Success, deviceC.changeEngine.sync().outcome)
+            assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+
+            val soleilB = deviceB.liseurDb.vocabularyDao().findWord("soleil", "fr")!!
+            VocabularyRepository(deviceB.liseurDb).deleteWord(soleilB.id)
+            serverA.hideOtherDeviceDeltasFor("dev-b")
+            assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+            serverA.unhideAll()
+
+            // A lost the review's provenance row: the review must not count as observed by B.
+            for (state in deviceA.driveDb.recordStates().forDomain(PERM_A, DriveWireCodec.DOMAIN_VOCAB_REVIEW)) {
+                deviceA.driveDb.recordStates().delete(PERM_A, DriveWireCodec.DOMAIN_VOCAB_REVIEW, state.recordKey)
+            }
+            assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+            assertNotNull(deviceA.liseurDb.vocabularyDao().findWord("soleil", "fr"))
+        } finally {
+            deviceC.close()
+        }
+    }
+
+    @Test
+    fun `deleter pulling a concurrent review before publishing its delete does not claim to have observed it`() = runTest {
+        deviceA.connect(PERM_A, "a@example.com")
+        deviceB.connect(PERM_A, "a@example.com")
+        val repoA = VocabularyRepository(deviceA.liseurDb)
+        val now = 1_745_970_000_000L
+        val idA = repoA.collect(VocabularyLookup("fleur", "fr", null), "flower", "en", now)!!
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+
+        // A deletes offline; B reviews and publishes meanwhile.
+        repoA.deleteWord(idA)
+        val fleurB = deviceB.liseurDb.vocabularyDao().findWord("fleur", "fr")!!
+        VocabularyRepository(deviceB.liseurDb).review(fleurB, Recall.GOOD, newLimit = 0, reviewLimit = 0, now = now + 1_000L)!!
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+
+        // A reconnects: pulls B's review (staged, word absent) and then publishes its delete.
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+        assertNotNull("B's concurrent review must survive A's delete", deviceB.liseurDb.vocabularyDao().findWord("fleur", "fr"))
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        assertNotNull(deviceA.liseurDb.vocabularyDao().findWord("fleur", "fr"))
+    }
+
+    @Test
+    fun `deleter reconnecting first and publishing unrelated edit still preserves concurrent review via add-wins`() = runTest {
+        deviceA.connect(PERM_A, "a@example.com")
+        deviceB.connect(PERM_A, "a@example.com")
+        val repoA = VocabularyRepository(deviceA.liseurDb)
+        val repoB = VocabularyRepository(deviceB.liseurDb)
+        val now = 1_745_800_000_000L
+
+        val luneIdA = repoA.collect(VocabularyLookup("lune", "fr", null), "moon", "en", now)!!
+        val etoileIdA = repoA.collect(VocabularyLookup("etoile", "fr", null), "star", "en", now)!!
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+
+        // Offline concurrent actions: A deletes "lune" while B reviews "lune".
+        val luneOnB = deviceB.liseurDb.vocabularyDao().findWord("lune", "fr")!!
+        repoA.deleteWord(luneIdA)
+        repoB.review(luneOnB, Recall.GOOD, newLimit = 0, reviewLimit = 0, now = now + 1_000L)!!
+
+        // Both publish independently while isolated from each other.
+        serverA.hideOtherDeviceDeltasFor("dev-a")
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        serverA.hideOtherDeviceDeltasFor("dev-b")
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+        serverA.unhideAll()
+
+        // Deleter A reconnects FIRST, pulls/stages B's concurrent review, then publishes an
+        // unrelated edit so A's manifest appliedVector now acknowledges B's review batch!
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        repoA.edit(etoileIdA, definition = "bright star", notes = "unrelated edit", now = now + 2_000L)
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+
+        // Now reviewer B syncs and applies A's earlier delete: must use the delete's immutable
+        // author-time observed vector (0), NOT A's newer manifest vector (1), so add-wins fires!
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+        assertNotNull("Add-wins must keep lune on B despite A's newer manifest vector", deviceB.liseurDb.vocabularyDao().findWord("lune", "fr"))
+
+        // A syncs again -> resurrects "lune" with B's review attached, and both devices converge!
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        val luneResA = deviceA.liseurDb.vocabularyDao().findWord("lune", "fr")
+        val luneResB = deviceB.liseurDb.vocabularyDao().findWord("lune", "fr")
+        assertNotNull("Add-wins must resurrect lune on A", luneResA)
+        assertNotNull(luneResB)
+        assertEquals(1, luneResA!!.repetitions)
+        assertEquals(1, luneResB!!.repetitions)
+        assertEquals(luneResB.dueAt, luneResA.dueAt)
+        assertEquals(1, deviceA.liseurDb.vocabularyDao().reviews(luneResA.id).size)
+        assertEquals(1, deviceB.liseurDb.vocabularyDao().reviews(luneResB.id).size)
+        assertEquals("bright star", deviceB.liseurDb.vocabularyDao().findWord("etoile", "fr")!!.definition)
+
+        // Contrast: deleting "lune" on A AFTER A has observed B's review deletes silently on B.
+        repoA.deleteWord(luneResA.id)
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+        assertNull(deviceB.liseurDb.vocabularyDao().findWord("lune", "fr"))
+    }
+
+    @Test
+    fun `coalescing duplicate unowned and retired-account word rows collapses matching legacy null-syncId reviews into one event`() = runTest {
+        deviceA.connect(PERM_A, "a@example.com")
+        deviceB.connect(PERM_A, "a@example.com")
+
+        val addedAt = 1_745_900_000_000L
+        val reviewedAt = addedAt + 60_000L
+        val unownedWordId = deviceA.liseurDb.vocabularyDao().insertWord(
+            VocabularyWord(
+                word = "clarté",
+                normalized = "clarté",
+                language = "fr",
+                definition = "clarity",
+                translationLanguage = "en",
+                notes = "",
+                addedAt = addedAt,
+                dueAt = addedAt,
+                ownerAccount = "",
+            ),
+        )
+        val retiredWordId = deviceA.liseurDb.vocabularyDao().insertWord(
+            VocabularyWord(
+                word = "clarté",
+                normalized = "clarté",
+                language = "fr",
+                definition = "clarity",
+                translationLanguage = "en",
+                notes = "retired account note",
+                addedAt = addedAt,
+                dueAt = addedAt,
+                ownerAccount = "liseursync|https://old.example|acct-1",
+                notesUpdatedAt = addedAt + 10L,
+            ),
+        )
+        // Insert matching legacy null-syncId reviews on BOTH the unowned and retired-account rows.
+        val legacyReview = VocabularyReview(
+            wordId = unownedWordId,
+            rating = Recall.GOOD.name,
+            reviewedAt = reviewedAt,
+            intervalMinutes = 60,
+            dueAt = reviewedAt + 3_600_000L,
+            firstReview = true,
+            syncId = null,
+        )
+        deviceA.liseurDb.vocabularyDao().addReview(legacyReview)
+        deviceA.liseurDb.vocabularyDao().addReview(legacyReview.copy(wordId = retiredWordId))
+
+        // Sync A -> B triggers coalescing + deterministic legacy syncId assignment.
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+
+        val expectedDeterministicId = DriveVocabularySync.deterministicLegacyReviewId(
+            language = "fr",
+            normalized = "clarté",
+            reviewedAt = reviewedAt,
+            rating = Recall.GOOD.name,
+        )
+
+        val wordsOnA = deviceA.liseurDb.vocabularyDao().findAllWordsByKey("clarté", "fr")
+        assertEquals(1, wordsOnA.size)
+        val survivorA = wordsOnA.single()
+        val reviewsOnA = deviceA.liseurDb.vocabularyDao().reviews(survivorA.id)
+        assertEquals("Matching legacy reviews must collapse into one event", 1, reviewsOnA.size)
+        assertEquals(expectedDeterministicId, reviewsOnA.single().syncId)
+        assertTrue(reviewsOnA.single().firstReview)
+        assertEquals(1, survivorA.repetitions)
+        assertEquals(1, survivorA.streak)
+        assertEquals("retired account note", survivorA.notes)
+
+        val wordOnB = deviceB.liseurDb.vocabularyDao().findWord("clarté", "fr")!!
+        val reviewsOnB = deviceB.liseurDb.vocabularyDao().reviews(wordOnB.id)
+        assertEquals(1, reviewsOnB.size)
+        assertEquals(expectedDeterministicId, reviewsOnB.single().syncId)
+        assertEquals(1, wordOnB.repetitions)
+        assertEquals(1, wordOnB.streak)
+        assertEquals(survivorA.dueAt, wordOnB.dueAt)
+    }
+
+    // -- Harness helpers -----------------------------------------------------
+
+    private suspend fun seedBook(
+        device: Phase5Device,
+        fileName: String,
+        isbn: String,
+        title: String,
+        author: String,
+    ): Book {
+        val bytes = "EPUB-P5:$fileName:$isbn".toByteArray()
+        val file = File(device.booksDir, fileName).apply { writeBytes(bytes) }
+        val fp = BookFingerprints.of(ByteArrayInputStream(bytes))
+        val url = file.toURI().toString()
+        val book = Book(
+            url = url,
+            title = title,
+            author = author,
+            coverPath = null,
+            source = null,
+            addedAt = 1_000L,
+            lastOpenedAt = null,
+            localUri = url,
+            downloadState = DownloadState.DOWNLOADED,
+            sizeBytes = fp.size,
+            fileTitle = title,
+            fileAuthor = author,
+            fileMetadataChecked = true,
+        )
+        device.liseurDb.bookDao().upsert(book)
+        device.liseurDb.workIdentityDao().upsert(
+            BookFingerprintRow(url, fp.sha256, fp.partialMd5, fp.size, file.lastModified(), 1L),
+        )
+        device.liseurDb.bookMetadataDao().upsert(
+            BookMetadata.of(url, MetadataSource.FILE, MetadataSnapshot(identifiers = listOf(Identifier("isbn", isbn)))),
+        )
+        return book
+    }
+
+    private fun alwaysAuthClient(token: String): DriveAuthClient = object : DriveAuthClient {
+        override suspend fun authorize(accountEmail: String?, selectAccount: Boolean) =
+            DriveAuthResult.Authorized(token)
+        override suspend fun authorizeSilently(accountEmail: String?) =
+            DriveAuthResult.Authorized(token)
+        override fun parseAuthorizationResult(data: Intent?) =
+            DriveAuthResult.Authorized(token)
+        override suspend fun clearCachedToken(accessToken: String) = Unit
+    }
+
+    private fun createDevice(
+        deviceId: String,
+        dir: File,
+        server: Phase5FakeDriveServer,
+    ): Phase5Device {
+        val booksDir = File(dir, "books").apply { mkdirs() }
+        val coversDir = File(dir, "covers").apply { mkdirs() }
+        val liseurDb = Room.inMemoryDatabaseBuilder(context, LiseurDatabase::class.java)
+            .allowMainThreadQueries()
+            .build()
+        val driveDb = Room.inMemoryDatabaseBuilder(context, DriveSyncDatabase::class.java)
+            .allowMainThreadQueries()
+            .build()
+        val removal = BookRemoval(
+            bookDao = liseurDb.bookDao(),
+            sessionDao = liseurDb.readingSessionDao(),
+            peerStateDao = liseurDb.syncPeerStateDao(),
+            identityDao = liseurDb.workIdentityDao(),
+            progressDao = liseurDb.readingProgressDao(),
+            annotationDao = liseurDb.annotationDao(),
+            annotationSyncDao = liseurDb.annotationSyncDao(),
+            inTransaction = { work -> liseurDb.withTransaction { work() } },
+            metadataDao = liseurDb.bookMetadataDao(),
+            evaluationDao = liseurDb.bookEvaluationDao(),
+        )
+        val remoteAccount = RemoteAccountRepository(
+            dao = liseurDb.remoteServerDao(),
+            bookDao = liseurDb.bookDao(),
+            progressDao = liseurDb.readingProgressDao(),
+            seriesExtraDao = liseurDb.seriesExtraDao(),
+            bookRemoval = removal,
+            inTransaction = { work -> liseurDb.withTransaction { work() } },
+        )
+        val clockVal = AtomicLong(1_745_000_000_000L)
+        val clock: () -> Long = { clockVal.addAndGet(100L) }
+        val driveSync = DriveLibrarySync(
+            context = context,
+            database = liseurDb,
+            remoteAccount = remoteAccount,
+            bookRemoval = removal,
+            switchCoordinator = LibrarySyncSwitchCoordinator(),
+            deviceIdGenerator = { deviceId },
+            openStore = { driveDb },
+            authClient = alwaysAuthClient("token-$deviceId"),
+            driveApi = server.clientFor(deviceId),
+            coversDirProvider = { coversDir },
+            clock = clock,
+        )
+        return Phase5Device(deviceId, booksDir, liseurDb, driveDb, driveSync)
+    }
+
+    private class Phase5Device(
+        val deviceId: String,
+        val booksDir: File,
+        val liseurDb: LiseurDatabase,
+        val driveDb: DriveSyncDatabase,
+        val driveSync: DriveLibrarySync,
+    ) {
+        val changeEngine: DriveChangeEngine get() = driveSync.changeEngine
+
+        suspend fun connect(permissionId: String, email: String) {
+            driveSync.activateAccount(permissionId, email, now = 1_000L)
+        }
+
+        fun close() {
+            driveDb.close()
+            liseurDb.close()
+        }
+    }
+
+    private class Phase5FakeDriveServer(
+        private val permissionId: String = PERM_A,
+        private val email: String = "a@example.com",
+    ) : DriveRemoteApi {
+        private data class StoredFile(
+            var meta: DriveRemoteFile,
+            var bytes: ByteArray,
+            val space: String,
+        )
+
+        private val idGen = AtomicInteger(1)
+        private val files = linkedMapOf<String, StoredFile>()
+        private val changeLog = mutableListOf<DriveChange>()
+        private var hiddenForDevice: String? = null
+        private val hiddenSourceForViewer = mutableMapOf<String, MutableSet<String>>()
+
+        fun hideOtherDeviceDeltasFor(deviceId: String) {
+            hiddenForDevice = deviceId
+        }
+
+        fun hideSourceDeviceFrom(sourceDeviceId: String, viewerDeviceId: String) {
+            hiddenSourceForViewer.getOrPut(viewerDeviceId) { mutableSetOf() }.add(sourceDeviceId)
+        }
+
+        fun unhideAll() {
+            hiddenForDevice = null
+            hiddenSourceForViewer.clear()
+        }
+
+        fun clientFor(deviceId: String): DriveRemoteApi = object : DriveRemoteApi by this@Phase5FakeDriveServer {
+            override suspend fun listAppDataFiles(accessToken: String, query: String?, pageSize: Int): List<DriveRemoteFile> =
+                this@Phase5FakeDriveServer.listAppDataFiles(accessToken, query, pageSize).filter { file ->
+                    val fileOwner = file.appProperties["deviceId"]
+                    val hiddenBySource = fileOwner != null && fileOwner in hiddenSourceForViewer[deviceId].orEmpty()
+                    val hiddenByOffline = hiddenForDevice == deviceId &&
+                        fileOwner != deviceId &&
+                        file.appProperties["kind"] == DriveFile.KIND_DELTA
+                    !hiddenBySource && !hiddenByOffline
+                }
+
+            override suspend fun listChanges(accessToken: String, pageToken: String, pageSize: Int): DriveChangesPage {
+                if (hiddenForDevice == deviceId) {
+                    return DriveChangesPage(emptyList(), null, pageToken)
+                }
+                val page = this@Phase5FakeDriveServer.listChanges(accessToken, pageToken, pageSize)
+                val hiddenSources = hiddenSourceForViewer[deviceId].orEmpty()
+                if (hiddenSources.isEmpty()) return page
+                return page.copy(
+                    changes = page.changes.filter { change ->
+                        val owner = change.file?.appProperties?.get("deviceId")
+                        owner == null || owner !in hiddenSources
+                    },
+                )
+            }
+        }
+
+        override suspend fun getAbout(accessToken: String) =
+            DriveUserAbout(permissionId, email)
+
+        override suspend fun getStartPageToken(accessToken: String): String =
+            (changeLog.size + 1).toString()
+
+        override suspend fun listChanges(accessToken: String, pageToken: String, pageSize: Int): DriveChangesPage {
+            val fromIdx = (pageToken.toIntOrNull() ?: 1) - 1
+            val slice = if (fromIdx in 0..changeLog.size) changeLog.subList(fromIdx, changeLog.size).toList() else emptyList()
+            return DriveChangesPage(slice, null, (changeLog.size + 1).toString())
+        }
+
+        override suspend fun listAppDataFiles(accessToken: String, query: String?, pageSize: Int): List<DriveRemoteFile> {
+            val all = files.values.filter { it.space == "appDataFolder" && !it.meta.trashed }.map { it.meta }
+            if (query.isNullOrBlank()) return all
+            val batchMatch = Regex("key='batchId'\\s+and\\s+value='([^']+)'").find(query)?.groupValues?.get(1)
+            val devMatch = Regex("key='deviceId'\\s+and\\s+value='([^']+)'").find(query)?.groupValues?.get(1)
+            return all.filter { f ->
+                (batchMatch == null || f.appProperties["batchId"] == batchMatch) &&
+                    (devMatch == null || f.appProperties["deviceId"] == devMatch)
+            }
+        }
+
+        override suspend fun listLiseurFolders(accessToken: String): List<DriveRemoteFile> =
+            files.values.filter { it.space == "drive" && it.meta.mimeType == DriveRestClient.FOLDER_MIME_TYPE && !it.meta.trashed }
+                .map { it.meta }
+
+        override suspend fun listDriveEpubFiles(accessToken: String): List<DriveRemoteFile> =
+            files.values.filter { it.space == "drive" && it.meta.appProperties["liseurKind"] == DriveFile.KIND_EPUB && !it.meta.trashed }
+                .map { it.meta }
+
+        override suspend fun ensureLiseurFolder(accessToken: String): LiseurFolderResolution {
+            val existing = listLiseurFolders(accessToken)
+            if (existing.isNotEmpty()) return LiseurFolderResolution(existing.first(), existing)
+            val id = "folder-${idGen.getAndIncrement()}"
+            val meta = DriveRemoteFile(id, DriveRestClient.LISEUR_FOLDER_NAME, DriveRestClient.FOLDER_MIME_TYPE, createdTime = "2026-04-01T00:00:00Z")
+            files[id] = StoredFile(meta, ByteArray(0), "drive")
+            changeLog.add(DriveChange(id, false, meta))
+            return LiseurFolderResolution(meta, listOf(meta))
+        }
+
+        override suspend fun findAppDataFileByBatchId(accessToken: String, batchId: String): DriveRemoteFile? =
+            files.values.firstOrNull { it.space == "appDataFolder" && it.meta.appProperties["batchId"] == batchId && !it.meta.trashed }?.meta
+
+        override suspend fun createAppDataFile(
+            accessToken: String,
+            name: String,
+            mimeType: String,
+            content: ByteArray,
+            appProperties: Map<String, String>,
+        ): DriveRemoteFile {
+            val id = "appdata-${idGen.getAndIncrement()}"
+            val meta = DriveRemoteFile(id, name, mimeType, size = content.size.toLong(), appProperties = appProperties)
+            files[id] = StoredFile(meta, content.copyOf(), "appDataFolder")
+            changeLog.add(DriveChange(id, false, meta))
+            return meta
+        }
+
+        override suspend fun updateFileMedia(
+            accessToken: String,
+            fileId: String,
+            mimeType: String,
+            content: ByteArray,
+            appProperties: Map<String, String>?,
+        ): DriveRemoteFile {
+            val stored = files[fileId] ?: throw DriveNotFoundException("Not found: $fileId", fileId)
+            val updated = stored.meta.copy(
+                size = content.size.toLong(),
+                appProperties = appProperties ?: stored.meta.appProperties,
+            )
+            stored.meta = updated
+            stored.bytes = content.copyOf()
+            changeLog.add(DriveChange(fileId, false, updated))
+            return updated
+        }
+
+        override suspend fun uploadAppDataJsonBatch(
+            accessToken: String,
+            name: String,
+            jsonPayload: ByteArray,
+            appProperties: Map<String, String>,
+        ): DriveRemoteFile {
+            val batchId = appProperties["batchId"]
+            if (batchId != null) {
+                findAppDataFileByBatchId(accessToken, batchId)?.let { return it }
+            }
+            return createAppDataFile(accessToken, name, "application/json", jsonPayload, appProperties)
+        }
+
+        override suspend fun downloadMedia(accessToken: String, fileId: String): ByteArray =
+            files[fileId]?.bytes?.copyOf() ?: throw DriveNotFoundException("Not found: $fileId", fileId)
+
+        override suspend fun downloadResumable(
+            accessToken: String,
+            fileId: String,
+            destination: OutputStream,
+            startOffset: Long,
+            onRestartFromZero: () -> Unit,
+            onProgress: (Long) -> Unit,
+        ): DriveDownloadResult {
+            val bytes = downloadMedia(accessToken, fileId)
+            val slice = bytes.copyOfRange(startOffset.toInt(), bytes.size)
+            destination.write(slice)
+            onProgress(bytes.size.toLong())
+            return DriveDownloadResult(slice.size.toLong(), bytes.size.toLong(), false)
+        }
+
+        override suspend fun trashFile(accessToken: String, fileId: String): DriveRemoteFile {
+            val stored = files[fileId] ?: throw DriveNotFoundException("Not found: $fileId", fileId)
+            stored.meta = stored.meta.copy(trashed = true)
+            changeLog.add(DriveChange(fileId, false, stored.meta))
+            return stored.meta
+        }
+
+        override suspend fun deleteFile(accessToken: String, fileId: String) {
+            files.remove(fileId)
+            changeLog.add(DriveChange(fileId, true, null))
+        }
+
+        override suspend fun initiateResumableUpload(
+            accessToken: String,
+            name: String,
+            mimeType: String,
+            totalBytes: Long,
+            parents: List<String>,
+            appProperties: Map<String, String>,
+        ): String = "https://upload.example/${idGen.getAndIncrement()}"
+
+        override suspend fun queryResumableUploadOffset(
+            accessToken: String,
+            sessionUri: String,
+            totalBytes: Long,
+        ): ResumableUploadStatus = ResumableUploadStatus.InProgress(0L)
+
+        override suspend fun uploadResumableChunk(
+            accessToken: String,
+            sessionUri: String,
+            chunk: ByteArray,
+            offset: Long,
+            totalBytes: Long,
+            mimeType: String,
+        ): ResumableUploadStatus = throw UnsupportedOperationException()
+
+        override suspend fun uploadResumableFile(
+            accessToken: String,
+            name: String,
+            mimeType: String,
+            totalBytes: Long,
+            parents: List<String>,
+            appProperties: Map<String, String>,
+            existingSessionUri: String?,
+            chunkSizeBytes: Int,
+            openStream: () -> InputStream,
+            onSessionUri: suspend (String) -> Unit,
+            onProgress: suspend (Long, String) -> Unit,
+        ): DriveRemoteFile {
+            val bytes = openStream().use { it.readBytes() }
+            val id = "epub-${idGen.getAndIncrement()}"
+            val meta = DriveRemoteFile(id, name, mimeType, parents = parents, appProperties = appProperties, size = bytes.size.toLong())
+            files[id] = StoredFile(meta, bytes, "drive")
+            changeLog.add(DriveChange(id, false, meta))
+            return meta
+        }
+    }
+
+    private companion object {
+        const val PERM_A = "perm-account-a"
+        const val PERM_B = "perm-account-b"
+    }
+}
