@@ -33,6 +33,37 @@ class MemorableLinesTest {
     }
 
     @Test
+    fun `the publisher's small print is never quoted, even its plain sentences`() {
+        val found = best(
+            "en",
+            "This eBook is for the use of anyone anywhere in the United States and most other parts of the world. " +
+                "If you are not located in the United States, you will have to check the laws of the country " +
+                "where you are located before using this eBook.",
+            "We never know how much we love a place until we have to leave it behind.",
+        )
+        assertEquals(listOf("We never know how much we love a place until we have to leave it behind."), found)
+    }
+
+    @Test
+    fun `ordinary prose about notebooks and Facebook survives the small print check`() {
+        val notebook = "We never know how much we love a place until we write about it in a notebook."
+        val facebook = "We never know how much we love a place until we write about it on Facebook."
+        assertEquals(listOf(notebook, facebook), best("en", notebook, facebook))
+    }
+
+    @Test
+    fun `french and italian notices with a typographic apostrophe are small print too`() {
+        val found = best(
+            "en",
+            "Tous droits réservés. Le droit d’auteur de cette traduction appartient à son auteur. " +
+                "Nous avons mis beaucoup de soin dans ce travail et nous espérons qu'il vous plaira.",
+            "Tutti i diritti riservati. Il diritto d’autore di questa edizione appartiene al curatore. " +
+                "Abbiamo messo molta cura in questo lavoro e speriamo che vi piaccia leggere il resto.",
+        )
+        assertEquals(emptyList<String>(), found)
+    }
+
+    @Test
     fun `chinese lines are measured in characters and need no capital`() {
         assertTrue(MemorableLines.acceptable("人生最大的幸福，莫过于在平凡的日子里找到属于自己的光。"))
         assertFalse(MemorableLines.acceptable("他走了。"))

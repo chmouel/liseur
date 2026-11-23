@@ -36,7 +36,7 @@ data class MemorableLine(
  */
 object MemorableLines {
     /** Bump when the scoring changes, so books scanned before are scanned again. */
-    const val VERSION = 3
+    const val VERSION = 4
 
     const val KEEP = 30
 
@@ -60,6 +60,7 @@ object MemorableLines {
         val lines = ArrayList<MemorableLine>()
         split.forEachIndexed { index, sentences ->
             val paragraph = paragraphs[index]
+            if (BOILERPLATE.containsMatchIn(paragraph.text)) return@forEachIndexed
             sentences.forEachIndexed { at, range ->
                 val next = sentences.getOrNull(at + 1)
                 val connected = next != null && next.last - range.first + 1 <= SWEET_SPOT.last &&
@@ -275,6 +276,24 @@ object MemorableLines {
     private val CHINESE_TURN = Regex("不但.+而且|不是.+而是|与其.+不如|越.+[，,].*越|[，,；;](?:却|但|反而)|；.+；")
     private val MIDDLE_TURN = Regex("\\S[;:]\\s+\\S")
     private val DIALOGUE = Regex("^\\s*[-—–\"“«„‘'「『]")
+    /**
+     * The publisher's small print: Project Gutenberg's header and licence,
+     * copyright pages. A paragraph that says any of this is skipped whole,
+     * since its other sentences ("If you are not located in the United
+     * States…") read as prose but are the same notice.
+     *
+     * "eBook" needs its word boundaries, or "notebook" and "Facebook"
+     * read as notices. The apostrophes accept the typographic form a
+     * printed notice usually carries.
+     */
+    private val BOILERPLATE = Regex(
+        "gutenberg|\\be-?books?\\b|copyright|trademark|licen[cs]e|all rights reserved|public domain" +
+            "|droits? d['’]auteur|tous droits|urheberrecht|derechos de autor" +
+            "|diritt[oi] d['’]autore|tutti i diritti riservati|direitos autorais" +
+            "|авторск|版权",
+        RegexOption.IGNORE_CASE,
+    )
+
     private val JUNK = Regex(
         "https?:|www\\.|@|©|ISBN|\\d{4,}|[|•_*#<>{}=]|\\.{4,}" +
             "|^\\s*(chapter|chapitre|kapitel|capítulo|capitolo|глава|kapitola)\\b",
