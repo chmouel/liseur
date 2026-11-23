@@ -67,6 +67,9 @@ internal class DriveLibrarySync(
     driveApi: DriveRemoteApi? = null,
     private val coversDirProvider: () -> File = { File(context.applicationContext.filesDir, "covers") },
     private val coverEncoder: DriveWebpEncoder = AndroidBitmapWebpEncoder,
+    private val compactionDeltaThreshold: Int = DriveCompactor.DEFAULT_DELTA_COUNT_THRESHOLD,
+    private val compactionBytesThreshold: Long = DriveCompactor.DEFAULT_DELTA_BYTES_THRESHOLD,
+    private val compactionMaxPartBytes: Int = DriveWireCodec.MAX_SNAPSHOT_PART_BYTES,
     private val clock: () -> Long = System::currentTimeMillis,
 ) : LibrarySyncBackend {
 
@@ -230,6 +233,9 @@ internal class DriveLibrarySync(
             seriesSync = seriesSync,
             vocabularySync = vocabularySync,
             sessionSync = sessionSync,
+            compactionDeltaThreshold = compactionDeltaThreshold,
+            compactionBytesThreshold = compactionBytesThreshold,
+            compactionMaxPartBytes = compactionMaxPartBytes,
             clock = clock,
         )
     }

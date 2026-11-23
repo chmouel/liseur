@@ -184,6 +184,18 @@ interface DriveOutboxDao {
     @Query("SELECT * FROM drive_outbox WHERE permission_id = :permissionId ORDER BY seq ASC")
     suspend fun forAccount(permissionId: String): List<DriveOutbox>
 
+    @Query(
+        "SELECT * FROM drive_outbox WHERE permission_id = :permissionId AND state = 'ACKED' " +
+            "AND seq <= :throughSeq ORDER BY seq ASC",
+    )
+    suspend fun ackedUpTo(permissionId: String, throughSeq: Long): List<DriveOutbox>
+
+    @Query(
+        "SELECT * FROM drive_outbox WHERE permission_id = :permissionId AND state = 'ACKED' " +
+            "AND seq > :afterSeq ORDER BY seq ASC",
+    )
+    suspend fun ackedAfter(permissionId: String, afterSeq: Long): List<DriveOutbox>
+
     @Upsert
     suspend fun upsert(entry: DriveOutbox)
 
@@ -192,6 +204,9 @@ interface DriveOutboxDao {
 
     @Query("UPDATE drive_outbox SET state = 'ACKED', file_id = :fileId WHERE permission_id = :permissionId AND seq = :seq")
     suspend fun markAcked(permissionId: String, seq: Long, fileId: String)
+
+    @Query("DELETE FROM drive_outbox WHERE permission_id = :permissionId AND state = 'ACKED' AND seq = :seq")
+    suspend fun deleteAckedSeq(permissionId: String, seq: Long)
 }
 
 @Dao

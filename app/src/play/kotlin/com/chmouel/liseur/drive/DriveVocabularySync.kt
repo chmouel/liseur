@@ -473,7 +473,14 @@ internal class DriveVocabularySync(
                         existing?.ancestorsList().orEmpty(),
                         exclude = record.fp,
                     )
-                    val bodyStr = record.body?.let { DriveCanonicalJson.encode(it) }
+                    val bodyStr = when {
+                        record.body != null -> DriveCanonicalJson.encode(record.body)
+                        record.d == DriveWireCodec.DOMAIN_VOCAB_WORD &&
+                            record.op == DriveRecordState.OP_DEL &&
+                            record.observed != null ->
+                            DriveCanonicalJson.encode(mapOf("observed" to record.observed))
+                        else -> null
+                    }
                     recordStates.upsert(
                         DriveRecordState(
                             permissionId = permissionId,
@@ -498,6 +505,14 @@ internal class DriveVocabularySync(
                             bodyJson = bodyStr,
                         ),
                     )
+                    if (record.d == DriveWireCodec.DOMAIN_VOCAB_WORD && record.op == DriveRecordState.OP_DEL) {
+                        val occPrefix = "${record.k}/"
+                        for (occState in recordStates.forDomain(permissionId, DriveWireCodec.DOMAIN_VOCAB_OCCURRENCE)) {
+                            if (occState.recordKey.startsWith(occPrefix)) {
+                                recordStates.delete(permissionId, DriveWireCodec.DOMAIN_VOCAB_OCCURRENCE, occState.recordKey)
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -666,6 +681,14 @@ internal class DriveVocabularySync(
                         listOfNotNull(prev?.versionFp) + prev?.ancestorsList().orEmpty(),
                         exclude = resultFp,
                     )
+                    // Do not overwrite local authorship when this device already authored and published
+                    // the exact converged content (otherwise both converged devices drop it on compaction).
+                    val preserveLocalOrigin = converged &&
+                        prev != null &&
+                        prev.originDeviceId == null &&
+                        prev.versionOp == DriveRecordState.OP_PUT &&
+                        prev.contentFp == resultContentFp &&
+                        prev.publishedFp == prev.versionFp
                     recordStates.upsert(
                         DriveRecordState(
                             permissionId = permissionId,
@@ -675,8 +698,15 @@ internal class DriveVocabularySync(
                             versionOp = DriveRecordState.OP_PUT,
                             publishedFp = if (converged) resultFp else null,
                             contentFp = resultContentFp,
-                            originDeviceId = if (converged) remoteDeviceId else null,
-                            originSeq = if (converged) remoteSeq else null,
+                            originDeviceId = when {
+                                !converged || preserveLocalOrigin -> null
+                                else -> remoteDeviceId
+                            },
+                            originSeq = when {
+                                !converged -> null
+                                preserveLocalOrigin -> prev?.originSeq
+                                else -> remoteSeq
+                            },
                             ancestorsJson = DriveCanonicalJson.encode(mergedAnc),
                             resRefsJson = "[]",
                             lastHlc = maxOf(prev?.lastHlc.orEmpty(), record.hlc),
@@ -725,7 +755,7 @@ internal class DriveVocabularySync(
                                 existingState.lastHlc to existingState.versionFp,
                                 { it.first },
                                 { it.second },
-                            ) >= 0
+                            ) > 0
                         val chosenFp = if (adoptIncoming) record.fp else existingState!!.versionFp
                         val chosenHlc = maxOf(existingState?.lastHlc.orEmpty(), record.hlc)
                         val mergedAnc = mergeAncestors(
@@ -747,7 +777,7 @@ internal class DriveVocabularySync(
                                 ancestorsJson = DriveCanonicalJson.encode(mergedAnc),
                                 resRefsJson = "[]",
                                 lastHlc = chosenHlc,
-                                bodyJson = null,
+                                bodyJson = if (adoptIncoming) null else existingState?.bodyJson,
                             ),
                         )
                     }
@@ -1064,6 +1094,13 @@ internal class DriveVocabularySync(
                 listOfNotNull(prev?.versionFp) + prev?.ancestorsList().orEmpty(),
                 exclude = resultFp,
             )
+            // Do not overwrite local authorship on content agreement with a locally authored occurrence.
+            val preserveLocalOrigin = converged &&
+                prev != null &&
+                prev.originDeviceId == null &&
+                prev.versionOp == DriveRecordState.OP_PUT &&
+                prev.contentFp == mergedContentFp &&
+                prev.publishedFp == prev.versionFp
             recordStates.upsert(
                 DriveRecordState(
                     permissionId = permissionId,
@@ -1073,8 +1110,15 @@ internal class DriveVocabularySync(
                     versionOp = DriveRecordState.OP_PUT,
                     publishedFp = if (converged) resultFp else null,
                     contentFp = mergedContentFp,
-                    originDeviceId = if (converged) remoteDeviceId else null,
-                    originSeq = if (converged) remoteSeq else null,
+                    originDeviceId = when {
+                        !converged || preserveLocalOrigin -> null
+                        else -> remoteDeviceId
+                    },
+                    originSeq = when {
+                        !converged -> null
+                        preserveLocalOrigin -> prev?.originSeq
+                        else -> remoteSeq
+                    },
                     ancestorsJson = DriveCanonicalJson.encode(mergedAnc),
                     resRefsJson = "[]",
                     lastHlc = maxOf(prev?.lastHlc.orEmpty(), record.hlc),
@@ -1132,17 +1176,21 @@ internal class DriveVocabularySync(
                 // Transaction 2: record final review tombstone in drive_sync.db.
                 store.withTransaction {
                     val prev = recordStates.get(permissionId, DriveWireCodec.DOMAIN_VOCAB_REVIEW, syncId)
+                    val preserveLocalOrigin = prev != null &&
+                        prev.originDeviceId == null &&
+                        prev.versionOp == DriveRecordState.OP_DEL &&
+                        prev.publishedFp == prev.versionFp
                     recordStates.upsert(
                         DriveRecordState(
                             permissionId = permissionId,
                             domain = DriveWireCodec.DOMAIN_VOCAB_REVIEW,
                             recordKey = syncId,
-                            versionFp = record.fp,
+                            versionFp = if (preserveLocalOrigin) prev!!.versionFp else record.fp,
                             versionOp = DriveRecordState.OP_DEL,
-                            publishedFp = record.fp,
+                            publishedFp = if (preserveLocalOrigin) prev!!.versionFp else record.fp,
                             contentFp = null,
-                            originDeviceId = remoteDeviceId,
-                            originSeq = remoteSeq,
+                            originDeviceId = if (preserveLocalOrigin) null else remoteDeviceId,
+                            originSeq = if (preserveLocalOrigin) prev?.originSeq else remoteSeq,
                             ancestorsJson = "[]",
                             resRefsJson = "[]",
                             lastHlc = maxOf(prev?.lastHlc.orEmpty(), record.hlc),
@@ -1246,6 +1294,11 @@ internal class DriveVocabularySync(
                 store.withTransaction {
                     val prev = recordStates.get(permissionId, DriveWireCodec.DOMAIN_VOCAB_REVIEW, syncId)
                     if (prev?.versionOp == DriveRecordState.OP_DEL) return@withTransaction
+                    val preserveLocalOrigin = prev != null &&
+                        prev.originDeviceId == null &&
+                        prev.versionOp == DriveRecordState.OP_PUT &&
+                        prev.versionFp == record.fp &&
+                        prev.publishedFp == prev.versionFp
                     recordStates.upsert(
                         DriveRecordState(
                             permissionId = permissionId,
@@ -1255,8 +1308,8 @@ internal class DriveVocabularySync(
                             versionOp = DriveRecordState.OP_PUT,
                             publishedFp = record.fp,
                             contentFp = record.fp,
-                            originDeviceId = remoteDeviceId,
-                            originSeq = if (provenanceKnown) remoteSeq else null,
+                            originDeviceId = if (preserveLocalOrigin) null else remoteDeviceId,
+                            originSeq = if (preserveLocalOrigin) prev?.originSeq else if (provenanceKnown) remoteSeq else null,
                             ancestorsJson = "[]",
                             resRefsJson = "[]",
                             lastHlc = maxOf(prev?.lastHlc.orEmpty(), record.hlc),
@@ -1490,7 +1543,7 @@ internal class DriveVocabularySync(
                             ancestorsJson = existing?.ancestorsJson ?: "[]",
                             resRefsJson = "[]",
                             lastHlc = existing?.lastHlc.orEmpty(),
-                            bodyJson = null,
+                            bodyJson = existing?.takeIf { it.versionOp == DriveRecordState.OP_DEL }?.bodyJson,
                         ),
                     )
                 }
