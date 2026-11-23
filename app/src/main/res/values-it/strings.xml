@@ -2164,6 +2164,7 @@
     <string name="home_tile_to_read">Da leggere</string>
     <string name="home_tile_series">Serie</string>
     <string name="home_tile_finished">Finiti</string>
+    <string name="home_tile_all">Tutti i libri</string>
     <string name="home_your_shelves">Scaffali</string>
     <string name="home_recently_added">Nuovi arrivi</string>
     <string name="home_quote_title">Dalle tue letture</string>

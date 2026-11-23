@@ -173,6 +173,24 @@ class LibraryLayoutTest {
     }
 
     @Test
+    fun `home desk shows all books in the series tile's place when there are no series`() {
+        val books = listOf(book("one", openedAt = 10), book("two"), book("boxed", archived = true))
+
+        val bare = desk(books).tiles
+        assertEquals(
+            listOf(HomeShelfKind.READING, HomeShelfKind.TO_READ, HomeShelfKind.ALL, HomeShelfKind.FINISHED),
+            bare.map { it.kind },
+        )
+        assertEquals(2, bare[2].count)
+
+        val withSeries = desk(books, series = listOf(series("s", books[0], books[1]))).tiles
+        assertEquals(
+            listOf(HomeShelfKind.READING, HomeShelfKind.TO_READ, HomeShelfKind.SERIES, HomeShelfKind.FINISHED),
+            withSeries.map { it.kind },
+        )
+    }
+
+    @Test
     fun `recently added leaves out the hero and keeps only unread books`() {
         val hero = book("hero", openedAt = 50)
         val reading = book("reading", openedAt = 10)

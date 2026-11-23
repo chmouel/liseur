@@ -2322,6 +2322,7 @@
     <string name="home_tile_to_read">Прочитать</string>
     <string name="home_tile_series">Серии</string>
     <string name="home_tile_finished">Прочитано</string>
+    <string name="home_tile_all">Все книги</string>
     <string name="home_your_shelves">Полки</string>
     <string name="home_recently_added">Новое на полке</string>
     <string name="home_quote_title">Из прочитанного</string>

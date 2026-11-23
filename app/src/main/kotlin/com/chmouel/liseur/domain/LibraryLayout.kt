@@ -329,8 +329,11 @@ fun planksOf(
     return rows
 }
 
-/** The four tiles under "Your shelves" on the Home tab. */
-enum class HomeShelfKind { READING, TO_READ, SERIES, FINISHED }
+/**
+ * The four tiles under "Your shelves" on the Home tab. [ALL] stands in for
+ * [SERIES] when the shelf holds no series, so the grid stays two by two.
+ */
+enum class HomeShelfKind { READING, TO_READ, SERIES, FINISHED, ALL }
 
 /**
  * One tile under "Your shelves": how many books it holds, up to three
@@ -407,6 +410,23 @@ fun homeDeskOf(
         .filter { it.nextUp != null && (it.inProgressCount > 0 || it.finishedCount > 0) }
         .sortedByDescending { set -> set.volumes.maxOf { it.book.lastOpenedAt ?: 0L } }
 
+    // Third slot: the shelf's series, or every book when there are none.
+    val shelfOrAll = if (series.isNotEmpty()) {
+        HomeShelfTile(
+            kind = HomeShelfKind.SERIES,
+            count = series.size,
+            covers = series.take(3).map { it.cover },
+            note = underway.size,
+        )
+    } else {
+        HomeShelfTile(
+            kind = HomeShelfKind.ALL,
+            count = shelf.size,
+            covers = shelf.sortedByDescending { it.addedAt }.take(3),
+            note = shelf.count { it.addedAt >= now - ADDED_LATELY_MS },
+        )
+    }
+
     val tiles = listOf(
         HomeShelfTile(
             kind = HomeShelfKind.READING,
@@ -420,12 +440,7 @@ fun homeDeskOf(
             covers = unread.take(3),
             note = unread.count { it.addedAt >= now - ADDED_LATELY_MS },
         ),
-        HomeShelfTile(
-            kind = HomeShelfKind.SERIES,
-            count = series.size,
-            covers = series.take(3).map { it.cover },
-            note = underway.size,
-        ),
+        shelfOrAll,
         HomeShelfTile(
             kind = HomeShelfKind.FINISHED,
             count = finished.size,

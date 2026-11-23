@@ -2086,6 +2086,7 @@
     <string name="home_tile_to_read">待读</string>
     <string name="home_tile_series">系列</string>
     <string name="home_tile_finished">已读完</string>
+    <string name="home_tile_all">所有图书</string>
     <string name="home_your_shelves">书架</string>
     <string name="home_recently_added">新上架</string>
     <string name="home_quote_title">摘自你的阅读</string>
