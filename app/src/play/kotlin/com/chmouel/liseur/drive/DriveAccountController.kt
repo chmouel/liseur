@@ -533,19 +533,22 @@ internal class DriveAccountController(
         if (!driveSync.hasStore()) return
         val active = driveSync.store.accounts().active() ?: return
         driveSync.store.accounts().setMeteredTransfers(active.permissionId, allowMetered)
-        if (driveSync.store.uploads().pendingForAccount(active.permissionId).isNotEmpty()) {
+        if (driveSync.store.uploads().workCount(active.permissionId) > 0) {
             driveSync.triggerEpubUploads(allowMetered)
         }
     }
 
-    /** Queues user-selected local EPUBs for upload to `Liseur/` and schedules the bulk upload worker. */
+    /** Reconciles the upload queue with the picker selection and schedules the bulk upload worker. */
     suspend fun confirmUploadSelection(selectedBookUrls: Set<String>) {
         if (!driveSync.hasStore()) return
         val active = driveSync.store.accounts().active() ?: return
         val queued = driveSync.epubTransfers.queueSelectedBooks(active.permissionId, selectedBookUrls)
         ephemeral.value = ephemeral.value.copy(uploadPickerVisible = false)
-        if (queued > 0) {
+        if (queued > 0 || driveSync.store.uploads().workCount(active.permissionId) > 0) {
+            // Also covers cleanup of uploads just cancelled: the replaced worker resolves their sessions.
             driveSync.triggerEpubUploads(active.meteredTransfers)
+        } else {
+            driveSync.cancelEpubUploads()
         }
     }
 
@@ -892,29 +895,27 @@ internal class DriveAccountController(
     suspend fun handleAuthExpired(failedAccessToken: String): SilentTokenResult =
         acquireSilentAccessToken(staleTokenToClear = failedAccessToken)
 
-    /** Reads exact local library counts from `liseur.db` for the confirmation dialog. */
+    /**
+     * Counts what the initial Drive export will send, with the export's own rules:
+     * library books only (browse-only copies stay out), minus the untouched server
+     * previews a switch removes; notes and closed reading sessions recorded on this
+     * device for those books (imported and Drive-pulled sessions are never sent).
+     */
     internal suspend fun readLocalLibrarySummary(): LocalLibrarySummary {
         val bookDao = database.bookDao()
-        // Untouched previews of a connected server are deleted on activation, so they are not
-        // books Drive will carry.
-        val discarded = if (remoteAccount.current() != null) {
-            val preserved = bookDao.remoteNotDownloadedPreservedStubs().mapTo(HashSet()) { it.url }
-            bookDao.remoteNotDownloadedUrls().filterNotTo(HashSet()) { it in preserved }
+        val removedOnSwitch = if (remoteAccount.current() != null) {
+            bookDao.remoteNotDownloadedUrls().toSet() -
+                bookDao.remoteNotDownloadedPreservedStubs().mapTo(HashSet()) { it.url }
         } else {
             emptySet()
         }
-        val books = bookDao.allOnce().count {
-            (it.browseServerId == null || it.localUri != null) && it.url !in discarded
-        }
-        val notes = database.annotationDao().all().size
-        // Only sittings Drive will carry: an imported one stays local, and one that
-        // cannot say where in the book it happened is never uploaded
-        // (`ReadingSessionDao.awaitingUpload`).
-        val sessions = database.readingSessionDao().closedForBackup().count {
-            it.importedAt == null && it.startProgression != null && it.endProgression != null
-        }
+        val eligibleUrls = bookDao.allOnce()
+            .filter { it.browseServerId == null && it.url !in removedOnSwitch }
+            .mapTo(HashSet()) { it.url }
+        val notes = database.annotationDao().all().count { it.bookId in eligibleUrls }
+        val sessions = database.readingSessionDao().localSessionsForSync().count { it.bookUrl in eligibleUrls }
         return LocalLibrarySummary(
-            booksCount = books,
+            booksCount = eligibleUrls.size,
             notesCount = notes,
             readingSessionsCount = sessions,
             // Only unowned words: other accounts' vocabulary is not this library's to disclose.

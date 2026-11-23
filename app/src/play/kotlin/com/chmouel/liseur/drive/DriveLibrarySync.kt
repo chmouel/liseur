@@ -59,6 +59,7 @@ internal class DriveLibrarySync(
     private val stopWorkers: () -> Unit = {},
     private val onResumeActive: () -> Unit = {},
     private val scheduleEpubUploadsWork: (allowMetered: Boolean) -> Unit = {},
+    private val cancelEpubUploadsWork: () -> Unit = {},
     private val enqueueEpubDownloadWork: suspend (bookUrl: String, allowMetered: Boolean) -> UUID? = { _, _ -> null },
     private val cancelEpubDownloadWork: suspend (bookUrl: String) -> Unit = {},
     private val deviceIdGenerator: () -> String = { UUID.randomUUID().toString().lowercase(Locale.ROOT) },
@@ -66,6 +67,7 @@ internal class DriveLibrarySync(
     authClient: DriveAuthClient? = null,
     driveApi: DriveRemoteApi? = null,
     private val coversDirProvider: () -> File = { File(context.applicationContext.filesDir, "covers") },
+    private val stagingDirProvider: () -> File = { DriveEpubTransferManager.defaultStagingDir(context.applicationContext) },
     private val coverEncoder: DriveWebpEncoder = AndroidBitmapWebpEncoder,
     private val compactionDeltaThreshold: Int = DriveCompactor.DEFAULT_DELTA_COUNT_THRESHOLD,
     private val compactionBytesThreshold: Long = DriveCompactor.DEFAULT_DELTA_BYTES_THRESHOLD,
@@ -134,6 +136,9 @@ internal class DriveLibrarySync(
             store = store,
             workIdentity = workIdentity,
             bookRemoval = bookRemoval,
+            onUploadDiscarded = { permissionId, sha ->
+                DriveEpubTransferManager.discardStaged(stagingDirProvider(), permissionId, sha)
+            },
             clock = clock,
         )
     }
@@ -257,6 +262,7 @@ internal class DriveLibrarySync(
                 changeEngine.sync()
             },
             onNeedsReconnect = { permissionId, reason -> markNeedsReconnectIfActive(permissionId, reason) },
+            stagingDirProvider = stagingDirProvider,
             clock = clock,
         )
     }
@@ -302,6 +308,7 @@ internal class DriveLibrarySync(
         if (!hasStore()) return
         scope.launch {
             runCatching {
+<<<<<<< HEAD
                 if (!recoverAbandonedSwitches()) {
                     val active = store.accounts().active() ?: return@runCatching
                     onResumeActive()
@@ -309,6 +316,10 @@ internal class DriveLibrarySync(
                         scheduleEpubUploadsWork(active.meteredTransfers)
                     }
                 }
+=======
+                if (store.accounts().active() == null) return@runCatching
+                resumeActiveWork()
+>>>>>>> a30e70bd2 (feat: Add Google Drive sync support for Google Play builds)
             }
         }
     }
@@ -340,6 +351,23 @@ internal class DriveLibrarySync(
     override fun ownsBook(book: Book): Boolean =
         book.url.startsWith(DriveWorkIdentity.DRIVE_BOOK_URL_PREFIX) ||
             DriveCatalogSync.fileIdFromHref(book.downloadHref) != null
+
+    override suspend fun canDownloadAgain(book: Book): Boolean {
+        if (!ownsBook(book) || !hasStore()) return false
+        val active = store.accounts().active() ?: return false
+        val installedSha = if (book.localUri != null) {
+            (fingerprintStore.of(book)?.sha256 ?: database.workIdentityDao().fingerprint(book.url)?.sha256)
+                ?.lowercase(java.util.Locale.ROOT)
+                ?: return false
+        } else {
+            null
+        }
+        return catalogSync.resolveDownloadSource(
+            permissionId = active.permissionId,
+            book = book,
+            requiredSha256 = installedSha,
+        ) != null
+    }
 
     override suspend fun enqueueDownload(book: Book): UUID? {
         if (!ownsBook(book)) return null
@@ -472,6 +500,10 @@ internal class DriveLibrarySync(
         scheduleEpubUploadsWork(allowMetered)
     }
 
+    internal fun cancelEpubUploads() {
+        cancelEpubUploadsWork()
+    }
+
     override val positionPeer: PeerPositionSync
         get() = positionSync
 
@@ -569,6 +601,7 @@ internal class DriveLibrarySync(
             }
             applied && state == DriveAccount.STATE_ACTIVE
         }
+<<<<<<< HEAD
         if (restoredActive) onResumeActive()
         return restoredActive
     }
@@ -588,10 +621,28 @@ internal class DriveLibrarySync(
             store.accounts().pauseAllActive()
             store.accounts().markPendingSwitch(previous.permissionId, previous.state)
         }
+=======
+        if (restoredActive) resumeActiveWork()
+>>>>>>> a30e70bd2 (feat: Add Google Drive sync support for Google Play builds)
     }
 
     internal fun notifyActivated() {
         onResumeActive()
+        scope.launch { runCatching { resumeQueuedUploads() } }
+    }
+
+    /** Reschedules reading-state sync and any EPUB uploads queued for the active account. */
+    private suspend fun resumeActiveWork() {
+        onResumeActive()
+        resumeQueuedUploads()
+    }
+
+    private suspend fun resumeQueuedUploads() {
+        if (!hasStore()) return
+        val active = store.accounts().active() ?: return
+        if (store.uploads().workCount(active.permissionId) > 0) {
+            scheduleEpubUploadsWork(active.meteredTransfers)
+        }
     }
 
     /**

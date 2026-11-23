@@ -426,7 +426,7 @@ class BrowseCatalogRepository(
             // A worker may have finished while cancellation was being requested.
             // Classify its row only after it has released the book lock.
             books.fromBrowseServer(serverId).filter { it.localUri == null }.forEach {
-                downloads.removeDownload(it)
+                downloads.removeDownloadLocked(it)
             }
             inTransaction {
                 // Read again here: a refresh of the same account may have

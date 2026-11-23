@@ -33,6 +33,9 @@ interface LibrarySyncBackend {
     /** Whether [book] is a remote catalog entry owned by this external sync backend. */
     fun ownsBook(book: Book): Boolean = false
 
+    /** Whether [book]'s file can be fetched again from this backend's active account. */
+    suspend fun canDownloadAgain(book: Book): Boolean = false
+
     /** Enqueues an on-demand download for [book] if owned by this backend; returns its WorkManager id. */
     suspend fun enqueueDownload(book: Book): UUID? = null
 

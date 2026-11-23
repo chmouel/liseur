@@ -564,6 +564,12 @@ private fun DriveAccountSwitchDialog(
     )
 }
 
+/** An empty selection still has to be confirmable when it drops books already queued. */
+internal fun canConfirmUploadSelection(
+    candidates: List<DriveUploadCandidate>,
+    selectedUrls: Set<String>,
+): Boolean = selectedUrls.isNotEmpty() || candidates.any { it.uploadState != null && !it.isUploaded }
+
 @Composable
 private fun DriveUploadFilesDialog(
     candidates: List<DriveUploadCandidate>,
@@ -722,7 +728,7 @@ private fun DriveUploadFilesDialog(
         confirmButton = {
             Button(
                 onClick = { onConfirm(selectedUrls) },
-                enabled = selectedUrls.isNotEmpty(),
+                enabled = canConfirmUploadSelection(candidates, selectedUrls),
             ) {
                 Text(stringResource(R.string.drive_sync_upload_epubs_confirm))
             }

@@ -34,12 +34,16 @@ import com.chmouel.liseur.domain.seriesKey
 import com.chmouel.liseur.sync.LibrarySyncSwitchCoordinator
 import java.io.ByteArrayInputStream
 import java.io.File
+import java.io.FilterInputStream
 import java.io.InputStream
 import java.io.OutputStream
 import java.security.MessageDigest
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import javax.crypto.KeyGenerator
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
@@ -1144,6 +1148,537 @@ class DrivePhase4EndToEndTest {
         assertEquals(com.chmouel.liseur.data.db.WorkAlias.REJECTED, deviceA.liseurDb.workIdentityDao().alias(second.url, peer)?.confidence)
         assertNotNull(deviceA.liseurDb.bookDao().getByUrl(second.url))
         assertNotNull(deviceA.liseurDb.bookDao().getByUrl(first.url))
+    }
+
+    @Test
+    fun `deleting a downloaded Drive book keeps its file and history and the copy is no longer redownloadable`() = runTest {
+        deviceA.connect()
+        deviceB.connect()
+        val bookA = seedBook(deviceA, "kept.epub", "9780547928227", "Kept", "Tolkien", customBytes = "EPUB-KEPT".toByteArray())
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        assertEquals(1, deviceA.epubTransfers.queueSelectedBooks(PERM_ID, setOf(bookA.url)))
+        assertEquals(1, deviceA.epubTransfers.uploadPending().uploadedCount)
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+
+        val stubB = "drive:isbn:9780547928227"
+        assertTrue(deviceB.epubTransfers.downloadBook(stubB) is DriveEpubDownloadOutcome.Downloaded)
+        deviceB.liseurDb.readingSessionDao().insert(
+            ReadingSession(
+                bookUrl = stubB, startedAt = 10_000L, endedAt = 70_000L,
+                lastCheckpointAt = 70_000L, durationMs = 60_000L,
+                startProgression = 0.0, endProgression = 0.1,
+            ),
+        )
+        val downloaded = deviceB.liseurDb.bookDao().getByUrl(stubB)!!
+        assertTrue(deviceB.driveSync.canDownloadAgain(downloaded))
+
+        assertTrue(deviceB.driveSync.deleteFromSyncedLibrary(downloaded))
+
+        val kept = deviceB.liseurDb.bookDao().getByUrl(stubB)
+        assertNotNull(kept)
+        assertTrue(File(java.net.URI(kept!!.localUri!!)).isFile)
+        assertNull(kept.downloadHref)
+        assertEquals(1, deviceB.liseurDb.readingSessionDao().countForBook(stubB))
+        assertFalse(deviceB.driveSync.canDownloadAgain(kept))
+
+        // Neither canDownloadAgain nor a subsequent sync may resurrect the Drive alias or publish records for the deleted work.
+        val peerId = DriveLibrarySync.accountPeerId(PERM_ID)
+        assertNull(deviceB.liseurDb.workIdentityDao().alias(stubB, peerId))
+        val appDataBefore = driveServer.appDataFilesSnapshot().map { it.id }.toSet()
+        deviceB.liseurDb.annotationDao().upsert(
+            BookAnnotation(
+                id = "ann-after-delete",
+                bookId = stubB,
+                kind = AnnotationKind.NOTE.name,
+                locatorJson = """{"href":"ch01.xhtml"}""",
+                text = "Still reading locally",
+                note = "Local only note",
+                createdAt = 20_000L,
+                updatedAt = 20_000L,
+            ),
+        )
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+        assertNull(deviceB.liseurDb.workIdentityDao().alias(stubB, peerId))
+        assertEquals(appDataBefore, driveServer.appDataFilesSnapshot().map { it.id }.toSet())
+    }
+
+    @Test
+    fun `confirming the upload picker drops queued books the reader unchecked`() = runTest {
+        deviceA.connect()
+        val first = seedBook(deviceA, "first.epub", "9780547928227", "First", "Author", customBytes = "EPUB-FIRST".toByteArray())
+        val second = seedBook(deviceA, "second.epub", "9780618640157", "Second", "Author", customBytes = "EPUB-SECOND".toByteArray())
+        assertEquals(2, deviceA.epubTransfers.queueSelectedBooks(PERM_ID, setOf(first.url, second.url)))
+
+        assertEquals(1, deviceA.epubTransfers.queueSelectedBooks(PERM_ID, setOf(first.url)))
+
+        assertEquals(listOf(first.url), deviceA.driveDb.uploads().pendingForAccount(PERM_ID).map { it.bookUrl })
+    }
+
+    @Test
+    fun `deselecting a queued book while an upload batch is running skips it without uploading`() = runTest {
+        deviceA.connect()
+        val first = seedBook(deviceA, "first-batch.epub", "9780547928227", "First", "Author", customBytes = "EPUB-BATCH-1".toByteArray())
+        val second = seedBook(deviceA, "second-batch.epub", "9780618640157", "Second", "Author", customBytes = "EPUB-BATCH-2".toByteArray())
+        assertEquals(2, deviceA.epubTransfers.queueSelectedBooks(PERM_ID, setOf(first.url, second.url)))
+        val secondSha = deviceA.liseurDb.workIdentityDao().fingerprint(second.url)!!.sha256
+
+        // Deselect `second` while `first` is actively uploading inside the same batch.
+        driveServer.onUploadResumableStart = { name ->
+            if (name == "First.epub") {
+                deviceA.epubTransfers.queueSelectedBooks(PERM_ID, setOf(first.url))
+            }
+        }
+        try {
+            val summary = deviceA.epubTransfers.uploadPending()
+            assertEquals(1, summary.uploadedCount)
+            assertEquals(0, summary.failedCount)
+        } finally {
+            driveServer.onUploadResumableStart = null
+        }
+
+        assertEquals(listOf("First.epub"), driveServer.epubFilesSnapshot().map { it.name })
+        val remainingUploads = deviceA.driveDb.uploads().forAccount(PERM_ID)
+        assertEquals(1, remainingUploads.size)
+        assertEquals(first.url, remainingUploads.single().bookUrl)
+        assertEquals(DriveUpload.STATE_UPLOADED, remainingUploads.single().state)
+        assertFalse(DriveEpubTransferManager.stagedFile(deviceA.stagingDir, PERM_ID, secondSha).exists())
+    }
+
+    @Test
+    fun `cross-device pull re-keys conflicting local ISBN alias instead of combining unrelated editions`() = runTest {
+        deviceA.connect()
+        deviceB.connect()
+        val isbn = "9780261102217"
+        val bookA = seedBook(deviceA, "hobbit-a.epub", isbn, "The Hobbit", "J.R.R. Tolkien", customBytes = "EPUB-HOBBIT-A".toByteArray())
+        val shaA = deviceA.liseurDb.workIdentityDao().fingerprint(bookA.url)!!.sha256
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+
+        val bookB = seedBook(deviceB, "cooking-b.epub", isbn, "Cooking Basics", "Someone Else", customBytes = "EPUB-COOKING-B".toByteArray())
+        val shaB = deviceB.liseurDb.workIdentityDao().fingerprint(bookB.url)!!.sha256
+        val peerId = DriveLibrarySync.accountPeerId(PERM_ID)
+
+        // Device B resolves its local aliases BEFORE pulling Device A's catalog.
+        deviceB.driveSync.workIdentity.resolveAllLocalBooks(PERM_ID)
+        assertEquals("isbn:$isbn", deviceB.liseurDb.workIdentityDao().alias(bookB.url, peerId)?.workId)
+
+        // Pull A's catalog and run follow-up sync/publish on both devices.
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+
+        // Device B keeps distinct aliases and distinct catalog works without combining editions.
+        val stubB = DriveWorkIdentity.driveBookUrl("isbn:$isbn")
+        assertEquals("isbn:$isbn", deviceB.liseurDb.workIdentityDao().alias(stubB, peerId)?.workId)
+        assertEquals("sha:$shaB", deviceB.liseurDb.workIdentityDao().alias(bookB.url, peerId)?.workId)
+
+        val isbnStateB = deviceB.driveDb.recordStates().get(PERM_ID, DriveWireCodec.DOMAIN_CATALOG, "isbn:$isbn")
+        val isbnBodyB = DriveWireCodec.decodeCatalogBody(org.json.JSONObject(isbnStateB!!.bodyJson!!))!!
+        assertEquals(listOf(shaA), isbnBodyB.editions.map { it.sha256 })
+
+        val shaStateB = deviceB.driveDb.recordStates().get(PERM_ID, DriveWireCodec.DOMAIN_CATALOG, "sha:$shaB")
+        val shaBodyB = DriveWireCodec.decodeCatalogBody(org.json.JSONObject(shaStateB!!.bodyJson!!))!!
+        assertEquals("Cooking Basics", shaBodyB.title)
+        assertEquals(listOf(shaB), shaBodyB.editions.map { it.sha256 })
+
+        // Device A also receives Cooking Basics as its own separate work.
+        val cookingStubA = deviceA.liseurDb.bookDao().getByUrl(DriveWorkIdentity.driveBookUrl("sha:$shaB"))
+        assertNotNull(cookingStubA)
+        assertEquals("Cooking Basics", cookingStubA!!.title)
+        val isbnStateA = deviceA.driveDb.recordStates().get(PERM_ID, DriveWireCodec.DOMAIN_CATALOG, "isbn:$isbn")
+        val isbnBodyA = DriveWireCodec.decodeCatalogBody(org.json.JSONObject(isbnStateA!!.bodyJson!!))!!
+        assertEquals(listOf(shaA), isbnBodyA.editions.map { it.sha256 })
+    }
+
+    @Test
+    fun `catalog deletion cleans up staged EPUB files left behind by interrupted uploads`() = runTest {
+        deviceA.connect()
+        deviceB.connect()
+
+        // 1. Local catalog deletion removes staged file & .part file for an interrupted upload.
+        val localBook = seedBook(deviceA, "staged-local.epub", "9780547928227", "Local Staged", "Author", customBytes = "EPUB-STAGED-LOCAL".toByteArray())
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        assertEquals(1, deviceA.epubTransfers.queueSelectedBooks(PERM_ID, setOf(localBook.url)))
+        val localSha = deviceA.liseurDb.workIdentityDao().fingerprint(localBook.url)!!.sha256
+        val localStaged = DriveEpubTransferManager.stagedFile(deviceA.stagingDir, PERM_ID, localSha).apply {
+            parentFile?.mkdirs()
+            writeBytes("EPUB-STAGED-LOCAL".toByteArray())
+        }
+        val localPart = File(localStaged.path + ".part").apply { writeBytes("PART".toByteArray()) }
+        assertTrue(localStaged.isFile)
+        assertTrue(localPart.isFile)
+
+        assertTrue(deviceA.driveSync.deleteFromSyncedLibrary(localBook))
+        assertNull(deviceA.driveDb.uploads().get(PERM_ID, localSha))
+        assertFalse(localStaged.exists())
+        assertFalse(localPart.exists())
+
+        // 2. Remote catalog tombstone removes staged file on the receiving device.
+        val sharedBytes = "EPUB-STAGED-REMOTE".toByteArray()
+        val remoteA = seedBook(deviceA, "staged-remote-a.epub", "9780618640157", "Remote Staged", "Author", customBytes = sharedBytes)
+        val remoteB = seedBook(deviceB, "staged-remote-b.epub", "9780618640157", "Remote Staged", "Author", customBytes = sharedBytes)
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+        assertEquals(1, deviceB.epubTransfers.queueSelectedBooks(PERM_ID, setOf(remoteB.url)))
+        val remoteSha = deviceB.liseurDb.workIdentityDao().fingerprint(remoteB.url)!!.sha256
+        val remoteStaged = DriveEpubTransferManager.stagedFile(deviceB.stagingDir, PERM_ID, remoteSha).apply {
+            parentFile?.mkdirs()
+            writeBytes(sharedBytes)
+        }
+        assertTrue(remoteStaged.isFile)
+
+        assertTrue(deviceA.driveSync.deleteFromSyncedLibrary(remoteA))
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+        assertNull(deviceB.driveDb.uploads().get(PERM_ID, remoteSha))
+        assertFalse(remoteStaged.exists())
+    }
+
+    @Test
+    fun `cross-device ISBN collision separates works even when both devices already stored catalog state`() = runTest {
+        deviceA.connect()
+        deviceB.connect()
+        // Establish baseline sync cursors on both devices before they diverge offline.
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+        val isbn = "9780261102217"
+        val peerId = DriveLibrarySync.accountPeerId(PERM_ID)
+        val bookA = seedBook(deviceA, "hobbit-both.epub", isbn, "The Hobbit", "J.R.R. Tolkien", customBytes = "EPUB-HOBBIT-BOTH".toByteArray())
+        val shaA = deviceA.liseurDb.workIdentityDao().fingerprint(bookA.url)!!.sha256
+        val bookB = seedBook(deviceB, "cooking-both.epub", isbn, "Cooking Basics", "Someone Else", customBytes = "EPUB-COOKING-BOTH".toByteArray())
+        val shaB = deviceB.liseurDb.workIdentityDao().fingerprint(bookB.url)!!.sha256
+
+        // Both Device A and Device B independently sync and store catalog state under the same ISBN before exchanging records.
+        driveServer.hideOtherDeviceDeltasFor("dev-a")
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        driveServer.hideOtherDeviceDeltasFor("dev-b")
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+        driveServer.unhideAll()
+
+        // Confirm BOTH devices already have catalog state for isbn:<isbn> before exchanging records.
+        assertNotNull(deviceA.driveDb.recordStates().get(PERM_ID, DriveWireCodec.DOMAIN_CATALOG, "isbn:$isbn"))
+        assertNotNull(deviceB.driveDb.recordStates().get(PERM_ID, DriveWireCodec.DOMAIN_CATALOG, "isbn:$isbn"))
+        assertEquals("isbn:$isbn", deviceA.liseurDb.workIdentityDao().alias(bookA.url, peerId)?.workId)
+        assertEquals("isbn:$isbn", deviceB.liseurDb.workIdentityDao().alias(bookB.url, peerId)?.workId)
+
+        // Exchange records and sync again on both devices.
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+
+        // Device B re-keyed Cooking Basics to sha:<shaB> and holds The Hobbit under isbn:<isbn> with no combined editions.
+        val stubB = DriveWorkIdentity.driveBookUrl("isbn:$isbn")
+        assertEquals("isbn:$isbn", deviceB.liseurDb.workIdentityDao().alias(stubB, peerId)?.workId)
+        assertEquals("sha:$shaB", deviceB.liseurDb.workIdentityDao().alias(bookB.url, peerId)?.workId)
+        assertEquals("The Hobbit", deviceB.liseurDb.bookDao().getByUrl(stubB)?.title)
+
+        val isbnBodyB = DriveWireCodec.decodeCatalogBody(
+            org.json.JSONObject(
+                deviceB.driveDb.recordStates().get(PERM_ID, DriveWireCodec.DOMAIN_CATALOG, "isbn:$isbn")!!.bodyJson!!,
+            ),
+        )!!
+        assertEquals("The Hobbit", isbnBodyB.title)
+        assertEquals(listOf(shaA), isbnBodyB.editions.map { it.sha256 })
+
+        val shaBodyB = DriveWireCodec.decodeCatalogBody(
+            org.json.JSONObject(
+                deviceB.driveDb.recordStates().get(PERM_ID, DriveWireCodec.DOMAIN_CATALOG, "sha:$shaB")!!.bodyJson!!,
+            ),
+        )!!
+        assertEquals("Cooking Basics", shaBodyB.title)
+        assertEquals(listOf(shaB), shaBodyB.editions.map { it.sha256 })
+
+        // Device A keeps The Hobbit under isbn:<isbn> and receives Cooking Basics under sha:<shaB> with no combined editions.
+        val cookingStubA = deviceA.liseurDb.bookDao().getByUrl(DriveWorkIdentity.driveBookUrl("sha:$shaB"))
+        assertNotNull(cookingStubA)
+        assertEquals("Cooking Basics", cookingStubA!!.title)
+        assertEquals("isbn:$isbn", deviceA.liseurDb.workIdentityDao().alias(bookA.url, peerId)?.workId)
+        assertEquals("sha:$shaB", deviceA.liseurDb.workIdentityDao().alias(cookingStubA.url, peerId)?.workId)
+
+        val isbnBodyA = DriveWireCodec.decodeCatalogBody(
+            org.json.JSONObject(
+                deviceA.driveDb.recordStates().get(PERM_ID, DriveWireCodec.DOMAIN_CATALOG, "isbn:$isbn")!!.bodyJson!!,
+            ),
+        )!!
+        assertEquals("The Hobbit", isbnBodyA.title)
+        assertEquals(listOf(shaA), isbnBodyA.editions.map { it.sha256 })
+
+        val shaBodyA = DriveWireCodec.decodeCatalogBody(
+            org.json.JSONObject(
+                deviceA.driveDb.recordStates().get(PERM_ID, DriveWireCodec.DOMAIN_CATALOG, "sha:$shaB")!!.bodyJson!!,
+            ),
+        )!!
+        assertEquals("Cooking Basics", shaBodyA.title)
+        assertEquals(listOf(shaB), shaBodyA.editions.map { it.sha256 })
+    }
+
+    @Test
+    fun `deselecting a book during the final upload PUT trashes the created remote EPUB and does not mark it uploaded`() = runTest {
+        deviceA.connect()
+        val book = seedBook(deviceA, "final-put-race.epub", "9780547928227", "Race Book", "Author", customBytes = "EPUB-FINAL-PUT-RACE".toByteArray())
+        val sha = deviceA.liseurDb.workIdentityDao().fingerprint(book.url)!!.sha256
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        assertEquals(1, deviceA.epubTransfers.queueSelectedBooks(PERM_ID, setOf(book.url)))
+
+        // Deselect the book after the final PUT creates the remote file on Drive and before onProgress(total, sessionUri) fires.
+        driveServer.onUploadResumableFinalPut = { name ->
+            if (name == "Race Book.epub") {
+                deviceA.epubTransfers.queueSelectedBooks(PERM_ID, emptySet())
+            }
+        }
+        try {
+            val summary = deviceA.epubTransfers.uploadPending()
+            assertEquals(0, summary.uploadedCount)
+            assertEquals(0, summary.failedCount)
+        } finally {
+            driveServer.onUploadResumableFinalPut = null
+        }
+
+        // The remote EPUB created by the final PUT must be trashed in Drive, not left active, and not recorded as uploaded.
+        val remoteEpubs = driveServer.epubFilesSnapshot()
+        assertEquals(1, remoteEpubs.size)
+        assertTrue("Expected remote EPUB to be trashed after deselection race", remoteEpubs.single().trashed)
+        assertTrue(driveServer.listDriveEpubFiles("token-dev-a").isEmpty())
+        assertTrue(deviceA.driveDb.uploads().forAccount(PERM_ID).isEmpty())
+        assertFalse(DriveEpubTransferManager.stagedFile(deviceA.stagingDir, PERM_ID, sha).exists())
+
+        // A subsequent changes scan must not resurrect EPUB availability.
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        val activeEpubsInDb = deviceA.driveDb.files().byKindAndSha256(PERM_ID, DriveFile.KIND_EPUB, sha)
+        assertTrue(activeEpubsInDb.isEmpty())
+    }
+
+    @Test
+    fun `a deselected upload whose trash fails is retried and never advertised`() = runTest {
+        deviceA.connect()
+        deviceB.connect()
+        val book = seedBook(deviceA, "final-put-offline.epub", "9780547928289", "Offline Race", "Author", customBytes = "EPUB-FINAL-PUT-OFFLINE".toByteArray())
+        val sha = deviceA.liseurDb.workIdentityDao().fingerprint(book.url)!!.sha256
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        assertEquals(1, deviceA.epubTransfers.queueSelectedBooks(PERM_ID, setOf(book.url)))
+
+        driveServer.onUploadResumableFinalPut = { name ->
+            if (name == "Offline Race.epub") deviceA.epubTransfers.queueSelectedBooks(PERM_ID, emptySet())
+        }
+        // Both the immediate cleanup and the end-of-run retry fail.
+        driveServer.failNextTrashes = 2
+        try {
+            val summary = deviceA.epubTransfers.uploadPending()
+            assertEquals(0, summary.uploadedCount)
+            // Cleanup-only work still asks the worker to retry.
+            assertTrue(summary.retryableFailure)
+        } finally {
+            driveServer.onUploadResumableFinalPut = null
+        }
+        assertFalse(driveServer.epubFilesSnapshot().single().trashed)
+        assertEquals(DriveUpload.STATE_CANCELLED, deviceA.driveDb.uploads().get(PERM_ID, sha)!!.state)
+        // Counted as outstanding work, so resume and settings changes reschedule the worker.
+        assertEquals(1, deviceA.driveDb.uploads().workCount(PERM_ID))
+
+        // A changes scan indexes the still-live file, but the catalog never advertises it.
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+        assertNull(deviceB.liseurDb.bookDao().getByUrl("drive:isbn:9780547928289")!!.downloadHref)
+
+        // The next upload run trashes it and forgets the row.
+        assertFalse(deviceA.epubTransfers.uploadPending().retryableFailure)
+        assertTrue(driveServer.epubFilesSnapshot().single().trashed)
+        assertNull(deviceA.driveDb.uploads().get(PERM_ID, sha))
+        assertEquals(0, deviceA.driveDb.uploads().workCount(PERM_ID))
+    }
+
+    @Test
+    fun `a worker cancelled after the final PUT commits leaves a session that cleanup resolves`() = runTest {
+        deviceA.connect()
+        deviceB.connect()
+        val book = seedBook(deviceA, "final-put-cancel.epub", "9780547928296", "Cancelled Race", "Author", customBytes = "EPUB-FINAL-PUT-CANCEL".toByteArray())
+        val sha = deviceA.liseurDb.workIdentityDao().fingerprint(book.url)!!.sha256
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        assertEquals(1, deviceA.epubTransfers.queueSelectedBooks(PERM_ID, setOf(book.url)))
+
+        // Drive commits the PUT, the reader deselects, and the worker is cancelled before the response.
+        driveServer.onUploadResumableFinalPut = { name ->
+            if (name == "Cancelled Race.epub") {
+                deviceA.epubTransfers.queueSelectedBooks(PERM_ID, emptySet())
+                throw kotlinx.coroutines.CancellationException("worker replaced")
+            }
+        }
+        try {
+            assertTrue(runCatching { deviceA.epubTransfers.uploadPending() }.exceptionOrNull() is kotlinx.coroutines.CancellationException)
+        } finally {
+            driveServer.onUploadResumableFinalPut = null
+        }
+        val cancelled = deviceA.driveDb.uploads().get(PERM_ID, sha)!!
+        assertEquals(DriveUpload.STATE_CANCELLED, cancelled.state)
+        assertNotNull(cancelled.sessionUri)
+
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+        assertNull(deviceB.liseurDb.bookDao().getByUrl("drive:isbn:9780547928296")!!.downloadHref)
+
+        // The replacement worker asks the session, finds the created file and trashes it.
+        assertFalse(deviceA.epubTransfers.uploadPending().retryableFailure)
+        assertTrue(driveServer.epubFilesSnapshot().single().trashed)
+        assertNull(deviceA.driveDb.uploads().get(PERM_ID, sha))
+    }
+
+    @Test
+    fun `cleanup keeps a cancelled session whose request is still running`() = runTest {
+        deviceA.connect()
+        val book = seedBook(deviceA, "still-running.epub", "9780547928319", "Still Running", "Author", customBytes = "EPUB-STILL-RUNNING".toByteArray())
+        val sha = deviceA.liseurDb.workIdentityDao().fingerprint(book.url)!!.sha256
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        assertEquals(1, deviceA.epubTransfers.queueSelectedBooks(PERM_ID, setOf(book.url)))
+
+        val started = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        driveServer.beforeUploadCommit = { name ->
+            if (name == "Still Running.epub") {
+                deviceA.epubTransfers.queueSelectedBooks(PERM_ID, emptySet())
+                started.complete(Unit)
+                release.await()
+            }
+        }
+        // The replaced worker's request commits the file, but its response is discarded.
+        driveServer.onUploadResumableFinalPut = { name ->
+            if (name == "Still Running.epub") throw kotlinx.coroutines.CancellationException("worker replaced")
+        }
+        try {
+            val oldWorker = async(Dispatchers.Default) { runCatching { deviceA.epubTransfers.uploadPending() } }
+            started.await()
+
+            // The replacement worker probes the session before the old request has committed.
+            assertTrue(deviceA.epubTransfers.uploadPending().retryableFailure)
+            assertEquals(DriveUpload.STATE_CANCELLED, deviceA.driveDb.uploads().get(PERM_ID, sha)!!.state)
+
+            release.complete(Unit)
+            oldWorker.await()
+        } finally {
+            driveServer.beforeUploadCommit = null
+            driveServer.onUploadResumableFinalPut = null
+        }
+        assertFalse(driveServer.epubFilesSnapshot().single().trashed)
+
+        // Once the request has returned, the next run finds the completed session and trashes it.
+        assertFalse(deviceA.epubTransfers.uploadPending().retryableFailure)
+        assertTrue(driveServer.epubFilesSnapshot().single().trashed)
+        assertNull(deviceA.driveDb.uploads().get(PERM_ID, sha))
+    }
+
+    @Test
+    fun `deselecting again while cleanup runs is not undone by that cleanup`() = runTest {
+        deviceA.connect()
+        val book = seedBook(deviceA, "deselect-again.epub", "9780547928326", "Deselect Again", "Author", customBytes = "EPUB-DESELECT-AGAIN".toByteArray())
+        val sha = deviceA.liseurDb.workIdentityDao().fingerprint(book.url)!!.sha256
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        assertEquals(1, deviceA.epubTransfers.queueSelectedBooks(PERM_ID, setOf(book.url)))
+        driveServer.onUploadResumableFinalPut = { name ->
+            if (name == "Deselect Again.epub") deviceA.epubTransfers.queueSelectedBooks(PERM_ID, emptySet())
+        }
+        driveServer.failNextTrashes = 2
+        try {
+            deviceA.epubTransfers.uploadPending()
+        } finally {
+            driveServer.onUploadResumableFinalPut = null
+        }
+        // Re-selected (REQUEUE), then deselected again while cleanup is trashing the old copy.
+        assertEquals(1, deviceA.epubTransfers.queueSelectedBooks(PERM_ID, setOf(book.url)))
+        assertEquals(DriveUpload.STATE_REQUEUE, deviceA.driveDb.uploads().get(PERM_ID, sha)!!.state)
+        driveServer.duringNextTrash = {
+            deviceA.epubTransfers.queueSelectedBooks(PERM_ID, emptySet())
+        }
+
+        val summary = deviceA.epubTransfers.uploadPending()
+
+        assertEquals(0, summary.uploadedCount)
+        assertNull(deviceA.driveDb.uploads().get(PERM_ID, sha))
+        assertTrue(driveServer.epubFilesSnapshot().all { it.trashed })
+    }
+
+    @Test
+    fun `re-selecting an edition while its cancelled copy is being trashed uploads a fresh copy`() = runTest {
+        deviceA.connect()
+        val book = seedBook(deviceA, "reselect.epub", "9780547928302", "Reselect", "Author", customBytes = "EPUB-RESELECT".toByteArray())
+        val sha = deviceA.liseurDb.workIdentityDao().fingerprint(book.url)!!.sha256
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        assertEquals(1, deviceA.epubTransfers.queueSelectedBooks(PERM_ID, setOf(book.url)))
+        driveServer.onUploadResumableFinalPut = { name ->
+            if (name == "Reselect.epub") deviceA.epubTransfers.queueSelectedBooks(PERM_ID, emptySet())
+        }
+        driveServer.failNextTrashes = 2
+        try {
+            deviceA.epubTransfers.uploadPending()
+        } finally {
+            driveServer.onUploadResumableFinalPut = null
+        }
+        val oldFileId = deviceA.driveDb.uploads().get(PERM_ID, sha)!!.fileId!!
+
+        // The reader picks the book again while cleanup is trashing the old copy.
+        driveServer.duringNextTrash = {
+            deviceA.epubTransfers.queueSelectedBooks(PERM_ID, setOf(book.url))
+        }
+        val summary = deviceA.epubTransfers.uploadPending()
+
+        assertEquals(1, summary.uploadedCount)
+        val uploaded = deviceA.driveDb.uploads().get(PERM_ID, sha)!!
+        assertEquals(DriveUpload.STATE_UPLOADED, uploaded.state)
+        assertTrue(uploaded.fileId != oldFileId)
+        val files = driveServer.epubFilesSnapshot().associateBy { it.id }
+        assertTrue(files.getValue(oldFileId).trashed)
+        assertFalse(files.getValue(uploaded.fileId!!).trashed)
+    }
+
+    @Test
+    fun `concurrent deletion of staging part file skips deleted item and still uploads remaining batch items`() = runTest {
+        deviceA.connect()
+        val first = seedBook(deviceA, "stage-race-1.epub", "9780547928227", "First Staged", "Author", customBytes = "EPUB-STAGE-RACE-1".toByteArray())
+        val second = seedBook(deviceA, "stage-race-2.epub", "9780618640157", "Second Staged", "Author", customBytes = "EPUB-STAGE-RACE-2".toByteArray())
+        val firstSha = deviceA.liseurDb.workIdentityDao().fingerprint(first.url)!!.sha256
+        val secondSha = deviceA.liseurDb.workIdentityDao().fingerprint(second.url)!!.sha256
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        assertEquals(2, deviceA.epubTransfers.queueSelectedBooks(PERM_ID, setOf(first.url, second.url)))
+
+        // Simulate catalog deletion removing `first`'s `.part` file right after copy finishes and before SHA hashing reads `.part`.
+        var triggeredDeletion = false
+        val transferManager = DriveEpubTransferManager(
+            context = context,
+            database = deviceA.liseurDb,
+            store = deviceA.driveDb,
+            driveApi = driveServer.clientFor("dev-a"),
+            workIdentity = deviceA.driveSync.workIdentity,
+            catalogSync = deviceA.driveSync.catalogSync,
+            fingerprintStore = deviceA.driveSync.fingerprintStore,
+            acquireToken = { SilentTokenResult.Token(accessToken = "token-dev-a", permissionId = PERM_ID) },
+            onCatalogAvailabilityChanged = { deviceA.changeEngine.sync() },
+            openBookStream = { book ->
+                val raw = File(java.net.URI(book.localUri!!)).inputStream()
+                if (book.url == first.url) {
+                    object : FilterInputStream(raw) {
+                        override fun close() {
+                            super.close()
+                            if (!triggeredDeletion) {
+                                triggeredDeletion = true
+                                runBlocking { deviceA.driveSync.deleteFromSyncedLibrary(first) }
+                            }
+                        }
+                    }
+                } else {
+                    raw
+                }
+            },
+            stagingDirProvider = { deviceA.stagingDir },
+        )
+
+        val summary = transferManager.uploadPending()
+        assertTrue(triggeredDeletion)
+        assertEquals(1, summary.uploadedCount)
+        assertEquals(0, summary.failedCount)
+        assertFalse(summary.retryableFailure)
+
+        assertEquals(listOf("Second Staged.epub"), driveServer.listDriveEpubFiles("token-dev-a").map { it.name })
+        assertNull(deviceA.driveDb.uploads().get(PERM_ID, firstSha))
+        assertEquals(DriveUpload.STATE_UPLOADED, deviceA.driveDb.uploads().get(PERM_ID, secondSha)?.state)
+        val firstStaged = DriveEpubTransferManager.stagedFile(deviceA.stagingDir, PERM_ID, firstSha)
+        assertFalse(firstStaged.exists())
+        assertFalse(File(firstStaged.path + ".part").exists())
     }
 
     @Test
@@ -2264,6 +2799,7 @@ class DrivePhase4EndToEndTest {
     private fun createDevice(deviceId: String, rootDir: File): Phase4Device {
         val booksDir = File(rootDir, "books").apply { mkdirs() }
         val coversDir = File(rootDir, "covers").apply { mkdirs() }
+        val stagingDir = File(rootDir, "staging").apply { mkdirs() }
         val liseurDb = Room.inMemoryDatabaseBuilder(context, LiseurDatabase::class.java)
             .allowMainThreadQueries()
             .build()
@@ -2318,6 +2854,7 @@ class DrivePhase4EndToEndTest {
             },
             driveApi = driveServer.clientFor(deviceId),
             coversDirProvider = { coversDir },
+            stagingDirProvider = { stagingDir },
             coverEncoder = deterministicEncoder,
             clock = clock,
         )
@@ -2325,6 +2862,7 @@ class DrivePhase4EndToEndTest {
             deviceId = deviceId,
             booksDir = booksDir,
             coversDir = coversDir,
+            stagingDir = stagingDir,
             liseurDb = liseurDb,
             driveDb = driveDb,
             driveSync = driveSync,
@@ -2335,6 +2873,7 @@ class DrivePhase4EndToEndTest {
         val deviceId: String,
         val booksDir: File,
         val coversDir: File,
+        val stagingDir: File,
         val liseurDb: LiseurDatabase,
         val driveDb: DriveSyncDatabase,
         val driveSync: DriveLibrarySync,
@@ -2366,6 +2905,11 @@ class DrivePhase4EndToEndTest {
         private var hiddenForDevice: String? = null
         private val coverDownloadFailuresRemaining = AtomicInteger(0)
         private val coverDownloadCorruptionsRemaining = AtomicInteger(0)
+        var onUploadResumableStart: (suspend (name: String) -> Unit)? = null
+        var onUploadResumableFinalPut: (suspend (name: String) -> Unit)? = null
+
+        /** Runs once the bytes were read, before Drive commits the file (its session still in progress). */
+        var beforeUploadCommit: (suspend (name: String) -> Unit)? = null
 
         fun failNextCoverDownloads(count: Int) {
             coverDownloadFailuresRemaining.set(count)
@@ -2562,7 +3106,21 @@ class DrivePhase4EndToEndTest {
             recordChange(removed.meta, removed = true)
         }
 
+        /** Number of upcoming trashFile calls that fail as if offline. */
+        var failNextTrashes = 0
+
+        /** Runs once, inside the next trashFile call, before the file is trashed. */
+        var duringNextTrash: (suspend () -> Unit)? = null
+
         override suspend fun trashFile(accessToken: String, fileId: String): DriveRemoteFile {
+            duringNextTrash?.let { hook ->
+                duringNextTrash = null
+                hook()
+            }
+            if (failNextTrashes > 0) {
+                failNextTrashes--
+                throw DriveHttpException("Simulated offline trash", httpCode = 503)
+            }
             val stored = files[fileId] ?: throw DriveNotFoundException("Missing $fileId", fileId)
             stored.meta = stored.meta.copy(trashed = true)
             recordChange(stored.meta)
@@ -2574,9 +3132,13 @@ class DrivePhase4EndToEndTest {
             parents: List<String>, appProperties: Map<String, String>,
         ): String = "session://${nextId("up")}"
 
+        private val completedSessions = mutableMapOf<String, String>()
+
         override suspend fun queryResumableUploadOffset(
             accessToken: String, sessionUri: String, totalBytes: Long,
-        ): ResumableUploadStatus = ResumableUploadStatus.InProgress(0L)
+        ): ResumableUploadStatus = completedSessions[sessionUri]?.let { files[it]?.meta }
+            ?.let { ResumableUploadStatus.Completed(it) }
+            ?: ResumableUploadStatus.InProgress(0L)
 
         override suspend fun uploadResumableChunk(
             accessToken: String, sessionUri: String, chunk: ByteArray,
@@ -2589,7 +3151,11 @@ class DrivePhase4EndToEndTest {
             chunkSizeBytes: Int, openStream: () -> InputStream,
             onSessionUri: suspend (String) -> Unit, onProgress: suspend (Long, String) -> Unit,
         ): DriveRemoteFile {
+            val sessionUri = existingSessionUri ?: "session://${nextId("up")}"
+            onSessionUri(sessionUri)
+            onUploadResumableStart?.invoke(name)
             val bytes = openStream().use { it.readBytes() }
+            beforeUploadCommit?.invoke(name)
             val id = nextId("epub")
             val meta = DriveRemoteFile(
                 id = id, name = name, mimeType = mimeType, parents = parents,
@@ -2597,7 +3163,10 @@ class DrivePhase4EndToEndTest {
                 createdTime = "2026-04-01T00:00:00Z",
             )
             files[id] = StoredFile(meta, bytes, "drive")
+            completedSessions[sessionUri] = id
             recordChange(meta)
+            onUploadResumableFinalPut?.invoke(name)
+            onProgress(bytes.size.toLong(), sessionUri)
             return meta
         }
 
