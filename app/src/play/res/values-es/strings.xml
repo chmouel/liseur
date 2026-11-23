@@ -93,7 +93,7 @@
     <string name="hardcover_error_offline">No se ha podido contactar con Hardcover. Comprueba la conexión e inténtalo de nuevo.</string>
     <string name="hardcover_error_other">No se ha podido actualizar Hardcover ahora. Inténtalo más tarde.</string>
     <string name="hardcover_privacy">Para encontrar cada libro, Liseur envía a Hardcover su título, autor e ISBN. Después envía el estado, las páginas leídas, las fechas de lectura y sincroniza tu valoración y tu reseña pública. Cuando eliges una edición a mano, también envía lo que buscas y carga las portadas desde el servidor de imágenes de Hardcover.</string>
-    <string name="hardcover_push">Enviar a Hardcover</string>
+    <string name="hardcover_push">Sincronizar Hardcover</string>
     <string name="hardcover_pushed">Enviado a Hardcover</string>
     <string name="hardcover_up_to_date">Hardcover ya está al día</string>
     <string name="hardcover_needs_match">Elige primero la edición de Hardcover de este libro en Detalles del libro</string>

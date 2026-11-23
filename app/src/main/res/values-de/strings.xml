@@ -1359,6 +1359,17 @@
     <string name="reader_translate_into">Auf %1$s übersetzen</string>
     <string name="reader_translate_book">Buch übersetzen</string>
     <string name="reader_narrate_from_here">Ab hier erzählen</string>
+    <string name="reader_menu_scroll_mode">Scroll-Modus</string>
+    <string name="reader_menu_auto_scroll">Auto-Scroll</string>
+    <string name="reader_menu_translate">Übersetzen</string>
+    <string name="reader_menu_whole_book">Ganzes Buch</string>
+    <string name="reader_menu_read_aloud">Vorlesen</string>
+    <string name="reader_menu_sync">Synchronisieren</string>
+    <string name="reader_menu_book_info">Buchinfos</string>
+    <string name="reader_menu_reading_settings">Einstellungen</string>
+    <string name="reader_menu_companion_detail">Figuren, Orte, Zusammenfassungen</string>
+    <string name="reader_menu_translate_detail">Ab dieser Seite übersetzen</string>
+    <string name="reader_menu_read_aloud_detail">Mit Sprachausgabe anhören</string>
     <string name="read_aloud_pause">Vorlesen pausieren</string>
     <string name="read_aloud_resume">Vorlesen fortsetzen</string>
     <string name="read_aloud_resume_listening">Weiterhören</string>

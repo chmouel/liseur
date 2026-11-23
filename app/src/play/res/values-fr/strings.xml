@@ -93,7 +93,7 @@
     <string name="hardcover_error_offline">Impossible de joindre Hardcover. Vérifiez votre connexion et réessayez.</string>
     <string name="hardcover_error_other">Impossible de mettre à jour Hardcover pour le moment. Réessayez plus tard.</string>
     <string name="hardcover_privacy">Pour trouver chaque livre, Liseur envoie à Hardcover son titre, son auteur et son ISBN. Il envoie ensuite le statut, les pages lues, les dates de lecture et synchronise votre note et votre critique publique. Quand vous choisissez une édition à la main, il envoie aussi votre recherche et charge les couvertures depuis le serveur d\'images de Hardcover.</string>
-    <string name="hardcover_push">Envoyer vers Hardcover</string>
+    <string name="hardcover_push">Synchroniser Hardcover</string>
     <string name="hardcover_pushed">Envoyé à Hardcover</string>
     <string name="hardcover_up_to_date">Hardcover est déjà à jour</string>
     <string name="hardcover_needs_match">Choisissez d\'abord l\'édition Hardcover de ce livre dans Détails du livre</string>

@@ -36,12 +36,11 @@ internal class ReadingTracker(context: Context, database: LiseurDatabase) {
     fun BookDetailsSection(bookUrl: String, modifier: Modifier, onOpenSettings: () -> Unit = {}) = Unit
 
     @Composable
-    fun ReaderMenuItem(
+    fun rememberReaderPushAction(
         bookUrl: String,
         savePlace: suspend () -> Boolean,
-        close: () -> Unit,
         requestEdition: ((bookUrl: String, push: Boolean) -> Unit)? = null,
-    ) = Unit
+    ): (() -> Unit)? = null
 
     @Composable
     fun ReaderEditionPicker(

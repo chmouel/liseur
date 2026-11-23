@@ -100,7 +100,7 @@
     <string name="hardcover_error_offline">Could not reach Hardcover. Check your connection and try again.</string>
     <string name="hardcover_error_other">Hardcover could not be updated right now. Try again later.</string>
     <string name="hardcover_privacy">To find each book, Liseur sends Hardcover its title, author and ISBN. It then sends the status, pages read, reading dates, and syncs your rating and public review. When you choose an edition by hand, it also sends what you search for, and loads covers from Hardcover\'s image host.</string>
-    <string name="hardcover_push">Push to Hardcover</string>
+    <string name="hardcover_push">Sync Hardcover</string>
     <string name="hardcover_pushed">Sent to Hardcover</string>
     <string name="hardcover_up_to_date">Hardcover is already up to date</string>
     <string name="hardcover_needs_match">Choose this book\'s Hardcover edition in Book details first</string>
