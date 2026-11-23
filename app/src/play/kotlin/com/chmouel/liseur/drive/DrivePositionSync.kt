@@ -59,6 +59,9 @@ internal data class DriveOutboxAckMetadata(
     val annotationAcks: List<DriveAnnotationAckMeta> = emptyList(),
     val evaluationAcks: List<DriveEvaluationAckMeta> = emptyList(),
     val metadataAcks: List<DriveMetadataAckMeta> = emptyList(),
+    val vocabWordAcks: List<DriveVocabWordAckMeta> = emptyList(),
+    val vocabReviewAcks: List<DriveVocabReviewAckMeta> = emptyList(),
+    val sessionAcks: List<DriveSessionAckMeta> = emptyList(),
 )
 
 /**

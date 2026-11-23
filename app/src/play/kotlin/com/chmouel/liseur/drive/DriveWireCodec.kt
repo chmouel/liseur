@@ -41,7 +41,7 @@ internal data class DriveManifest(
     val updatedHlc: String,
     val snapshot: DriveSnapshotRef? = null,
     val previousSnapshot: DriveSnapshotRef? = null,
-    val domains: Map<String, Int> = DriveWireCodec.PHASE4_DOMAINS,
+    val domains: Map<String, Int> = DriveWireCodec.SUPPORTED_DOMAIN_VERSIONS,
     val epubFolder: DriveEpubFolderRef? = null,
     val appliedVector: Map<String, Long> = emptyMap(),
 )
@@ -57,6 +57,7 @@ internal data class DriveWireRecord(
     val body: JSONObject? = null,
     val outcome: String? = null,
     val resolvedFps: List<String> = emptyList(),
+    val observed: Map<String, Long>? = null,
 )
 
 internal data class DriveDeltaBatch(
@@ -67,6 +68,7 @@ internal data class DriveDeltaBatch(
     val createdHlc: String,
     val domains: Map<String, Int>,
     val records: List<DriveWireRecord>,
+    val observed: Map<String, Long> = emptyMap(),
 )
 
 internal data class DriveSnapshotResolution(
@@ -303,6 +305,91 @@ internal data class DriveMetadataAckMeta(
     val remoteCoverUpdatedAt: Long = 0L,
 )
 
+// -- Phase 5 Domain Wire Bodies -----------------------------------------------
+
+internal data class DriveVocabBaselineBody(
+    val dueAt: Long,
+    val reviewedAt: Long?,
+    val streak: Int,
+    val intervalMinutes: Int,
+    val repetitions: Int,
+)
+
+internal data class DriveVocabWordBody(
+    val language: String,
+    val normalized: String,
+    val word: String,
+    val definition: String?,
+    val translationLanguage: String?,
+    val notes: String,
+    val definitionEdited: Boolean,
+    val definitionUpdatedAt: Long,
+    val notesUpdatedAt: Long,
+    val addedAt: Long,
+    val baseline: DriveVocabBaselineBody?,
+)
+
+internal data class DriveVocabOccurrenceBody(
+    val wordKey: String,
+    val occurrenceKey: String,
+    val workKey: String?,
+    val bookTitle: String,
+    val locationKey: String,
+    val locator: String?,
+    val sentence: String?,
+    val sentenceEdited: Boolean,
+    val sentenceUpdatedAt: Long,
+    val lastSeenAt: Long,
+    val encounters: Int,
+)
+
+internal data class DriveVocabReviewBody(
+    val syncId: String,
+    val wordKey: String,
+    val language: String,
+    val normalized: String,
+    val rating: String,
+    val reviewedAt: Long,
+    val intervalMinutes: Int,
+    val dueAt: Long,
+)
+
+internal data class DriveSessionBody(
+    val sessionId: String,
+    val workKey: String,
+    val startedAt: Long,
+    val endedAt: Long,
+    val durationMs: Long,
+    val idleMs: Long,
+    val startProgression: Double,
+    val endProgression: Double,
+    val originDeviceId: String,
+)
+
+internal data class DriveVocabWordAckMeta(
+    val language: String,
+    val normalized: String,
+    val wordId: Long?,
+    val recordKey: String,
+    val recordFp: String,
+    val baseJson: String?,
+    val isDelete: Boolean,
+)
+
+internal data class DriveVocabReviewAckMeta(
+    val reviewId: String,
+    val localReviewId: Long?,
+    val language: String,
+    val normalized: String,
+    val recordFp: String,
+    val isDelete: Boolean,
+)
+
+internal data class DriveSessionAckMeta(
+    val remoteSessionId: String,
+    val recordFp: String,
+)
+
 /**
  * Wire-format encoder, decoder, and schema-version guard for `drive.appdata` v1
  * (`docs/DRIVE_SYNC.md` §2 & §4.1–4.6).
@@ -338,7 +425,7 @@ internal object DriveWireCodec {
         DOMAIN_FURTHEST to 1,
     )
 
-    /** Domains actively published and applied in Phase 4 (Phase 5 vocab/sessions stay paused). */
+    /** Domains actively published and applied in Phase 4. */
     val PHASE4_DOMAINS: Map<String, Int> = PHASE3_DOMAINS + mapOf(
         DOMAIN_METADATA to 1,
         DOMAIN_SERIES to 1,
@@ -346,8 +433,16 @@ internal object DriveWireCodec {
         DOMAIN_EVALUATION to 1,
     )
 
+    /** All v1 domains actively published and applied as of Phase 5. */
+    val PHASE5_DOMAINS: Map<String, Int> = PHASE4_DOMAINS + mapOf(
+        DOMAIN_VOCAB_WORD to 1,
+        DOMAIN_VOCAB_OCCURRENCE to 1,
+        DOMAIN_VOCAB_REVIEW to 1,
+        DOMAIN_SESSION to 1,
+    )
+
     /** Highest domain versions actively implemented and supported by this build. */
-    val SUPPORTED_DOMAIN_VERSIONS: Map<String, Int> = PHASE4_DOMAINS
+    val SUPPORTED_DOMAIN_VERSIONS: Map<String, Int> = PHASE5_DOMAINS
 
     /** Canonical apply order within a sync run (`docs/DRIVE_SYNC.md` §4). */
     val APPLY_ORDER: List<String> = listOf(
@@ -504,6 +599,9 @@ internal object DriveWireCodec {
             "domains" to batch.domains,
             "records" to batch.records.map(::wireRecordToMap),
         )
+        if (batch.observed.isNotEmpty()) {
+            map["observed"] = batch.observed
+        }
         return DriveCanonicalJson.encode(map)
     }
 
@@ -518,6 +616,7 @@ internal object DriveWireCodec {
         val batchId = json.optString("batchId").ifBlank { DriveCanonicalJson.batchId(deviceId, seq) }
         val createdHlc = json.optString("createdHlc")
         val domains = parseIntMap(json.optJSONObject("domains"))
+        val observed = parseLongMap(json.optJSONObject("observed"))
         val records = if (schemaVersion <= SCHEMA_VERSION) {
             parseWireRecords(json.optJSONArray("records"))
         } else {
@@ -531,6 +630,7 @@ internal object DriveWireCodec {
             createdHlc = createdHlc,
             domains = domains,
             records = records,
+            observed = observed,
         )
     }
 
@@ -838,10 +938,21 @@ internal object DriveWireCodec {
             DOMAIN_EVALUATION, DOMAIN_METADATA -> "${s("workKey")}/${s("field")}"
             DOMAIN_POSITION -> "${s("workKey")}/${s("deviceId")}"
             DOMAIN_SERIES, DOMAIN_CATALOG -> s("workKey")
+            DOMAIN_VOCAB_WORD -> vocabWordKey(s("language"), s("normalized"))
+            DOMAIN_VOCAB_OCCURRENCE -> "${s("wordKey")}/${s("occurrenceKey")}"
+            DOMAIN_VOCAB_REVIEW -> {
+                // A review also names its word twice; both must agree.
+                if (s("wordKey") != vocabWordKey(s("language"), s("normalized"))) return false
+                s("syncId")
+            }
+            DOMAIN_SESSION -> s("sessionId")
             else -> return true
         }
         return expected == record.k
     }
+
+    /** Same format as `DriveVocabularySync.wordKey`: `"<language.length>:<language>:<normalized>"`. */
+    private fun vocabWordKey(language: String, normalized: String): String = "${language.length}:$language:$normalized"
 
     fun decodeAnnotationBody(json: JSONObject): DriveAnnotationBody? {
         val id = json.optString("id").trim()
@@ -978,6 +1089,184 @@ internal object DriveWireCodec {
         )
     }
 
+    // -- Phase 5 Domain Body Codecs -------------------------------------------
+
+    fun encodeVocabWordBody(body: DriveVocabWordBody): Map<String, Any?> = mapOf(
+        "language" to body.language,
+        "normalized" to body.normalized,
+        "word" to body.word,
+        "definition" to body.definition,
+        "translationLanguage" to body.translationLanguage,
+        "notes" to body.notes,
+        "definitionEdited" to body.definitionEdited,
+        "definitionUpdatedAt" to body.definitionUpdatedAt,
+        "notesUpdatedAt" to body.notesUpdatedAt,
+        "addedAt" to body.addedAt,
+        "baseline" to body.baseline?.let { b ->
+            mapOf(
+                "dueAt" to b.dueAt,
+                "reviewedAt" to b.reviewedAt,
+                "streak" to b.streak,
+                "intervalMinutes" to b.intervalMinutes,
+                "repetitions" to b.repetitions,
+            )
+        },
+    )
+
+    fun decodeVocabWordBody(json: JSONObject): DriveVocabWordBody? {
+        val language = json.optString("language").trim()
+        val normalized = json.optString("normalized").trim()
+        val word = json.optString("word")
+        if (language.isEmpty() || normalized.isEmpty() || word.isBlank()) return null
+        val baselineObj = if (json.isNull("baseline")) null else json.optJSONObject("baseline")
+        val baseline = baselineObj?.let { b ->
+            val repetitions = b.optInt("repetitions", 0)
+            val dueAt = b.optNullableLong("dueAt")
+            if (dueAt != null && repetitions > 0) {
+                DriveVocabBaselineBody(
+                    dueAt = dueAt,
+                    reviewedAt = b.optNullableLong("reviewedAt"),
+                    streak = b.optInt("streak", 0).coerceAtLeast(0),
+                    intervalMinutes = b.optInt("intervalMinutes", 0).coerceAtLeast(0),
+                    repetitions = repetitions,
+                )
+            } else {
+                null
+            }
+        }
+        return DriveVocabWordBody(
+            language = language,
+            normalized = normalized,
+            word = word,
+            definition = json.optNullableString("definition"),
+            translationLanguage = json.optNullableString("translationLanguage"),
+            notes = json.optString("notes"),
+            definitionEdited = json.optBoolean("definitionEdited", false),
+            definitionUpdatedAt = json.optLong("definitionUpdatedAt", 0L),
+            notesUpdatedAt = json.optLong("notesUpdatedAt", 0L),
+            addedAt = json.optLong("addedAt", 0L),
+            baseline = baseline,
+        )
+    }
+
+    fun encodeVocabOccurrenceBody(body: DriveVocabOccurrenceBody): Map<String, Any?> = mapOf(
+        "wordKey" to body.wordKey,
+        "occurrenceKey" to body.occurrenceKey,
+        "workKey" to body.workKey,
+        "bookTitle" to body.bookTitle,
+        "locationKey" to com.chmouel.liseur.domain.VocabularyMerge.wireLocationKey(body.locationKey),
+        "locator" to body.locator?.takeIf { it.isNotBlank() }?.let(DriveCanonicalJson::canonicalizeJsonString),
+        "sentence" to body.sentence,
+        "sentenceEdited" to body.sentenceEdited,
+        "sentenceUpdatedAt" to body.sentenceUpdatedAt,
+        "lastSeenAt" to body.lastSeenAt,
+        "encounters" to body.encounters.coerceAtLeast(1),
+    )
+
+    fun decodeVocabOccurrenceBody(json: JSONObject): DriveVocabOccurrenceBody? {
+        val wordKey = json.optString("wordKey").trim()
+        val occurrenceKey = json.optString("occurrenceKey").trim()
+        if (wordKey.isEmpty() || occurrenceKey.isEmpty()) return null
+        val locationKey = com.chmouel.liseur.domain.VocabularyMerge.wireLocationKey(json.optString("locationKey"))
+        return DriveVocabOccurrenceBody(
+            wordKey = wordKey,
+            occurrenceKey = occurrenceKey,
+            workKey = json.optNullableString("workKey")?.trim()?.takeIf { it.isNotEmpty() },
+            bookTitle = json.optString("bookTitle"),
+            locationKey = locationKey,
+            locator = json.optNullableString("locator")?.takeIf { it.isNotBlank() },
+            sentence = json.optNullableString("sentence"),
+            sentenceEdited = json.optBoolean("sentenceEdited", false),
+            sentenceUpdatedAt = json.optLong("sentenceUpdatedAt", 0L),
+            lastSeenAt = json.optLong("lastSeenAt", 0L),
+            encounters = json.optInt("encounters", 1).coerceAtLeast(1),
+        )
+    }
+
+    fun encodeVocabReviewBody(body: DriveVocabReviewBody): Map<String, Any?> {
+        require(body.rating in VALID_VOCAB_RATINGS) { "Invalid vocabulary review rating: ${body.rating}" }
+        return mapOf(
+            "syncId" to body.syncId,
+            "wordKey" to body.wordKey,
+            "language" to body.language,
+            "normalized" to body.normalized,
+            "rating" to body.rating,
+            "reviewedAt" to body.reviewedAt,
+            "intervalMinutes" to body.intervalMinutes,
+            "dueAt" to body.dueAt,
+        )
+    }
+
+    fun decodeVocabReviewBody(json: JSONObject): DriveVocabReviewBody? {
+        val syncId = json.optString("syncId").trim()
+        val wordKey = json.optString("wordKey").trim()
+        val language = json.optString("language").trim()
+        val normalized = json.optString("normalized").trim()
+        val rating = json.optString("rating").trim()
+        if (syncId.isEmpty() || wordKey.isEmpty() || language.isEmpty() || normalized.isEmpty()) return null
+        if (rating !in VALID_VOCAB_RATINGS) return null
+        val reviewedAt = json.optNullableLong("reviewedAt") ?: return null
+        val dueAt = json.optNullableLong("dueAt") ?: return null
+        return DriveVocabReviewBody(
+            syncId = syncId,
+            wordKey = wordKey,
+            language = language,
+            normalized = normalized,
+            rating = rating,
+            reviewedAt = reviewedAt,
+            intervalMinutes = json.optInt("intervalMinutes", 0).coerceAtLeast(0),
+            dueAt = dueAt,
+        )
+    }
+
+    fun encodeSessionBody(body: DriveSessionBody): Map<String, Any?> {
+        require(body.startProgression.isFinite() && body.startProgression in 0.0..1.0) {
+            "Invalid session startProgression: ${body.startProgression}"
+        }
+        require(body.endProgression.isFinite() && body.endProgression in 0.0..1.0) {
+            "Invalid session endProgression: ${body.endProgression}"
+        }
+        return mapOf(
+            "sessionId" to body.sessionId,
+            "workKey" to body.workKey,
+            "startedAt" to body.startedAt,
+            "endedAt" to body.endedAt,
+            "durationMs" to body.durationMs.coerceAtLeast(0L),
+            "idleMs" to body.idleMs.coerceAtLeast(0L),
+            "startProgression" to body.startProgression,
+            "endProgression" to body.endProgression,
+            "originDeviceId" to body.originDeviceId,
+        )
+    }
+
+    fun decodeSessionBody(json: JSONObject): DriveSessionBody? {
+        val sessionId = json.optString("sessionId").trim()
+        val workKey = json.optString("workKey").trim()
+        val originDeviceId = json.optString("originDeviceId").trim()
+        if (sessionId.isEmpty() || workKey.isEmpty()) return null
+        val startedAt = json.optNullableLong("startedAt") ?: return null
+        val endedAt = json.optNullableLong("endedAt") ?: return null
+        val durationMs = json.optNullableLong("durationMs")?.takeIf { it >= 0L } ?: return null
+        val idleMs = (json.optNullableLong("idleMs") ?: 0L).coerceAtLeast(0L)
+        val startProg = json.optNullableDouble("startProgression")
+            ?.takeIf { it.isFinite() && it in 0.0..1.0 }
+            ?: return null
+        val endProg = json.optNullableDouble("endProgression")
+            ?.takeIf { it.isFinite() && it in 0.0..1.0 }
+            ?: return null
+        return DriveSessionBody(
+            sessionId = sessionId,
+            workKey = workKey,
+            startedAt = startedAt,
+            endedAt = maxOf(endedAt, startedAt),
+            durationMs = durationMs,
+            idleMs = idleMs,
+            startProgression = startProg,
+            endProgression = endProg,
+            originDeviceId = originDeviceId,
+        )
+    }
+
     fun encodeRevisionAckJson(payload: DriveRevisionAckPayload): String {
         val map = linkedMapOf<String, Any?>(
             "vfp" to payload.vfp,
@@ -1060,6 +1349,33 @@ internal object DriveWireCodec {
                         "recordOp" to ack.recordOp,
                         "remoteCoverSha256" to ack.remoteCoverSha256,
                         "remoteCoverUpdatedAt" to ack.remoteCoverUpdatedAt,
+                    )
+                },
+                "vocabWordAcks" to metadata.vocabWordAcks.map { ack ->
+                    mapOf(
+                        "language" to ack.language,
+                        "normalized" to ack.normalized,
+                        "wordId" to ack.wordId,
+                        "recordKey" to ack.recordKey,
+                        "recordFp" to ack.recordFp,
+                        "baseJson" to ack.baseJson,
+                        "isDelete" to ack.isDelete,
+                    )
+                },
+                "vocabReviewAcks" to metadata.vocabReviewAcks.map { ack ->
+                    mapOf(
+                        "reviewId" to ack.reviewId,
+                        "localReviewId" to ack.localReviewId,
+                        "language" to ack.language,
+                        "normalized" to ack.normalized,
+                        "recordFp" to ack.recordFp,
+                        "isDelete" to ack.isDelete,
+                    )
+                },
+                "sessionAcks" to metadata.sessionAcks.map { ack ->
+                    mapOf(
+                        "remoteSessionId" to ack.remoteSessionId,
+                        "recordFp" to ack.recordFp,
                     )
                 },
             ),
@@ -1166,12 +1482,67 @@ internal object DriveWireCodec {
                 )
             }
         }
+        val vocabWordArr = json.optJSONArray("vocabWordAcks") ?: JSONArray()
+        val vocabWordAcks = buildList(vocabWordArr.length()) {
+            for (i in 0 until vocabWordArr.length()) {
+                val obj = vocabWordArr.optJSONObject(i) ?: continue
+                val language = obj.optString("language").trim()
+                val normalized = obj.optString("normalized").trim()
+                if (language.isEmpty() || normalized.isEmpty()) continue
+                add(
+                    DriveVocabWordAckMeta(
+                        language = language,
+                        normalized = normalized,
+                        wordId = obj.optNullableLong("wordId"),
+                        recordKey = obj.optString("recordKey"),
+                        recordFp = obj.optString("recordFp"),
+                        baseJson = obj.optNullableString("baseJson"),
+                        isDelete = obj.optBoolean("isDelete", false),
+                    ),
+                )
+            }
+        }
+        val vocabReviewArr = json.optJSONArray("vocabReviewAcks") ?: JSONArray()
+        val vocabReviewAcks = buildList(vocabReviewArr.length()) {
+            for (i in 0 until vocabReviewArr.length()) {
+                val obj = vocabReviewArr.optJSONObject(i) ?: continue
+                val reviewId = obj.optString("reviewId").trim()
+                if (reviewId.isEmpty()) continue
+                add(
+                    DriveVocabReviewAckMeta(
+                        reviewId = reviewId,
+                        localReviewId = obj.optNullableLong("localReviewId"),
+                        language = obj.optString("language"),
+                        normalized = obj.optString("normalized"),
+                        recordFp = obj.optString("recordFp"),
+                        isDelete = obj.optBoolean("isDelete", false),
+                    ),
+                )
+            }
+        }
+        val sessionArr = json.optJSONArray("sessionAcks") ?: JSONArray()
+        val sessionAcks = buildList(sessionArr.length()) {
+            for (i in 0 until sessionArr.length()) {
+                val obj = sessionArr.optJSONObject(i) ?: continue
+                val remoteSessionId = obj.optString("remoteSessionId").trim()
+                if (remoteSessionId.isEmpty()) continue
+                add(
+                    DriveSessionAckMeta(
+                        remoteSessionId = remoteSessionId,
+                        recordFp = obj.optString("recordFp"),
+                    ),
+                )
+            }
+        }
         return DriveOutboxAckMetadata(
             positionAcks = positionAcks,
             peakAcks = peakAcks,
             annotationAcks = annotationAcks,
             evaluationAcks = evaluationAcks,
             metadataAcks = metadataAcks,
+            vocabWordAcks = vocabWordAcks,
+            vocabReviewAcks = vocabReviewAcks,
+            sessionAcks = sessionAcks,
         )
     }
 
@@ -1230,6 +1601,7 @@ internal object DriveWireCodec {
         ancestors: List<String> = emptyList(),
         resRefs: List<String> = emptyList(),
         explicitFp: String? = null,
+        observed: Map<String, Long>? = null,
     ): DriveWireRecord = DriveWireRecord(
         d = domain,
         k = key,
@@ -1239,6 +1611,7 @@ internal object DriveWireCodec {
         anc = ancestors.distinct().take(MAX_ANCESTORS),
         resRefs = resRefs.distinct().sorted(),
         body = null,
+        observed = observed,
     )
 
     /**
@@ -1318,6 +1691,9 @@ internal object DriveWireCodec {
         put("anc", record.anc.distinct().take(MAX_ANCESTORS))
         put("resRefs", record.resRefs.distinct().sorted())
         put("body", record.body)
+        if (record.observed != null) {
+            put("observed", record.observed)
+        }
     }
 
     private fun parseWireRecords(array: JSONArray?): List<DriveWireRecord> {
@@ -1343,6 +1719,11 @@ internal object DriveWireCodec {
                         body = if (obj.isNull("body")) null else obj.optJSONObject("body"),
                         outcome = obj.optNullableString("outcome"),
                         resolvedFps = parseStringList(obj.optJSONArray("resolvedFps")),
+                        observed = if (obj.has("observed") && !obj.isNull("observed")) {
+                            parseLongMap(obj.optJSONObject("observed"))
+                        } else {
+                            null
+                        },
                     ),
                 )
             }
@@ -1445,6 +1826,7 @@ internal object DriveWireCodec {
     }
 
     private val VALID_ANNOTATION_KINDS = setOf("HIGHLIGHT", "NOTE", "BOOK_NOTE", "BOOKMARK")
+    private val VALID_VOCAB_RATINGS = setOf("AGAIN", "HARD", "GOOD", "EASY")
     private val SHA256_REGEX = Regex("[0-9a-f]{64}")
 
     private fun JSONObject.optNullableString(key: String): String? =

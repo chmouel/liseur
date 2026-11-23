@@ -181,6 +181,24 @@ internal class DriveLibrarySync(
         )
     }
 
+    internal val vocabularySync: DriveVocabularySync by lazy {
+        DriveVocabularySync(
+            database = database,
+            store = store,
+            workIdentity = workIdentity,
+            clock = clock,
+        )
+    }
+
+    internal val sessionSync: DriveSessionSync by lazy {
+        DriveSessionSync(
+            database = database,
+            store = store,
+            workIdentity = workIdentity,
+            clock = clock,
+        )
+    }
+
     internal val positionSync: DrivePositionSync by lazy {
         DrivePositionSync(
             database = database,
@@ -210,6 +228,8 @@ internal class DriveLibrarySync(
             evaluationSync = evaluationSync,
             metadataSync = metadataSync,
             seriesSync = seriesSync,
+            vocabularySync = vocabularySync,
+            sessionSync = sessionSync,
             clock = clock,
         )
     }

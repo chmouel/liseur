@@ -1147,7 +1147,7 @@ class DrivePhase4EndToEndTest {
     }
 
     @Test
-    fun `Phase 5 domains remain paused and unsupported in DriveWireCodec`() {
+    fun `all v1 domains including Phase 5 are supported in DriveWireCodec while future versions pause`() {
         val phase5Domains = listOf(
             DriveWireCodec.DOMAIN_VOCAB_WORD,
             DriveWireCodec.DOMAIN_VOCAB_OCCURRENCE,
@@ -1155,9 +1155,10 @@ class DrivePhase4EndToEndTest {
             DriveWireCodec.DOMAIN_SESSION,
         )
         for (domain in phase5Domains) {
-            assertFalse("$domain must remain paused in Phase 4", domain in DriveWireCodec.SUPPORTED_DOMAIN_VERSIONS)
-            val check = DriveWireCodec.checkSchema(1, mapOf(domain to 1))
-            assertTrue(check is DriveSchemaCheck.UnsupportedDomains)
+            assertTrue("$domain must be supported in Phase 5", domain in DriveWireCodec.SUPPORTED_DOMAIN_VERSIONS)
+            assertEquals(DriveSchemaCheck.Supported, DriveWireCodec.checkSchema(1, mapOf(domain to 1)))
+            val futureCheck = DriveWireCodec.checkSchema(1, mapOf(domain to 2))
+            assertTrue(futureCheck is DriveSchemaCheck.UnsupportedDomains)
         }
     }
 
@@ -1728,9 +1729,16 @@ class DrivePhase4EndToEndTest {
             for (domain in phase4Only) {
                 deviceB.driveDb.cursors().upsert(DriveCursor(PERM_ID, "dev-a", domain, appliedSeq = 0L, pausedSchemaVersion = 1))
             }
-            // Phase 5 domain must STAY paused after the Phase 4 upgrade!
+            // Phase 5 domain v1 pause should ALSO unpause cleanly now that Phase 5 is supported!
             deviceB.driveDb.cursors().upsert(
                 DriveCursor(PERM_ID, "dev-a", DriveWireCodec.DOMAIN_VOCAB_WORD, appliedSeq = 0L, pausedSchemaVersion = 1),
+            )
+            // Unsupported future schema version (v2) and unknown future domain MUST stay paused!
+            deviceB.driveDb.cursors().upsert(
+                DriveCursor(PERM_ID, "dev-a", DriveWireCodec.DOMAIN_SESSION, appliedSeq = 0L, pausedSchemaVersion = 2),
+            )
+            deviceB.driveDb.cursors().upsert(
+                DriveCursor(PERM_ID, "dev-a", "futureDomain", appliedSeq = 0L, pausedSchemaVersion = 1),
             )
             // Advance startPageToken to the head so incremental sync sees ZERO new Drive changes!
             deviceB.driveDb.accounts().updateStartPageToken(PERM_ID, driveServer.getStartPageToken("token-dev-b"))
@@ -1742,16 +1750,17 @@ class DrivePhase4EndToEndTest {
         assertEquals("Dune", deviceB.liseurDb.bookDao().getByUrl(stubB)!!.title)
         assertFalse(deviceB.liseurDb.bookDao().getByUrl(stubB)!!.seriesOverridden)
 
-        // Upgraded Phase 4 build runs incremental sync (no new remote changes on Drive)!
+        // Upgraded build runs incremental sync (no new remote changes on Drive)!
         val summary = deviceB.changeEngine.sync()
         assertEquals(SyncOutcome.Success, summary.outcome)
 
-        // All 4 Phase 4 domain pauses are cleared and records are imported from appliedSeq!
+        // All Phase 4 + Phase 5 v1 domain pauses are cleared and records are imported from appliedSeq!
         for (domain in listOf(
             DriveWireCodec.DOMAIN_ANNOTATION,
             DriveWireCodec.DOMAIN_METADATA,
             DriveWireCodec.DOMAIN_SERIES,
             DriveWireCodec.DOMAIN_EVALUATION,
+            DriveWireCodec.DOMAIN_VOCAB_WORD,
         )) {
             val cursor = deviceB.driveDb.cursors().get(PERM_ID, "dev-a", domain)!!
             assertNull("Expected pause cleared for $domain", cursor.pausedSchemaVersion)
@@ -1762,10 +1771,13 @@ class DrivePhase4EndToEndTest {
         assertEquals("Dune (Upgraded)", deviceB.liseurDb.bookDao().getByUrl(stubB)!!.title)
         assertEquals("Dune Upgraded Series", deviceB.liseurDb.bookDao().getByUrl(stubB)!!.userSeriesName)
 
-        // Phase 5 domain cursor remains paused!
-        val vocabCursor = deviceB.driveDb.cursors().get(PERM_ID, "dev-a", DriveWireCodec.DOMAIN_VOCAB_WORD)!!
-        assertEquals(1, vocabCursor.pausedSchemaVersion)
-        assertEquals(0L, vocabCursor.appliedSeq)
+        // Unsupported future version (v2) and unknown future domain cursors remain paused!
+        val sessionV2Cursor = deviceB.driveDb.cursors().get(PERM_ID, "dev-a", DriveWireCodec.DOMAIN_SESSION)!!
+        assertEquals(2, sessionV2Cursor.pausedSchemaVersion)
+        assertEquals(0L, sessionV2Cursor.appliedSeq)
+        val futureDomainCursor = deviceB.driveDb.cursors().get(PERM_ID, "dev-a", "futureDomain")!!
+        assertEquals(1, futureDomainCursor.pausedSchemaVersion)
+        assertEquals(0L, futureDomainCursor.appliedSeq)
     }
 
     // -- Harness --------------------------------------------------------------
