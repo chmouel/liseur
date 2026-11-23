@@ -627,6 +627,9 @@ internal class ReadingTracker(context: Context, private val database: LiseurData
     ) {
         if (!remember { used() }) return
         val account by hardcover.account.collectAsState(initial = null)
+        // Opening the Services page creates the database, so only a past connection counts as set up.
+        val everConnected by produceState(false, account) { value = account != null || hardcover.everConnected() }
+        if (!everConnected) return
         val link by remember(bookUrl) { hardcover.link(bookUrl) }.collectAsState(initial = null)
         val evaluations by remember(bookUrl) { hardcover.evaluations(bookUrl) }.collectAsState(initial = emptyList())
         val conflicts = remember(evaluations) { evaluations.filter { it.conflict } }
@@ -761,7 +764,7 @@ internal class ReadingTracker(context: Context, private val database: LiseurData
                         onClick = {
                             confirmingUnlink = false
                             message = null
-                            ui.launch { hardcover.unlink(bookUrl) }
+                            scope.launch { runCatching { hardcover.unlink(bookUrl) } }
                         },
                     ) {
                         Text(stringResource(R.string.hardcover_book_unlink))

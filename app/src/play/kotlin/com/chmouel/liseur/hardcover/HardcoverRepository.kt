@@ -205,11 +205,17 @@ class HardcoverRepository(
     suspend fun unlink(bookUrl: String) = lock.withLock {
         inTransaction {
             val urls = listOf(bookUrl)
+            val keptOff = dao.link(bookUrl)?.excluded == true
             dao.forgetLinks(urls)
+            // A book kept off Hardcover stays off, or the next change would match and push it again.
+            if (keptOff) dao.upsertLink(HardcoverBookLink(bookUrl = bookUrl, excluded = true))
             dao.forgetPending(urls)
             dao.forgetEvaluations(urls)
         }
     }
+
+    /** Whether an account was ever connected here; the owner of the matches outlives a disconnect. */
+    suspend fun everConnected(): Boolean = dao.linksOwner() != null
 
     /**
      * Queues a book for the next drain, when an automatic push is wanted.

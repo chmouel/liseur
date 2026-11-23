@@ -995,6 +995,26 @@ class HardcoverRepositoryTest {
     }
 
     @Test
+    fun `unlinking a book kept off hardcover keeps it off`() = runBlocking {
+        signedIn()
+        dao.links[BOOK] = HardcoverBookLink(bookUrl = BOOK, hardcoverBookId = 9, editionId = 5, excluded = true)
+
+        repository().unlink(BOOK)
+
+        val row = checkNotNull(dao.links[BOOK])
+        assertTrue(row.excluded)
+        assertFalse(row.matched)
+        assertFalse(repository().queue(BOOK))
+    }
+
+    @Test
+    fun `only a past connection counts as hardcover set up`() = runBlocking {
+        assertFalse(repository().everConnected())
+        dao.setLinksOwner(HardcoverLinksOwner(userId = 42))
+        assertTrue(repository().everConnected())
+    }
+
+    @Test
     fun `unlinking drops the book link and queued push without contacting hardcover`() = runBlocking {
         signedIn()
         val repository = repository()
