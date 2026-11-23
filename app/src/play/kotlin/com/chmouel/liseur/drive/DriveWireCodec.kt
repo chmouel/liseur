@@ -58,6 +58,11 @@ internal data class DriveWireRecord(
     val outcome: String? = null,
     val resolvedFps: List<String> = emptyList(),
     val observed: Map<String, Long>? = null,
+    /**
+     * Snapshot records only: the author's publication seq of this version, so provenance
+     * checks (vocabulary delete observed vectors) do not mistake it for `throughSeq`.
+     */
+    val seq: Long? = null,
 )
 
 internal data class DriveDeltaBatch(
@@ -402,6 +407,7 @@ internal object DriveWireCodec {
     const val MAX_BATCH_RECORDS = 2_000
     const val MAX_BATCH_BYTES = 1_048_576
     private const val BATCH_ENVELOPE_MARGIN = 512
+    const val MAX_SNAPSHOT_PART_BYTES = 4 * 1024 * 1024
     const val MAX_ANCESTORS = 64
 
     const val DOMAIN_WORK_ALIAS = "workAlias"
@@ -470,6 +476,9 @@ internal object DriveWireCodec {
     fun deltaFileName(deviceId: String, seq: Long): String =
         String.format(Locale.ROOT, "device-%s-seq-%010d.json", deviceId, seq)
 
+    fun snapshotPartFileName(deviceId: String, throughSeq: Long, partIndex: Int): String =
+        String.format(Locale.ROOT, "device-%s-snapshot-%010d-part-%03d.json", deviceId, throughSeq, partIndex)
+
     fun manifestAppProperties(deviceId: String): Map<String, String> = mapOf(
         "liseur" to "1",
         "kind" to DriveFile.KIND_MANIFEST,
@@ -485,6 +494,21 @@ internal object DriveWireCodec {
         "seq" to seq.toString(),
         "batchId" to batchId,
     )
+
+    fun snapshotPartAppProperties(
+        deviceId: String,
+        throughSeq: Long,
+        partIndex: Int,
+        sha256: String? = null,
+    ): Map<String, String> = buildMap {
+        put("liseur", "1")
+        put("kind", DriveFile.KIND_SNAPSHOT)
+        put("schemaVersion", SCHEMA_VERSION.toString())
+        put("deviceId", deviceId)
+        put("throughSeq", throughSeq.toString())
+        put("partIndex", partIndex.toString())
+        sha256?.trim()?.lowercase(Locale.ROOT)?.takeIf { it.isNotEmpty() }?.let { put("sha256", it) }
+    }
 
     fun epubAppProperties(sha256: String, workKey: String): Map<String, String> = mapOf(
         "liseur" to "1",
@@ -634,7 +658,23 @@ internal object DriveWireCodec {
         )
     }
 
-    // -- Snapshot part decoder (for bootstrap / fallback) ---------------------
+    // -- Snapshot part encoder & decoder --------------------------------------
+
+    fun encodeSnapshotPart(part: DriveSnapshotPart): String {
+        val map = linkedMapOf<String, Any?>(
+            "schemaVersion" to part.schemaVersion,
+            "kind" to DriveFile.KIND_SNAPSHOT,
+            "deviceId" to part.deviceId,
+            "throughSeq" to part.throughSeq,
+            "partIndex" to part.partIndex,
+            "partCount" to part.partCount,
+            "createdHlc" to part.createdHlc,
+            "domains" to part.domains,
+            "records" to part.records.map(::wireRecordToMap),
+            "resolutions" to part.resolutions.map(::snapshotResolutionToMap),
+        )
+        return DriveCanonicalJson.encode(map)
+    }
 
     fun decodeSnapshotPart(rawJson: String): DriveSnapshotPart {
         val json = JSONObject(rawJson)
@@ -1678,7 +1718,7 @@ internal object DriveWireCodec {
         return BatchChunking(chunks, oversized)
     }
 
-    private fun wireRecordToMap(record: DriveWireRecord): Map<String, Any?> = linkedMapOf<String, Any?>().apply {
+    internal fun wireRecordToMap(record: DriveWireRecord): Map<String, Any?> = linkedMapOf<String, Any?>().apply {
         put("d", record.d)
         put("k", record.k)
         put("op", record.op)
@@ -1694,7 +1734,19 @@ internal object DriveWireCodec {
         if (record.observed != null) {
             put("observed", record.observed)
         }
+        if (record.seq != null) {
+            put("seq", record.seq)
+        }
     }
+
+    internal fun snapshotResolutionToMap(resolution: DriveSnapshotResolution): Map<String, Any?> = mapOf(
+        "d" to resolution.d,
+        "k" to resolution.k,
+        "resolutionFp" to resolution.resolutionFp,
+        "resolvedFps" to resolution.resolvedFps.distinct().sorted(),
+        "outcome" to resolution.outcome,
+        "hlc" to resolution.hlc,
+    )
 
     private fun parseWireRecords(array: JSONArray?): List<DriveWireRecord> {
         if (array == null) return emptyList()
@@ -1724,13 +1776,14 @@ internal object DriveWireCodec {
                         } else {
                             null
                         },
+                        seq = obj.optNullableLong("seq")?.takeIf { it > 0L },
                     ),
                 )
             }
         }
     }
 
-    private fun snapshotRefToMap(ref: DriveSnapshotRef): Map<String, Any?> = mapOf(
+    internal fun snapshotRefToMap(ref: DriveSnapshotRef): Map<String, Any?> = mapOf(
         "throughSeq" to ref.throughSeq,
         "parts" to ref.parts.map { part ->
             mapOf(
@@ -1743,7 +1796,7 @@ internal object DriveWireCodec {
         },
     )
 
-    private fun parseSnapshotRef(json: JSONObject): DriveSnapshotRef {
+    internal fun parseSnapshotRef(json: JSONObject): DriveSnapshotRef {
         val throughSeq = json.optLong("throughSeq", 0L)
         val partsArr = json.optJSONArray("parts") ?: JSONArray()
         val parts = buildList(partsArr.length()) {
