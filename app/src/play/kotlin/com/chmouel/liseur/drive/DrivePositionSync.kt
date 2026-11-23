@@ -1,0 +1,1240 @@
+package com.chmouel.liseur.drive
+
+import androidx.room.withTransaction
+import com.chmouel.liseur.data.db.Book
+import com.chmouel.liseur.data.db.FurthestPosition
+import com.chmouel.liseur.data.db.LiseurDatabase
+import com.chmouel.liseur.data.db.PeakDelivery
+import com.chmouel.liseur.data.db.ReadingProgress
+import com.chmouel.liseur.data.db.SyncPeerState
+import com.chmouel.liseur.data.db.WorkAlias
+import com.chmouel.liseur.data.library.FinishedState
+import com.chmouel.liseur.data.remote.FurthestDestination
+import com.chmouel.liseur.data.remote.PeerPositionSync
+import com.chmouel.liseur.data.remote.PreviewOutcome
+import com.chmouel.liseur.data.remote.ResolveOutcome
+import com.chmouel.liseur.data.remote.ResumeConfidence
+import com.chmouel.liseur.data.remote.SyncFailure
+import com.chmouel.liseur.data.remote.SyncIdentity
+import com.chmouel.liseur.data.remote.SyncOutcome
+import com.chmouel.liseur.data.remote.SyncPreview
+import com.chmouel.liseur.data.remote.SyncSnapshot
+import com.chmouel.liseur.domain.FinishedOverride
+import com.chmouel.liseur.domain.NarrativeCoverage
+import com.chmouel.liseur.domain.ReadingBaseline
+import com.chmouel.liseur.domain.ReadingState
+import com.chmouel.liseur.domain.ReadingStatus
+import com.chmouel.liseur.domain.ReadingStatusChoice
+import com.chmouel.liseur.domain.SyncDecision
+import com.chmouel.liseur.domain.readingStatusFor
+import com.chmouel.liseur.domain.reconcileReadingState
+import com.chmouel.liseur.reader.progress.ExactLocatorAnchor
+import com.chmouel.liseur.reader.progress.ResourceAnchor
+import java.util.Locale
+import java.util.UUID
+import org.json.JSONObject
+
+/** Outbound delivery metadata tracked alongside a frozen batch so ACK can settle `liseur.db`. */
+internal data class DrivePositionAckMeta(
+    val bookUrl: String,
+    val localRevision: Long,
+    val statusRevision: Long,
+    val progression: Double?,
+    val status: String,
+    val recordKey: String = "",
+    val recordFp: String = "",
+)
+
+internal data class DrivePeakAckMeta(
+    val bookUrl: String,
+    val workKey: String,
+    val peakRevision: Long,
+    val recordKey: String = "",
+    val recordFp: String = "",
+)
+
+internal data class DriveOutboxAckMetadata(
+    val positionAcks: List<DrivePositionAckMeta> = emptyList(),
+    val peakAcks: List<DrivePeakAckMeta> = emptyList(),
+)
+
+/**
+ * Reading position, reading status, per-device positions, edition-gated locators,
+ * backward reading moves, and furthest-position peaks/resets for Google Drive sync
+ * (`docs/DRIVE_SYNC.md` §4.5–4.6).
+ */
+internal class DrivePositionSync(
+    private val database: LiseurDatabase,
+    private val storeProvider: () -> DriveSyncDatabase,
+    private val workIdentityProvider: () -> DriveWorkIdentity,
+    private val finishedState: FinishedState,
+    private val runSync: suspend (bookUrl: String?) -> SyncOutcome,
+    private val isActive: suspend () -> Boolean,
+    private val activeAccount: suspend () -> DriveAccount?,
+    private val localDeviceId: suspend () -> String,
+    private val nextHlc: suspend (permissionId: String) -> String,
+    private val clock: () -> Long = System::currentTimeMillis,
+) : PeerPositionSync {
+
+    private val store get() = storeProvider()
+    private val workIdentity get() = workIdentityProvider()
+    private val books get() = database.bookDao()
+    private val progressDao get() = database.readingProgressDao()
+    private val peerStateDao get() = database.syncPeerStateDao()
+    private val furthestDao get() = database.furthestPositionDao()
+    private val identities get() = database.workIdentityDao()
+    private val recordStates get() = store.recordStates()
+
+    override val peerId: String get() = DriveLibrarySync.PEER_ID
+
+    override suspend fun dialledAddress(): String? =
+        if (isActive()) DRIVE_DIALLED_ADDRESS else null
+
+    override suspend fun syncAll(snapshot: SyncSnapshot?): SyncOutcome =
+        if (isActive()) runSync(null) else SyncOutcome.NotApplicable
+
+    override suspend fun syncBook(bookUrl: String): SyncOutcome =
+        if (isActive()) runSync(bookUrl) else SyncOutcome.NotApplicable
+
+    override suspend fun canSync(bookUrl: String): Boolean {
+        if (!isActive()) return false
+        val book = books.getByUrl(bookUrl) ?: return false
+        return book.browseServerId == null
+    }
+
+    override suspend fun previewBook(bookUrl: String): PreviewOutcome =
+        previewKnownBook(bookUrl)
+
+    override suspend fun previewKnownBook(bookUrl: String): PreviewOutcome {
+        val account = activeAccount() ?: return PreviewOutcome.NotSynced
+        val drivePeerId = DriveLibrarySync.accountPeerId(account.permissionId)
+        val book = books.getByUrl(bookUrl) ?: return PreviewOutcome.NotSynced
+        val alias = workIdentity.resolveBook(account.permissionId, book, computeFingerprintIfMissing = false)
+            ?.takeIf { it.usable }
+            ?: return PreviewOutcome.NotSynced
+        val stored = progressDao.get(bookUrl)
+        val peerState = peerStateDao.get(bookUrl, drivePeerId)
+        val destination = furthestDestination(account.permissionId, bookUrl, alias)
+        val hasPending = peerState?.hasPending == true && peerState.pendingProgression != null
+        if (!hasPending && destination == null) return PreviewOutcome.NotSynced
+
+        val exact = if (hasPending) peerState.exactLocatorFor(alias) else null
+        return PreviewOutcome.Ready(
+            SyncPreview(
+                local = stored?.totalProgression,
+                remote = if (hasPending) peerState.pendingProgression else null,
+                remoteAt = if (hasPending) peerState.remoteUpdatedAt?.takeIf { it > 0L } else null,
+                excerpt = ExactLocatorAnchor.excerpt(exact),
+                confidence = if (exact != null) ResumeConfidence.EXACT else ResumeConfidence.APPROXIMATE,
+                exactPositionAgreement = if (hasPending) {
+                    ExactLocatorAnchor.agreement(stored?.locatorJson, exact)
+                } else {
+                    null
+                },
+                accountKey = drivePeerId,
+                remoteStatus = if (hasPending) peerState.pendingStatus else null,
+                remoteLocatorJson = if (hasPending) peerState.restorableLocatorFor(alias) else null,
+                localRevision = stored?.localRevision,
+                resolvable = hasPending,
+                furthest = destination,
+                localLocatorJson = stored?.locatorJson,
+                furthestUptoSeq = knownMaxSeq(account.permissionId, alias.workId),
+                localUnreadResetPending = stored?.hasPendingUnreadReset(peerState?.ackedRevision ?: 0L) == true,
+            ),
+        )
+    }
+
+    override suspend fun preservedConflict(bookUrl: String, peerId: String?): SyncPreview? {
+        val account = activeAccount() ?: return null
+        val drivePeerId = DriveLibrarySync.accountPeerId(account.permissionId)
+        val state = peerStateDao.get(bookUrl, drivePeerId) ?: return null
+        if (!state.hasPending) return null
+        val there = state.pendingProgression ?: return null
+        val stored = progressDao.get(bookUrl)
+        val alias = identities.alias(bookUrl, drivePeerId)
+        val exact = state.exactLocatorFor(alias)
+        return SyncPreview(
+            local = stored?.totalProgression,
+            remote = there,
+            remoteAt = state.remoteUpdatedAt?.takeIf { it > 0L },
+            excerpt = ExactLocatorAnchor.excerpt(exact),
+            confidence = if (exact != null) ResumeConfidence.EXACT else ResumeConfidence.APPROXIMATE,
+            exactPositionAgreement = ExactLocatorAnchor.agreement(stored?.locatorJson, exact),
+            accountKey = drivePeerId,
+            remoteStatus = state.pendingStatus,
+            remoteLocatorJson = state.restorableLocatorFor(alias),
+            localRevision = stored?.localRevision,
+            localUnreadResetPending = stored?.hasPendingUnreadReset(state.ackedRevision) == true,
+        ).takeIf { !it.agrees }
+    }
+
+    override suspend fun takeRemotePosition(
+        bookUrl: String,
+        atRevision: Long,
+        peerId: String?,
+        expectedAccountKey: String?,
+    ): ResolveOutcome {
+        val account = activeAccount() ?: return if (expectedAccountKey != null) {
+            ResolveOutcome.Superseded
+        } else {
+            ResolveOutcome.Done
+        }
+        val drivePeerId = DriveLibrarySync.accountPeerId(account.permissionId)
+        if (expectedAccountKey != null && expectedAccountKey != drivePeerId) {
+            return ResolveOutcome.Superseded
+        }
+        val state = peerStateDao.get(bookUrl, drivePeerId) ?: return if (expectedAccountKey != null) {
+            ResolveOutcome.Superseded
+        } else {
+            ResolveOutcome.Done
+        }
+        val progression = state.pendingProgression ?: return if (expectedAccountKey != null) {
+            ResolveOutcome.Superseded
+        } else {
+            ResolveOutcome.Done
+        }
+        val alias = identities.alias(bookUrl, drivePeerId)
+        val locator = state.restorableLocatorFor(alias)
+        val partial = state.pendingCoverage == NarrativeCoverage.PARTIAL.wireName
+        val status = readingStatusFor(progression, partialCoverage = partial)
+        val now = clock()
+        var applied = false
+        database.withTransaction {
+            applied = progressDao.applyPeerPull(
+                bookUrl = bookUrl,
+                expectedRevision = atRevision,
+                progression = progression,
+                status = status.wireName,
+                now = now,
+                locatorJson = locator,
+                remoteUpdatedAt = state.pendingUpdatedAt,
+                coverage = state.pendingCoverage,
+            )
+            if (applied) {
+                peerStateDao.settle(
+                    bookUrl = bookUrl,
+                    peerId = drivePeerId,
+                    ackedRevision = atRevision + 1L,
+                    progression = progression,
+                    status = status.wireName,
+                    now = now,
+                )
+            }
+        }
+        if (!applied) return ResolveOutcome.Superseded
+        finishedState.refreshFromProgress(bookUrl)
+        return ResolveOutcome.Done
+    }
+
+    override suspend fun keepLocalPosition(bookUrl: String, peerId: String?): ResolveOutcome {
+        val account = activeAccount() ?: return ResolveOutcome.Done
+        val drivePeerId = DriveLibrarySync.accountPeerId(account.permissionId)
+        peerStateDao.clearPending(bookUrl, drivePeerId)
+        return ResolveOutcome.Done
+    }
+
+    override suspend fun takeFurthestPosition(
+        bookUrl: String,
+        atRevision: Long,
+        destination: FurthestDestination,
+        peerId: String?,
+    ): ResolveOutcome {
+        val account = activeAccount() ?: return ResolveOutcome.Superseded
+        val drivePeerId = DriveLibrarySync.accountPeerId(account.permissionId)
+        if (destination.accountKey != drivePeerId) return ResolveOutcome.Superseded
+        var applied = false
+        val now = clock()
+        database.withTransaction {
+            val alias = identities.alias(bookUrl, drivePeerId)?.takeIf { it.usable }
+                ?: return@withTransaction
+            if (alias.workId != destination.workId ||
+                alias.editionSha != destination.localEdition ||
+                furthestDestination(account.permissionId, bookUrl, alias) != destination
+            ) {
+                return@withTransaction
+            }
+            val status = readingStatusFor(
+                destination.progression,
+                partialCoverage = destination.coverage == NarrativeCoverage.PARTIAL,
+            )
+            applied = progressDao.applyPeerPull(
+                bookUrl = bookUrl,
+                expectedRevision = atRevision,
+                progression = destination.progression,
+                status = status.wireName,
+                now = now,
+                locatorJson = destination.locatorJson,
+                remoteUpdatedAt = destination.at,
+                coverage = destination.coverage?.wireName,
+            )
+            if (applied) {
+                peerStateDao.clearPending(bookUrl, drivePeerId)
+            }
+        }
+        if (!applied) return ResolveOutcome.Superseded
+        finishedState.refreshFromProgress(bookUrl)
+        return ResolveOutcome.Done
+    }
+
+    override suspend fun forgetFurthestPosition(
+        bookUrl: String,
+        destination: FurthestDestination,
+        uptoSeq: Long,
+        peerId: String?,
+    ): ResolveOutcome {
+        val account = activeAccount() ?: return ResolveOutcome.Superseded
+        val drivePeerId = DriveLibrarySync.accountPeerId(account.permissionId)
+        if (destination.accountKey != drivePeerId) return ResolveOutcome.Superseded
+        val alias = identities.alias(bookUrl, drivePeerId)?.takeIf { it.usable }
+            ?: return ResolveOutcome.Superseded
+        if (alias.workId != destination.workId ||
+            alias.editionSha != destination.localEdition ||
+            furthestDestination(account.permissionId, bookUrl, alias) != destination
+        ) {
+            return ResolveOutcome.Superseded
+        }
+
+        val devId = localDeviceId()
+        val now = clock()
+        val workKey = workIdentity.canonicalWorkKey(account.permissionId, alias.workId)
+        val observed = furthestDao.forWork(drivePeerId, workKey)
+        val stored = progressDao.get(bookUrl)
+
+        val floors = linkedMapOf<String, Long>()
+        for (row in observed) {
+            val origin = row.origin.ifBlank { devId }
+            val current = floors[origin] ?: 0L
+            floors[origin] = maxOf(current, row.seq)
+        }
+        stored?.peakRevision?.let { rev ->
+            val current = floors[devId] ?: 0L
+            floors[devId] = maxOf(current, rev)
+        }
+        if (floors.isEmpty() && uptoSeq > 0L) {
+            floors[devId] = uptoSeq
+        }
+
+        val resetId = UUID.randomUUID().toString().lowercase(Locale.ROOT)
+        val resetKey = resetRecordKey(workKey, resetId)
+        val body = DriveFurthestBody.Reset(
+            workKey = workKey,
+            resetId = resetId,
+            floors = floors.toSortedMap(),
+            resetAt = now,
+        )
+        val bodyMap = DriveWireCodec.encodeFurthestBody(body)
+        val fp = DriveCanonicalJson.contentFp(bodyMap)
+        val hlc = nextHlc(account.permissionId)
+
+        // Transaction 1 (`liseur.db`): drop observations <= floor and reset local peak immediately.
+        database.withTransaction {
+            for ((origin, floor) in floors) {
+                furthestDao.deleteUpToForOrigin(drivePeerId, workKey, origin, floor)
+            }
+            progressDao.resetPeak(bookUrl, alias.editionSha)
+            furthestDao.deleteDelivery(drivePeerId, bookUrl, workKey)
+        }
+
+        // Transaction 2 (`drive_sync.db`): persist durable floors and queue reset for delta publish.
+        store.withTransaction {
+            for ((origin, floor) in floors) {
+                raisePersistedFloor(account.permissionId, workKey, origin, floor, hlc)
+            }
+            recordStates.upsert(
+                DriveRecordState(
+                    permissionId = account.permissionId,
+                    domain = DriveWireCodec.DOMAIN_FURTHEST,
+                    recordKey = resetKey,
+                    versionFp = fp,
+                    versionOp = DriveRecordState.OP_PUT,
+                    publishedFp = null,
+                    contentFp = fp,
+                    ancestorsJson = "[]",
+                    resRefsJson = "[]",
+                    lastHlc = hlc,
+                    bodyJson = DriveCanonicalJson.encode(bodyMap),
+                ),
+            )
+        }
+        return ResolveOutcome.Done
+    }
+
+    override suspend fun refreshUnresolved() = Unit
+
+    override suspend fun identity(): SyncIdentity? {
+        val account = activeAccount() ?: return null
+        return SyncIdentity(login = account.email, strandedBooks = 0)
+    }
+
+    // -- Outbound collection & ACK --------------------------------------------
+
+    internal data class OutboundBundle(
+        val records: List<DriveWireRecord>,
+        val positionAcks: List<DrivePositionAckMeta>,
+        val peakAcks: List<DrivePeakAckMeta>,
+    )
+
+    /** Collects dirty `position` and `furthest` (peaks + resets) records for publication. */
+    suspend fun collectDirtyRecords(
+        permissionId: String,
+        deviceId: String,
+        bookUrlFilter: String? = null,
+        nextHlc: suspend () -> String,
+    ): OutboundBundle {
+        val drivePeerId = DriveLibrarySync.accountPeerId(permissionId)
+        val allBooks = if (bookUrlFilter != null) {
+            listOfNotNull(books.getByUrl(bookUrlFilter))
+        } else {
+            books.allOnce()
+        }.filter { it.browseServerId == null }
+
+        val records = mutableListOf<DriveWireRecord>()
+        val posAcks = mutableListOf<DrivePositionAckMeta>()
+        val peakAcks = mutableListOf<DrivePeakAckMeta>()
+
+        for (book in allBooks) {
+            val alias = workIdentity.resolveBook(permissionId, book) ?: continue
+            if (!alias.usable) continue
+            val workKey = workIdentity.canonicalWorkKey(permissionId, alias.workId)
+            val progress = progressDao.get(book.url) ?: continue
+            val peerState = peerStateDao.get(book.url, drivePeerId)
+
+            val dirtyPos = peerState == null || peerState.isDirty(progress.localRevision)
+            val dirtyStatus = peerState == null || peerState.owesStatus(progress.statusRevision)
+            val pendingUnread = progress.hasPendingUnreadReset(peerState?.ackedRevision ?: 0L)
+
+            if (dirtyPos || dirtyStatus || pendingUnread) {
+                val editionSha = identities.fingerprint(book.url)?.sha256?.lowercase(Locale.ROOT)
+                    ?: alias.editionSha?.lowercase(Locale.ROOT)
+                val status = readingStatusFor(
+                    progress.totalProgression,
+                    progress.override,
+                    progress.partialCoverage,
+                )
+                val choice = ReadingStatusChoice.forOverride(progress.override)
+                val posKey = positionRecordKey(workKey, deviceId)
+                val body = DrivePositionBody(
+                    workKey = workKey,
+                    deviceId = deviceId,
+                    editionSha = editionSha,
+                    locatorJson = DriveCanonicalJson.canonicalizeJsonString(
+                        progress.locatorJson.ifBlank { ReadingProgress.EMPTY_LOCATOR },
+                    ),
+                    totalProgression = progress.totalProgression,
+                    status = status.wireName,
+                    finishedOverride = choice.wireName,
+                    coverage = progress.coverage,
+                    unreadResetAt = if (pendingUnread) progress.updatedAt else null,
+                    readAt = progress.readAt ?: progress.updatedAt,
+                    updatedAt = progress.updatedAt,
+                )
+                val bodyMap = DriveWireCodec.encodePositionBody(body)
+                val fp = DriveCanonicalJson.contentFp(bodyMap)
+                val existing = recordStates.get(permissionId, DriveWireCodec.DOMAIN_POSITION, posKey)
+                if (existing == null || existing.publishedFp != fp) {
+                    val hlc = nextHlc()
+                    val anc = buildList {
+                        existing?.versionFp?.takeIf { it != fp }?.let(::add)
+                        addAll(DriveWorkIdentity.decodeStringArray(existing?.ancestorsJson))
+                    }.distinct().take(DriveWireCodec.MAX_ANCESTORS)
+                    val record = DriveWireCodec.putRecord(
+                        domain = DriveWireCodec.DOMAIN_POSITION,
+                        key = posKey,
+                        hlc = hlc,
+                        bodyMap = bodyMap,
+                        ancestors = anc,
+                    )
+                    recordStates.upsert(
+                        DriveRecordState(
+                            permissionId = permissionId,
+                            domain = DriveWireCodec.DOMAIN_POSITION,
+                            recordKey = posKey,
+                            versionFp = fp,
+                            versionOp = DriveRecordState.OP_PUT,
+                            publishedFp = existing?.publishedFp,
+                            contentFp = fp,
+                            ancestorsJson = DriveCanonicalJson.encode(anc),
+                            resRefsJson = "[]",
+                            lastHlc = hlc,
+                            bodyJson = DriveCanonicalJson.encode(bodyMap),
+                        ),
+                    )
+                    records.add(record)
+                    val positionStatus = readingStatusFor(
+                        progress.totalProgression,
+                        partialCoverage = progress.partialCoverage,
+                    )
+                    posAcks.add(
+                        DrivePositionAckMeta(
+                            bookUrl = book.url,
+                            localRevision = progress.localRevision,
+                            statusRevision = progress.statusRevision,
+                            progression = progress.totalProgression,
+                            status = positionStatus.wireName,
+                            recordKey = posKey,
+                            recordFp = fp,
+                        ),
+                    )
+                }
+            }
+
+            // Furthest peak outbound
+            val peakProg = progress.peakProgression
+            val peakRev = progress.peakRevision
+            val peakAt = progress.peakAt
+            if (peakProg != null && peakRev != null && peakAt != null && peakProg in 0.0..1.0) {
+                val delivered = furthestDao.delivered(drivePeerId, book.url, workKey)
+                val alreadyAcked = delivered?.acknowledged == true && delivered.revision >= peakRev
+                val floor = getPersistedFloor(permissionId, workKey, deviceId)
+                if (!alreadyAcked && peakRev > floor) {
+                    val peakEdition = (progress.peakEdition
+                        ?: identities.fingerprint(book.url)?.sha256
+                        ?: alias.editionSha
+                        ?: "").lowercase(Locale.ROOT)
+                    val peakKey = peakRecordKey(workKey, peakEdition, deviceId)
+                    val body = DriveFurthestBody.Peak(
+                        workKey = workKey,
+                        editionSha = peakEdition,
+                        deviceId = deviceId,
+                        seq = peakRev,
+                        progression = peakProg,
+                        locatorJson = DriveCanonicalJson.canonicalizeJsonString(
+                            progress.peakLocator?.ifBlank { ReadingProgress.EMPTY_LOCATOR }
+                                ?: ReadingProgress.EMPTY_LOCATOR,
+                        ),
+                        coverage = progress.peakCoverage,
+                        peakAt = peakAt,
+                    )
+                    val bodyMap = DriveWireCodec.encodeFurthestBody(body)
+                    val fp = DriveCanonicalJson.contentFp(bodyMap)
+                    val existing = recordStates.get(permissionId, DriveWireCodec.DOMAIN_FURTHEST, peakKey)
+                    if (existing == null || existing.publishedFp != fp) {
+                        val hlc = nextHlc()
+                        val anc = buildList {
+                            existing?.versionFp?.takeIf { it != fp }?.let(::add)
+                            addAll(DriveWorkIdentity.decodeStringArray(existing?.ancestorsJson))
+                        }.distinct().take(DriveWireCodec.MAX_ANCESTORS)
+                        val record = DriveWireCodec.putRecord(
+                            domain = DriveWireCodec.DOMAIN_FURTHEST,
+                            key = peakKey,
+                            hlc = hlc,
+                            bodyMap = bodyMap,
+                            ancestors = anc,
+                        )
+                        recordStates.upsert(
+                            DriveRecordState(
+                                permissionId = permissionId,
+                                domain = DriveWireCodec.DOMAIN_FURTHEST,
+                                recordKey = peakKey,
+                                versionFp = fp,
+                                versionOp = DriveRecordState.OP_PUT,
+                                publishedFp = existing?.publishedFp,
+                                contentFp = fp,
+                                ancestorsJson = DriveCanonicalJson.encode(anc),
+                                resRefsJson = "[]",
+                                lastHlc = hlc,
+                                bodyJson = DriveCanonicalJson.encode(bodyMap),
+                            ),
+                        )
+                        records.add(record)
+                        peakAcks.add(
+                            DrivePeakAckMeta(
+                                bookUrl = book.url,
+                                workKey = workKey,
+                                peakRevision = peakRev,
+                                recordKey = peakKey,
+                                recordFp = fp,
+                            ),
+                        )
+                    }
+                }
+            }
+        }
+
+        // Unpublished furthest resets (append-only).
+        for (state in recordStates.forDomain(permissionId, DriveWireCodec.DOMAIN_FURTHEST)) {
+            if (!state.recordKey.startsWith(RESET_KEY_PREFIX)) continue
+            if (state.publishedFp == state.versionFp) continue
+            val bodyJson = state.bodyJson ?: continue
+            records.add(
+                DriveWireRecord(
+                    d = DriveWireCodec.DOMAIN_FURTHEST,
+                    k = state.recordKey,
+                    op = DriveRecordState.OP_PUT,
+                    hlc = state.lastHlc,
+                    fp = state.versionFp,
+                    anc = emptyList(),
+                    resRefs = emptyList(),
+                    body = JSONObject(bodyJson),
+                ),
+            )
+        }
+
+        return OutboundBundle(records = records, positionAcks = posAcks, peakAcks = peakAcks)
+    }
+
+    /** Commits delivery ACKs to `liseur.db` first, then marks `published_fp` in `drive_sync.db`. */
+    suspend fun acknowledgePublished(
+        permissionId: String,
+        records: List<DriveWireRecord>,
+        positionAcks: List<DrivePositionAckMeta>,
+        peakAcks: List<DrivePeakAckMeta>,
+    ) {
+        val drivePeerId = DriveLibrarySync.accountPeerId(permissionId)
+        val now = clock()
+
+        // Transaction 1 (`liseur.db`): advance per-peer position/status/peak delivery acks.
+        if (positionAcks.isNotEmpty() || peakAcks.isNotEmpty()) {
+            database.withTransaction {
+                for (ack in positionAcks) {
+                    val currentPeerState = peerStateDao.get(ack.bookUrl, drivePeerId)
+                    if (currentPeerState?.hasPending == true) {
+                        // Preserve unresolved remote conflict until the reader chooses;
+                        // only advance delivery revision so this device stops re-uploading.
+                        peerStateDao.settlePositionRevision(ack.bookUrl, drivePeerId, ack.localRevision)
+                    } else if (currentPeerState == null || currentPeerState.ackedRevision <= ack.localRevision) {
+                        peerStateDao.settle(
+                            bookUrl = ack.bookUrl,
+                            peerId = drivePeerId,
+                            ackedRevision = ack.localRevision,
+                            progression = ack.progression,
+                            status = ack.status,
+                            now = now,
+                        )
+                    }
+                    if (ack.statusRevision > 0L) {
+                        peerStateDao.settleStatus(ack.bookUrl, drivePeerId, ack.statusRevision)
+                    }
+                }
+                for (peak in peakAcks) {
+                    if (progressDao.get(peak.bookUrl) != null) {
+                        val existingDelivery = furthestDao.delivered(drivePeerId, peak.bookUrl, peak.workKey)
+                        if (existingDelivery == null || !existingDelivery.acknowledged || existingDelivery.revision < peak.peakRevision) {
+                            furthestDao.acknowledge(
+                                PeakDelivery(
+                                    peerId = drivePeerId,
+                                    bookUrl = peak.bookUrl,
+                                    workId = peak.workKey,
+                                    revision = peak.peakRevision,
+                                    acknowledged = true,
+                                ),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // Transaction 2 (`drive_sync.db`): mark published_fp.
+        store.withTransaction {
+            for (record in records) {
+                if (record.d != DriveWireCodec.DOMAIN_POSITION && record.d != DriveWireCodec.DOMAIN_FURTHEST) continue
+                val existing = recordStates.get(permissionId, record.d, record.k) ?: continue
+                if (existing.versionFp == record.fp) {
+                    recordStates.upsert(existing.copy(publishedFp = record.fp))
+                }
+            }
+        }
+    }
+
+    // -- Inbound apply --------------------------------------------------------
+
+    /** Applies an incoming remote `position` record via `reconcileReadingState`. */
+    suspend fun applyRemotePosition(
+        permissionId: String,
+        localDeviceId: String,
+        record: DriveWireRecord,
+        remoteDeviceId: String,
+        remoteSeq: Long,
+    ) {
+        if (record.op != DriveRecordState.OP_PUT) return
+        val bodyJson = record.body ?: return
+        val body = DriveWireCodec.decodePositionBody(bodyJson) ?: return
+        if (body.deviceId == localDeviceId) return
+
+        val existing = recordStates.get(permissionId, DriveWireCodec.DOMAIN_POSITION, record.k)
+        if (existing != null && record.hlc <= existing.lastHlc) return
+
+        val canonicalWorkKey = workIdentity.canonicalWorkKey(permissionId, body.workKey)
+        val drivePeerId = DriveLibrarySync.accountPeerId(permissionId)
+        val matchingAliases = identities.aliasesFor(drivePeerId).filter { alias ->
+            alias.usable && workIdentity.canonicalWorkKey(permissionId, alias.workId) == canonicalWorkKey
+        }
+        val now = clock()
+
+        for (alias in matchingAliases) {
+            reconcileIncomingPositionForBook(
+                drivePeerId = drivePeerId,
+                alias = alias,
+                body = body,
+                now = now,
+            )
+        }
+
+        store.withTransaction {
+            val anc = (listOfNotNull(existing?.versionFp) +
+                DriveWorkIdentity.decodeStringArray(existing?.ancestorsJson) + record.anc)
+                .distinct()
+                .filter { it != record.fp }
+                .take(DriveWireCodec.MAX_ANCESTORS)
+            recordStates.upsert(
+                DriveRecordState(
+                    permissionId = permissionId,
+                    domain = DriveWireCodec.DOMAIN_POSITION,
+                    recordKey = record.k,
+                    versionFp = record.fp,
+                    versionOp = DriveRecordState.OP_PUT,
+                    publishedFp = record.fp,
+                    contentFp = record.fp,
+                    originDeviceId = remoteDeviceId,
+                    originSeq = remoteSeq,
+                    ancestorsJson = DriveCanonicalJson.encode(anc),
+                    resRefsJson = "[]",
+                    lastHlc = record.hlc,
+                    bodyJson = DriveCanonicalJson.encode(DriveWireCodec.encodePositionBody(body)),
+                ),
+            )
+        }
+    }
+
+    /** Applies an incoming remote `furthest` record (peak or reset). */
+    suspend fun applyRemoteFurthest(
+        permissionId: String,
+        localDeviceId: String,
+        record: DriveWireRecord,
+        remoteDeviceId: String,
+        remoteSeq: Long,
+    ) {
+        if (record.op != DriveRecordState.OP_PUT) return
+        val bodyJson = record.body ?: return
+        val body = DriveWireCodec.decodeFurthestBody(bodyJson) ?: return
+        val drivePeerId = DriveLibrarySync.accountPeerId(permissionId)
+        val canonicalWorkKey = workIdentity.canonicalWorkKey(permissionId, body.workKey)
+
+        when (body) {
+            is DriveFurthestBody.Reset -> {
+                // Transaction 1 (`liseur.db`): delete observations <= floor per origin & reset local peak if covered.
+                database.withTransaction {
+                    for ((origin, floor) in body.floors) {
+                        furthestDao.deleteUpToForOrigin(drivePeerId, canonicalWorkKey, origin, floor)
+                    }
+                    val localFloor = body.floors[localDeviceId]
+                    if (localFloor != null) {
+                        val aliases = identities.aliasesFor(drivePeerId).filter { alias ->
+                            alias.usable && workIdentity.canonicalWorkKey(permissionId, alias.workId) == canonicalWorkKey
+                        }
+                        for (alias in aliases) {
+                            val stored = progressDao.get(alias.bookUrl) ?: continue
+                            val delivery = furthestDao.delivered(drivePeerId, alias.bookUrl, canonicalWorkKey)
+                            val localPeakRev = stored.peakRevision
+                            val covered = localPeakRev == null ||
+                                (localPeakRev <= localFloor && (delivery == null || delivery.acknowledged))
+                            if (covered) {
+                                progressDao.resetPeak(alias.bookUrl, alias.editionSha)
+                                furthestDao.deleteDelivery(drivePeerId, alias.bookUrl, canonicalWorkKey)
+                            }
+                        }
+                    }
+                }
+                // Transaction 2 (`drive_sync.db`): persist durable floors & reset record forever.
+                store.withTransaction {
+                    for ((origin, floor) in body.floors) {
+                        raisePersistedFloor(permissionId, canonicalWorkKey, origin, floor, record.hlc)
+                    }
+                    recordStates.upsert(
+                        DriveRecordState(
+                            permissionId = permissionId,
+                            domain = DriveWireCodec.DOMAIN_FURTHEST,
+                            recordKey = record.k,
+                            versionFp = record.fp,
+                            versionOp = DriveRecordState.OP_PUT,
+                            publishedFp = record.fp,
+                            contentFp = record.fp,
+                            originDeviceId = remoteDeviceId,
+                            originSeq = remoteSeq,
+                            ancestorsJson = "[]",
+                            resRefsJson = "[]",
+                            lastHlc = record.hlc,
+                            bodyJson = DriveCanonicalJson.encode(DriveWireCodec.encodeFurthestBody(body)),
+                        ),
+                    )
+                }
+            }
+            is DriveFurthestBody.Peak -> {
+                if (body.deviceId == localDeviceId) return
+                val floor = getPersistedFloor(permissionId, canonicalWorkKey, body.deviceId)
+                if (body.seq <= floor) return
+
+                val payload = DriveCanonicalJson.encode(
+                    mapOf(
+                        "locatorJson" to body.locatorJson,
+                        "coverage" to body.coverage,
+                        "peakAt" to body.peakAt,
+                    ),
+                )
+                furthestDao.observe(
+                    FurthestPosition(
+                        peerId = drivePeerId,
+                        workId = canonicalWorkKey,
+                        edition = body.editionSha,
+                        origin = body.deviceId,
+                        progression = body.progression,
+                        seq = body.seq,
+                        payload = payload,
+                    ),
+                )
+                store.withTransaction {
+                    recordStates.upsert(
+                        DriveRecordState(
+                            permissionId = permissionId,
+                            domain = DriveWireCodec.DOMAIN_FURTHEST,
+                            recordKey = record.k,
+                            versionFp = record.fp,
+                            versionOp = DriveRecordState.OP_PUT,
+                            publishedFp = record.fp,
+                            contentFp = record.fp,
+                            originDeviceId = remoteDeviceId,
+                            originSeq = remoteSeq,
+                            ancestorsJson = DriveCanonicalJson.encode(record.anc.take(DriveWireCodec.MAX_ANCESTORS)),
+                            resRefsJson = "[]",
+                            lastHlc = record.hlc,
+                            bodyJson = DriveCanonicalJson.encode(DriveWireCodec.encodeFurthestBody(body)),
+                        ),
+                    )
+                }
+            }
+        }
+    }
+
+    private suspend fun reconcileIncomingPositionForBook(
+        drivePeerId: String,
+        alias: WorkAlias,
+        body: DrivePositionBody,
+        now: Long,
+    ) {
+        val bookUrl = alias.bookUrl
+        var stored = progressDao.get(bookUrl)
+        var peerState = peerStateDao.get(bookUrl, drivePeerId)
+        val localEditionSha = identities.fingerprint(bookUrl)?.sha256?.lowercase(Locale.ROOT)
+            ?: alias.editionSha?.lowercase(Locale.ROOT)
+        val sameEdition = !body.editionSha.isNullOrBlank() &&
+            !localEditionSha.isNullOrBlank() &&
+            body.editionSha.equals(localEditionSha, ignoreCase = true)
+
+        val remoteChoice = ReadingStatusChoice.fromWire(body.finishedOverride) ?: ReadingStatusChoice.AUTOMATIC
+        // Capture pre-adoption position debt before any status adoption bumps localRevision,
+        // so adopting a remote status never silently acknowledges unrelated local movement.
+        val hadPositionDebt = stored != null && (peerState == null || peerState.isDirty(stored.localRevision))
+        val statusDirty = stored != null && (peerState == null || peerState.owesStatus(stored.statusRevision))
+
+        // Handle explicit remote unread reset first.
+        if (body.unreadResetAt != null || remoteChoice == ReadingStatusChoice.UNREAD) {
+            if (!hadPositionDebt && !statusDirty) {
+                val applied = progressDao.openBooks.unlessOpen(bookUrl) {
+                    database.withTransaction {
+                        progressDao.setFinishedOverride(
+                            bookUrl = bookUrl,
+                            override = FinishedOverride.UNREAD.ordinal,
+                            status = ReadingStatus.READY_TO_READ.wireName,
+                            progression = 0.0,
+                            now = now,
+                            resetPosition = true,
+                        )
+                        val refreshed = progressDao.get(bookUrl)
+                        peerStateDao.settle(
+                            bookUrl = bookUrl,
+                            peerId = drivePeerId,
+                            ackedRevision = refreshed?.localRevision ?: 1L,
+                            progression = 0.0,
+                            status = ReadingStatus.READY_TO_READ.wireName,
+                            now = now,
+                        )
+                        if (refreshed != null && refreshed.statusRevision > 0L) {
+                            peerStateDao.settleStatus(bookUrl, drivePeerId, refreshed.statusRevision)
+                        }
+                    }
+                    true
+                } == true
+                if (applied) {
+                    finishedState.refreshFromProgress(bookUrl)
+                    return
+                }
+            }
+            peerStateDao.persistPendingStatus(
+                bookUrl = bookUrl,
+                peerId = drivePeerId,
+                choice = ReadingStatusChoice.UNREAD.wireName,
+                remoteUpdatedAt = body.updatedAt,
+            )
+            if (!hadPositionDebt && !statusDirty) {
+                peerStateDao.persistPending(
+                    bookUrl = bookUrl,
+                    peerId = drivePeerId,
+                    progression = 0.0,
+                    status = ReadingStatus.READY_TO_READ.wireName,
+                    remoteUpdatedAt = body.readAt ?: body.updatedAt,
+                    locatorJson = null,
+                    editionSha = body.editionSha,
+                    coverage = body.coverage,
+                )
+                return
+            }
+        } else {
+            val localOverride = stored?.override ?: FinishedOverride.NONE
+            if (localOverride != remoteChoice.override) {
+                if (!statusDirty) {
+                    val expectedBefore = stored?.localRevision ?: 0L
+                    val adopted = finishedState.adoptRemoteStatus(
+                        bookUrl = bookUrl,
+                        expectedStatusRevision = stored?.statusRevision ?: 0L,
+                        account = drivePeerId,
+                        override = remoteChoice.override,
+                        status = resolvedStatus(remoteChoice, stored),
+                        finishedAt = body.updatedAt.takeIf { remoteChoice == ReadingStatusChoice.FINISHED },
+                        expectedLocalRevision = expectedBefore,
+                        keepUnreadReset = true,
+                        handOverOwnership = true,
+                    )
+                    if (adopted) {
+                        val after = progressDao.get(bookUrl)
+                        if (after != null) {
+                            peerStateDao.settleStatus(bookUrl, drivePeerId, after.statusRevision)
+                            peerStateDao.clearPendingStatus(bookUrl, drivePeerId)
+                            // Taking a status is not a position move: only settle localRevision
+                            // when the local position had no unsent debt prior to adoption.
+                            if (!hadPositionDebt && after.localRevision == expectedBefore + 1L) {
+                                peerStateDao.settlePositionRevision(bookUrl, drivePeerId, after.localRevision)
+                            }
+                            if (after.localRevision != expectedBefore + 1L) {
+                                // A page turned concurrently during adoption; abandon this pass.
+                                return
+                            }
+                            stored = after
+                            peerState = peerStateDao.get(bookUrl, drivePeerId)
+                        }
+                    } else if ((progressDao.get(bookUrl)?.localRevision ?: 0L) != expectedBefore) {
+                        // A page turned concurrently before adoption; abandon this pass.
+                        return
+                    }
+                } else {
+                    peerStateDao.persistPendingStatus(
+                        bookUrl = bookUrl,
+                        peerId = drivePeerId,
+                        choice = remoteChoice.wireName,
+                        remoteUpdatedAt = body.updatedAt,
+                    )
+                }
+            }
+        }
+
+        val remotePosStatus = if (body.totalProgression != null) {
+            readingStatusFor(
+                body.totalProgression,
+                partialCoverage = body.coverage == NarrativeCoverage.PARTIAL.wireName,
+            )
+        } else {
+            ReadingStatus.fromWire(body.status)
+        }
+        val remoteState = ReadingState(
+            progression = body.totalProgression,
+            status = remotePosStatus,
+            updatedAt = body.readAt ?: body.updatedAt,
+        )
+        val localState = stored?.let { row ->
+            ReadingState(
+                progression = row.totalProgression,
+                status = readingStatusFor(row.totalProgression, partialCoverage = row.partialCoverage),
+                updatedAt = row.readAt ?: row.updatedAt,
+            )
+        }
+        val baseline = peerState?.let { ps ->
+            if (ps.agreedProgression == null && ps.agreedStatus == null) {
+                null
+            } else {
+                ReadingBaseline(
+                    progression = ps.agreedProgression,
+                    status = ReadingStatus.fromWire(ps.agreedStatus),
+                )
+            }
+        }
+
+        val exactRemote = if (sameEdition && ExactLocatorAnchor.isExactJson(body.locatorJson)) {
+            body.locatorJson
+        } else {
+            null
+        }
+        val restorableRemote = if (sameEdition) {
+            body.locatorJson.takeIf { it.isNotBlank() && it != ReadingProgress.EMPTY_LOCATOR }
+        } else {
+            null
+        }
+
+        val decision = reconcileReadingState(
+            local = localState,
+            remote = remoteState,
+            baseline = baseline,
+            localDirty = hadPositionDebt,
+            localUnreadOverride = stored?.override == FinishedOverride.UNREAD,
+            unreadResetUndelivered = stored?.hasPendingUnreadReset(peerState?.ackedRevision ?: 0L) == true,
+            exactPositionAgreement = ExactLocatorAnchor.agreement(stored?.locatorJson, exactRemote),
+        )
+
+        when (decision) {
+            SyncDecision.InSync -> {
+                peerStateDao.settle(
+                    bookUrl = bookUrl,
+                    peerId = drivePeerId,
+                    ackedRevision = stored?.localRevision ?: 0L,
+                    progression = stored?.totalProgression,
+                    status = localState?.status?.wireName,
+                    now = now,
+                )
+            }
+            is SyncDecision.Pull -> {
+                val progression = decision.state.progression ?: return
+                val expected = stored?.localRevision ?: 0L
+                val effectiveStatus = readingStatusFor(
+                    progression,
+                    stored?.override ?: FinishedOverride.NONE,
+                    partialCoverage = body.coverage == NarrativeCoverage.PARTIAL.wireName,
+                )
+                var applied = false
+                database.withTransaction {
+                    // Always respect the open-reader fence for automatic imports (including
+                    // book-scoped syncs); direct applyPeerPull is reserved for explicit reader resolutions.
+                    applied = progressDao.applyUnattendedPeerPull(
+                        bookUrl = bookUrl,
+                        expectedRevision = expected,
+                        progression = progression,
+                        status = effectiveStatus.wireName,
+                        now = now,
+                        locatorJson = restorableRemote,
+                        remoteUpdatedAt = body.readAt ?: body.updatedAt,
+                        coverage = body.coverage,
+                    )
+                    if (applied) {
+                        peerStateDao.settle(
+                            bookUrl = bookUrl,
+                            peerId = drivePeerId,
+                            ackedRevision = expected + 1L,
+                            progression = progression,
+                            status = decision.state.status.wireName,
+                            now = now,
+                        )
+                    } else {
+                        // Book is open or moved concurrently: preserve pending for next open.
+                        peerStateDao.persistPending(
+                            bookUrl = bookUrl,
+                            peerId = drivePeerId,
+                            progression = progression,
+                            status = decision.state.status.wireName,
+                            remoteUpdatedAt = body.readAt ?: body.updatedAt,
+                            locatorJson = body.locatorJson.takeUnless { it == ReadingProgress.EMPTY_LOCATOR },
+                            editionSha = body.editionSha,
+                            coverage = body.coverage,
+                        )
+                    }
+                }
+                if (applied) finishedState.refreshFromProgress(bookUrl)
+            }
+            is SyncDecision.AdoptStatus -> {
+                val adopted = progressDao.adoptPeerStatus(bookUrl, decision.status.wireName, now)
+                if (adopted) finishedState.refreshFromProgress(bookUrl)
+            }
+            is SyncDecision.Push -> {
+                // Local moved (including intentional backward moves); keep local state for outbound publish.
+                peerStateDao.clearPending(bookUrl, drivePeerId)
+            }
+            is SyncDecision.Conflict -> {
+                peerStateDao.persistPending(
+                    bookUrl = bookUrl,
+                    peerId = drivePeerId,
+                    progression = decision.remote.progression,
+                    status = decision.remote.status.wireName,
+                    remoteUpdatedAt = body.readAt ?: body.updatedAt,
+                    locatorJson = body.locatorJson.takeUnless { it == ReadingProgress.EMPTY_LOCATOR },
+                    editionSha = body.editionSha,
+                    coverage = body.coverage,
+                )
+            }
+        }
+    }
+
+    private fun resolvedStatus(choice: ReadingStatusChoice, stored: ReadingProgress?): ReadingStatus =
+        when (choice) {
+            ReadingStatusChoice.FINISHED -> ReadingStatus.FINISHED
+            ReadingStatusChoice.UNREAD -> ReadingStatus.READY_TO_READ
+            ReadingStatusChoice.WANT_TO_READ -> ReadingStatus.WANT_TO_READ
+            ReadingStatusChoice.READING -> ReadingStatus.READING
+            ReadingStatusChoice.PAUSED -> ReadingStatus.PAUSED
+            ReadingStatusChoice.DID_NOT_FINISH -> ReadingStatus.DID_NOT_FINISH
+            ReadingStatusChoice.AUTOMATIC ->
+                readingStatusFor(
+                    stored?.totalProgression,
+                    FinishedOverride.NONE,
+                    stored?.partialCoverage == true,
+                )
+        }
+
+    // -- Furthest helpers -----------------------------------------------------
+
+    private suspend fun furthestDestination(
+        permissionId: String,
+        bookUrl: String,
+        alias: WorkAlias,
+    ): FurthestDestination? {
+        val drivePeerId = DriveLibrarySync.accountPeerId(permissionId)
+        val workKey = workIdentity.canonicalWorkKey(permissionId, alias.workId)
+        val localEdition = identities.fingerprint(bookUrl)?.sha256?.lowercase(Locale.ROOT)
+            ?: alias.editionSha?.lowercase(Locale.ROOT)
+
+        data class Candidate(
+            val id: String,
+            val edition: String?,
+            val progression: Double,
+            val seq: Long,
+            val locatorJson: String?,
+            val coverage: NarrativeCoverage?,
+            val at: Long,
+            val locallyAuthored: Boolean,
+        )
+
+        val candidates = mutableListOf<Candidate>()
+        for (row in furthestDao.forWork(drivePeerId, workKey)) {
+            val payload = runCatching { JSONObject(row.payload) }.getOrNull()
+            val loc = payload?.optString("locatorJson")?.takeIf { it.isNotBlank() && it != ReadingProgress.EMPTY_LOCATOR }
+            val cov = payload?.takeIf { it.has("coverage") && !it.isNull("coverage") }
+                ?.optString("coverage")?.let(NarrativeCoverage::fromWire)
+            val at = payload?.optLong("peakAt", 0L) ?: 0L
+            candidates.add(
+                Candidate(
+                    id = "${row.origin}:${row.edition}:${row.seq}",
+                    edition = row.edition.takeIf { it.isNotBlank() },
+                    progression = row.progression,
+                    seq = row.seq,
+                    locatorJson = loc,
+                    coverage = cov,
+                    at = at,
+                    locallyAuthored = false,
+                ),
+            )
+        }
+        val stored = progressDao.get(bookUrl)
+        val localProg = stored?.peakProgression
+        val localAt = stored?.peakAt
+        if (localProg != null && localAt != null && localProg in 0.0..1.0) {
+            candidates.add(
+                Candidate(
+                    id = "local:${stored.peakRevision ?: 0L}",
+                    edition = stored.peakEdition ?: localEdition,
+                    progression = localProg,
+                    seq = stored.peakRevision ?: 0L,
+                    locatorJson = stored.peakLocator?.takeUnless { it == ReadingProgress.EMPTY_LOCATOR },
+                    coverage = stored.peakNarrativeCoverage,
+                    at = localAt,
+                    locallyAuthored = true,
+                ),
+            )
+        }
+        val best = candidates.sortedWith(
+            compareByDescending<Candidate> { it.progression }.thenBy { it.seq }.thenBy { it.id },
+        ).firstOrNull() ?: return null
+
+        val sameEdition = best.locallyAuthored ||
+            (!best.edition.isNullOrBlank() && !localEdition.isNullOrBlank() &&
+                best.edition.equals(localEdition, ignoreCase = true))
+        val restorable = if (sameEdition) best.locatorJson else null
+        return FurthestDestination(
+            accountKey = drivePeerId,
+            workId = alias.workId,
+            localEdition = alias.editionSha,
+            candidateId = best.id,
+            progression = best.progression,
+            locatorJson = restorable,
+            at = best.at,
+            confidence = if (sameEdition && ExactLocatorAnchor.isExactJson(restorable)) {
+                ResumeConfidence.EXACT
+            } else {
+                ResumeConfidence.APPROXIMATE
+            },
+            locallyAuthored = best.locallyAuthored,
+            coverage = best.coverage,
+        )
+    }
+
+    private suspend fun knownMaxSeq(permissionId: String, workKey: String): Long {
+        val drivePeerId = DriveLibrarySync.accountPeerId(permissionId)
+        val canonical = workIdentity.canonicalWorkKey(permissionId, workKey)
+        val observedMax = furthestDao.forWork(drivePeerId, canonical).maxOfOrNull { it.seq } ?: 0L
+        return observedMax
+    }
+
+    internal suspend fun getPersistedFloor(
+        permissionId: String,
+        workKey: String,
+        originDeviceId: String,
+    ): Long {
+        val state = recordStates.get(permissionId, FLOOR_STATE_DOMAIN, floorRecordKey(workKey, originDeviceId))
+        return state?.lastSyncedRevision ?: 0L
+    }
+
+    private suspend fun raisePersistedFloor(
+        permissionId: String,
+        workKey: String,
+        originDeviceId: String,
+        floor: Long,
+        hlc: String,
+    ) {
+        val key = floorRecordKey(workKey, originDeviceId)
+        val existing = recordStates.get(permissionId, FLOOR_STATE_DOMAIN, key)
+        val current = existing?.lastSyncedRevision ?: 0L
+        if (floor <= current) return
+        recordStates.upsert(
+            DriveRecordState(
+                permissionId = permissionId,
+                domain = FLOOR_STATE_DOMAIN,
+                recordKey = key,
+                versionFp = floor.toString(),
+                versionOp = DriveRecordState.OP_PUT,
+                publishedFp = floor.toString(),
+                lastSyncedRevision = floor,
+                lastHlc = hlc,
+            ),
+        )
+    }
+
+    private fun SyncPeerState.sameEdition(alias: WorkAlias?): Boolean {
+        val remoteSha = pendingEditionSha?.takeIf { it.isNotBlank() } ?: return false
+        val localSha = alias?.editionSha?.takeIf { it.isNotBlank() } ?: return false
+        return remoteSha.equals(localSha, ignoreCase = true)
+    }
+
+    private fun SyncPeerState.exactLocatorFor(alias: WorkAlias?): String? =
+        if (sameEdition(alias) && ExactLocatorAnchor.isExactJson(pendingLocatorJson)) {
+            pendingLocatorJson
+        } else {
+            null
+        }
+
+    private fun SyncPeerState.restorableLocatorFor(alias: WorkAlias?): String? {
+        if (!sameEdition(alias)) return null
+        val json = pendingLocatorJson?.takeIf { it.isNotBlank() && it != ReadingProgress.EMPTY_LOCATOR }
+            ?: return null
+        return if (ExactLocatorAnchor.isExactJson(json) || ResourceAnchor.isResourceJson(json)) json else null
+    }
+
+    companion object {
+        const val DRIVE_DIALLED_ADDRESS = "https://www.googleapis.com"
+        const val PEAK_KEY_PREFIX = "peak/"
+        const val RESET_KEY_PREFIX = "reset/"
+        private const val FLOOR_STATE_DOMAIN = "_furthest_floor"
+
+        fun positionRecordKey(workKey: String, deviceId: String): String = "$workKey/$deviceId"
+        fun peakRecordKey(workKey: String, editionSha: String, deviceId: String): String =
+            "$PEAK_KEY_PREFIX$workKey/$editionSha/$deviceId"
+        fun resetRecordKey(workKey: String, resetId: String): String =
+            "$RESET_KEY_PREFIX$workKey/$resetId"
+        private fun floorRecordKey(workKey: String, originDeviceId: String): String =
+            "$workKey/$originDeviceId"
+    }
+}

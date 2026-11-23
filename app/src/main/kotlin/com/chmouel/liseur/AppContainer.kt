@@ -726,6 +726,8 @@ class AppContainer(
             mainServer = { database.remoteServerDao().get() },
             browseServer = { id -> database.remoteServerDao().get(id) },
             inTransaction = { work -> bookRemoval.together(work) },
+            externalDownload = { book -> librarySync.enqueueDownload(book) },
+            externalCancel = { book -> librarySync.cancelDownload(book) },
         )
 
     val bookUploads = BookUploadRepository(context.applicationContext)

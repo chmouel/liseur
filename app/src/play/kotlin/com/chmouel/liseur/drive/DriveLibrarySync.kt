@@ -4,17 +4,15 @@ import android.content.Context
 import androidx.compose.runtime.Composable
 import androidx.room.withTransaction
 import com.chmouel.liseur.data.db.Book
+import com.chmouel.liseur.data.db.DownloadState
 import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.data.db.RemoteServer
 import com.chmouel.liseur.data.db.WorkAlias
+import com.chmouel.liseur.data.library.BookFingerprintStore
+import com.chmouel.liseur.data.library.FinishedState
 import com.chmouel.liseur.data.remote.PeerPositionSync
-import com.chmouel.liseur.data.remote.PreviewOutcome
 import com.chmouel.liseur.data.remote.RemoteAccountRepository
-import com.chmouel.liseur.data.remote.ResolveOutcome
-import com.chmouel.liseur.data.remote.SyncIdentity
-import com.chmouel.liseur.data.remote.SyncOutcome
-import com.chmouel.liseur.data.remote.SyncPreview
-import com.chmouel.liseur.data.remote.SyncSnapshot
+import com.chmouel.liseur.domain.FOREGROUND_SYNC_FRESH_FOR_MS
 import com.chmouel.liseur.domain.MetadataSource
 import com.chmouel.liseur.domain.USELESS_IDENTIFIERS
 import com.chmouel.liseur.domain.WorkIdentifiers
@@ -52,6 +50,9 @@ internal class DriveLibrarySync(
     private val beforeServerDisconnect: suspend () -> Unit = {},
     private val stopWorkers: () -> Unit = {},
     private val onResumeActive: () -> Unit = {},
+    private val scheduleEpubUploadsWork: (allowMetered: Boolean) -> Unit = {},
+    private val enqueueEpubDownloadWork: (bookUrl: String, allowMetered: Boolean) -> UUID? = { _, _ -> null },
+    private val cancelEpubDownloadWork: (bookUrl: String) -> Unit = {},
     private val deviceIdGenerator: () -> String = { UUID.randomUUID().toString().lowercase(Locale.ROOT) },
     private val openStore: (() -> DriveSyncDatabase)? = null,
     authClient: DriveAuthClient? = null,
@@ -92,6 +93,82 @@ internal class DriveLibrarySync(
         )
     }
 
+    internal val fingerprintStore: BookFingerprintStore by lazy {
+        BookFingerprintStore(appContext, database.workIdentityDao(), clock)
+    }
+
+    private val finishedState: FinishedState by lazy {
+        FinishedState(
+            bookDao = database.bookDao(),
+            progressDao = database.readingProgressDao(),
+            inTransaction = { work -> database.withTransaction { work() } },
+            now = clock,
+        )
+    }
+
+    internal val workIdentity: DriveWorkIdentity by lazy {
+        DriveWorkIdentity(
+            database = database,
+            store = store,
+            fingerprintStore = fingerprintStore,
+            clock = clock,
+        )
+    }
+
+    internal val catalogSync: DriveCatalogSync by lazy {
+        DriveCatalogSync(
+            database = database,
+            store = store,
+            workIdentity = workIdentity,
+            clock = clock,
+        )
+    }
+
+    internal val positionSync: DrivePositionSync by lazy {
+        DrivePositionSync(
+            database = database,
+            storeProvider = { store },
+            workIdentityProvider = { workIdentity },
+            finishedState = finishedState,
+            runSync = { bookUrl -> changeEngine.sync(bookUrlFilter = bookUrl).outcome },
+            isActive = ::isActive,
+            activeAccount = { if (hasStore()) store.accounts().active() else null },
+            localDeviceId = { ensureInstall().deviceId },
+            nextHlc = { permissionId -> changeEngine.nextHlc(permissionId) },
+            clock = clock,
+        )
+    }
+
+    internal val changeEngine: DriveChangeEngine by lazy {
+        DriveChangeEngine(
+            store = store,
+            driveApi = this.driveApi,
+            workIdentity = workIdentity,
+            catalogSync = catalogSync,
+            positionSync = positionSync,
+            acquireToken = { stale -> accountController.acquireSilentAccessToken(stale) },
+            ensureDeviceId = { ensureInstall().deviceId },
+            clock = clock,
+        )
+    }
+
+    internal val epubTransfers: DriveEpubTransferManager by lazy {
+        DriveEpubTransferManager(
+            context = appContext,
+            database = database,
+            store = store,
+            driveApi = this.driveApi,
+            workIdentity = workIdentity,
+            catalogSync = catalogSync,
+            fingerprintStore = fingerprintStore,
+            acquireToken = { stale -> accountController.acquireSilentAccessToken(stale) },
+            onCatalogAvailabilityChanged = {
+                changeEngine.sync()
+            },
+            clock = clock,
+        )
+    }
+
     internal fun hasStore(): Boolean = storeLazy.isInitialized() || openStore != null || storeFile.exists()
 
     internal val storeAvailable: Flow<Boolean> = storeOpened
@@ -120,12 +197,46 @@ internal class DriveLibrarySync(
         if (!hasStore()) return
         scope.launch {
             runCatching {
-                if (store.accounts().active() != null) onResumeActive()
+                val active = store.accounts().active() ?: return@runCatching
+                onResumeActive()
+                if (store.uploads().pendingForAccount(active.permissionId).isNotEmpty()) {
+                    scheduleEpubUploadsWork(active.meteredTransfers)
+                }
             }
         }
     }
 
-    override val positionPeer: PeerPositionSync = DrivePositionPeer()
+    override suspend fun shouldSyncOnForeground(now: Long): Boolean {
+        if (!hasStore()) return false
+        val active = store.accounts().active() ?: return false
+        val last = active.lastSuccessAt ?: return true
+        if (last > now) return true
+        return now - last >= FOREGROUND_SYNC_FRESH_FOR_MS
+    }
+
+    override fun ownsBook(book: Book): Boolean =
+        book.url.startsWith(DriveWorkIdentity.DRIVE_BOOK_URL_PREFIX) ||
+            DriveCatalogSync.fileIdFromHref(book.downloadHref) != null
+
+    override suspend fun enqueueDownload(book: Book): UUID? {
+        if (!ownsBook(book)) return null
+        if (!hasStore()) return null
+        val active = store.accounts().active() ?: return null
+        database.bookDao().setDownloadState(book.url, DownloadState.QUEUED, null)
+        return enqueueEpubDownloadWork(book.url, active.meteredTransfers)
+    }
+
+    override suspend fun cancelDownload(book: Book) {
+        if (!ownsBook(book)) return
+        cancelEpubDownloadWork(book.url)
+    }
+
+    internal fun triggerEpubUploads(allowMetered: Boolean) {
+        scheduleEpubUploadsWork(allowMetered)
+    }
+
+    override val positionPeer: PeerPositionSync
+        get() = positionSync
 
     @Composable
     override fun SettingsEntry(onOpen: () -> Unit) {
@@ -269,40 +380,6 @@ internal class DriveLibrarySync(
                 ),
             )
         }
-    }
-
-    /**
-     * Play-only position-sync peer attached after kosync in
-     * `CompositePositionSync`. Answers `NotApplicable` / `NotSynced` while
-     * inactive (and until Phase 3 wires Drive position reconciliation).
-     */
-    private class DrivePositionPeer : PeerPositionSync {
-        override val peerId: String get() = PEER_ID
-
-        override suspend fun dialledAddress(): String? = null
-
-        override suspend fun syncAll(snapshot: SyncSnapshot?): SyncOutcome = SyncOutcome.NotApplicable
-
-        override suspend fun syncBook(bookUrl: String): SyncOutcome = SyncOutcome.NotApplicable
-
-        override suspend fun canSync(bookUrl: String): Boolean = false
-
-        override suspend fun previewBook(bookUrl: String): PreviewOutcome = PreviewOutcome.NotSynced
-
-        override suspend fun preservedConflict(bookUrl: String, peerId: String?): SyncPreview? = null
-
-        override suspend fun takeRemotePosition(
-            bookUrl: String,
-            atRevision: Long,
-            peerId: String?,
-            expectedAccountKey: String?,
-        ): ResolveOutcome = if (expectedAccountKey != null) ResolveOutcome.Superseded else ResolveOutcome.Done
-
-        override suspend fun keepLocalPosition(bookUrl: String, peerId: String?): ResolveOutcome = ResolveOutcome.Done
-
-        override suspend fun refreshUnresolved() = Unit
-
-        override suspend fun identity(): SyncIdentity? = null
     }
 
     companion object {

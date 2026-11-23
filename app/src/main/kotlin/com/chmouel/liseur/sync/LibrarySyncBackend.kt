@@ -1,7 +1,9 @@
 package com.chmouel.liseur.sync
 
 import androidx.compose.runtime.Composable
+import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.remote.PeerPositionSync
+import java.util.UUID
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 
@@ -24,6 +26,18 @@ interface LibrarySyncBackend {
 
     /** Called on application start to reschedule background work when active. */
     fun resume()
+
+    /** Whether bringing the app to the foreground should trigger a full sync for this backend. */
+    suspend fun shouldSyncOnForeground(now: Long): Boolean = false
+
+    /** Whether [book] is a remote catalog entry owned by this external sync backend. */
+    fun ownsBook(book: Book): Boolean = false
+
+    /** Enqueues an on-demand download for [book] if owned by this backend; returns its WorkManager id. */
+    suspend fun enqueueDownload(book: Book): UUID? = null
+
+    /** Cancels an in-flight download for [book] if owned by this backend. */
+    suspend fun cancelDownload(book: Book) = Unit
 
     /**
      * Position-sync partner for [com.chmouel.liseur.data.remote.CompositePositionSync].

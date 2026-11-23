@@ -50,6 +50,12 @@ data class DriveSettingsUiState(
     val pausedAccounts: List<DriveAccount> = emptyList(),
     val pendingUploadsCount: Int = 0,
     val unresolvedConflictsCount: Int = 0,
+    val pausedSchemaDeviceLabels: List<String> = emptyList(),
+    val pendingWorkMatches: List<DrivePendingWorkMatch> = emptyList(),
+    val meteredTransfers: Boolean = false,
+    val uploadPickerVisible: Boolean = false,
+    val uploadCandidates: List<DriveUploadCandidate> = emptyList(),
+    val syncingNow: Boolean = false,
     val busy: Boolean = false,
     val errorMessage: String? = null,
     val pendingConfirmation: PendingAccountSwitchConfirmation? = null,
@@ -98,6 +104,9 @@ internal class DriveAccountController(
 
     private data class EphemeralState(
         val busy: Boolean = false,
+        val syncingNow: Boolean = false,
+        val uploadPickerVisible: Boolean = false,
+        val uploadCandidates: List<DriveUploadCandidate> = emptyList(),
         val errorMessage: String? = null,
         val pendingConfirmation: PendingAccountSwitchConfirmation? = null,
         val pendingAuthIntent: PendingIntent? = null,
@@ -108,6 +117,8 @@ internal class DriveAccountController(
         val pausedAccounts: List<DriveAccount> = emptyList(),
         val pendingUploadsCount: Int = 0,
         val unresolvedConflictsCount: Int = 0,
+        val pausedSchemaDeviceLabels: List<String> = emptyList(),
+        val pendingWorkMatches: List<DrivePendingWorkMatch> = emptyList(),
     )
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -128,15 +139,31 @@ internal class DriveAccountController(
                     if (primary == null) {
                         flowOf(StoreSnapshot(account = null, pausedAccounts = paused))
                     } else {
+                        val peerId = DriveLibrarySync.accountPeerId(primary.permissionId)
                         combine(
                             db.uploads().observePendingCount(primary.permissionId),
                             db.conflicts().observeOpenCount(primary.permissionId),
-                        ) { pendingUploads, openConflicts ->
+                            db.cursors().observePausedForAccount(primary.permissionId),
+                            database.workIdentityDao().observeAmbiguityCount(peerId),
+                            database.workIdentityDao().observeAwaitingAnswer(peerId),
+                        ) { pendingUploads, openConflicts, pausedCursors, _, _ ->
+                            val pausedLabels = pausedCursors
+                                .map { it.deviceId }
+                                .distinct()
+                                .map { devId ->
+                                    db.devices().get(primary.permissionId, devId)?.label
+                                        ?.takeIf { it.isNotBlank() } ?: devId
+                                }
+                            val matches = runCatching {
+                                driveSync.workIdentity.pendingMatches(primary.permissionId)
+                            }.getOrDefault(emptyList())
                             StoreSnapshot(
                                 account = primary,
                                 pausedAccounts = paused,
                                 pendingUploadsCount = pendingUploads,
                                 unresolvedConflictsCount = openConflicts,
+                                pausedSchemaDeviceLabels = pausedLabels,
+                                pendingWorkMatches = matches,
                             )
                         }
                     }
@@ -149,6 +176,12 @@ internal class DriveAccountController(
                 pausedAccounts = storeSnapshot.pausedAccounts,
                 pendingUploadsCount = storeSnapshot.pendingUploadsCount,
                 unresolvedConflictsCount = storeSnapshot.unresolvedConflictsCount,
+                pausedSchemaDeviceLabels = storeSnapshot.pausedSchemaDeviceLabels,
+                pendingWorkMatches = storeSnapshot.pendingWorkMatches,
+                meteredTransfers = storeSnapshot.account?.meteredTransfers == true,
+                uploadPickerVisible = ui.uploadPickerVisible,
+                uploadCandidates = ui.uploadCandidates,
+                syncingNow = ui.syncingNow,
                 busy = ui.busy,
                 errorMessage = ui.errorMessage,
                 pendingConfirmation = ui.pendingConfirmation,
@@ -355,6 +388,90 @@ internal class DriveAccountController(
     /** Dismisses a transient error banner in the UI. */
     fun clearError() {
         ephemeral.value = ephemeral.value.copy(errorMessage = null)
+    }
+
+    /** Triggers an immediate `drive.appdata` sync cycle. */
+    suspend fun syncNow() {
+        if (ephemeral.value.syncingNow) return
+        ephemeral.value = ephemeral.value.copy(syncingNow = true, errorMessage = null)
+        try {
+            driveSync.changeEngine.sync()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            ephemeral.value = ephemeral.value.copy(
+                errorMessage = e.message ?: "Google Drive sync failed",
+            )
+        } finally {
+            ephemeral.value = ephemeral.value.copy(syncingNow = false)
+        }
+    }
+
+    /** Opens the Play-only "Upload EPUB files" selection UI for the active Drive account. */
+    suspend fun openUploadPicker() {
+        if (!driveSync.hasStore()) return
+        val active = driveSync.store.accounts().active() ?: return
+        val candidates = driveSync.epubTransfers.listUploadCandidates(active.permissionId)
+        ephemeral.value = ephemeral.value.copy(
+            uploadPickerVisible = true,
+            uploadCandidates = candidates,
+        )
+    }
+
+    /** Closes the "Upload EPUB files" selection UI without modifying the upload queue. */
+    fun closeUploadPicker() {
+        ephemeral.value = ephemeral.value.copy(uploadPickerVisible = false)
+    }
+
+    /** Updates whether bulk EPUB transfers may use metered mobile networks (default: unmetered only). */
+    suspend fun setMeteredTransfers(allowMetered: Boolean) {
+        if (!driveSync.hasStore()) return
+        val active = driveSync.store.accounts().active() ?: return
+        driveSync.store.accounts().setMeteredTransfers(active.permissionId, allowMetered)
+        if (driveSync.store.uploads().pendingForAccount(active.permissionId).isNotEmpty()) {
+            driveSync.triggerEpubUploads(allowMetered)
+        }
+    }
+
+    /** Queues user-selected local EPUBs for upload to `Liseur/` and schedules the bulk upload worker. */
+    suspend fun confirmUploadSelection(selectedBookUrls: Set<String>) {
+        if (!driveSync.hasStore()) return
+        val active = driveSync.store.accounts().active() ?: return
+        val queued = driveSync.epubTransfers.queueSelectedBooks(active.permissionId, selectedBookUrls)
+        ephemeral.value = ephemeral.value.copy(uploadPickerVisible = false)
+        if (queued > 0) {
+            driveSync.triggerEpubUploads(active.meteredTransfers)
+        }
+    }
+
+    /** Explicitly confirms an ambiguous title/author match and publishes a `workAlias` merge record. */
+    suspend fun confirmWorkMatch(match: DrivePendingWorkMatch) {
+        if (!driveSync.hasStore()) return
+        val active = driveSync.store.accounts().active() ?: return
+        val hlc = driveSync.changeEngine.nextHlc(active.permissionId)
+        driveSync.workIdentity.confirmMerge(
+            permissionId = active.permissionId,
+            bookUrl = match.bookUrl,
+            keyA = match.localWorkKey,
+            keyB = match.candidateWorkKey,
+            hlc = hlc,
+        )
+        runCatching { driveSync.changeEngine.sync() }
+    }
+
+    /** Explicitly rejects an ambiguous title/author match and publishes a `workAlias` reject record. */
+    suspend fun rejectWorkMatch(match: DrivePendingWorkMatch) {
+        if (!driveSync.hasStore()) return
+        val active = driveSync.store.accounts().active() ?: return
+        val hlc = driveSync.changeEngine.nextHlc(active.permissionId)
+        driveSync.workIdentity.rejectMerge(
+            permissionId = active.permissionId,
+            bookUrl = match.bookUrl,
+            keyA = match.localWorkKey,
+            keyB = match.candidateWorkKey,
+            hlc = hlc,
+        )
+        runCatching { driveSync.changeEngine.sync() }
     }
 
     /**
