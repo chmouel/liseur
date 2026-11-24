@@ -195,11 +195,18 @@ object VocabularyMerge {
                 )
             }
         }
+        val winner = if (
+            compareValuesBy(local, remote, { it.definition.orEmpty() }, { it.translationLanguage.orEmpty() }) >= 0
+        ) {
+            local
+        } else {
+            remote
+        }
         return MergedDefinition(
-            remote.definition,
-            remote.translationLanguage,
-            remote.definitionEdited,
-            remote.definitionUpdatedAt,
+            winner.definition,
+            winner.translationLanguage,
+            winner.definitionEdited,
+            winner.definitionUpdatedAt,
         )
     }
 
@@ -227,10 +234,10 @@ object VocabularyMerge {
             if (local.notes.isBlank() && remote.notes.isNotBlank()) return remote.notes to remote.notesUpdatedAt
             if (remote.notes.isBlank() && local.notes.isNotBlank()) return local.notes to local.notesUpdatedAt
         }
-        return if (local.notesUpdatedAt > remote.notesUpdatedAt) {
-            local.notes to local.notesUpdatedAt
-        } else {
-            remote.notes to remote.notesUpdatedAt
+        return when {
+            local.notesUpdatedAt > remote.notesUpdatedAt -> local.notes to local.notesUpdatedAt
+            remote.notesUpdatedAt > local.notesUpdatedAt -> remote.notes to remote.notesUpdatedAt
+            else -> maxOf(local.notes, remote.notes) to local.notesUpdatedAt
         }
     }
 
@@ -326,7 +333,11 @@ object VocabularyMerge {
             workId = remote.workId ?: local.workId,
             bookTitle = bookTitle,
             locationKey = wireLocationKey(local.locationKey.ifBlank { remote.locationKey }),
-            locator = local.locator ?: remote.locator,
+            locator = if (local.locator != null && remote.locator != null) {
+                maxOf(local.locator, remote.locator)
+            } else {
+                local.locator ?: remote.locator
+            },
             sentence = sentence,
             sentenceEdited = sentenceEdited,
             sentenceUpdatedAt = sentenceUpdatedAt,
@@ -375,6 +386,10 @@ object VocabularyMerge {
             if (remote.sentence.isNullOrBlank() && !local.sentence.isNullOrBlank()) {
                 return MergedSentence(local.sentence, false, local.sentenceUpdatedAt)
             }
+        }
+        if (local.sentenceUpdatedAt == remote.sentenceUpdatedAt && local.sentence != remote.sentence) {
+            val winner = if ((local.sentence ?: "") >= (remote.sentence ?: "")) local else remote
+            return MergedSentence(winner.sentence, winner.sentenceEdited, winner.sentenceUpdatedAt)
         }
         return MergedSentence(remote.sentence, remote.sentenceEdited, remote.sentenceUpdatedAt)
     }
