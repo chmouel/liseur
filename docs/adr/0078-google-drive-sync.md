@@ -72,7 +72,12 @@ Identifiers:
 
 - Account peer key: `drive:<permissionId>`, used as `peer_id` in every
   per-peer table of `liseur.db` and as partition key in `drive_sync.db`.
-  No schema change to existing `liseur.db` sync tables is needed.
+  Position baselines also use per-device rows
+  `drive:<permissionId>/<deviceId>` in `sync_peer_state`
+  (`docs/DRIVE_SYNC.md` §4.5). Existing per-peer sync tables keep their
+  schema except `vocabulary_staged_review`, which gains `state`,
+  `origin_device_id` and `origin_seq` in migration 84→85 (see
+  Consequences).
 - `deviceId`: lowercase UUIDv4 generated once per install in
   `drive_install`. It is never taken from `DeviceIdentity`.
 - `fp` (version fingerprint, lowercase hex SHA-256 of canonical JSON:
@@ -114,13 +119,13 @@ commits replays cleanly on restart.
 Existing `liseur.db` per-peer tables fall into two shapes:
 
 - **Fingerprint-native tables (`annotation_sync`, `vocabulary_word_sync`):**
-  store `acked_fingerprint` atomically with the data row. On crash
-  recovery, recompute `contentFp` from the committed `liseur.db` row (or
-  `"DELETED"` when the row is absent while its sync row remains) and
-  reconcile `drive_record_state` against `acked_fingerprint`. For
-  `annotation`, `acked_fingerprint` alone cannot name the applied wire
-  version (a keep-body resolution leaves it unchanged), so the apply
-  receipt below decides.
+  store `acked_fingerprint` atomically with the data row.
+  `acked_fingerprint` alone cannot name the applied wire version: a
+  keep-body annotation resolution leaves it unchanged, and a `vocabWord`
+  revival or keep has `fp = reviveFp` while the row and `acked_fingerprint`
+  hold `contentFp(restore.body)`. Both domains therefore recover from the
+  apply receipt below, which `vocabWord` also writes for every revival or
+  keep it mints, never by recomputing `contentFp` from the row.
 - **Revision-based tables (`evaluation_sync`, `metadata_override_sync`):**
   these tables store `acked_revision` (`Long`), `sent_revision`
   (`Long?`), and `sent_json` (`String?`) rather than an `acked_fp`
@@ -129,11 +134,19 @@ Existing `liseur.db` per-peer tables fall into two shapes:
   table:
   1. On **remote apply** (Transaction 1 in `liseur.db`): write the
      applied value to `book_evaluation` (or `books` +
-     `metadata_override_revision`) at `rev_applied`, and in the **same
-     transaction** upsert `evaluation_sync` / `metadata_override_sync`
-     for `peer_id = drive:<permissionId>` with
+     `metadata_override_revision`) at `rev_applied = max(row.revision,
+     sync.acked_revision) + 1`. The revision rises even when the applied
+     outcome leaves the value unchanged (a keep-body resolution, a
+     `resolve` adopted on Agreement); liseur-sync adoption keeps the row's
+     revision (`LiseurSyncEvaluations.kt:256`) and Drive must not. In the
+     **same transaction** upsert `evaluation_sync` /
+     `metadata_override_sync` for `peer_id = drive:<permissionId>` with
      `acked_revision = rev_applied`, `sent_revision = rev_applied`, and
      `sent_json = {"vfp":"<R.fp>","cfp":"<contentFp>","rev":<rev_applied>}`.
+     Invariant: `sent_json.vfp` never changes unless `acked_revision`
+     strictly increases. This covers a local resolution and the outgoing
+     ACK in step 2 too, so step 3's gate catches every Tx 1 whose Tx 2 is
+     missing.
   2. On **outgoing batch ACK** (Transaction 1 in `liseur.db`, after
      Drive confirms the delta `fileId`): advance `acked_revision =
      target_revision`, `sent_revision = target_revision`, and
@@ -169,20 +182,25 @@ Existing `liseur.db` per-peer tables fall into two shapes:
        mandatory `op: "resolve"` persistence/settlement pre-step if the
        replayed record is a resolution).
 
-**Apply receipt.** `annotation`, `series` and `catalog` have no per-peer
-ack that carries the applied wire version, and a catalog wire body cannot
+**Apply receipt.** `annotation`, `series`, `catalog` and `vocabWord` have no
+per-peer ack that carries the applied wire version (a `vocabWord` revival or
+keep has `fp = reviveFp`), and a catalog wire body cannot
 be recomputed from the `books` row: `archiveHlc`, each edition's
 availability group and `updatedAt` have no column there. In the same
 `liseur.db` transaction as the data, each remote apply of these domains
 upserts one row in a new table `drive_apply_receipt(peer_id, domain,
 record_key, version_fp, version_op, outcome, hlc, origin_device_id,
-origin_seq, anc_json, res_refs_json, body_json, row_fp, republish)`.
+origin_seq, anc_json, res_refs_json, body_json, row_fp, republish,
+local_version, revives_json)`.
 `body_json` is the body as materialized (the merged body for `catalog`),
 `row_fp` fingerprints the projection of fields the row stores (for
 `catalog`: `title`, `author`, `fileSeriesName`, `fileSeriesIndex`,
 `addedAt`, `archivedAt`), and `republish` marks a merged body that differs
-from `R.body`. The protocol is unreleased, so the table ships with the
-first schema that has Drive and needs no migration. Recovery runs before
+from `R.body`. A `vocabWord` revival or add-wins keep minted by this device
+writes a receipt with `local_version = 1`, so recovery restores
+`L := reviveFp` with its lineage and leaves it unpublished. Migration 84→85
+creates the table empty; the protocol is unreleased, so nothing is
+backfilled. Recovery runs before
 diffing and pulling for every receipt whose `receipt_id` (a UUID unique per
 apply) differs from `drive_record_state.acked_receipt_id`, which Tx 2 sets
 with the rest of the record's state and which local versions and the
@@ -200,9 +218,16 @@ and records a dirty `del` with the receipt's `version_fp` in `anc`, so
 replay is Stale and the delete is published. No receipt
 for `R.fp` means Tx 1 never committed. Tx 1 also verifies that the row
 still has the fingerprint the apply was decided against, so a local edit
-landing in between is never overwritten. The cursor is the last write of
-Tx 2. `evaluation` and `metadata` already satisfy this through `sent_json.vfp`
-and `rev`. `docs/DRIVE_SYNC.md` §3.3 has the exact columns and steps.
+landing in between is never overwritten. `drive_cursor.applied_seq` names a
+whole
+`(device, domain, seq)`: it moves to `seq` only after every record of that
+domain in the batch has committed its Tx 2 (for a snapshot, to `throughSeq`
+only after that domain's records in every part have), so a crash inside a
+batch replays the whole batch for that domain and the already-committed
+records reach Agreement or Stale. `evaluation` and `metadata` already
+satisfy this through `sent_json.vfp` and a `rev` that strictly increases
+with every change of `vfp`. `docs/DRIVE_SYNC.md` §3.3 has the exact columns and
+steps.
 
 ### Conflict rule for mutable records
 
@@ -365,7 +390,11 @@ before cascading any delete. A child with unknown provenance, or a local
 occurrence edit not yet published, counts as uncovered, and snapshot
 records carry their original publication `seq` so restored children can
 be checked. An uncovered child makes the delete a concurrent write, so
-add-wins keeps the word with all its children and republishes them. A
+add-wins keeps the word with all its children and republishes them. If
+the kept word's version is in the `del`'s `anc` (unchanged since the deleter
+saw it), the republished word is a revival (`reviveFp(delFp, restore.fp)`,
+body `restore.body`), so a replay of the `del` after the child is undone is
+Stale rather than a causal supersession. A
 covered child is not discarded by a cascade: it becomes non-live history
 (`vocabulary_staged_review.state = COVERED` for reviews, `held = 1` in
 `drive_record_state` for occurrences), never shown or counted while the
@@ -377,11 +406,15 @@ after the tombstone and is not covered restores the word as a **revival**:
 a wire `put` with body `restore.body`, `anc = [delFp, restore.fp]`, an
 envelope `revives = {del, restore}` and `fp = reviveFp(delFp, restore.fp)`,
 a hash distinct from `restore.fp` (`content_fp` stays
-`contentFp(restore.body)`). Because the original `del`'s `anc` holds
+`contentFp(restore.body)`; the Tx 1 that mints it records `reviveFp`, `anc`
+and `revives` in `drive_apply_receipt`, so crash recovery never falls back to
+`restore.fp`). Because the original `del`'s `anc` holds
 `restore.fp` but no `del` holds `reviveFp`, a late replay of that `del`
 is Stale and cannot delete the revived word again. The revival is
 republished along with the same eligible set of retained children
-(`STAGED` and `COVERED`, minus undone reviews) whichever order the `del`,
+(`STAGED` and `COVERED`; undone reviews are kept as `UNDONE` evidence that
+still keeps or revives the word but are never attached) whichever order the
+`del`,
 covered children and uncovered child arrived in; a tombstone that arrives
 after a staged uncovered child and finds the parent absent restores the word
 the same way, from the incoming `restore`. Snapshots build `records` from
@@ -398,7 +431,12 @@ progress reuses `reconcileReadingState`, and `SyncDecision.Conflict`
 goes through the existing position-choice UI. Uploading to a device's own
 stream is delivery, not agreement: it never marks a local position as
 reconciled with another device, so a concurrent position on two devices
-still opens a conflict whether the upload or the pull happens first. Series conflicts are
+still opens a conflict whether the upload or the pull happens first.
+Agreement is kept per other device in `sync_peer_state` rows keyed
+`drive:<permissionId>/<deviceId>`, while the account row
+`drive:<permissionId>` holds only delivery acks, so agreeing with one device
+never moves the baseline used against another, and a pulled position counts
+as a local change relative to every other device. Series conflicts are
 grouped by `seriesKey` and resolved per shelf, written as per-book
 `op: "resolve"` records. Metadata override and evaluation conflicts
 prompt per field. `archived_at` auto-resolves to the higher HLC of the archive choice itself
@@ -431,8 +469,11 @@ reading sessions (`remote_session_id`), and work aliases
   `remote_uuid`, or a later `disconnect()` would delete them.
   `hidden_at` stays local.
 - Catalog `del` is published only by **Delete from synced library**. The
-  receiver removes `drive:` rows through `BookRemoval` and keeps
-  annotations as hidden history that never recreates the shelf entry. A
+  receiver removes `drive:` rows through a history-preserving `BookRemoval`
+  path that keeps annotations and reading sessions (unlike
+  `BookRemoval.forget()`, which deletes sessions) as history that never
+  recreates the shelf entry, so statistics are the same whether a session
+  arrived before or after the tombstone. A
   book with a local file is unlinked from Drive, not removed. A Drive-side
   EPUB delete only clears that edition's availability group
   (`driveFileId`, `fileName`, `uploadedAt`) and stamps a new
@@ -672,10 +713,17 @@ surviving delta applies the snapshot, which is idempotent.
    (`appProperties has {key='kind' and value='manifest'}`); per device
    read snapshot parts, then list deltas by `deviceId` and apply in seq
    order; list `Liseur` folders and EPUBs in `spaces=drive` (with
-   `drive.file`, only app-created files are visible); commit the token.
+   `drive.file`, only app-created files are visible); record every listed
+   file in `drive_file` with its `kind` (`epub` for EPUBs); commit the token.
 2. Incremental: `changes.list(pageToken, spaces="appDataFolder,drive",
    includeRemoved=true, pageSize=1000, fields="nextPageToken,newStartPageToken,changes(fileId,removed,file(id,name,parents,trashed,appProperties,size,md5Checksum,createdTime))")`.
-   Route by `appProperties.kind`. Apply each device's deltas only in
+   Route by `appProperties.kind`, or by `appProperties.liseurKind` for EPUBs
+   (`epub`), which carry no `kind`. A change with `removed = true` or no
+   `file` has no `appProperties`: route it by the `kind` cached in
+   `drive_file` for its `fileId` (`epub` for EPUBs), and ignore it if
+   `drive_file` has no row. A removed or trashed EPUB clears that edition's
+   availability group through a catalog `put` (`docs/DRIVE_SYNC.md` §4.2).
+   Apply each device's deltas only in
    contiguous seq order; a gap waits or falls back to the snapshot. Commit
    the token only after both database writes for that page.
 3. An invalid or expired token (HTTP 400/404 on `pageToken`) triggers the
@@ -722,7 +770,7 @@ restored device gets its own `deviceId`.
 | `drive_account` | `permission_id` | `email`, `state` (ACTIVE / PAUSED / NEEDS_RECONNECT), `connected_at`, `last_success_at`, `last_error`, `folder_id`, `start_page_token`, `next_seq`, `manifest_file_id`, `snapshot_through_seq`, `deltas_since_snapshot`, `hlc_wall_ms`, `hlc_counter`, `metered_transfers` |
 | `drive_device` | `(permission_id, device_id)` | `label`, `manifest_file_id`, `app_version_code`, `snapshot_through_seq`, `last_seen_at` |
 | `drive_cursor` | `(permission_id, device_id, domain)` | `applied_seq`, `paused_schema_version` |
-| `drive_file` | `(permission_id, file_id)` | `name`, `kind`, `device_id`, `seq`, `sha256`, `size`, `md5`, `trashed`, `created_time`; index `(permission_id, kind, sha256)` |
+| `drive_file` | `(permission_id, file_id)` | `name`, `kind` (`manifest` / `delta` / `snapshot` / `cover`, or `epub` from `liseurKind`), `device_id`, `seq`, `sha256`, `size`, `md5`, `trashed`, `created_time`; index `(permission_id, kind, sha256)` |
 | `drive_outbox` | `(permission_id, seq)` | `batch_id`, `payload`, `state` (BUILT / UPLOADED / ACKED), `file_id`, `created_at` |
 | `drive_authored_record` | `(permission_id, domain, record_key, seq)` | `op`, `hlc`, `fp`, `anc_json`, `res_refs_json`, `body_json`, `observed_json`, `restore_json`, `revives_json`, `first_seq` (original publication seq, for `vocabOccurrence` / `vocabReview`) |
 | `drive_record_state` | `(permission_id, domain, record_key)` | `version_fp`, `version_op`, `published_fp`, `content_fp`, `last_synced_revision`, `origin_device_id`, `origin_seq`, `ancestors_json`, `res_refs_json`, `last_hlc`, `body_json`, `observed_json` and `restore_json` (`vocabWord` `del` only), `held` (version recorded but not applied to `liseur.db`: book tombstoned, or `vocabOccurrence` child of an absent or tombstoned word), `acked_receipt_id` |
@@ -919,7 +967,10 @@ Mutual exclusion invariant: never both `remote_server.id = 1` and a
    silently. A review that arrives after the word's tombstone and was not
    covered by its `observed` vector restores the word from the `restore`
    payload carried by the `del` itself, which snapshots keep, so a device
-   rebuilt from snapshots restores it too.
+   rebuilt from snapshots restores it too. An uncovered review keeps or
+   restores the word even if it is later undone: the undo is final for the
+   review, which stays as `UNDONE` evidence, so every arrival order of the
+   delete, the review and its undo converges.
 4. Concurrent differing resolutions: higher HLC wins silently by `(hlc,
    fp)` lexicographical order **only** when both current versions are
    themselves competing `op: "resolve"` records (whether keep-vs-keep or
@@ -946,11 +997,17 @@ Mutual exclusion invariant: never both `remote_server.id = 1` and a
 ## Consequences
 
 - Reconciliation reuses existing per-peer ack tables and domain merge
-  logic (`reconcileReadingState`, `VocabularyMerge`, `WorkIdentifiers`)
-  with no change to existing `liseur.db` tables except migration 84→85 for
-  session columns (`remote_session_id` + unique index, `origin_device_id`),
-  plus the new `drive_apply_receipt` table for crash recovery. The
-  protocol is unreleased, so no existing Drive data needs migrating.
+  logic (`reconcileReadingState`, `VocabularyMerge`, `WorkIdentifiers`).
+  `liseur.db` migration 84→85 adds the session columns
+  (`remote_session_id` + unique index, `origin_device_id`). It adds
+  `state TEXT NOT NULL DEFAULT 'STAGED'` (`STAGED` / `COVERED` /
+  `UNDONE`), `origin_device_id TEXT` and `origin_seq INTEGER` to
+  `vocabulary_staged_review`. That table was created in 83→84 for
+  liseur-sync and released, so existing rows become `STAGED` with `NULL`
+  provenance. The migration also creates the empty `drive_apply_receipt`
+  table. No other existing table changes. The Drive protocol is
+  unreleased, so no Drive data needs migrating, but existing liseur-sync
+  staging rows do.
 - Backup restore no longer duplicates device ids or sessions, because
   Drive state lives outside the backup and session ids derive from
   content, while per-account session delivery lives in
