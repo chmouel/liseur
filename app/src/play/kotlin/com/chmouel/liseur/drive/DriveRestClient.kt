@@ -450,7 +450,12 @@ class DriveRestClient(
                 return when (val outcome = executeOnce(request, fileId = null, treat400And404AsInvalidPageToken = false)) {
                     is RawOutcome.Success -> parseDriveFile(parseJsonObject(outcome.body.toString(Charsets.UTF_8), "uploadBatch"))
                     is RawOutcome.Retryable -> {
-                        if (attempt >= maxRetries || shouldDeferRetry(outcome.retryAfterMs)) {
+                        // Without a batchId a 5xx cannot be reconciled, and may hide a
+                        // committed create; rate limiting committed nothing.
+                        if ((batchId == null && !outcome.isRateLimited) ||
+                            attempt >= maxRetries ||
+                            shouldDeferRetry(outcome.retryAfterMs)
+                        ) {
                             throw outcome.toFinalException()
                         }
                         sleep(computeBackoffMs(attempt, outcome.retryAfterMs))
@@ -795,98 +800,103 @@ class DriveRestClient(
             }
         }
 
-        var attempt = 0
-        var highWaterOffset = offset
-        while (true) {
-            val activeUri = requireNotNull(sessionUri)
-            val chunk = readChunkAt(openStream, offset, min(chunkSizeBytes.toLong(), totalBytes - offset).toInt())
-            val status = try {
-                uploadResumableChunk(
-                    accessToken = accessToken,
-                    sessionUri = activeUri,
-                    chunk = chunk,
-                    offset = offset,
-                    totalBytes = totalBytes,
-                    mimeType = mimeType,
-                )
-            } catch (e: DriveQuotaException) {
-                if (e.isStorageQuota || attempt >= maxRetries || shouldDeferRetry(e.retryAfterMs)) throw e
-                sleep(computeBackoffMs(attempt, e.retryAfterMs))
-                attempt++
-                when (val probed = queryResumableUploadOffset(accessToken, activeUri, totalBytes)) {
-                    is ResumableUploadStatus.Completed -> return probed.file
-                    is ResumableUploadStatus.InProgress -> {
-                        offset = probed.nextByteOffset.coerceIn(0L, totalBytes)
-                        continue
-                    }
-                    ResumableUploadStatus.Expired -> ResumableUploadStatus.Expired
-                }
-            } catch (e: DriveApiException) {
-                val retryableHttp = e is DriveHttpException && (
-                    (e.httpCode != null && e.httpCode in 500..599) ||
-                        (e.httpCode == 403 && e.reason in RETRYABLE_403_BACKEND_REASONS)
-                    )
-                val retryable = retryableHttp || (e.cause is IOException)
-                val retryAfterMs = e.retryAfterMs
-                if (!retryable || attempt >= maxRetries || shouldDeferRetry(retryAfterMs)) throw e
-                sleep(computeBackoffMs(attempt, retryAfterMs = retryAfterMs))
-                attempt++
-                when (val probed = queryResumableUploadOffset(accessToken, activeUri, totalBytes)) {
-                    is ResumableUploadStatus.Completed -> return probed.file
-                    is ResumableUploadStatus.InProgress -> {
-                        offset = probed.nextByteOffset.coerceIn(0L, totalBytes)
-                        continue
-                    }
-                    ResumableUploadStatus.Expired -> ResumableUploadStatus.Expired
-                }
-            }
-
-            when (status) {
-                is ResumableUploadStatus.Completed -> {
-                    onProgress(totalBytes, activeUri)
-                    return status.file
-                }
-                is ResumableUploadStatus.InProgress -> {
-                    val nextOffset = status.nextByteOffset.coerceIn(0L, totalBytes)
-                    if (nextOffset <= offset) {
-                        if (attempt >= maxRetries) {
-                            throw DriveApiException(
-                                "Google Drive resumable upload made no progress (offset=$offset, acknowledged=$nextOffset)",
-                            )
-                        }
-                        sleep(computeBackoffMs(attempt, retryAfterMs = null))
-                        attempt++
-                        offset = nextOffset
-                    } else if (nextOffset > highWaterOffset) {
-                        highWaterOffset = nextOffset
-                        attempt = 0
-                        offset = nextOffset
-                        onProgress(offset, activeUri)
-                    } else {
-                        // Replaying bytes after a rewind: advance offset without resetting retry budget.
-                        offset = nextOffset
-                    }
-                }
-                ResumableUploadStatus.Expired -> {
-                    if (restartedExpiredSession) {
-                        throw DriveApiException("Google Drive resumable upload session expired repeatedly")
-                    }
-                    restartedExpiredSession = true
-                    attempt = 0
-                    offset = 0L
-                    highWaterOffset = 0L
-                    val freshUri = initiateResumableUpload(
+        val chunks = ChunkSource(openStream)
+        try {
+            var attempt = 0
+            var highWaterOffset = offset
+            while (true) {
+                val activeUri = requireNotNull(sessionUri)
+                val chunk = chunks.read(offset, min(chunkSizeBytes.toLong(), totalBytes - offset).toInt())
+                val status = try {
+                    uploadResumableChunk(
                         accessToken = accessToken,
-                        name = name,
-                        mimeType = mimeType,
+                        sessionUri = activeUri,
+                        chunk = chunk,
+                        offset = offset,
                         totalBytes = totalBytes,
-                        parents = parents,
-                        appProperties = appProperties,
+                        mimeType = mimeType,
                     )
-                    sessionUri = freshUri
-                    onSessionUri(freshUri)
+                } catch (e: DriveQuotaException) {
+                    if (e.isStorageQuota || attempt >= maxRetries || shouldDeferRetry(e.retryAfterMs)) throw e
+                    sleep(computeBackoffMs(attempt, e.retryAfterMs))
+                    attempt++
+                    when (val probed = queryResumableUploadOffset(accessToken, activeUri, totalBytes)) {
+                        is ResumableUploadStatus.Completed -> return probed.file
+                        is ResumableUploadStatus.InProgress -> {
+                            offset = probed.nextByteOffset.coerceIn(0L, totalBytes)
+                            continue
+                        }
+                        ResumableUploadStatus.Expired -> ResumableUploadStatus.Expired
+                    }
+                } catch (e: DriveApiException) {
+                    val retryableHttp = e is DriveHttpException && (
+                        (e.httpCode != null && e.httpCode in 500..599) ||
+                            (e.httpCode == 403 && e.reason in RETRYABLE_403_BACKEND_REASONS)
+                        )
+                    val retryable = retryableHttp || (e.cause is IOException)
+                    val retryAfterMs = e.retryAfterMs
+                    if (!retryable || attempt >= maxRetries || shouldDeferRetry(retryAfterMs)) throw e
+                    sleep(computeBackoffMs(attempt, retryAfterMs = retryAfterMs))
+                    attempt++
+                    when (val probed = queryResumableUploadOffset(accessToken, activeUri, totalBytes)) {
+                        is ResumableUploadStatus.Completed -> return probed.file
+                        is ResumableUploadStatus.InProgress -> {
+                            offset = probed.nextByteOffset.coerceIn(0L, totalBytes)
+                            continue
+                        }
+                        ResumableUploadStatus.Expired -> ResumableUploadStatus.Expired
+                    }
+                }
+
+                when (status) {
+                    is ResumableUploadStatus.Completed -> {
+                        onProgress(totalBytes, activeUri)
+                        return status.file
+                    }
+                    is ResumableUploadStatus.InProgress -> {
+                        val nextOffset = status.nextByteOffset.coerceIn(0L, totalBytes)
+                        if (nextOffset <= offset) {
+                            if (attempt >= maxRetries) {
+                                throw DriveApiException(
+                                    "Google Drive resumable upload made no progress (offset=$offset, acknowledged=$nextOffset)",
+                                )
+                            }
+                            sleep(computeBackoffMs(attempt, retryAfterMs = null))
+                            attempt++
+                            offset = nextOffset
+                        } else if (nextOffset > highWaterOffset) {
+                            highWaterOffset = nextOffset
+                            attempt = 0
+                            offset = nextOffset
+                            onProgress(offset, activeUri)
+                        } else {
+                            // Replaying bytes after a rewind: advance offset without resetting retry budget.
+                            offset = nextOffset
+                        }
+                    }
+                    ResumableUploadStatus.Expired -> {
+                        if (restartedExpiredSession) {
+                            throw DriveApiException("Google Drive resumable upload session expired repeatedly")
+                        }
+                        restartedExpiredSession = true
+                        attempt = 0
+                        offset = 0L
+                        highWaterOffset = 0L
+                        val freshUri = initiateResumableUpload(
+                            accessToken = accessToken,
+                            name = name,
+                            mimeType = mimeType,
+                            totalBytes = totalBytes,
+                            parents = parents,
+                            appProperties = appProperties,
+                        )
+                        sessionUri = freshUri
+                        onSessionUri(freshUri)
+                    }
                 }
             }
+        } finally {
+            chunks.close()
         }
     }
 
@@ -1151,35 +1161,61 @@ class DriveRestClient(
         written
     }
 
-    private suspend fun readChunkAt(
-        openStream: () -> InputStream,
-        offset: Long,
-        length: Int,
-    ): ByteArray = withContext(Dispatchers.IO) {
-        openStream().use { input ->
+    /**
+     * Reads upload chunks from one open stream while they are requested in
+     * order, and reopens and skips forward only when the offset moves (a
+     * retry of the same chunk, a server-reported rewind or a restart).
+     */
+    private class ChunkSource(private val openStream: () -> InputStream) {
+        private var input: InputStream? = null
+        private var position = 0L
+
+        suspend fun read(offset: Long, length: Int): ByteArray = withContext(Dispatchers.IO) {
+            try {
+                val stream = input?.takeIf { position == offset } ?: reopenAt(offset)
+                val buffer = ByteArray(length)
+                var filled = 0
+                while (filled < length) {
+                    val read = stream.read(buffer, filled, length - filled)
+                    if (read < 0) break
+                    filled += read
+                }
+                position = offset + filled
+                if (filled == length) buffer else buffer.copyOf(filled)
+            } catch (e: Throwable) {
+                close()
+                throw e
+            }
+        }
+
+        fun close() {
+            val stream = input
+            input = null
+            stream?.close()
+        }
+
+        private fun reopenAt(offset: Long): InputStream {
+            close()
+            val stream = openStream()
+            input = stream
+            position = 0L
             var remainingSkip = offset
             val skipBuffer = ByteArray(8192)
             while (remainingSkip > 0L) {
-                val skipped = input.skip(remainingSkip)
+                val skipped = stream.skip(remainingSkip)
                 if (skipped > 0L) {
                     remainingSkip -= skipped
                 } else {
                     val toRead = min(skipBuffer.size.toLong(), remainingSkip).toInt()
-                    val read = input.read(skipBuffer, 0, toRead)
+                    val read = stream.read(skipBuffer, 0, toRead)
                     if (read < 0) {
                         throw DriveApiException("Upload stream ended before offset $offset")
                     }
                     remainingSkip -= read
                 }
             }
-            val buffer = ByteArray(length)
-            var filled = 0
-            while (filled < length) {
-                val read = input.read(buffer, filled, length - filled)
-                if (read < 0) break
-                filled += read
-            }
-            if (filled == length) buffer else buffer.copyOf(filled)
+            position = offset
+            return stream
         }
     }
 
