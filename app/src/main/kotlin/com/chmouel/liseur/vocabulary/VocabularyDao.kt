@@ -423,6 +423,9 @@ interface VocabularyDao {
     @Query("SELECT * FROM vocabulary_reviews WHERE syncId = :syncId LIMIT 1")
     suspend fun reviewBySyncIdAnyOwner(syncId: String): VocabularyReview?
 
+    @Query("SELECT * FROM vocabulary_reviews WHERE syncId = :syncId")
+    suspend fun reviewsBySyncIdAnyOwner(syncId: String): List<VocabularyReview>
+
     @Query(
         "SELECT r.* FROM vocabulary_reviews r " +
             "JOIN vocabulary_words w ON w.id = r.wordId " +

@@ -1298,6 +1298,287 @@ class DrivePhase5EndToEndTest {
 
     // -- Harness helpers -----------------------------------------------------
 
+    @Test
+    fun `an undo recorded while its put is built but not acknowledged survives the parent word delete`() = runTest {
+        deviceA.connect(PERM_A, "a@example.com")
+        val repoA = VocabularyRepository(deviceA.liseurDb)
+        val vocabSync = deviceA.driveSync.vocabularySync
+        val now = 1_746_000_000_000L
+        val wordId = repoA.collect(VocabularyLookup("brume", "fr", null), "mist", "en", now)!!
+        val undo = repoA.review(
+            deviceA.liseurDb.vocabularyDao().word(wordId)!!, Recall.GOOD, newLimit = 0, reviewLimit = 0, now = now + 1_000L,
+        )!!
+        val sid = deviceA.liseurDb.vocabularyDao().review(undo.reviewId)!!.syncId!!
+
+        val built = vocabSync.collectDirtyRecords(PERM_A) { nextTestHlc() }
+        assertTrue(built.reviewAcks.any { it.reviewId == sid && !it.isDelete })
+
+        // The user undoes while the frozen batch is uploading, then the word is deleted.
+        assertTrue(repoA.undoReview(undo))
+        repoA.deleteWord(wordId)
+        vocabSync.acknowledgePublished(PERM_A, 50L, built.records, built.wordAcks, built.reviewAcks)
+
+        val peerId = DriveLibrarySync.accountPeerId(PERM_A)
+        assertTrue(deviceA.liseurDb.vocabularySyncDao().review(peerId, sid)!!.pendingDeleted)
+        val next = vocabSync.collectDirtyRecords(PERM_A) { nextTestHlc() }
+        assertTrue(
+            "the undo must publish a tombstone even though its word is gone",
+            next.records.any { it.d == DriveWireCodec.DOMAIN_VOCAB_REVIEW && it.k == sid && it.op == DriveRecordState.OP_DEL },
+        )
+    }
+
+    @Test
+    fun `deleting and recollecting a synced word does not publish review tombstones for the cascaded reviews`() = runTest {
+        deviceA.connect(PERM_A, "a@example.com")
+        val repoA = VocabularyRepository(deviceA.liseurDb)
+        val now = 1_746_010_000_000L
+        val lookup = VocabularyLookup("givre", "fr", null)
+        val wordId = repoA.collect(lookup, "frost", "en", now)!!
+        repoA.review(deviceA.liseurDb.vocabularyDao().word(wordId)!!, Recall.GOOD, newLimit = 0, reviewLimit = 0, now = now + 1_000L)!!
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        val peerId = DriveLibrarySync.accountPeerId(PERM_A)
+        val rows = deviceA.liseurDb.vocabularySyncDao().allReviews(peerId)
+        assertEquals(1, rows.size)
+
+        repoA.deleteWord(wordId)
+        repoA.collect(lookup, "frost", "en", now + 5_000L)!!
+
+        val bundle = deviceA.driveSync.vocabularySync.collectDirtyRecords(PERM_A) { nextTestHlc() }
+        assertTrue(
+            "a cascade is not an undo",
+            bundle.records.none { it.d == DriveWireCodec.DOMAIN_VOCAB_REVIEW && it.op == DriveRecordState.OP_DEL },
+        )
+        assertFalse(deviceA.liseurDb.vocabularySyncDao().review(peerId, rows.single().reviewId)!!.ackedDeleted)
+    }
+
+    @Test
+    fun `a review undo removes every copy of the event held by duplicate unowned and retired-account words`() = runTest {
+        deviceA.connect(PERM_A, "a@example.com")
+        val dao = deviceA.liseurDb.vocabularyDao()
+        val addedAt = 1_746_020_000_000L
+        fun word(owner: String) = VocabularyWord(
+            word = "vent", normalized = "vent", language = "fr", definition = "wind", translationLanguage = "en",
+            notes = "", addedAt = addedAt, dueAt = addedAt, ownerAccount = owner,
+        )
+        val unowned = dao.insertWord(word(""))
+        val retired = dao.insertWord(word("liseursync|https://old.example|acct-1"))
+        for (id in listOf(unowned, retired)) {
+            dao.addReview(
+                VocabularyReview(
+                    wordId = id, rating = Recall.GOOD.name, reviewedAt = addedAt + 1_000L, intervalMinutes = 60,
+                    dueAt = addedAt + 3_601_000L, firstReview = true, syncId = "dup-event",
+                ),
+            )
+            deviceA.driveSync.vocabularySync.reconcileWordSchedule(id)
+        }
+        assertEquals(1, dao.word(unowned)!!.repetitions)
+        assertEquals(1, dao.word(retired)!!.repetitions)
+
+        deviceA.driveSync.vocabularySync.applyRemoteReview(
+            PERM_A,
+            DriveWireCodec.delRecord(DriveWireCodec.DOMAIN_VOCAB_REVIEW, "dup-event", nextTestHlc()),
+            "dev-b",
+            7L,
+        )
+
+        assertTrue(dao.reviewsBySyncIdAnyOwner("dup-event").isEmpty())
+        assertEquals(0, dao.word(unowned)!!.repetitions)
+        assertEquals(0, dao.word(retired)!!.repetitions)
+    }
+
+    @Test
+    fun `legacy backfill does not give a tombstoned deterministic id to a restored null-syncId review`() = runTest {
+        deviceA.connect(PERM_A, "a@example.com")
+        val dao = deviceA.liseurDb.vocabularyDao()
+        val addedAt = 1_746_030_000_000L
+        val wordId = dao.insertWord(
+            VocabularyWord(
+                word = "pluie", normalized = "pluie", language = "fr", definition = "rain", translationLanguage = "en",
+                notes = "", addedAt = addedAt, dueAt = addedAt,
+            ),
+        )
+        val undoneAt = addedAt + 1_000L
+        val keptAt = addedAt + 2_000L
+        for (at in listOf(undoneAt, keptAt)) {
+            dao.addReview(
+                VocabularyReview(
+                    wordId = wordId, rating = Recall.GOOD.name, reviewedAt = at, intervalMinutes = 60,
+                    dueAt = at + 3_600_000L, firstReview = false, syncId = null,
+                ),
+            )
+        }
+        val undoneId = DriveVocabularySync.deterministicLegacyReviewId("fr", "pluie", undoneAt, Recall.GOOD.name)
+        val keptId = DriveVocabularySync.deterministicLegacyReviewId("fr", "pluie", keptAt, Recall.GOOD.name)
+        deviceA.driveSync.vocabularySync.applyRemoteReview(
+            PERM_A,
+            DriveWireCodec.delRecord(DriveWireCodec.DOMAIN_VOCAB_REVIEW, undoneId, nextTestHlc()),
+            "dev-b",
+            3L,
+        )
+
+        val bundle = deviceA.driveSync.vocabularySync.collectDirtyRecords(PERM_A) { nextTestHlc() }
+
+        assertNull(dao.reviewBySyncIdAnyOwner(undoneId))
+        assertNotNull("an untombstoned legacy review is preserved and backfilled", dao.reviewBySyncIdAnyOwner(keptId))
+        assertEquals(1, dao.word(wordId)!!.repetitions)
+        assertTrue(bundle.records.none { it.d == DriveWireCodec.DOMAIN_VOCAB_REVIEW && it.k == undoneId && it.op == DriveRecordState.OP_PUT })
+        assertTrue(bundle.records.any { it.d == DriveWireCodec.DOMAIN_VOCAB_REVIEW && it.k == keptId && it.op == DriveRecordState.OP_PUT })
+    }
+
+    @Test
+    fun `a delayed review the delete already covered is not reattached on recollect while an unobserved one survives`() = runTest {
+        deviceA.connect(PERM_A, "a@example.com")
+        val vocabSync = deviceA.driveSync.vocabularySync
+        val dao = deviceA.liseurDb.vocabularyDao()
+        val syncDao = deviceA.liseurDb.vocabularySyncDao()
+        val peerId = DriveLibrarySync.accountPeerId(PERM_A)
+        val key = DriveVocabularySync.wordKey("fr", "neige")
+        val delivered = deliveredWordRecords("neige")
+
+        // dev-x deletes after observing dev-c up to seq 3. Nothing about the word is local here.
+        val del = DriveWireCodec.delRecord(DriveWireCodec.DOMAIN_VOCAB_WORD, key, nextTestHlc(), observed = mapOf("dev-c" to 3L))
+        vocabSync.applyRemoteWord(PERM_A, del, "dev-x", 5L, localDeviceId = "dev-a", remoteObserved = del.observed)
+
+        // Covered historical review arrives late; unobserved one is concurrent.
+        vocabSync.applyRemoteReview(PERM_A, reviewPut("covered", "neige", 1_000L), "dev-c", 3L)
+        vocabSync.applyRemoteReview(PERM_A, reviewPut("concurrent", "neige", 2_000L), "dev-c", 4L)
+        assertEquals(listOf("concurrent"), syncDao.stagedForWord(peerId, "fr", "neige", 0L).map { it.reviewId })
+
+        // A snapshot cannot prove origin seq, so it never drops on the boundary alone.
+        vocabSync.applyRemoteReview(PERM_A, reviewPut("from-snapshot", "neige", 3_000L), "dev-c", 3L, provenanceKnown = false)
+        assertEquals(
+            setOf("concurrent", "from-snapshot"),
+            syncDao.stagedForWord(peerId, "fr", "neige", 0L).map { it.reviewId }.toSet(),
+        )
+
+        // Recollect: the word's put supersedes the delete.
+        val recollect = DriveWireCodec.putRecord(
+            domain = DriveWireCodec.DOMAIN_VOCAB_WORD,
+            key = key,
+            hlc = nextTestHlc(),
+            bodyMap = DriveWireCodec.encodeVocabWordBody(DriveWireCodec.decodeVocabWordBody(delivered.body!!)!!),
+            ancestors = listOf(del.fp),
+        )
+        vocabSync.applyRemoteWord(PERM_A, recollect, "dev-y", 6L, localDeviceId = "dev-a", remoteObserved = emptyMap())
+
+        val word = dao.findWord("neige", "fr")!!
+        val syncIds = dao.reviews(word.id).mapNotNull { it.syncId }.toSet()
+        assertEquals(setOf("concurrent", "from-snapshot"), syncIds)
+        assertNull(dao.reviewBySyncIdAnyOwner("covered"))
+    }
+
+    @Test
+    fun `a delete applied after staged reviews drops only the covered ones`() = runTest {
+        deviceA.connect(PERM_A, "a@example.com")
+        val vocabSync = deviceA.driveSync.vocabularySync
+        val syncDao = deviceA.liseurDb.vocabularySyncDao()
+        val peerId = DriveLibrarySync.accountPeerId(PERM_A)
+        val key = DriveVocabularySync.wordKey("fr", "orage")
+
+        vocabSync.applyRemoteReview(PERM_A, reviewPut("covered", "orage", 1_000L), "dev-c", 3L)
+        vocabSync.applyRemoteReview(PERM_A, reviewPut("concurrent", "orage", 2_000L), "dev-c", 4L)
+        assertEquals(2, syncDao.stagedForWord(peerId, "fr", "orage", 0L).size)
+
+        val del = DriveWireCodec.delRecord(DriveWireCodec.DOMAIN_VOCAB_WORD, key, nextTestHlc(), observed = mapOf("dev-c" to 3L))
+        vocabSync.applyRemoteWord(PERM_A, del, "dev-x", 5L, localDeviceId = "dev-a", remoteObserved = del.observed)
+
+        assertEquals(listOf("concurrent"), syncDao.stagedForWord(peerId, "fr", "orage", 0L).map { it.reviewId })
+    }
+
+    @Test
+    fun `a published local delete covers its observed reviews so a delayed replay is not staged`() = runTest {
+        deviceA.connect(PERM_A, "a@example.com")
+        deviceB.connect(PERM_A, "a@example.com")
+        val repoA = VocabularyRepository(deviceA.liseurDb)
+        val now = 1_746_040_000_000L
+        val lookup = VocabularyLookup("rosee", "fr", null)
+        val wordIdA = repoA.collect(lookup, "dew", "en", now)!!
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+        val wordB = deviceB.liseurDb.vocabularyDao().findWord("rosee", "fr")!!
+        val undoB = VocabularyRepository(deviceB.liseurDb).review(wordB, Recall.GOOD, newLimit = 0, reviewLimit = 0, now = now + 1_000L)!!
+        val review = deviceB.liseurDb.vocabularyDao().review(undoB.reviewId)!!
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        val seenAt = deviceA.driveDb.recordStates()
+            .get(PERM_A, DriveWireCodec.DOMAIN_VOCAB_REVIEW, review.syncId!!)!!.originSeq!!
+
+        repoA.deleteWord(wordIdA)
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+
+        val peerId = DriveLibrarySync.accountPeerId(PERM_A)
+        val replay = reviewPut(review.syncId!!, "rosee", review.reviewedAt)
+        deviceA.driveSync.vocabularySync.applyRemoteReview(PERM_A, replay, "dev-b", seenAt)
+        assertTrue(deviceA.liseurDb.vocabularySyncDao().stagedForWord(peerId, "fr", "rosee", 0L).isEmpty())
+
+        // A genuinely later review from the same device is not covered.
+        deviceA.driveSync.vocabularySync.applyRemoteReview(PERM_A, reviewPut("later", "rosee", review.reviewedAt + 1L), "dev-b", seenAt + 10L)
+        assertEquals(listOf("later"), deviceA.liseurDb.vocabularySyncDao().stagedForWord(peerId, "fr", "rosee", 0L).map { it.reviewId })
+    }
+
+    @Test
+    fun `a delete boundary of one account does not drop reviews arriving for another account`() = runTest {
+        deviceA.connect(PERM_A, "a@example.com")
+        val vocabSync = deviceA.driveSync.vocabularySync
+        val syncDao = deviceA.liseurDb.vocabularySyncDao()
+        val key = DriveVocabularySync.wordKey("fr", "brise")
+        val del = DriveWireCodec.delRecord(DriveWireCodec.DOMAIN_VOCAB_WORD, key, nextTestHlc(), observed = mapOf("dev-c" to 9L))
+        vocabSync.applyRemoteWord(PERM_A, del, "dev-x", 5L, localDeviceId = "dev-a", remoteObserved = del.observed)
+
+        vocabSync.applyRemoteReview(PERM_A, reviewPut("same", "brise", 1_000L), "dev-c", 3L)
+        vocabSync.applyRemoteReview(PERM_B, reviewPut("same", "brise", 1_000L), "dev-c", 3L)
+
+        assertTrue(syncDao.stagedForWord(DriveLibrarySync.accountPeerId(PERM_A), "fr", "brise", 0L).isEmpty())
+        assertEquals(
+            listOf("same"),
+            syncDao.stagedForWord(DriveLibrarySync.accountPeerId(PERM_B), "fr", "brise", 0L).map { it.reviewId },
+        )
+    }
+
+    private var testHlcCounter = 0
+
+    private fun nextTestHlc(): String = "0017460000000-%04d-dev-a".format(++testHlcCounter)
+
+    private fun reviewPut(syncId: String, normalized: String, reviewedAt: Long): DriveWireRecord =
+        DriveWireCodec.putRecord(
+            domain = DriveWireCodec.DOMAIN_VOCAB_REVIEW,
+            key = syncId,
+            hlc = nextTestHlc(),
+            bodyMap = DriveWireCodec.encodeVocabReviewBody(
+                DriveVocabReviewBody(
+                    syncId = syncId,
+                    wordKey = DriveVocabularySync.wordKey("fr", normalized),
+                    language = "fr",
+                    normalized = normalized,
+                    rating = Recall.GOOD.name,
+                    reviewedAt = reviewedAt,
+                    intervalMinutes = 60,
+                    dueAt = reviewedAt + 3_600_000L,
+                ),
+            ),
+        )
+
+    private fun deliveredWordRecords(normalized: String): DriveWireRecord = DriveWireCodec.putRecord(
+        domain = DriveWireCodec.DOMAIN_VOCAB_WORD,
+        key = DriveVocabularySync.wordKey("fr", normalized),
+        hlc = nextTestHlc(),
+        bodyMap = DriveWireCodec.encodeVocabWordBody(
+            DriveVocabWordBody(
+                language = "fr",
+                normalized = normalized,
+                word = normalized,
+                definition = "snow",
+                translationLanguage = "en",
+                notes = "",
+                definitionEdited = false,
+                definitionUpdatedAt = 0L,
+                notesUpdatedAt = 0L,
+                addedAt = 1_746_050_000_000L,
+                baseline = null,
+            ),
+        ),
+    )
+
     private suspend fun seedBook(
         device: Phase5Device,
         fileName: String,
