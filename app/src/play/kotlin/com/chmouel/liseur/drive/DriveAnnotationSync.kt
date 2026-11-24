@@ -58,6 +58,14 @@ internal class DriveAnnotationSync(
             val liveRow = annotations.byId(state.recordKey)
             val bookId = liveRow?.bookId ?: syncRow?.bookId
             if (bookUrlFilter != null && bookId != null && bookId != bookUrlFilter) continue
+            // A choice still waiting for recovery has not reached `liseur.db`, so it is not published yet.
+            val awaitingLocalCommit = bookId != null &&
+                conflicts.unsettledForRecord(permissionId, DriveWireCodec.DOMAIN_ANNOTATION, state.recordKey)
+                    .any { it.state == DriveConflict.STATE_RESOLVING && it.resolutionFp == state.versionFp }
+            if (awaitingLocalCommit) {
+                val expectedAck = if (res.outcome == DriveResolution.OUTCOME_DELETE) DELETED_ACK else state.contentFp
+                if (syncRow?.ackedFingerprint != expectedAck) continue
+            }
 
             val bodyMap = if (res.outcome == DriveResolution.OUTCOME_PUT) {
                 state.bodyJson?.let { raw ->
@@ -153,8 +161,8 @@ internal class DriveAnnotationSync(
                             versionOp = repairedOp,
                             publishedFp = repairedFp,
                             contentFp = contentFp,
-                            originDeviceId = existingState?.originDeviceId,
-                            originSeq = existingState?.originSeq,
+                            originDeviceId = existingState?.originDeviceId?.takeIf { existingState.versionFp == repairedFp },
+                            originSeq = existingState?.originSeq?.takeIf { existingState.versionFp == repairedFp },
                             ancestorsJson = existingState?.ancestorsJson ?: "[]",
                             resRefsJson = existingState?.resRefsJson ?: "[]",
                             lastHlc = existingState?.lastHlc ?: "",
@@ -604,8 +612,40 @@ internal class DriveAnnotationSync(
         val chosenBodyMap = chosenBody?.let(DriveWireCodec::encodeAnnotationBody)
         val chosenContentFp = chosenBody?.let(DriveWireCodec::annotationContentFp)
         val hlc = nextHlc()
+        val (resolution, state) = DriveConflictEngine.buildLocalResolution(
+            permissionId = permissionId,
+            conflict = conflict,
+            outcome = outcome,
+            chosenBodyMap = chosenBodyMap,
+            chosenContentFp = chosenContentFp,
+            existingState = existingState,
+            hlc = hlc,
+            localDeviceId = localDeviceId,
+            now = now,
+        )
 
-        // Transaction 1 (`liseur.db`): apply chosen outcome + atomic ack.
+        // Persist the exact chosen body with the resolution before touching `liseur.db`, so a crash
+        // can later prove what was chosen instead of re-deciding from newer local state.
+        store.withTransaction {
+            resolutions.upsert(resolution)
+            recordStates.upsert(state)
+            conflicts.upsert(conflict.copy(state = DriveConflict.STATE_RESOLVING, choice = choice.name, resolutionFp = resolution.resolutionFp))
+        }
+
+        commitChosen(peerId, conflict, outcome, chosenBody, chosenContentFp, targetBookUrl, workKey, syncRow)
+    }
+
+    /** Applies a persisted chosen outcome to `liseur.db` together with its `annotation_sync` ack. */
+    private suspend fun commitChosen(
+        peerId: String,
+        conflict: DriveConflict,
+        outcome: String,
+        chosenBody: DriveAnnotationBody?,
+        chosenContentFp: String?,
+        targetBookUrl: String?,
+        workKey: String,
+        syncRow: AnnotationSync?,
+    ) {
         database.withTransaction {
             if (outcome == DriveResolution.OUTCOME_PUT && chosenBody != null && targetBookUrl != null) {
                 val existing = annotations.byId(chosenBody.id)
@@ -652,24 +692,6 @@ internal class DriveAnnotationSync(
                 }
             }
         }
-
-        // Transaction 2 (`drive_sync.db`): persist durable resolution & queue `op: "resolve"` record.
-        val (resolution, state) = DriveConflictEngine.buildLocalResolution(
-            permissionId = permissionId,
-            conflict = conflict,
-            outcome = outcome,
-            chosenBodyMap = chosenBodyMap,
-            chosenContentFp = chosenContentFp,
-            existingState = existingState,
-            hlc = hlc,
-            localDeviceId = localDeviceId,
-            now = now,
-        )
-        store.withTransaction {
-            resolutions.upsert(resolution)
-            recordStates.upsert(state)
-            conflicts.upsert(conflict.copy(state = DriveConflict.STATE_RESOLVING, choice = choice.name, resolutionFp = resolution.resolutionFp))
-        }
     }
 
     /** Crash recovery for any `RESOLVING` annotation conflict interrupted between Tx 1 and Tx 2. */
@@ -680,14 +702,21 @@ internal class DriveAnnotationSync(
         nextHlc: suspend () -> String,
     ) {
         val existingState = recordStates.get(permissionId, DriveWireCodec.DOMAIN_ANNOTATION, conflict.recordKey)
-        if (existingState != null &&
-            existingState.versionOp == DriveRecordState.OP_RESOLVE &&
-            existingState.versionFp == conflict.resolutionFp
-        ) {
-            val res = resolutions.get(permissionId, DriveWireCodec.DOMAIN_ANNOTATION, conflict.recordKey, existingState.versionFp)
-            if (res != null && existingState.publishedFp == existingState.versionFp) {
-                conflicts.markResolved(permissionId, conflict.conflictId, conflict.choice ?: res.outcome, res.resolutionFp, clock())
-            }
+        val intentState = existingState?.takeIf {
+            it.versionOp == DriveRecordState.OP_RESOLVE && it.versionFp == conflict.resolutionFp
+        }
+        val intentResolution = intentState?.let {
+            resolutions.get(permissionId, DriveWireCodec.DOMAIN_ANNOTATION, conflict.recordKey, it.versionFp)
+        }
+        if (intentState != null && intentResolution == null) return
+        if (intentState != null && intentResolution != null && intentState.publishedFp == intentState.versionFp) {
+            conflicts.markResolved(
+                permissionId,
+                conflict.conflictId,
+                conflict.choice ?: intentResolution.outcome,
+                intentResolution.resolutionFp,
+                clock(),
+            )
             return
         }
         val choice = conflict.choice?.let { runCatching { DriveConflictChoice.valueOf(it) }.getOrNull() }
@@ -707,6 +736,34 @@ internal class DriveAnnotationSync(
                 identities.alias(url, peerId)?.workId?.let { workIdentity.canonicalWorkKey(permissionId, it) }
             }
             ?: ""
+
+        if (intentState != null && intentResolution != null) {
+            // The resolution and chosen body were persisted before Tx 1: finish Tx 1 from them only.
+            val chosenBody = if (intentResolution.outcome == DriveResolution.OUTCOME_PUT) {
+                intentState.bodyJson?.let { raw ->
+                    runCatching { DriveWireCodec.decodeAnnotationBody(JSONObject(raw)) }.getOrNull()
+                } ?: return
+            } else {
+                null
+            }
+            val chosenContentFp = chosenBody?.let(DriveWireCodec::annotationContentFp)
+            if (chosenBody != null && chosenContentFp != intentState.contentFp) return
+            val expectedAck = chosenContentFp ?: DELETED_ACK
+            // Tx 1 already committed (any later reader edit stays dirty and publishes as a successor).
+            if (syncRow?.ackedFingerprint == expectedAck) return
+            if (targetBookUrl == null) return
+            // Tx 1 never ran: apply it only while the note is still as it was when the choice was made.
+            val liveContentFp = liveRow?.let { row ->
+                val sha = identities.fingerprint(row.bookId)?.sha256?.lowercase(Locale.ROOT)
+                DriveWireCodec.annotationContentFp(toWireBody(row, workKey, sha))
+            }
+            val untouched = liveContentFp == chosenContentFp ||
+                liveContentFp == conflict.localFp ||
+                (liveRow == null && chosenBody == null)
+            if (!untouched) return
+            commitChosen(peerId, conflict, intentResolution.outcome, chosenBody, chosenContentFp, targetBookUrl, workKey, syncRow)
+            return
+        }
 
         var tx1AlreadyCommitted = false
         var recoveredOutcome = DriveResolution.OUTCOME_DELETE
@@ -805,6 +862,15 @@ internal class DriveAnnotationSync(
                     now = now,
                 )
             }
+            return
+        }
+
+        // Without a persisted choice, a note deleted since must not be restored from the remote side.
+        if (choice == DriveConflictChoice.KEEP_EDITED &&
+            conflict.kind == DriveConflict.KIND_EDIT_EDIT &&
+            liveRow == null &&
+            remoteBody != null
+        ) {
             return
         }
 
