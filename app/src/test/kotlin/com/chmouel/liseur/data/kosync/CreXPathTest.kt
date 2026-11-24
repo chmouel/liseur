@@ -340,6 +340,13 @@ class CreXPathTest {
     }
 
     @Test
+    fun `a CDATA section long enough to split declines even with a less-than sign inside`() {
+        fun p(repeats: Int) = "<html><body><p><![CDATA[" + "word < ".repeat(repeats) + "]]>needle</p></body></html>"
+        assertXpath("/body/DocFragment[1]/body/p[1]/text()[2].0", p(100), "body > p:nth-of-type(1)", "< ", "needle")
+        assertNull(xpath(p(1200), "body > p:nth-of-type(1)", "< ", "needle"))
+    }
+
+    @Test
     fun `an offset is counted in code points`() {
         assertXpath(
             "/body/DocFragment[1]/body/p[1]/text()[1].3",

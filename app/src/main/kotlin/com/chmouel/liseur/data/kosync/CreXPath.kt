@@ -40,20 +40,42 @@ internal object CreXPath {
 
     /**
      * An upper bound on the source length of any text node: text runs from
-     * one piece of markup to the next, and every piece starts with `<`. Bytes
+     * one piece of markup to the next, and every piece starts with `<`. A
+     * CDATA section is measured whole, since a `<` inside it is text. Bytes
      * are never fewer than the characters they encode.
      */
     private fun longestSourceRun(xhtml: ByteArray): Int {
         var longest = 0
         var start = 0
-        for (i in xhtml.indices) {
-            if (xhtml[i] == '<'.code.toByte()) {
+        var i = 0
+        while (i < xhtml.size) {
+            if (xhtml[i] != '<'.code.toByte()) {
+                i++
+                continue
+            }
+            longest = maxOf(longest, i - start)
+            start = i
+            if (startsWith(xhtml, i, CDATA_OPEN)) {
+                val end = indexOf(xhtml, CDATA_CLOSE, i + CDATA_OPEN.size)
+                if (end < 0) return Int.MAX_VALUE
+                i = end + CDATA_CLOSE.size
                 longest = maxOf(longest, i - start)
                 start = i
+            } else {
+                i++
             }
         }
         return maxOf(longest, xhtml.size - start)
     }
+
+    private fun startsWith(bytes: ByteArray, at: Int, prefix: ByteArray): Boolean =
+        at + prefix.size <= bytes.size && prefix.indices.all { bytes[at + it] == prefix[it] }
+
+    private fun indexOf(bytes: ByteArray, needle: ByteArray, from: Int): Int =
+        (from..bytes.size - needle.size).firstOrNull { startsWith(bytes, it, needle) } ?: -1
+
+    private val CDATA_OPEN = "<![CDATA[".toByteArray()
+    private val CDATA_CLOSE = "]]>".toByteArray()
 
     /** One text node as CrossPoint counts them: the character data between two pieces of markup. */
     private class Run(
