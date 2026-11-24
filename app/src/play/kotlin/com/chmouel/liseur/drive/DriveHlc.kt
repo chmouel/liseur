@@ -6,7 +6,9 @@ import java.util.Locale
  * Monotonic Hybrid Logical Clock (HLC) for Google Drive sync (ADR-0078).
  *
  * Wire format: `"%013d-%04x-%s".format(wallMs, counter, deviceId)`, compared
- * lexicographically with strict total order across all devices.
+ * lexicographically with strict total order across all devices. The wall field
+ * is exactly 13 digits, so `wallMs` is capped at [MAX_WALL_MS]; advancing past
+ * it throws instead of producing a wider field that would sort out of order.
  */
 data class DriveHlc(
     val wallMs: Long,
@@ -15,7 +17,7 @@ data class DriveHlc(
 ) : Comparable<DriveHlc> {
 
     init {
-        require(wallMs >= 0L) { "HLC wallMs must be non-negative: $wallMs" }
+        require(wallMs in 0L..MAX_WALL_MS) { "HLC wallMs out of range 0..$MAX_WALL_MS: $wallMs" }
         require(counter in 0..MAX_COUNTER) { "HLC counter out of range: $counter" }
         require(deviceId.isNotBlank()) { "HLC deviceId must not be blank" }
     }
@@ -28,15 +30,21 @@ data class DriveHlc(
 
     companion object {
         const val MAX_COUNTER = 0xFFFF
-        private val PATTERN = Regex("""^(\d{13,})-([0-9a-fA-F]{4})-(.+)$""")
+        const val MAX_WALL_MS = 9_999_999_999_999L
+        private val PATTERN = Regex("""^(\d{13})-([0-9a-fA-F]{4})-(.+)$""")
 
         fun parse(raw: String): DriveHlc? {
             val match = PATTERN.matchEntire(raw.trim()) ?: return null
             val wall = match.groupValues[1].toLongOrNull() ?: return null
             val counter = match.groupValues[2].toIntOrNull(16) ?: return null
             val deviceId = match.groupValues[3]
-            if (wall < 0L || counter !in 0..MAX_COUNTER || deviceId.isBlank()) return null
+            if (wall !in 0L..MAX_WALL_MS || counter !in 0..MAX_COUNTER || deviceId.isBlank()) return null
             return DriveHlc(wallMs = wall, counter = counter, deviceId = deviceId)
+        }
+
+        private fun overflowWall(wallMs: Long): Long {
+            check(wallMs < MAX_WALL_MS) { "HLC cannot advance past wallMs $MAX_WALL_MS" }
+            return wallMs + 1L
         }
 
         /** Advances the local HLC for an outgoing event. */
@@ -53,7 +61,7 @@ data class DriveHlc(
             } else if (currentCounter < MAX_COUNTER) {
                 DriveHlc(wallMs = clampedWall, counter = currentCounter + 1, deviceId = deviceId)
             } else {
-                DriveHlc(wallMs = clampedWall + 1L, counter = 0, deviceId = deviceId)
+                DriveHlc(wallMs = overflowWall(clampedWall), counter = 0, deviceId = deviceId)
             }
         }
 
@@ -77,7 +85,7 @@ data class DriveHlc(
             return if (nextCounter <= MAX_COUNTER) {
                 DriveHlc(wallMs = maxWall, counter = nextCounter, deviceId = localDeviceId)
             } else {
-                DriveHlc(wallMs = maxWall + 1L, counter = 0, deviceId = localDeviceId)
+                DriveHlc(wallMs = overflowWall(maxWall), counter = 0, deviceId = localDeviceId)
             }
         }
     }

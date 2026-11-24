@@ -621,18 +621,9 @@ internal class DriveWorkIdentity(
                     runCatching { DriveWireCodec.decodeWorkAliasBody(JSONObject(it)) }.getOrNull()
                 } as? DriveWorkAliasBody.Merge
                 val chosenTo = if (existingTo != null) minOf(existingTo.to, parsed.to) else parsed.to
-                val chosenBody = if (chosenTo == parsed.to) {
-                    bodyJson.toString()
-                } else {
-                    DriveCanonicalJson.encode(
-                        DriveWireCodec.encodeWorkAliasBody(parsed.copy(to = chosenTo)),
-                    )
-                }
-                val chosenFp = if (chosenTo == parsed.to) {
-                    record.fp
-                } else {
-                    DriveCanonicalJson.contentFp(JSONObject(chosenBody))
-                }
+                val existingWins = existing != null && existingTo != null && chosenTo != parsed.to
+                val chosenBody = if (existingWins) existing!!.bodyJson!! else bodyJson.toString()
+                val chosenFp = if (existingWins) existing!!.versionFp else record.fp
 
                 // Transaction 1 (`liseur.db`): propagate merge across aliases & clear matching ambiguities.
                 val mergesBefore = loadMergeMap(permissionId)
@@ -673,7 +664,11 @@ internal class DriveWorkIdentity(
                         .distinct()
                         .filter { it != chosenFp }
                         .take(DriveWireCodec.MAX_ANCESTORS)
-                    recordStates.upsert(
+                    if (existingWins) {
+                        // The incoming version lost: keep the stored winner's body, fingerprint,
+                        // ancestry and publication status coherent.
+                        recordStates.upsert(existing!!.copy(lastHlc = maxOf(existing.lastHlc, record.hlc)))
+                    } else recordStates.upsert(
                         DriveRecordState(
                             permissionId = permissionId,
                             domain = DriveWireCodec.DOMAIN_WORK_ALIAS,
