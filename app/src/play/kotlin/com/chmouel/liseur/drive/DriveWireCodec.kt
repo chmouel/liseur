@@ -201,6 +201,7 @@ internal object DriveWireCodec {
 
     const val MAX_BATCH_RECORDS = 2_000
     const val MAX_BATCH_BYTES = 1_048_576
+    private const val BATCH_ENVELOPE_MARGIN = 512
     const val MAX_ANCESTORS = 64
 
     const val DOMAIN_WORK_ALIAS = "workAlias"
@@ -674,24 +675,34 @@ internal object DriveWireCodec {
         )
     }
 
+    /** Records that fit in batches, plus single records too large for any batch; none is dropped silently. */
+    data class BatchChunking(
+        val chunks: List<List<DriveWireRecord>>,
+        val oversized: List<DriveWireRecord>,
+    )
+
     /** Splits outgoing records into size- and count-bounded chunks respecting 2,000 records / 1 MiB. */
-    fun chunkRecordsForBatches(records: List<DriveWireRecord>): List<List<DriveWireRecord>> {
-        if (records.isEmpty()) return emptyList()
+    fun chunkRecordsForBatches(records: List<DriveWireRecord>): BatchChunking {
         val chunks = mutableListOf<List<DriveWireRecord>>()
+        val oversized = mutableListOf<DriveWireRecord>()
         var current = mutableListOf<DriveWireRecord>()
-        var currentBytes = 512 // envelope overhead margin
+        var currentBytes = BATCH_ENVELOPE_MARGIN
         for (record in records) {
             val encodedSize = DriveCanonicalJson.encode(wireRecordToMap(record)).toByteArray(Charsets.UTF_8).size + 2
+            if (BATCH_ENVELOPE_MARGIN + encodedSize > MAX_BATCH_BYTES) {
+                oversized.add(record)
+                continue
+            }
             if (current.isNotEmpty() && (current.size >= MAX_BATCH_RECORDS || currentBytes + encodedSize > MAX_BATCH_BYTES)) {
                 chunks.add(current)
                 current = mutableListOf()
-                currentBytes = 512
+                currentBytes = BATCH_ENVELOPE_MARGIN
             }
             current.add(record)
             currentBytes += encodedSize
         }
         if (current.isNotEmpty()) chunks.add(current)
-        return chunks
+        return BatchChunking(chunks, oversized)
     }
 
     private fun wireRecordToMap(record: DriveWireRecord): Map<String, Any?> = linkedMapOf<String, Any?>().apply {
