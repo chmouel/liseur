@@ -546,6 +546,17 @@ internal class DriveVocabularySync(
                 val bodyJson = record.body ?: return
                 val remoteBody = DriveWireCodec.decodeVocabWordBody(bodyJson) ?: return
                 val recordKey = wordKey(remoteBody.language, remoteBody.normalized)
+                // A snapshot put carries the delete boundary its author holds, restored before any
+                // staged review attaches so an earlier delete's coverage survives pruning.
+                record.observed?.takeIf { it.isNotEmpty() }?.let { carried ->
+                    val boundary = mergeBoundaries(readDeleteBoundary(permissionId, recordKey), carried)
+                    store.withTransaction { writeDeleteBoundary(permissionId, recordKey, boundary) }
+                    database.withTransaction {
+                        dropCoveredStagedReviews(
+                            permissionId, peerId, remoteBody.language, remoteBody.normalized, boundary,
+                        )
+                    }
+                }
                 val remoteBodyMap = DriveWireCodec.encodeVocabWordBody(remoteBody)
                 val remoteCanonicalJson = DriveCanonicalJson.encode(remoteBodyMap)
                 val remoteContentFp = DriveCanonicalJson.contentFp(remoteBodyMap)

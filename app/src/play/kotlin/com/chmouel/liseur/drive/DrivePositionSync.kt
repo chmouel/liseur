@@ -431,6 +431,7 @@ internal class DrivePositionSync(
         val drivePeerId = DriveLibrarySync.accountPeerId(permissionId)
         val localFloor = floors[localDeviceId]
         val covered = mutableListOf<Triple<String, String?, Long>>()
+        val coveredPeakKeys = mutableListOf<String?>()
         if (localFloor != null) {
             val eligible = localEditions(permissionId, drivePeerId, workKey).filter { edition ->
                 edition.progress.peakRevision != null &&
@@ -465,27 +466,47 @@ internal class DrivePositionSync(
                     } else {
                         listOf(member)
                     }
-                    for (m in members) covered.add(Triple(m.bookUrl, m.editionSha, m.progress.peakRevision!!))
+                    val peakKey = peakRecordKey(workKey, template.editionSha, localDeviceId)
+                    for (m in members) {
+                        covered.add(Triple(m.bookUrl, m.editionSha, m.progress.peakRevision!!))
+                        coveredPeakKeys.add(peakKey)
+                    }
                 } else if (ownSeq != null && ownSeq <= localFloor) {
                     covered.add(Triple(member.bookUrl, member.editionSha, peakRev))
+                    coveredPeakKeys.add(null)
                 }
             }
         }
         // Peaks retained above a floor were skipped by `observe` when a higher one from the
         // same origin and edition arrived first, so rebuild them once the reset drops the rest.
         val retained = retainedRemotePeaks(permissionId, workKey, localDeviceId, floors)
+        val retiredPeakKeys = mutableListOf<String>()
         database.withTransaction {
             for ((origin, floor) in floors) {
                 furthestDao.deleteUpToForOrigin(drivePeerId, workKey, origin, floor)
             }
             for (peak in retained) observePeak(drivePeerId, workKey, peak)
-            for ((bookUrl, editionSha, peakRev) in covered) {
+            for ((index, item) in covered.withIndex()) {
+                val (bookUrl, editionSha, peakRev) = item
                 val current = progressDao.get(bookUrl)
                 if (current?.peakRevision == peakRev &&
                     (guardRevisions == null || guardRevisions[bookUrl] == current.localRevision)
                 ) {
                     progressDao.resetPeak(bookUrl, editionSha)
                     furthestDao.deleteDelivery(drivePeerId, bookUrl, workKey)
+                    coveredPeakKeys[index]?.let { retiredPeakKeys.add(it) }
+                }
+            }
+        }
+        // A never-published peak the reset covered has nothing left to publish; keeping its row
+        // would hold back snapshot compaction indefinitely.
+        if (retiredPeakKeys.isNotEmpty()) {
+            store.withTransaction {
+                for (key in retiredPeakKeys) {
+                    val state = recordStates.get(permissionId, DriveWireCodec.DOMAIN_FURTHEST, key)
+                    if (state != null && state.publishedFp == null) {
+                        recordStates.delete(permissionId, DriveWireCodec.DOMAIN_FURTHEST, key)
+                    }
                 }
             }
         }
