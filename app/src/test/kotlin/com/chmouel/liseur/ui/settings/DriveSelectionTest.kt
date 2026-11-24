@@ -13,27 +13,50 @@ class DriveSelectionTest {
 
     @Test
     fun `a requested switch is kept while the server stays connected`() {
-        assertTrue(nextLibrarySyncSelected(true, true, true, false, true))
+        assertTrue(nextLibrarySyncSelected(true, true, true, true, false, true))
     }
 
     @Test
     fun `a server arriving without a request clears a stale selection`() {
-        assertFalse(nextLibrarySyncSelected(true, true, false, false, true))
+        assertFalse(nextLibrarySyncSelected(true, true, true, false, false, true))
     }
 
     @Test
     fun `a disconnected server with active Drive selects it`() {
-        assertTrue(nextLibrarySyncSelected(false, false, false, true, true))
+        assertTrue(nextLibrarySyncSelected(true, false, false, false, true, true))
     }
 
     @Test
     fun `builds without Drive never show it`() {
         assertFalse(showsLibrarySyncSection(false, false, false, true, true))
-        assertFalse(nextLibrarySyncSelected(true, false, false, true, false))
+        assertFalse(nextLibrarySyncSelected(true, true, false, false, true, false))
     }
 
     @Test
     fun `editing an address keeps the connect form`() {
         assertFalse(showsLibrarySyncSection(false, true, true, true, false))
+    }
+
+    @Test
+    fun `restored switch intent survives delayed server hydration`() {
+        assertTrue(nextSwitchRequested(requested = true, serverLoaded = false, hasServer = false))
+        assertTrue(
+            nextLibrarySyncSelected(
+                serverLoaded = false, current = true, hasServer = false,
+                switchRequested = true, backendActive = false, supported = true,
+            ),
+        )
+        assertTrue(nextSwitchRequested(requested = true, serverLoaded = true, hasServer = true))
+        assertTrue(nextLibrarySyncSelected(true, true, true, true, false, true))
+    }
+
+    @Test
+    fun `a switch request is dropped once the server is known absent`() {
+        assertFalse(nextSwitchRequested(requested = true, serverLoaded = true, hasServer = false))
+    }
+
+    @Test
+    fun `a restored pairing-pending server shows Drive after a switch request`() {
+        assertTrue(showsLibrarySyncSection(true, false, true, true, true))
     }
 }
