@@ -233,4 +233,36 @@
         <item quantity="one">%1$d Buch ausgewählt · %2$s</item>
         <item quantity="other">%1$d Bücher ausgewählt · %2$s</item>
     </plurals>
+    <string name="drive_sync_account_summary_conflicts">%1$s · %2$s · %3$s</string>
+    <string name="drive_sync_resolve_conflicts">Konflikte lösen</string>
+    <string name="drive_sync_conflicts_dialog_title">Synchronisierungskonflikte lösen</string>
+    <string name="drive_sync_conflicts_dialog_intro">Wähle, welche Version behalten werden soll. Deine Wahl wird mit deinen anderen Geräten synchronisiert.</string>
+    <string name="drive_sync_conflicts_dialog_close">Schließen</string>
+    <string name="drive_sync_conflict_local_label">Auf diesem Gerät</string>
+    <string name="drive_sync_conflict_remote_label">Auf anderem Gerät</string>
+    <string name="drive_sync_conflict_deleted_value">Gelöscht</string>
+    <string name="drive_sync_conflict_keep_mine">Meine behalten</string>
+    <string name="drive_sync_conflict_keep_other">Andere behalten</string>
+    <string name="drive_sync_conflict_keep_edited_note">Bearbeitete Notiz behalten</string>
+    <string name="drive_sync_conflict_delete_note">Notiz löschen</string>
+    <string name="drive_sync_conflict_keep_edited">Bearbeitung behalten</string>
+    <string name="drive_sync_conflict_delete_value">Löschen</string>
+    <string name="drive_sync_conflict_series_keep_mine">Reihenfolge dieses Geräts behalten</string>
+    <string name="drive_sync_conflict_series_keep_other">Reihenfolge des anderen Geräts behalten</string>
+    <string name="drive_sync_conflict_domain_annotation">Anmerkung</string>
+    <string name="drive_sync_conflict_domain_evaluation">Bewertung &amp; Rezension</string>
+    <string name="drive_sync_conflict_domain_metadata">Buchdetails</string>
+    <string name="drive_sync_conflict_domain_series">Reihenfolge der Serie</string>
+    <string name="drive_sync_conflict_field_rating">Bewertung</string>
+    <string name="drive_sync_conflict_field_review">Rezension</string>
+    <string name="drive_sync_conflict_field_title">Titel</string>
+    <string name="drive_sync_conflict_field_author">Autor</string>
+    <string name="drive_sync_conflict_field_description">Beschreibung</string>
+    <string name="drive_sync_conflict_field_cover">Eigenes Cover</string>
+    <string name="drive_sync_delete_from_library">Aus synchronisierter Bibliothek löschen</string>
+    <string name="drive_sync_delete_from_library_title">Aus synchronisierter Bibliothek löschen?</string>
+    <string name="drive_sync_delete_from_library_warning_remote">„%1$s“ wird aus deiner mit Google Drive synchronisierten Bibliothek entfernt und die hochgeladene EPUB-Datei in den Google-Drive-Papierkorb verschoben. Deine Notizen und Markierungen bleiben erhalten.</string>
+    <string name="drive_sync_delete_from_library_warning_local">„%1$s“ wird aus deiner mit Google Drive synchronisierten Bibliothek entfernt und die hochgeladene EPUB-Datei in den Google-Drive-Papierkorb verschoben. Die lokale Datei auf diesem Gerät bleibt unverändert.</string>
+    <string name="drive_sync_delete_from_library_confirm">Aus synchronisierter Bibliothek löschen</string>
+    <string name="drive_sync_delete_from_library_failed">Das Löschen aus der synchronisierten Bibliothek ist fehlgeschlagen. Versuche es erneut.</string>
 </resources>

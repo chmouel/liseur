@@ -251,4 +251,36 @@
         <item quantity="many">Выбрано %1$d книг · %2$s</item>
         <item quantity="other">Выбрано %1$d книги · %2$s</item>
     </plurals>
+    <string name="drive_sync_account_summary_conflicts">%1$s · %2$s · %3$s</string>
+    <string name="drive_sync_resolve_conflicts">Разрешить конфликты</string>
+    <string name="drive_sync_conflicts_dialog_title">Разрешение конфликтов синхронизации</string>
+    <string name="drive_sync_conflicts_dialog_intro">Выберите, какую версию сохранить. Ваш выбор синхронизируется с другими устройствами.</string>
+    <string name="drive_sync_conflicts_dialog_close">Закрыть</string>
+    <string name="drive_sync_conflict_local_label">На этом устройстве</string>
+    <string name="drive_sync_conflict_remote_label">На другом устройстве</string>
+    <string name="drive_sync_conflict_deleted_value">Удалено</string>
+    <string name="drive_sync_conflict_keep_mine">Оставить мою</string>
+    <string name="drive_sync_conflict_keep_other">Оставить другую</string>
+    <string name="drive_sync_conflict_keep_edited_note">Оставить изменённую заметку</string>
+    <string name="drive_sync_conflict_delete_note">Удалить заметку</string>
+    <string name="drive_sync_conflict_keep_edited">Оставить изменения</string>
+    <string name="drive_sync_conflict_delete_value">Удалить</string>
+    <string name="drive_sync_conflict_series_keep_mine">Оставить порядок этого устройства</string>
+    <string name="drive_sync_conflict_series_keep_other">Оставить порядок другого устройства</string>
+    <string name="drive_sync_conflict_domain_annotation">Аннотация</string>
+    <string name="drive_sync_conflict_domain_evaluation">Оценка и отзыв</string>
+    <string name="drive_sync_conflict_domain_metadata">Сведения о книге</string>
+    <string name="drive_sync_conflict_domain_series">Порядок в серии</string>
+    <string name="drive_sync_conflict_field_rating">Оценка</string>
+    <string name="drive_sync_conflict_field_review">Отзыв</string>
+    <string name="drive_sync_conflict_field_title">Название</string>
+    <string name="drive_sync_conflict_field_author">Автор</string>
+    <string name="drive_sync_conflict_field_description">Описание</string>
+    <string name="drive_sync_conflict_field_cover">Своя обложка</string>
+    <string name="drive_sync_delete_from_library">Удалить из синхронизируемой библиотеки</string>
+    <string name="drive_sync_delete_from_library_title">Удалить из синхронизируемой библиотеки?</string>
+    <string name="drive_sync_delete_from_library_warning_remote">«%1$s» будет удалена из библиотеки, синхронизируемой с Google Drive, а загруженный файл EPUB перемещён в корзину Google Drive. Ваши заметки и выделения сохранятся.</string>
+    <string name="drive_sync_delete_from_library_warning_local">«%1$s» будет удалена из библиотеки, синхронизируемой с Google Drive, а загруженный файл EPUB перемещён в корзину Google Drive. Локальный файл на этом устройстве останется нетронутым.</string>
+    <string name="drive_sync_delete_from_library_confirm">Удалить из синхронизируемой библиотеки</string>
+    <string name="drive_sync_delete_from_library_failed">Не удалось удалить из синхронизируемой библиотеки. Повторите попытку.</string>
 </resources>
