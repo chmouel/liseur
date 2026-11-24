@@ -556,6 +556,7 @@ class DriveAccountControllerTest {
                 addedAt = 5L,
                 lastOpenedAt = null,
                 remoteUuid = "uuid-1",
+                downloadState = DownloadState.REMOTE,
             ),
         )
         fakeAuth.nextAuthorize = DriveAuthResult.Authorized("tok-a")
