@@ -174,9 +174,14 @@ fun ServerAccountScreen(
     }
     var pickingDriveKind by rememberSaveable { mutableStateOf(false) }
     var driveSwitchRequested by rememberSaveable { mutableStateOf(false) }
-    LaunchedEffect(state.server, driveActive, driveSwitchRequested) {
-        if (state.server == null) driveSwitchRequested = false
+    LaunchedEffect(state.server, state.serverLoaded, driveActive, driveSwitchRequested) {
+        driveSwitchRequested = nextSwitchRequested(
+            requested = driveSwitchRequested,
+            serverLoaded = state.serverLoaded,
+            hasServer = state.server != null,
+        )
         driveSelected = nextLibrarySyncSelected(
+            serverLoaded = state.serverLoaded,
             current = driveSelected,
             hasServer = state.server != null,
             switchRequested = driveSwitchRequested,
@@ -330,6 +335,14 @@ fun ServerAccountScreen(
                         TextButton(onClick = onDisconnect) {
                             Text(stringResource(R.string.server_disconnect))
                         }
+                    }
+                    if (librarySync.supportsBookServerOption) {
+                        librarySync.BookServerSwitchAction(
+                            onClick = {
+                                driveSwitchRequested = true
+                                driveSelected = true
+                            },
+                        )
                     }
                 } else {
                     ConnectedCard(

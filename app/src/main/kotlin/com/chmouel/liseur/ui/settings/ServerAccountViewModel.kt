@@ -146,6 +146,8 @@ data class WorkConfirmation(
 
 data class ServerAccountUiState(
     val server: RemoteServer? = null,
+    /** False until the stored server has been read; [server] is null before that too. */
+    val serverLoaded: Boolean = false,
     val kind: ServerKind = ServerKind.CALIBRE,
     val url: String = "",
     val username: String = "",
@@ -239,6 +241,7 @@ class ServerAccountViewModel(
                 _state.update { state ->
                     state.copy(
                         server = server,
+                        serverLoaded = true,
                         kosync = peer,
                     )
                 }
