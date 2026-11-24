@@ -23,6 +23,7 @@ internal data class DriveCompactionState(
     val pendingPruneFileIds: List<String> = emptyList(),
     val pendingSnapshot: DrivePendingSnapshot? = null,
     val authoredVersionFps: Map<String, Map<String, String>> = emptyMap(),
+    val orphanCleanupNeeded: Boolean = false,
 )
 
 /** Outcome of evaluating and optionally running per-device snapshot compaction. */
@@ -178,6 +179,7 @@ internal class DriveCompactor(
         // Finish any pending prunes left over from an earlier interrupted run.
         val shouldGcInitially = adoptedThroughSeq != null ||
             state.pendingPruneFileIds.isNotEmpty() ||
+            (state.orphanCleanupNeeded && initialAccount != null) ||
             (state.previousSnapshot?.throughSeq ?: 0L) > state.prunedThroughSeq
         val initialPrune = pruneSuperseded(
             permissionId = permissionId,
@@ -420,6 +422,7 @@ internal class DriveCompactor(
             pendingPruneFileIds = newPendingPruneIds,
             pendingSnapshot = null,
             authoredVersionFps = nextAuthoredFps,
+            orphanCleanupNeeded = state.orphanCleanupNeeded,
         )
         store.withTransaction {
             for (df in uploadedDriveFiles) {
@@ -531,6 +534,7 @@ internal class DriveCompactor(
             pendingPruneFileIds = newlySupersededIds,
             pendingSnapshot = null,
             authoredVersionFps = refreshedAuthoredFps,
+            orphanCleanupNeeded = state.orphanCleanupNeeded,
         )
         val deltasAfterAdopted = outbox.ackedAfter(permissionId, remoteSnap.throughSeq).size
         val manifestFileId = remoteManifestPair.first
@@ -1053,6 +1057,7 @@ internal class DriveCompactor(
         //     in appDataFolder whose file IDs are NOT referenced by snapshot / previousSnapshot
         //     (or an active pending generation / remote manifest).
         var orphanListingFailed = false
+        var orphanCleanupNeeded = state.orphanCleanupNeeded || gcOrphanSnapshots
         if (gcOrphanSnapshots && !snapshotDeleteAborted) {
             val ownSnapshotFiles = prefetchedOwnSnapshotFiles ?: runCatching {
                 listOwnSnapshotFiles(localDeviceId, accessToken)
@@ -1061,6 +1066,7 @@ internal class DriveCompactor(
                 orphanListingFailed = true
                 emptyList()
             }
+            if (!orphanListingFailed) orphanCleanupNeeded = false
             val alreadyTracked = remainingPendingSnapshotIds.toSet()
             for (remote in ownSnapshotFiles) {
                 if (remote.id in protectedIds || remote.id in alreadyTracked) continue
@@ -1123,8 +1129,9 @@ internal class DriveCompactor(
         val updatedState = state.copy(
             prunedThroughSeq = newPrunedThroughSeq,
             pendingPruneFileIds = remainingPendingSnapshotIds.distinct(),
+            orphanCleanupNeeded = orphanCleanupNeeded,
         )
-        if (stateChanged) {
+        if (stateChanged || orphanCleanupNeeded != state.orphanCleanupNeeded) {
             val existingRow = recordStates.get(permissionId, COMPACTION_STATE_DOMAIN, COMPACTION_STATE_KEY)
             persistCompactionState(
                 permissionId = permissionId,
@@ -1201,6 +1208,7 @@ internal class DriveCompactor(
                 )
             },
             "authoredVersionFps" to state.authoredVersionFps,
+            "orphanCleanupNeeded" to state.orphanCleanupNeeded,
         ),
     )
 
@@ -1276,6 +1284,7 @@ internal class DriveCompactor(
             pendingPruneFileIds = pendingIds,
             pendingSnapshot = pendingSnapshot,
             authoredVersionFps = authoredVersionFps,
+            orphanCleanupNeeded = obj.optBoolean("orphanCleanupNeeded", false),
         )
     }
 
