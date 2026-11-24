@@ -70,14 +70,17 @@ All fingerprints are 64-char lowercase hex SHA-256 digests of canonical JSON:
 
 | Operation | Formula | Notes |
 |---|---|---|
-| `op: "put"` | `contentFp(body) = sha256Hex(canonicalJson({"op":"put","body":<canonicalBody>}))` | Depends only on content fields (never `editionSha` for annotations, never `position`, never local-only columns). Recomputable directly from the committed `liseur.db` row for every domain whose body is fully stored there. `catalog` is not (`archiveHlc`, edition availability and `updatedAt` have no `books` column), so its recovery uses the apply receipt (§3.3). |
+| `op: "put"` | `putFp(body, hlc) = sha256Hex(canonicalJson({"op":"put","body":<canonicalBody>,"hlc":<hlc>}))` | The record's authoring `hlc` (§1.1) is unique per version, so a version keeps its own identity even when its complete body recurs: a note changed X → Y → X while the wall clock returns to X's original `updatedAt` yields a third `fp`, never X's, so X and Y never become each other's ancestors. The HLC never regresses with the wall clock. `body` follows the same exclusions as `contentFp` (below). The `hlc` is minted when local diffing records the version and is stored with it (`drive_record_state.last_hlc`), so a retry or a restart re-sends the same `fp`. A put's `fp` cannot be recomputed from the row: it lives in `drive_record_state.version_fp`, in `sent_json.vfp` for `evaluation` and `metadata` (§3.2), or in the apply receipt (§3.3). |
+| content identity (not a wire `fp`) | `contentFp(body) = sha256Hex(canonicalJson({"op":"put","body":<canonicalBody>}))` | Never sent as `fp`. Depends only on content fields (never `editionSha` for annotations, never `position`, never local-only columns). Recomputable directly from the committed `liseur.db` row for every domain whose body is fully stored there. `catalog` is not (`archiveHlc`, edition availability and `updatedAt` have no `books` column), so its recovery uses the apply receipt (§3.3). It is stored as `drive_record_state.content_fp` (and `acked_fingerprint`). It detects local edits (row against `content_fp`) and decides whether two live puts carry the same body (Agreement by content, §3.1 Step 2); it never identifies a version. |
 | `op: "del"` | `delFp(d, k, hlc) = sha256Hex(canonicalJson({"op":"del","d":<d>,"k":<k>,"hlc":<hlc>}))` | Including `hlc` makes every delete event unique, so deleting a record after keeping it in an earlier `DELETE_EDIT` resolution never collides with the old delete in `anc`. |
-| `op: "put"` revival (`vocabWord` only, §4.9) | `reviveFp(delFp, restoreFp) = sha256Hex(canonicalJson({"op":"revive","delFp":<delFp>,"restoreFp":<restoreFp>}))` | A revival is a wire `op: "put"` whose `fp` is `reviveFp`, not `contentFp(body)`. Its body is `restore.body`, so `drive_record_state.content_fp` (and `acked_fingerprint`) stay `contentFp(restore.body)` and local diffing compares the row against `content_fp`, never against `version_fp`. Because the row cannot reproduce `reviveFp`, the Tx 1 that makes a revival current also writes its `fp`, `anc` and `revives` to `drive_apply_receipt` (§3.3). Every device that revives from the same `del` computes the same `reviveFp`, so concurrent revivals agree (§3.1 Step 2). |
+| `op: "put"` revival (`vocabWord` only, §4.9) | `reviveFp(delFp, restoreFp) = sha256Hex(canonicalJson({"op":"revive","delFp":<delFp>,"restoreFp":<restoreFp>}))` | A revival is a wire `op: "put"` whose `fp` is `reviveFp`, not `putFp`. Its body is `restore.body`, so `drive_record_state.content_fp` (and `acked_fingerprint`) stay `contentFp(restore.body)` and local diffing compares the row against `content_fp`, never against `version_fp`. Because the row cannot reproduce `reviveFp`, the Tx 1 that makes a revival current also writes its `fp`, `anc` and `revives` to `drive_apply_receipt` (§3.3). Every device that revives from the same `del` computes the same `reviveFp`, so concurrent revivals agree (§3.1 Step 2). |
 | `op: "resolve"` | `resolveFp(outcome, resolvedFps, hlc, body) = sha256Hex(canonicalJson({"op":"resolve","outcome":<outcome>,"resolvedFps":<sorted>,"hlc":<hlc>,"body":<bodyOrNull>}))` | Distinct from both conflicting fps even when the reader keeps a local version verbatim (`outcome: "put"`), guaranteeing strict causal supersession over both sides. |
 
 **Golden test invariant:** Phase 4–6 unit tests include a golden fingerprint
 suite that writes representative rows to `liseur.db`, reads them back, computes
-`contentFp`, and verifies exact SHA-256 equality against fixed fixtures.
+`contentFp` and `putFp` (for a fixed `hlc`), and verifies exact SHA-256 equality against fixed fixtures. A
+second fixture writes the same body at two different HLCs and asserts two
+different `putFp` and one `contentFp`.
 
 ---
 
@@ -182,7 +185,7 @@ batch; larger queues split into consecutive `seq` values (`1, 2, 3, ...`).
       "k": "5b1e...",
       "op": "put",
       "hlc": "0017450000000-0001-550e8400-e29b-41d4-a716-446655440000",
-      "fp": "<64-hex contentFp>",
+      "fp": "<64-hex putFp>",
       "anc": ["<prevFp>"],
       "resRefs": ["<winningResolveFp>"],
       "body": { "...": "..." }
@@ -225,12 +228,26 @@ Record envelope fields:
 | `hlc` | `String` | Always | Authoring HLC for this record. |
 | `fp` | `String` | Always | Canonical 64-hex SHA-256 fingerprint per Section 1.3. |
 | `anc` | `Array<String>` | Always | Superseded version fps, newest first, deduplicated, capped at **64** entries (`[]` for append-only domains and new records). |
-| `resRefs` | `Array<String>` | Always | Sorted, deduplicated, **uncapped** list of winning resolution fps (`resolveFp`) from which this record causally descends, carried forward across every successor edit, delete, or resolution outside the 64-entry `anc` cap (`[]` for append-only domains and records with no prior resolution in their ancestry; excluded from `contentFp`). |
+| `resRefs` | `Array<String>` | Always | Sorted, deduplicated, **uncapped** list of winning resolution fps (`resolveFp`) from which this record causally descends, carried forward across every successor edit, delete, or resolution outside the 64-entry `anc` cap (`[]` for append-only domains and records with no prior resolution in their ancestry; excluded from `fp`). |
 | `body` | `Object \| null` | Always | Domain payload object for `op == "put"` and `op == "resolve" && outcome == "put"`; strictly `null` for `op == "del"` and `op == "resolve" && outcome == "delete"`. |
 | `observed` | `Object<deviceId, seq>` | Only when `d == "vocabWord" && op == "del"` | Vector of the highest delta `seq` the deleting device had applied from each other device when it authored the delete — the causal boundary for the word's reviews and occurrences (§4.9). A value that is not an object decodes to `{}`, which keeps data. Absent otherwise. Excluded from `delFp` (§1.3). Snapshots keep it on the `del` record. |
-| `restore` | `Object` | Only when `d == "vocabWord" && op == "del"` (required there) | `{"fp": <contentFp of the last live word body>, "hlc": <record hlc of that version>, "body": <that full vocabWord body, §4.9>}`: the parent content a receiver needs to restore the word when a review or occurrence it did not cover arrives later. It is the last live version the deleter held before deleting, so `fp` is normally `anc[0]`. The record's own `body` stays `null`, so the general `op: "del"` contract is unchanged. Excluded from `delFp`. Snapshots keep it on the `del` record, so a device rebuilt from snapshots has it. A `del` without a valid `restore` is malformed: it is not applied (no cascade, nothing is deleted), it counts as committed for the batch cursor (§3.3), and the receiver logs it. |
+| `restore` | `Object` | Only when `d == "vocabWord" && op == "del"` (required there) | `{"fp": <version `fp` of the last live word version>, "hlc": <record hlc of that version>, "body": <that full vocabWord body, §4.9>}`: the parent content a receiver needs to restore the word when a review or occurrence it did not cover arrives later. It is the last live version the deleter held before deleting, so `fp` is `anc[0]`. The record's own `body` stays `null`, so the general `op: "del"` contract is unchanged. Excluded from `delFp`. Snapshots keep it on the `del` record, so a device rebuilt from snapshots has it. A `del` without a valid `restore` is malformed: it is not applied (no cascade, nothing is deleted), it counts as committed for the batch cursor (§3.3), and the receiver logs it. |
 | `seq` | `Long` | Snapshot `vocabOccurrence` / `vocabReview` records only | The author's delta `seq` that first published this version. Readers store it as the record's provenance instead of `snapshot.throughSeq`, so a later `vocabWord` `del` whose `observed` vector covers that seq still counts the record as seen. `throughSeq` only advances cursors. A record with no known provenance counts as unseen. |
 | `revives` | `Object` | Only when `d == "vocabWord" && op == "put"` and the put is a revival (§4.9) | `{"del": <delFp>, "restore": <restore.fp>}`. Required exactly when `fp` is a `reviveFp` (§1.3); a receiver recomputes `reviveFp(revives.del, revives.restore)` and rejects the record as malformed if it differs from `fp`. `anc` is `[revives.del, revives.restore]` followed by the revived version's other ancestry. Excluded from `fp`. |
+
+**One version of a `(d, k)` per batch.** A delta holds at most one record for
+each `(d, k)`, so the authored-record key `(permission_id, domain,
+record_key, seq)` (ADR 0078, `drive_authored_record`) never collides. Usually
+only a record's latest version is owed. When a freeze finds two versions of
+one `(d, k)` that both must reach the wire, it places them in consecutive
+batches in version order, each with its own `seq`, `drive_outbox` row and
+authored row, allocated in one freeze transaction. Two cases exist: a
+`vocabReview` `put` still unpublished when the reader undoes it (the `put`
+goes first, then the `del`, §4.11), and a local resolution awaiting
+publication ahead of a later edit of the same record (the `resolve` goes
+first, §3.2). A snapshot then holds both envelopes (§2.4) with no version
+column, and receivers apply them in `seq` order. The count and size limits
+above split between versions, never inside one batch.
 
 A `vocabWord` `del` record, with `body` still `null`:
 
@@ -246,7 +263,7 @@ A `vocabWord` `del` record, with `body` still `null`:
   "body": null,
   "observed": { "661f9511-f3ac-52e5-b827-557766551111": 8 },
   "restore": {
-    "fp": "<64-hex contentFp of the body below>",
+    "fp": "<64-hex version fp of the body below>",
     "hlc": "0017450000000-0002-550e8400-e29b-41d4-a716-446655440000",
     "body": { "language": "fr", "normalized": "ephemere", "word": "éphémère", "...": "..." }
   }
@@ -423,11 +440,23 @@ snapshot, `R.seq = snapshot.throughSeq`):
 2. **Agreement (`R.fp == L`, OR both `L` and `R` are deletions (`del`, or a
    `del` paired with a `resolve` whose `outcome` is `"delete"`; two **distinct**
    `op: "resolve"` records never agree here — they are routed to the
-   incoming-resolution rule in Step 3 first), OR `R.op == "resolve" && R.outcome ==
+   incoming-resolution rule in Step 3 first), OR both `L` and `R` are live
+   `put`s with equal `contentFp` (two devices that made the same edit, or
+   merged to the same body, each minted their own `putFp`, §1.3) and neither
+   `fp` is in the other's `anc`, OR `R.op == "resolve" && R.outcome ==
    "put"` and the committed `liseur.db` row already matches `contentFp(R.body)`
    with a matching per-peer ack after crash recovery):** No conflict. Merge
    `anc(L) := cap64(anc(L) ∪ R.anc)` and `res_refs(L) := res_refs(L) ∪
-   R.resRefs`. For concurrent `del`s, adopt the higher `(hlc, fp)` as `L`; for
+   R.resRefs`. For concurrent `del`s, adopt the higher `(hlc, fp)` as `L`,
+   together with that `del`'s own `restore` and `observed` payloads
+   (`restore_json`, `observed_json`, §4.9): the fingerprint, `restore` and
+   `observed` of `L` always come from one record, and the losing `del`'s
+   payloads are discarded, never copied beside the winning `fp`, so every
+   delivery order of two distinct deletes yields the same causal boundary.
+   For concurrent live puts with equal bodies, adopt the higher `(hlc, fp)`
+   as `L` the same way (the row is unchanged) and keep the other `fp` in
+   `anc(L)`; `published_fp := R.fp` only when `R` is adopted, because a
+   retained local `L` is still owed. For
    incoming `op: "resolve"` replay agreement (including fingerprint-native
    tables like `annotation_sync` where `acked_fingerprint` holds `contentFp` /
    `"DELETED"`), adopt `L := R.fp`, `version_op := "resolve"`, `published_fp :=
@@ -527,14 +556,14 @@ Every apply and outbox ACK commits **Transaction 1 (`liseur.db`) first**, then
 | Domain / Table | Atomic `liseur.db` Ack | Recovery if Crash Between Tx 1 and Tx 2 |
 |---|---|---|
 | `annotation` (`annotations` + `annotation_sync`) | `annotation_sync.acked_fingerprint = contentFp` (or `"DELETED"` on delete/delete-resolution), plus a `drive_apply_receipt` row (§3.3) in the same Tx 1. | `acked_fingerprint` alone cannot name the applied wire version: a keep-body resolution leaves it unchanged, so an edit made after the crash looks like one made before the resolution. Use the receipt. Receipt `version_fp == R.fp` and row unchanged since the apply (`row_fp` equal) → Agreement (repair `drive_record_state`, advance cursor). Row edited after the apply → post-apply edit rule (§3.3): the edit stays dirty, `R.fp` joins its `anc`, replay is Stale. No receipt for `R.fp` → Tx 1 never committed; apply normally. |
-| `evaluation` (`book_evaluation` + `evaluation_sync`) | Revision-to-fingerprint adapter: `rev = max(row.revision, sync.acked_revision) + 1` is written to `book_evaluation.revision`, `acked_revision` and `sent_revision`, with `sent_json = {"vfp": "<fp>", "cfp": "<contentFp>", "rev": <rev>}`. Every Tx 1 that changes `sent_json.vfp` (remote apply, unchanged-outcome resolution, local resolution, outgoing ACK) strictly raises `acked_revision`. | When `drive_record_state.last_synced_revision < sync.acked_revision` (always true after a Tx 1-only commit, because of the strict raise): if `row.revision == sync.acked_revision`, recompute `contentFp` from committed `book_evaluation` row (or `"DELETED"` if `value == null`), pair with `sent_json.vfp`, and repair `drive_record_state`. If `row.revision > sync.acked_revision`, seed `anc` with `sent_json.vfp` and keep new edit dirty (`row.owed(sync) == true`). |
-| `metadata` (`books` + `metadata_override_revision` + `metadata_override_sync`) | Same revision-to-fingerprint adapter on `metadata_override_sync` (`acked_revision`, `sent_revision`, `sent_json`), with `rev` raised the same way on `metadata_override_revision.revision`, plus `remote_cover_sha256` & `adopted` for `cover`. | Identical to `evaluation`: recompute `contentFp` from committed `books` override columns when `rev.revision == sync.acked_revision`; seed `anc` from `sent_json.vfp` if reader edited again before recovery ran. |
-| `vocabWord` + `vocabOccurrence` (`vocabulary_*` + `vocabulary_word_sync`) | `vocabulary_word_sync.acked_fingerprint` + `acked_base_json`, plus a `drive_apply_receipt` row (§3.3) in the same Tx 1 for every word version that Tx 1 makes current: a remote apply, or a revival or add-wins keep this device mints (§4.9). | `acked_fingerprint` is `contentFp` of the row and cannot name a revival (`reviveFp`), so word recovery uses the receipt (§3.3), never `contentFp` of the row. After a crash between Tx 1 and Tx 2 of a revival, `L` is restored to `reviveFp` with its `anc` and `revives`, so a replay of the `del`, even after the triggering review is undone, is Stale. Replay of a word `del` that reaches Agreement rewrites `restore_json` and `observed_json` from `R`. Occurrences are a separate domain; their merge is commutative and idempotent (§4.10), so replay reproduces the same result without a receipt. A word `del` also stores its `restore` and `observed` payloads (`restore_json`, `observed_json`, §4.9). |
+| `evaluation` (`book_evaluation` + `evaluation_sync`) | Revision-to-fingerprint adapter: `rev = max(row.revision, sync.acked_revision) + 1` is written to `book_evaluation.revision`, `acked_revision` and `sent_revision`, with `sent_json = {"vfp": "<fp>", "cfp": "<contentFp>", "rev": <rev>}`. Every Tx 1 that changes `sent_json.vfp` (remote apply, unchanged-outcome resolution, local resolution, outgoing ACK) strictly raises `acked_revision`. | When `drive_record_state.last_synced_revision < sync.acked_revision` (always true after a Tx 1-only commit, because of the strict raise): if `row.revision == sync.acked_revision`, recompute `contentFp` from committed `book_evaluation` row (or `"DELETED"` if `value == null`), pair with `sent_json.vfp`, and repair `drive_record_state`. If `row.revision > sync.acked_revision`, the post-crash edit becomes a new local version with `sent_json.vfp` first in its `anc`, kept dirty (`row.owed(sync) == true`). Its op follows the row: `value != null` is a put (mint a fresh HLC `h`, `L := putFp(<body built from the row>, h)`, `content_fp := contentFp(<body>)`); `value == null` (the reader cleared the rating or review) is a **delete** (mint `h`, `L := delFp(d, k, h)`, `version_op := "del"`, `body_json := NULL`), and the tombstone is owed. Recovery never builds a put from a null value (invalid, §4.8). |
+| `metadata` (`books` + `metadata_override_revision` + `metadata_override_sync`) | Same revision-to-fingerprint adapter on `metadata_override_sync` (`acked_revision`, `sent_revision`, `sent_json`), with `rev` raised the same way on `metadata_override_revision.revision`, plus `remote_cover_sha256` & `adopted` for `cover`. | Identical to `evaluation`: recompute `contentFp` from committed `books` override columns when `rev.revision == sync.acked_revision`. If the reader edited again before recovery ran, the edit is a new local version with `sent_json.vfp` first in its `anc`: an override still set is a put (fresh HLC, `putFp`); an override the reader reset (`*_override = 0`, §4.3) is a **delete** (`delFp(d, k, h)`, `body_json := NULL`, tombstone owed), never a put rebuilt from the fallback file/catalog value, which would restore the cleared override. |
+| `vocabWord` + `vocabOccurrence` (`vocabulary_*` + `vocabulary_word_sync`) | `vocabulary_word_sync.acked_fingerprint` + `acked_base_json`, plus a `drive_apply_receipt` row (§3.3) in the same Tx 1 for every word version that Tx 1 makes current: a remote apply, or a revival or add-wins keep this device mints (§4.9). | `acked_fingerprint` is `contentFp` of the row and cannot name a revival (`reviveFp`), so word recovery uses the receipt (§3.3), never `contentFp` of the row. After a crash between Tx 1 and Tx 2 of a revival, `L` is restored to `reviveFp` with its `anc` and `revives`, so a replay of the `del`, even after the triggering review is undone, is Stale. A word `del` that reaches Agreement rewrites `restore_json` and `observed_json` from `R` only when `R.fp` is (or becomes) `L`; when `L` is a distinct concurrent `del` that wins on `(hlc, fp)` (§3.1 Step 2), the stored payloads stay and `R`'s are discarded, so `fp`, `restore` and `observed` never come from different deletes. Occurrences are a separate domain; their merge is commutative and idempotent (§4.10), so replay reproduces the same result without a receipt. A word `del` also stores its `restore` and `observed` payloads (`restore_json`, `observed_json`, §4.9). |
 | `vocabReview` (`vocabulary_reviews` + `vocabulary_review_sync`) | `UNIQUE(wordId, syncId)` + `vocabulary_review_sync(peer_id, review_id, acked_deleted)`. | `INSERT OR IGNORE` + idempotent `reconcileSchedule`; replay inserts 0 rows and produces identical SRS state. |
 | `session` (`reading_sessions` + `drive_session_ack`) | `UNIQUE INDEX` on `reading_sessions.remote_session_id`. | Incoming pull uses `INSERT OR IGNORE` — replay after crash inserts 0 rows, so session counts once. Outbound upload tracks per-account delivery in `drive_session_ack`. |
 | `series` / `catalog` (`books`) | `drive_apply_receipt` row written in the same Tx 1 as the `books` writes (§3.3). `drive_record_state` stores `version_fp`, `published_fp`, `content_fp`, `body_json`. | Receipt recovery (§3.3) and local diffing run **before** pulling. The bare `books` row cannot reproduce a catalog wire fp (it has no `archiveHlc`, edition availability or `updatedAt`), so recovery compares a row projection with the receipt and never `contentFp(book)` with `contentFp(R.body)`. Row unchanged since the apply → restore `drive_record_state` from the receipt, advance the cursor on replay. Row edited after the apply → the edit becomes a new local version whose `anc` holds `R.fp`, so replay is Stale and no spurious `series` conflict opens. |
 | `position` / `furthest` (`reading_progress` + `sync_peer_state` + `furthest_position`) | `sync_peer_state` account row (`acked_*`, delivery) and per-device rows (`acked_*`, `agreed_*`, `pending_*`), §4.5; `FurthestPositionDao.observe` (monotonic max). | `reconcileReadingState` and `observe` / `deleteUpToForOrigin` are strictly idempotent on replay. |
-| Local conflict resolution (`drive_conflict` `RESOLVING`) | Local choice applied to `liseur.db` in Tx 1; `drive_conflict.state` moves `RESOLVING → RESOLVED` after publish. | On restart, any `RESOLVING` row checks committed `liseur.db` state, ensures the `op: "resolve"` batch is frozen/uploaded, persists `drive_resolution` and `res_refs_json`, and marks `RESOLVED`. |
+| Local conflict resolution (`drive_conflict` `RESOLVING`) | Before anything is applied, a `drive_sync.db` transaction writes `RESOLVING` with the exact resolution (`resolution_json`: `resolveFp`, `outcome`, `resolvedFps`, `hlc`, `anc`, `resRefs`, `body`). Tx 1 applies the choice to `liseur.db` and, for the receipt domains (`annotation`, `series`, `catalog`, `vocabWord`), writes a `drive_apply_receipt` row (§3.3, `local_version = 1`, `version_fp = resolveFp`) in the same transaction; `evaluation` and `metadata` raise `acked_revision` with `sent_json.vfp = resolveFp`. `drive_conflict.state` moves `RESOLVING → RESOLVED` after publish. | On restart, the stored resolution is never re-applied to `liseur.db` once its receipt (or raised `acked_revision`) exists: Tx 1 is recovered through §3.3, or the revision adapter above. Row unchanged since the apply → `L := resolveFp` with its `res_refs`, still owed. Row edited since (the reader edited or deleted after Tx 1 and before the batch was frozen) → the edit stays dirty as a descendant with `resolveFp` in its `anc`, never overwritten by the stored choice. Without a receipt Tx 1 never committed, and the choice is applied from `resolution_json`. Either way the stored `op: "resolve"` record is frozen and uploaded, in its own batch ahead of any later edit of the same record (§2.3), `drive_resolution` and `res_refs_json` are persisted, and the row is marked `RESOLVED`. |
 | Incoming `op: "resolve"` replay (`drive_conflict` `OPEN`) | Remote resolution outcome + per-peer ack/`sent_json` committed to `liseur.db` in Tx 1; `drive_resolution`, `drive_conflict` (`RESOLVED`), `res_refs_json`, and `drive_cursor` committed in Tx 2. | If crash occurs after Tx 1 and before Tx 2, recovery repairs `drive_record_state` from `liseur.db` and the apply receipt (§3.3) while the conflict stays `OPEN` and `drive_cursor` stays un-advanced. On replay of `R` (`op: "resolve"`), **Step 0 runs BEFORE Agreement (unedited) and BEFORE Stale (post-crash local edit)**, idempotently persisting `R` in `drive_resolution`, closing the `OPEN` conflict in `drive_conflict` as `RESOLVED`, updating `res_refs_json`, and only then advancing `drive_cursor`. |
 
 ### 3.3 Apply Receipt & Transaction Order
@@ -546,7 +575,9 @@ revival or keep (§4.9) has `fp = reviveFp` while the row holds
 Domains without a per-peer ack that carries the applied version fp therefore
 get a receipt. `annotation`, `series`, `catalog` and `vocabWord` write one row
 per record in a new `liseur.db` table `drive_apply_receipt`, in the same Tx 1
-as the data. Migration 84→85 creates the table empty; no Drive data predates
+as the data. The Tx 1 of a remote apply writes one, and so does every Tx 1
+that makes a version minted on this device current: a `vocabWord` revival or
+keep (§4.9) and a local conflict resolution (§3.2). Migration 84→85 creates the table empty; no Drive data predates
 it, so nothing is backfilled. `evaluation` and `metadata` already satisfy the
 rule: `sent_json.vfp` is the applied `R.fp`, and `rev` strictly increases with
 every local edit and every applied remote version (§3.2).
@@ -561,7 +592,7 @@ every local edit and every applied remote version (§3.2).
 | `body_json` | Canonical body as materialized, which for the `catalog` automatic merge is the merged body and can differ from `R.body`. `NULL` when the apply deleted the row. |
 | `row_fp` | Fingerprint of the row projection after the apply, or `"DELETED"`. The projection is the set of body fields the domain stores in `liseur.db`: `annotation`, `series` and `vocabWord` use the whole body (minus `editionSha` for annotations); `catalog` uses `title`, `author`, `fileSeriesName`, `fileSeriesIndex`, `addedAt` and `archivedAt` only. |
 | `republish` | `1` when `body_json` differs from `R.body`, so the merged body is owed as a new version. |
-| `local_version` | `1` when this device minted the version in this Tx 1 (a `vocabWord` revival or add-wins keep, §4.9) instead of applying `R`: `version_fp` is the `reviveFp`, `hlc` is the freshly minted HLC and `origin_*` are `NULL`. `0` for a remote apply. |
+| `local_version` | `1` when this device minted the version in this Tx 1 instead of applying `R`: a `vocabWord` revival or add-wins keep (§4.9), where `version_fp` is the `reviveFp`, or a local conflict resolution (§3.2), where `version_fp` is the `resolveFp`, `version_op` is `"resolve"`, `outcome` and `body_json` are the chosen outcome and body, and `res_refs_json` includes `resolveFp`. `hlc` is the freshly minted HLC (the resolution's own) and `origin_*` are `NULL`. `0` for a remote apply. |
 | `revives_json` | The `revives` envelope of a `vocabWord` revival or keep, else `NULL`. |
 
 **Tx 2 acknowledgement.** The Tx 2 of every remote apply writes
@@ -581,17 +612,18 @@ repair below sets `acked_receipt_id := receipt_id` in its own Tx 2. Recompute th
   `anc`, `res_refs`, `origin_*` and `body_json` from the receipt, and
   `published_fp := version_fp`, unless `local_version == 1`: then
   `published_fp` keeps its old value, so the minted version (with `revives`
-  from `revives_json`) is still owed. The replayed record is then the
-  revival's trigger (a child or the `del`), which reaches an idempotent
-  insert or Stale. If `republish == 1`, instead make
-  `L := contentFp(body_json)` a new local version with
-  `anc := [version_fp, <old L>] ∪ anc_json` and leave it unpublished, so
-  the merged body is sent next. Replay of `R` then reaches Agreement.
+  from `revives_json`, or the stored resolution of §3.2 for a local
+  resolution) is still owed. The replayed record is then the revival's
+  trigger (a child or the `del`), which reaches an idempotent insert or
+  Stale. If `republish == 1`, instead mint a fresh HLC `h`, make
+  `L := putFp(body_json, h)` (`content_fp := contentFp(body_json)`) a new
+  local version with `anc := [version_fp, <old L>] ∪ anc_json` and leave it
+  unpublished, so the merged body is sent next. Replay of `R` then reaches Agreement.
 - **Changed since the apply (post-crash edit):** the row projection differs
   from `row_fp`.
   - **Row still present:** build the new body from `body_json` with the
-    projection fields replaced by the row's values, set
-    `L := contentFp(<new body>)`, `anc := [version_fp, <old L>] ∪ anc_json`,
+    projection fields replaced by the row's values, mint a fresh HLC `h`, set
+    `L := putFp(<new body>, h)`, `content_fp := contentFp(<new body>)`, `anc := [version_fp, <old L>] ∪ anc_json`,
     `res_refs := res_refs_json`, and keep it dirty. Replay of `R` then
     reaches Stale because `R.fp ∈ anc(L)`. For `catalog`, only the
     row-backed fields are replaced; every edition, its `availabilityHlc`,
@@ -611,10 +643,16 @@ repair below sets `acked_receipt_id := receipt_id` in its own Tx 2. Recompute th
     never resurrects the row. A receipt with `row_fp == "DELETED"` and a row
     still absent is the *Unchanged* case above. For `vocabWord` the `del` is
     an ordinary local word delete (§4.9) with
-    `restore = {fp: contentFp(body_json), hlc: <receipt hlc>, body: body_json}`
+    `restore = {fp: <receipt version_fp>, hlc: <receipt hlc>, body: body_json}`
     and `observed` taken from this device's cursors.
 - In both cases Step 0 (§3.1) still runs on replay before the cursor
   advances.
+- A `local_version` receipt of a local resolution whose row changed since
+  the apply keeps the minted resolution owed: the stored `op: "resolve"`
+  record (`drive_conflict.resolution_json`, §3.2) is frozen first, in its own
+  batch (§2.3), and the post-crash edit, which has `resolveFp` in its `anc`
+  and `res_refs`, follows in a later batch. The stored choice is never
+  applied to `liseur.db` again.
 
 A receipt whose `version_fp` differs from `R.fp` on replay, or no receipt,
 means Tx 1 for `R` never committed. `R` is processed from scratch. A
@@ -1105,7 +1143,19 @@ with outcome `delete`) when it reaches those records:
     binding is dropped when the book's peak changes.
   - Merge rule: ignore if `seq <= maxFloor[workKey][deviceId]`; otherwise apply
     via `FurthestPositionDao.observe` (keeps max `progression` per
-    `(peer_id, work_id, edition, origin = deviceId)`).
+    `(peer_id, work_id, edition, origin = deviceId)`). A peak that `observe`
+    does not make the visible row because its `progression` is lower, but
+    whose `seq` is higher than the visible row's, is a **newer peak
+    candidate** and is retained, not dropped: B's 80% peak at `seq = 10` and
+    its post-reset 30% peak at `seq = 11` are both kept, because a reset
+    with floor 10 deletes the first and must leave the second. Candidates
+    live in `drive_sync.db` (`drive_peak_candidate`, one row per
+    `(permission_id, work_id, edition, origin, seq)` with `progression` and
+    the payload), and a candidate is discarded as soon as another peak of the
+    same slot has `seq` at or above its own and `progression` at or above its
+    own, so each slot holds a short chain of rising `seq` and falling
+    `progression`. `furthest_position` holds the slot's maximum-`progression`
+    row, so the visible state is unchanged when no reset ever arrives.
 - **Sub-record B — Reset (`k = "reset/<workKey>/<resetId>"`, append-only):**
   ```json
   {
@@ -1124,9 +1174,14 @@ with outcome `delete`) when it reaches those records:
     `furthest_position` rows matching `(peer_id = drive:<permissionId>,
     work_id = workKey, origin = originDeviceId, seq <= floorSeq)` (requires new
     DAO query `FurthestPositionDao.deleteUpToForOrigin(peer, work, origin,
-    floor)`), and persist `maxFloor[workKey][originDeviceId]` in `drive_sync.db`
-    so late-arriving peaks with `seq <= floorSeq` are ignored. Resets are
-    retained forever in snapshots.
+    floor)`), delete the retained candidates of the same slots with
+    `seq <= floorSeq`, **re-materialize** each affected slot's visible row
+    from its best remaining candidate (through `observe`), and persist
+    `maxFloor[workKey][originDeviceId]` in `drive_sync.db` so late-arriving
+    peaks with `seq <= floorSeq` are ignored. Resets are retained forever in
+    snapshots. The visible peak is therefore a function of the set of peaks
+    and floors received, never of their delivery order: a peak above the
+    floor survives whether it arrives before or after the reset.
   - Forgetting applies to the whole work, not one edition. The reset record
     and its floors (the authoring device's floor is its highest allocated
     `seq`) are persisted in `drive_sync.db` first. Local effects follow: delete
@@ -1248,7 +1303,9 @@ with outcome `delete`) when it reaches those records:
     from wire and `contentFp` (populated from `books` / catalog on apply).
 - **`del` semantics:** Clearing a rating or review locally sets
   `book_evaluation.value = null` and increments `revision`; Drive publishes
-  `op: "del"`. Applying remote `del` sets `book_evaluation.value = null` and
+  `op: "del"`, including when the clear happens after a crash between the two
+  commits and before recovery (§3.2), where it is never rebuilt as a put.
+  Applying remote `del` sets `book_evaluation.value = null` and
   atomically updates `evaluation_sync.acked_revision` + `sent_json`.
 - **Conflict rule:** Reader-resolved per `(workKey, field)` via Section 3.1
   (`EDIT_EDIT` and `DELETE_EDIT`), closed via `op: "resolve"`.
@@ -1324,7 +1381,8 @@ with outcome `delete`) when it reaches those records:
     incoming. The merge is **commutative**: for the same `base`, swapping
     `local` and `remote` yields a byte-identical canonical body, so two
     devices that exchange concurrent edits compute the same merged body, both
-    publish (or skip) a put with the same `fp`, and meet in Agreement. Equal
+    publish (or skip) a put of that body, each with its own `putFp`, and meet
+    in Agreement by content (§3.1 Step 2). Equal
     timestamps are broken by value, never by which side is local:
     - `notes`: later `notesUpdatedAt` wins; on equal timestamps the greater
       `notes` string (UTF-16 code-unit order) wins and keeps the shared
@@ -1395,11 +1453,11 @@ with outcome `delete`) when it reaches those records:
       `revives = {del: D.fp, restore: restore.fp}`,
       `anc = [D.fp, restore.fp] ∪ anc(L)` and
       `content_fp := contentFp(restore.body)`, as in **Revive** below.
-      Republishing `contentFp` would leave `L ∈ D.anc`, so a replay of `D`
+      Republishing a plain `putFp` put of `restore.body` would leave `L ∈ D.anc`, so a replay of `D`
       after the child is undone would pass Step 4 before Step 5 and delete
       the word again.
     - **`L ∉ D.anc`** (a concurrent word edit): the republished `put` keeps
-      `contentFp` of the local body with `D.fp` in `anc`. A replay of `D` is
+      a `putFp` put (fresh HLC) of the local body with `D.fp` in `anc`. A replay of `D` is
       then Stale.
 
     If all children are covered, the cascade does not discard them: Tx 1
@@ -1414,8 +1472,10 @@ with outcome `delete`) when it reaches those records:
     `vocabulary_word_sync` row with `acked_fingerprint = "DELETED"` and
     `acked_base_json = restore.body`, and in Tx 2 by writing
     `drive_record_state.restore_json = restore` and `observed_json =
-    observed`. It always uses the `del`'s `restore`, not its own last body,
-    so every device holds the same parent baseline. The payload is
+    observed`. It always uses the `restore` of the `del` that is `L` (§3.1 Step 2: with
+    distinct concurrent deletes, the winner's `restore` and `observed` travel
+    with the winner's `fp`), not its own last body, so every device holds the
+    same parent baseline. The payload is
     replicated through deltas and snapshots like any other record field, so a
     device that reconstructs only from snapshots has it.
   - **Child arrives:** the same coverage test against the tombstone's
@@ -1451,7 +1511,7 @@ with outcome `delete`) when it reaches those records:
     example after the reader undoes the uncovered review that triggered the
     revival) is Stale under §3.1 Step 5 and can never supersede the revival
     in Step 4. A later `del` of the revived word has `restore.fp =
-    contentFp(<the body it deleted>)` and `anc[0] = reviveFp` as usual. The same set is
+    reviveFp` and `anc[0] = reviveFp` as usual. The same set is
     attached whichever order the `del`, covered children and uncovered child
     arrived in. A word `put` received later that supersedes the tombstone
     (`del` fp in its `anc`) attaches the same set on the receiver.
@@ -1472,7 +1532,7 @@ with outcome `delete`) when it reaches those records:
     restore.
   - `del` vs. concurrent edit of the word: **add-wins silently**, keeping the
     local word and children, and republishing as in **Delete vs. uncovered
-    child** (a revival when `L ∈ D.anc`, otherwise a `contentFp` put with the
+    child** (a revival when `L ∈ D.anc`, otherwise a `putFp` put with the
     `del` fp in `anc`).
   - `ownerAccount`: Drive reads the visible vocabulary set (matching
     `VocabularyDao.exportWords()`, including `ownerAccount = ''` and retired
@@ -1593,7 +1653,10 @@ with outcome `delete`) when it reaches those records:
     `reconcileSchedule` on the parent word. A later replay of the undone
     `syncId`'s `put` never reaches the schedule: it is stored `UNDONE` if not
     already present. An `UNDONE` review stays evidence for the parent-existence
-    rule (§4.9).
+    rule (§4.9). The `put` and its `del` share one `syncId`, so when both are
+    owed before the next sync they freeze in separate, consecutive batches,
+    the `put` first (§2.3); each keeps its own authored row and snapshot
+    envelope.
 - **Room mapping (`liseur.db`):**
   - `vocabulary_reviews`: `wordId`, `rating`, `reviewedAt`, `intervalMinutes`,
     `dueAt`, `firstReview` (derived), `syncId`.
@@ -1783,7 +1846,9 @@ transport, controllable clocks, and fault-injection hooks:
      local choice (`outcome: "put"` or `"delete"`) to `liseur.db` and before
      updating `drive_conflict` / `drive_resolution`. Restart → `RESOLVING`
      recovery ensures the `op: "resolve"` batch is published, persists
-     `drive_resolution`, and marks `RESOLVED`.
+     `drive_resolution`, and marks `RESOLVED`. Add the variant where the
+     reader edits the field after the crash and before recovery (C27): the
+     stored choice is not re-applied over the edit.
    - *Incoming `op: "resolve"` crash between transactions (`OPEN` conflict):* B
      holds an `OPEN` conflict `{fA, fB}`. B receives A's `op: "resolve"`
      (`res1`, tested for both `outcome: "put"` and `outcome: "delete"`), commits
@@ -1870,8 +1935,8 @@ transport, controllable clocks, and fault-injection hooks:
 
 ### 5.3 Contract Acceptance Cases
 
-These cases test the contracts in §1.1, §2.1, §2.4, §3.3, §4.2, §4.5,
-§4.9–4.12 and the §4 intro. Each runs on the §5.2 harness. Cases marked "both
+These cases test the contracts in §1.1, §1.3, §2.1, §2.3, §2.4, §3.1–§3.3,
+§4.2, §4.3, §4.5, §4.6, §4.8–4.12 and the §4 intro. Each runs on the §5.2 harness. Cases marked "both
 orders" run once per delivery
 order and must end in the same state.
 
@@ -1884,7 +1949,7 @@ order and must end in the same state.
 | C5 | A fresh device has only A's snapshot, which holds A's `del` of W (with `observed = {B: 8}` and `restore`), and B's snapshot, which holds review `r` (`seq = 9`). Apply the `del` first, then `r`. Repeat with `r` first. | The device creates the `DELETED` sync row from `restore`, then on `r` (uncovered) restores W from `restore.body`, inserts `r`, and publishes a `put` with `anc = [delFp, restore.fp]`. Same result in both orders. With `observed = {B: 9}`, or an occurrence covered the same way, W is not restored and `r` is ignored. A `del` without `restore` is not applied and deletes nothing. |
 | C5b | A fresh device first ingests B's snapshot (review `r1` at `seq = 8`, concurrent `r2` at `seq = 9`, no word), then A's snapshot with the `del` (`observed = {B: 8}`, `restore`). Repeat with A's snapshot first, and with the order `del`, `r1`, `r2` and `del`, `r2`, `r1`. | In every order W is restored from `restore.body` with both `r1` and `r2` attached and the schedule derived from both; a published `put` has `anc = [delFp, restore.fp]`. If only `r1` exists, W stays deleted, `r1` is `COVERED`, and nothing is visible. An undone `r1` is never reattached. |
 | C5c | Same as C5b but both snapshots are compacted and the deltas pruned. | Identical result: the covered `r1` is still present in B's snapshot. |
-| C6 | A and B edit `notes`, then separately the definition group, an occurrence sentence and an occurrence locator, with equal timestamps and different values, then exchange them. Run merge with arguments swapped, with a provisional and a canonical occurrence in both iteration orders. | Merged canonical bodies and fps are byte-identical in every order. Neither device republishes a differing body: they meet in Agreement. |
+| C6 | A and B edit `notes`, then separately the definition group, an occurrence sentence and an occurrence locator, with equal timestamps and different values, then exchange them. Run merge with arguments swapped, with a provisional and a canonical occurrence in both iteration orders. | Merged canonical bodies and `contentFp` are byte-identical in every order (each device's `putFp` differs, because its HLC does). Neither device republishes a differing body: they meet in Agreement by content (§3.1 Step 2), and both end on the same `L`, the higher `(hlc, fp)`. |
 | C7 | A snapshot holds a catalog `del` for K, annotation puts and a `del` for K, and `evaluation`, `series`, `metadata` and `position` records for K. Apply on a fresh device. | The annotations exist under `drive:<K>` with no `books` row and no shelf entry. The other four are `held` in `drive_record_state` with body, op and lineage, and no cursor stalls. A later annotation edit applies. Reading sessions for K are inserted under `drive:<K>` and counted in statistics. |
 | C7b | Continue C7: the reader later restores K (a `books` row for `drive:<K>` appears). A newer `evaluation` for K also arrives while it is held. | On the next run the held records are applied through §3.1 and `held` clears; the newer `evaluation` replaced the held one before that, losing nothing. Before the restore, no `books` row exists and K is not on the shelf. A concurrent held `evaluation` conflict stays hidden until the book exists. |
 | C8 | Incoming keep-body resolution `R` for an annotation: Tx 1 commits, crash before Tx 2, the reader edits the annotation, restart. | Recovery builds `L` from the edit with `R.fp` in `anc`; replay is Stale; the edit stays dirty and is published; the conflict closes as `RESOLVED`; the cursor advances after Tx 2. Without the edit, replay is Agreement. |
@@ -1896,10 +1961,15 @@ order and must end in the same state.
 | C14 | C8 with the reader **deleting** the annotation (not editing it) before restart. Variants: incoming `R` is a `put`; incoming `R` is a keep-body `resolve`. | Recovery sees projection `DELETED` against a live `row_fp`, mints a fresh HLC `h` and builds `L = delFp(d, k, h)` with `R.fp` (receipt `version_fp`) in `anc`. Replay of `R` is Stale, the annotation stays deleted, the `del` (`body: null`) is published, and the cursor advances after Tx 2. |
 | C15 | C9 (b) variants: (a) the reader unarchives and a post-crash edition upload happens; (b) the reader only changes `title` after the crash. | (a) `archiveHlc` is minted once for the unarchive and every other edition, `availabilityHlc` and identifier is unchanged. (b) the receipt's `archiveHlc` is kept unchanged; no new `archiveHlc` is minted. |
 | C16 | A deletes W, B's review `r` is uncovered, so W is revived on A with `reviveFp`. The reader then undoes `r`. The original `del` D (and the original `put` P) are replayed to A, and delivered late to B, in both orders. Variant (live parent): W is live on B at `P = restore.fp` when `D` arrives with `r` uncovered, so B keeps W. Then the reader undoes `r`, and `D` is replayed to B and delivered to C. | `fp(revival) ≠ restore.fp`; D is Stale on every device (`D.fp ∈ anc(revival)`), P is Stale, and W stays live with the same body everywhere. Two devices that revive concurrently from D produce the same `reviveFp` and agree without a conflict. A record with `revives` whose `fp` is not `reviveFp(revives.del, revives.restore)` is rejected as malformed. In the live-parent variant B publishes `fp = reviveFp(D.fp, P)`, not `P`. On B and C `D` is Stale, W stays live, and a device that revived W from absent reaches Agreement with B. Crash variant: crash after Tx 1 and before Tx 2 of A's revival, restart, the reader undoes `r`, then `D` is replayed. Recovery restores `L = reviveFp` from the receipt with `anc = [D.fp, restore.fp]`, the revival is still published, `D` is Stale and W stays live. The same holds when the revival is a peer's revival `put` applied by A. |
-| C17 | B authors review `r` (published, `seq = 5`), adopts A's later update to an occurrence B had also authored, then undoes `r` (final `del` at `seq = 7`). B compacts and prunes its deltas. A fresh device D reads only B's snapshot, with a word `del` from A that covers `r` (`observed = {B: 5}`) and another that does not (`observed = {B: 4}`). | The snapshot holds `r`'s `put` (`seq = 5`) and `del` (`seq = 7`) and B's authored occurrence record with its original `seq`, although `drive_record_state` holds only the adopted or deleted version. D reaches the same state as a device that read the deltas. Crashing between seq allocation and the outbox write leaves neither an authored row nor an outbox row. Cross-stream permutations on a device holding W: `D` (`observed = {B: 4}`) → `r` put (`B:5`) → undo (`B:7`); `r` → `D` → undo; `r` → undo → `D`; and an undo authored by A that arrives before B's `r` put. All four end with W live without `r`, and `r` stored `UNDONE`. On a device without W, the same orders revive W from `restore`. With `observed = {B: 5}` every order ends with W deleted and `r` `UNDONE`. |
+| C17 | B authors review `r` (published, `seq = 5`), adopts A's later update to an occurrence B had also authored, then undoes `r` (final `del` at `seq = 7`). B compacts and prunes its deltas. A fresh device D reads only B's snapshot, with a word `del` from A that covers `r` (`observed = {B: 5}`) and another that does not (`observed = {B: 4}`). | The snapshot holds `r`'s `put` (`seq = 5`) and `del` (`seq = 7`) and B's authored occurrence record with its original `seq`, although `drive_record_state` holds only the adopted or deleted version. D reaches the same state as a device that read the deltas. Crashing between seq allocation and the outbox write leaves neither an authored row nor an outbox row. Variant: the `put` of `r` is still unpublished when the reader undoes it, so both are owed before B's next sync. They freeze into two consecutive batches (`put` at `seq = 5`, `del` at `seq = 6`) in one freeze transaction, each with its own authored row, and neither insert fails or replaces the other. B's snapshot holds both envelopes, and a device reading only that snapshot ends with `r` `UNDONE`. Cross-stream permutations on a device holding W: `D` (`observed = {B: 4}`) → `r` put (`B:5`) → undo (`B:7`); `r` → `D` → undo; `r` → undo → `D`; and an undo authored by A that arrives before B's `r` put. All four end with W live without `r`, and `r` stored `UNDONE`. On a device without W, the same orders revive W from `restore`. With `observed = {B: 5}` every order ends with W deleted and `r` `UNDONE`. |
 | C18 | B has applied A's sessions `s1`, `s2` for K, then receives A's catalog `del` for K. A fresh device reads A's snapshot holding the `del` and both sessions. Both orders. | `s1` and `s2` exist under `drive:<K>` on both devices with no `books` row, and total and per-day durations are equal. Restoring K shows them on the book again. |
 | C19 | A, B and C agree at 50%. B reads to 60%. A pulls B (`Pull`), then pulls C, which is still 50%. Then a fresh device D reconstructs from B's and C's streams, in both orders. | A stays at 60% and keeps a per-device baseline of 60% with B and 50% with C. The account row's `agreed_*` is never read. D opens one position conflict (60% vs 50%) in both orders, and choosing either value converges. |
 | C20 | A delta batch from B holds two `annotation` records `R1`, `R2` (and two `vocabReview` puts). Crash after `R1`'s Tx 2 and before `R2`'s. Repeat with a snapshot whose `annotation` records span parts 0 and 1, crashing after part 0. | `drive_cursor(B, annotation)` is still below the batch `seq` (or below `throughSeq`). On restart `R1` reaches Agreement, `R2` applies, and only then does the cursor move. No record is skipped and the review count is unchanged on replay. |
 | C21 | B holds `EDIT_EDIT` on a rating. A's keep-body `resolve` `R` keeps B's value, so the row value is unchanged. Tx 1 commits, then crash before Tx 2. The reader edits the rating, then restart. Repeat for a metadata `title` override. | Tx 1 raised `acked_revision`, so recovery runs. The edit stays dirty with `R.fp` in `anc` and carries `R.fp` in `resRefs`, replay of `R` is Stale, the conflict closes as `RESOLVED`, and the cursor advances after Tx 2. Without the edit, replay is Agreement. |
 | C22 | A uploads edition X of K (`liseurKind=epub`), and B caches it in `drive_file` as `epub`. The reader then deletes the EPUB in the Drive UI, so B's change feed returns `removed = true` with no `file`. Repeat with `trashed = true` and full metadata. | Both variants route as EPUB changes. The device that sees the change publishes a catalog `put` clearing X's `driveFileId`, `fileName` and `uploadedAt` with a new `availabilityHlc`. No catalog `del` is published, and history is kept. |
 | C23 | Migrate a version-84 database that holds liseur-sync `vocabulary_staged_review` rows to 85. | The rows survive with `state = 'STAGED'` and `NULL` `origin_device_id` / `origin_seq`. liseur-sync staging and attach behave as before. `drive_apply_receipt` exists and is empty. `reading_sessions` has the new columns and the unique index. |
+| C24 | Note N is at version X (`updatedAt = t0`). A edits N to Y, then edits it back to X's exact body while A's wall clock has returned to `t0` (the HLC still advances), then B, which holds Y, pulls. Repeat with B pulling after each step, and with the three records delivered as X, Y, X' and as Y, X', X (a replayed older record) to a fresh device. Run for an `annotation` note, a `vocabWord` note and an `evaluation` review. Variant: A and B independently make the same edit from X, each minting its own `putFp`. | X' has the same body and `contentFp` as X but a different `putFp`, with `anc` holding Y's and X's `fp`. B and the fresh device end on X' in every order, and a replayed Y or X is Stale (`R.fp ∈ anc(X')`), so the revert is never silently replaced by Y. No device finds X and Y mutual ancestors. In the variant the two puts meet in Agreement by content, both end on the higher `(hlc, fp)` with the other `fp` in `anc`, and no conflict opens. The golden suite pins `putFp` for one body at two HLCs (§1.3). |
+| C25 | Two devices A and B delete word W concurrently, giving distinct deletes `D1` and `D2`, with `D1 > D2` on `(hlc, fp)`. `D1.observed = {C: 5}`, `D2.observed = {C: 4}`, and each has its own `restore`. Device X receives `D1` then `D2`, and a second device Y `D2` then `D1`. C's review `r` (`C:5`) arrives later on both. Repeat with `D1.observed = {C: 4}` and `D2.observed = {C: 5}`. | In both orders `L = D1.fp` with `D1`'s `restore_json` and `observed_json`, and the losing delete's payloads are discarded. In the first run `r` is covered on X and Y: W stays deleted and `r` is `COVERED`. In the second run `r` is uncovered on X and Y: W is revived from `D1`'s `restore` on both. The answer never depends on delivery order. |
+| C26 | C holds B's 80% peak for edition E at `seq = 10`. A resets the work with `floors = {B: 10}`. After pulling the reset, B reads to 30% and publishes a peak at `seq = 11`. C receives the `seq = 11` peak before A's reset, then repeat with the reset first. Variant: the `seq = 10` peak is replayed after the reset. | In both orders C ends with exactly one peak for B and E, 30% at `seq = 11`, and `maxFloor[B] = 10`. In the first order `observe` does not make the 30% peak visible, but it is kept as a newer candidate and re-materialized when the reset deletes `seq = 10`. The replayed `seq = 10` peak is dropped. A `seq = 11` peak that is 80% (higher than the `seq = 10` row) replaces it, leaving no candidate chain. |
+| C27 | The reader resolves an annotation `EDIT_EDIT` locally. Tx 1 commits the choice and its `local_version` receipt, then the process crashes before the `op: "resolve"` batch is frozen. After restart, before recovery runs, the reader edits the annotation (variants: the reader deletes it). Repeat for `outcome: "delete"`, for a metadata `title` override, and with a crash before Tx 1. | Recovery finds the receipt with `version_fp = resolveFp` and a changed row (for the metadata override, the raised `acked_revision` with `sent_json.vfp = resolveFp`), and never re-applies the stored choice, so the edit (or deletion) is kept. It becomes a descendant with `resolveFp` in its `anc` and `res_refs`. The stored `resolve` record is frozen in its own batch ahead of the edit's batch, the conflict closes as `RESOLVED`, and a peer applying both in order ends on the edit. Without an edit the version is `resolveFp` and is published. With a crash before Tx 1 (no receipt), the choice is applied from `resolution_json`. |
+| C28 | A rating (and separately a `review`, and a metadata `title` override) is applied remotely: Tx 1 commits and the process crashes before Tx 2. After restart, before recovery runs, the reader clears the rating or resets the override. Variant: the reader clears the field, then sets it again before recovery. | Recovery sees `row.revision > acked_revision` with `value == null` (or `title_override = 0`) and mints `delFp(d, k, h)` with `sent_json.vfp` first in `anc`; `body_json` is `NULL` and the tombstone is owed. Replay of `R` is Stale, a `del` is published, and the override is not restored from fallback metadata. A put with a null value is never built. In the variant the final value is a put with a fresh `putFp` and `sent_json.vfp` in `anc`. |
