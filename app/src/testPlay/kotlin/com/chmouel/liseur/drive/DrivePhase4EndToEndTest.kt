@@ -36,6 +36,7 @@ import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
+import java.security.MessageDigest
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import javax.crypto.KeyGenerator
@@ -1511,6 +1512,54 @@ class DrivePhase4EndToEndTest {
         assertTrue(File(updatedV2.userCoverPath!!).isFile)
         assertTrue(
             deviceB.driveDb.cursors().get(PERM_ID, "dev-a", DriveWireCodec.DOMAIN_METADATA)!!.appliedSeq > cursorAfterFirstCover,
+        )
+    }
+
+    @Test
+    fun `cover install failure defers the record without advancing the cursor and applies on retry`() = runTest {
+        deviceA.connect()
+        deviceB.connect()
+        val bookA = seedBook(deviceA, "cover-install.epub", "9780547928227", "The Hobbit", "J.R.R. Tolkien")
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+        val stubB = "drive:isbn:9780547928227"
+        val cursorBefore = deviceB.driveDb.cursors().get(PERM_ID, "dev-a", DriveWireCodec.DOMAIN_METADATA)!!.appliedSeq
+
+        val repoA = BookMetadataOverrideRepository(
+            bookDao = deviceA.liseurDb.bookDao(),
+            overrideDao = deviceA.liseurDb.bookMetadataOverrideDao(),
+            coversDir = deviceA.coversDir,
+            inTransaction = { work -> deviceA.liseurDb.withTransaction { work() } },
+            encodeCoverJpeg = { it },
+        )
+        assertNotNull(repoA.coverFromBytes(bookA.url, "COVER-INSTALL-IMAGE-BYTES".toByteArray()))
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        // The published cover is the encoded WebP, so its hash comes from the cache file, not the reader's source image.
+        val sha = deviceA.coversDir.listFiles { f -> f.name.startsWith("drive-cover-") }!!.single()
+            .name.removePrefix("drive-cover-").removeSuffix(".webp")
+
+        // A non-empty directory at the install's temp path makes the copy fail, like a full or read-only disk.
+        val bookHash = MessageDigest.getInstance("SHA-1").digest(stubB.toByteArray())
+            .joinToString("") { "%02x".format(it) }.take(16)
+        val blocker = File(deviceB.coversDir, "drive-book-$bookHash-${sha.take(12)}.webp.tmp")
+        assertTrue(File(blocker, "keep").apply { parentFile!!.mkdirs() }.createNewFile())
+
+        deviceB.changeEngine.sync()
+        assertEquals(
+            cursorBefore,
+            deviceB.driveDb.cursors().get(PERM_ID, "dev-a", DriveWireCodec.DOMAIN_METADATA)!!.appliedSeq,
+        )
+        assertFalse(deviceB.liseurDb.bookDao().getByUrl(stubB)!!.coverOverridden)
+        assertTrue(deviceB.liseurDb.bookMetadataOverrideDao().revisions(stubB).isEmpty())
+
+        blocker.deleteRecursively()
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+        val applied = deviceB.liseurDb.bookDao().getByUrl(stubB)!!
+        assertTrue(applied.coverOverridden)
+        assertEquals(sha, applied.userCoverSha256)
+        assertTrue(File(applied.userCoverPath!!).isFile)
+        assertTrue(
+            deviceB.driveDb.cursors().get(PERM_ID, "dev-a", DriveWireCodec.DOMAIN_METADATA)!!.appliedSeq > cursorBefore,
         )
     }
 

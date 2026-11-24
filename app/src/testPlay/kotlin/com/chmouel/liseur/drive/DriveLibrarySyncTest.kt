@@ -26,13 +26,16 @@ import com.chmouel.liseur.domain.MetadataSnapshot
 import com.chmouel.liseur.domain.MetadataSource
 import com.chmouel.liseur.domain.workIdOf
 import com.chmouel.liseur.sync.LibrarySyncSwitchCoordinator
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -793,6 +796,138 @@ class DriveLibrarySyncTest {
         assertEquals(canonical, keyFor("", "URN:UUID:${id.uppercase()}"))
         assertNotEquals(canonical, keyFor("calibre", id))
         assertNotEquals(canonical, keyFor("calibre", "uuid:$id"))
+    }
+
+    @Test
+    fun `deactivating under the switch lock cancels a delete holding the sync lock instead of deadlocking`() = runTest {
+        driveSync.activateAccount("perm-a", "a@example.com", now = 100L)
+        val book = stub("drive:isbn:111")
+        liseurDb.bookDao().upsert(book)
+        val outcome = CompletableDeferred<Result<Boolean>>()
+
+        withContext(Dispatchers.Default) {
+            withTimeout(10_000) {
+                switchCoordinator.withSwitchLock {
+                    launch { outcome.complete(runCatching { driveSync.deleteFromSyncedLibrary(book) }) }
+                    // The delete now owns the sync lock and can only be waiting on the switch lock held here.
+                    while (!driveSync.changeEngine.isSyncLockHeld) delay(1)
+                    driveSync.deactivate()
+                }
+            }
+        }
+
+        assertTrue(outcome.await().exceptionOrNull() is CancellationException)
+        assertNotNull(liseurDb.bookDao().getByUrl(book.url))
+        assertTrue(driveDb.recordStates().forDomain("perm-a", DriveWireCodec.DOMAIN_CATALOG).isEmpty())
+        assertFalse(driveSync.changeEngine.isSyncLockHeld)
+    }
+
+    @Test
+    fun `deactivating under the switch lock cancels a conflict resolution holding the sync lock`() = runTest {
+        driveSync.activateAccount("perm-a", "a@example.com", now = 100L)
+        val conflict = DriveConflict(
+            permissionId = "perm-a",
+            conflictId = "c-1",
+            domain = DriveWireCodec.DOMAIN_ANNOTATION,
+            recordKey = "isbn:111",
+            kind = DriveConflict.KIND_EDIT_EDIT,
+            localFp = "l",
+            remoteFp = "r",
+            remoteDeviceId = "dev",
+            remoteHlc = "h",
+            state = DriveConflict.STATE_OPEN,
+            openedAt = 1L,
+        )
+        val outcome = CompletableDeferred<Result<Unit>>()
+
+        withContext(Dispatchers.Default) {
+            withTimeout(10_000) {
+                switchCoordinator.withSwitchLock {
+                    launch {
+                        outcome.complete(
+                            runCatching {
+                                driveSync.resolveConflicts(listOf(conflict), DriveConflictChoice.KEEP_LOCAL, syncAfter = false)
+                            },
+                        )
+                    }
+                    while (!driveSync.changeEngine.isSyncLockHeld) delay(1)
+                    driveSync.deactivate()
+                }
+            }
+        }
+
+        assertTrue(outcome.await().exceptionOrNull() is CancellationException)
+        assertFalse(driveSync.changeEngine.isSyncLockHeld)
+    }
+
+    @Test
+    fun `a delete waiting on the switch lock does nothing when the account is paused meanwhile`() = runTest {
+        driveSync.activateAccount("perm-a", "a@example.com", now = 100L)
+        val book = stub("drive:isbn:111")
+        liseurDb.bookDao().upsert(book)
+        val outcome = CompletableDeferred<Boolean>()
+
+        withContext(Dispatchers.Default) {
+            withTimeout(10_000) {
+                switchCoordinator.withSwitchLock {
+                    launch { outcome.complete(driveSync.deleteFromSyncedLibrary(book)) }
+                    while (!driveSync.changeEngine.isSyncLockHeld) delay(1)
+                    driveDb.accounts().pauseAllActive()
+                }
+                assertFalse(outcome.await())
+            }
+        }
+
+        assertNotNull(liseurDb.bookDao().getByUrl(book.url))
+        assertTrue(driveDb.recordStates().forDomain("perm-a", DriveWireCodec.DOMAIN_CATALOG).isEmpty())
+    }
+
+    @Test
+    fun `deleting a local edition keeps a stub, alias and history that another account still references`() = runTest {
+        val peerA = DriveLibrarySync.accountPeerId("perm-a")
+        val peerB = DriveLibrarySync.accountPeerId("perm-b")
+        driveSync.activateAccount("perm-b", "b@example.com", now = 100L)
+        val shared = stub("drive:isbn:111")
+        liseurDb.bookDao().upsert(shared)
+        liseurDb.workIdentityDao().upsert(
+            WorkAlias(bookUrl = shared.url, peerId = peerB, workId = "isbn:111", confidence = WorkAlias.HIGH, confirmed = true, resolvedAt = 1L),
+        )
+        liseurDb.readingSessionDao().insert(
+            ReadingSession(
+                bookUrl = shared.url,
+                startedAt = 100L,
+                endedAt = 200L,
+                lastCheckpointAt = 200L,
+                durationMs = 100L,
+                startProgression = 0.0,
+                endProgression = 0.2,
+            ),
+        )
+        driveSync.activateAccount("perm-a", "a@example.com", now = 200L)
+        val local = stub("local:edition").copy(localUri = "file:///edition.epub", downloadState = DownloadState.DOWNLOADED)
+        liseurDb.bookDao().upsert(local)
+        liseurDb.workIdentityDao().upsert(
+            WorkAlias(bookUrl = local.url, peerId = peerA, workId = "isbn:111", confidence = WorkAlias.HIGH, confirmed = true, resolvedAt = 2L),
+        )
+
+        assertTrue(driveSync.deleteFromSyncedLibrary(local))
+
+        assertNotNull(liseurDb.bookDao().getByUrl(local.url))
+        assertNull(liseurDb.workIdentityDao().alias(local.url, peerA))
+        assertNotNull(liseurDb.bookDao().getByUrl(shared.url))
+        assertNotNull(liseurDb.workIdentityDao().alias(shared.url, peerB))
+        assertEquals(1, liseurDb.readingSessionDao().countForBook(shared.url))
+    }
+
+    @Test
+    fun `deleting from the synced library still removes a stub no other account references`() = runTest {
+        driveSync.activateAccount("perm-a", "a@example.com", now = 100L)
+        val stub = stub("drive:isbn:222")
+        liseurDb.bookDao().upsert(stub)
+
+        assertTrue(driveSync.deleteFromSyncedLibrary(stub))
+
+        assertNull(liseurDb.bookDao().getByUrl(stub.url))
     }
 
     private fun stub(url: String) = Book(
