@@ -1001,6 +1001,7 @@ class DriveConflictEngineTest {
         )
         assertEquals(ReconciliationCase.AGREEMENT, result.reconciliationCase)
         assertEquals(resBFp, result.updatedRecordState!!.versionFp)
+        assertEquals("0017450000900-0001-dev-z", result.updatedRecordState!!.lastHlc)
     }
 
     @Test
