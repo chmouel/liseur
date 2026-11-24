@@ -345,7 +345,7 @@ internal object DriveConflictEngine {
                     if (localWins) {
                         Triple(lFp, local.versionOp, local.lastHlc)
                     } else {
-                        Triple(incoming.fp, DriveRecordState.OP_RESOLVE, incoming.hlc)
+                        Triple(incoming.fp, DriveRecordState.OP_RESOLVE, maxOf(local.lastHlc, incoming.hlc))
                     }
                 }
                 isIncomingResolve -> {
