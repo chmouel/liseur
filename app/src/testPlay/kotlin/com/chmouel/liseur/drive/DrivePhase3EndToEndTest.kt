@@ -539,6 +539,13 @@ class DrivePhase3EndToEndTest {
         )
 
         var hlc = 0
+        // A book-scoped sync of the losing edition must not publish into the shared slot.
+        val scopedLoser = deviceA.positionSync.collectDirtyRecords(PERM_ID, "dev-a", bookUrlFilter = older.url) {
+            "00000000${hlc++}-0000-dev-a"
+        }
+        assertEquals(emptyList<String>(), scopedLoser.records.filter { it.d == DriveWireCodec.DOMAIN_POSITION }.map { it.k })
+        assertEquals(emptyList<String>(), scopedLoser.positionAcks.map { it.bookUrl })
+
         val bundle = deviceA.positionSync.collectDirtyRecords(PERM_ID, "dev-a") {
             "00000000${hlc++}-0000-dev-a"
         }
@@ -558,6 +565,11 @@ class DrivePhase3EndToEndTest {
         // The un-acked older edition must not overwrite the winning shared position.
         assertEquals(emptyList<String>(), second.records.filter { it.d == DriveWireCodec.DOMAIN_POSITION }.map { it.k })
         assertEquals(emptyList<String>(), second.positionAcks.map { it.bookUrl })
+
+        val scopedAfterAck = deviceA.positionSync.collectDirtyRecords(PERM_ID, "dev-a", bookUrlFilter = older.url) {
+            "00000000${hlc++}-0000-dev-a"
+        }
+        assertEquals(emptyList<String>(), scopedAfterAck.records.filter { it.d == DriveWireCodec.DOMAIN_POSITION }.map { it.k })
     }
 
     @Test
@@ -686,6 +698,7 @@ class DrivePhase3EndToEndTest {
         // Case 2: Pre-existing .part file resumes from offset, passes SHA-256, moves atomically into place
         driveServer.corruptNextDownload = false
         deviceB.booksDir.mkdirs()
+        deviceB.liseurDb.bookDao().setFileMetadataChecked(stubUrl, true)
         DriveEpubTransferManager.downloadPartFile(deviceB.booksDir, stubUrl, fp.sha256).writeBytes(validBytes.copyOfRange(0, 10))
         val resumed = deviceB.epubTransfers.downloadBook(stubUrl)
         assertTrue(resumed is DriveEpubDownloadOutcome.Downloaded)
@@ -694,6 +707,9 @@ class DrivePhase3EndToEndTest {
         assertTrue(finalFile.isFile)
         assertEquals(validBytes.toList(), finalFile.readBytes().toList())
         assertEquals(DownloadState.DOWNLOADED, deviceB.liseurDb.bookDao().getByUrl(stubUrl)!!.downloadState)
+        // Arriving bytes invalidate what was derived from the previous file, then store the verified fingerprint.
+        assertFalse(deviceB.liseurDb.bookDao().getByUrl(stubUrl)!!.fileMetadataChecked)
+        assertEquals(fp.sha256, deviceB.liseurDb.workIdentityDao().fingerprint(stubUrl)?.sha256)
     }
 
     @Test
