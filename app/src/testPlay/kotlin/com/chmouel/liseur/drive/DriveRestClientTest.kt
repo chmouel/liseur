@@ -631,6 +631,46 @@ class DriveRestClientTest {
     }
 
     @Test
+    fun `listLiseurFolders only matches folders created by Liseur`() = runTest {
+        server.enqueue(MockResponse.Builder().code(200).body("""{"files":[]}""").build())
+
+        client.listLiseurFolders("tok")
+
+        val query = server.takeRequest().url.queryParameter("q")!!
+        assertTrue(query.contains("appProperties has { key='liseur' and value='1' }"))
+        assertTrue(query.contains("appProperties has { key='kind' and value='folder' }"))
+    }
+
+    @Test
+    fun `resumable upload resets retry budget on each advancing 503 probe recovery`() = runTest {
+        val payload = ByteArray(10) { it.toByte() }
+        val sessionUrl = server.url("/upload/session/abc").toString()
+        server.enqueue(MockResponse.Builder().code(200).addHeader("Location", sessionUrl).build())
+        for (end in listOf(1, 3, 5, 7)) {
+            server.enqueue(MockResponse.Builder().code(503).body("retry").build())
+            server.enqueue(MockResponse.Builder().code(308).addHeader("Range", "bytes=0-$end").build())
+        }
+        server.enqueue(
+            MockResponse.Builder().code(200).body("""{"id":"epub-file-1","name":"book.epub","size":"10"}""").build(),
+        )
+
+        val uploaded = client.uploadResumableFile(
+            accessToken = "tok",
+            name = "book.epub",
+            mimeType = "application/epub+zip",
+            totalBytes = payload.size.toLong(),
+            parents = listOf("folder-1"),
+            appProperties = mapOf("liseur" to "1", "liseurKind" to "epub", "sha256" to "abc"),
+            chunkSizeBytes = 2,
+            openStream = { ByteArrayInputStream(payload) },
+            onSessionUri = {},
+            onProgress = { _, _ -> },
+        )
+
+        assertEquals("epub-file-1", uploaded.id)
+    }
+
+    @Test
     fun `resumable upload initiates session, sends chunks, recovers mid-upload 503 via offset probe, and completes`() = runTest {
         val payload = ByteArray(10) { (it + 1).toByte() }
         val sessionUrl = server.url("/upload/session/abc").toString()
