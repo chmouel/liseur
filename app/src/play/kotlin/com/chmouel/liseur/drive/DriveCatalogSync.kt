@@ -8,6 +8,8 @@ import com.chmouel.liseur.data.db.WorkAlias
 import com.chmouel.liseur.data.library.BookRemoval
 import com.chmouel.liseur.domain.MetadataSource
 import java.util.Locale
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -678,36 +680,40 @@ internal class DriveCatalogSync(
 
         // Persist tombstone & pending trash IDs FIRST so a crash or cancellation while trashing
         // remote files never leaves the EPUB gone without recording the catalog deletion.
-        store.withTransaction {
-            for (fid in fileIdsToTrash) {
-                if (driveFiles.get(permissionId, fid) != null) {
-                    driveFiles.setTrashed(permissionId, fid, true)
+        // The tombstone and the local cleanup are one unit: a cancellation after the durable
+        // write must not leave the deletion half-applied, and nothing here touches the network.
+        withContext(NonCancellable) {
+            store.withTransaction {
+                for (fid in fileIdsToTrash) {
+                    if (driveFiles.get(permissionId, fid) != null) {
+                        driveFiles.setTrashed(permissionId, fid, true)
+                    }
                 }
+                for (sha in shasToRemove) {
+                    uploads.delete(permissionId, sha)
+                }
+                recordStates.upsert(
+                    DriveRecordState(
+                        permissionId = permissionId,
+                        domain = DriveWireCodec.DOMAIN_CATALOG,
+                        recordKey = canonicalKey,
+                        versionFp = delFp,
+                        versionOp = DriveRecordState.OP_DEL,
+                        publishedFp = null, // unpublished -> emitted in next delta batch
+                        contentFp = null,
+                        originDeviceId = null,
+                        originSeq = null,
+                        ancestorsJson = DriveCanonicalJson.encode(anc),
+                        resRefsJson = existingState?.resRefsJson ?: "[]",
+                        lastHlc = hlc,
+                        bodyJson = pendingTrashPayload,
+                    ),
+                )
             }
-            for (sha in shasToRemove) {
-                uploads.delete(permissionId, sha)
-            }
-            recordStates.upsert(
-                DriveRecordState(
-                    permissionId = permissionId,
-                    domain = DriveWireCodec.DOMAIN_CATALOG,
-                    recordKey = canonicalKey,
-                    versionFp = delFp,
-                    versionOp = DriveRecordState.OP_DEL,
-                    publishedFp = null, // unpublished -> emitted in next delta batch
-                    contentFp = null,
-                    originDeviceId = null,
-                    originSeq = null,
-                    ancestorsJson = DriveCanonicalJson.encode(anc),
-                    resRefsJson = existingState?.resRefsJson ?: "[]",
-                    lastHlc = hlc,
-                    bodyJson = pendingTrashPayload,
-                ),
-            )
-        }
 
-        // Every local copy of the work is cleaned, not only the selected edition.
-        removeLocalWorkCopies(permissionId, peerId, canonicalKey, selected = book to alias?.workId)
+            // Every local copy of the work is cleaned, not only the selected edition.
+            removeLocalWorkCopies(permissionId, peerId, canonicalKey, selected = book to alias?.workId)
+        }
 
         // Best-effort trash immediately after the tombstone is durable; any remaining IDs
         // stay queued in `pendingTrashFileIds` for the next sync.
