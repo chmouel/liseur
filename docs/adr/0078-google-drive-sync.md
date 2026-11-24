@@ -354,12 +354,13 @@ occurrence edit not yet published, counts as uncovered, and snapshot
 records carry their original publication `seq` so restored children can
 be checked. An uncovered child makes the delete a concurrent write, so
 add-wins keeps the word with all its reviews and occurrences and
-republishes them. The deleted word body is kept as a baseline in
-`vocabulary_word_sync.acked_base_json` and the `del`'s `observed` vector in
-`drive_record_state.observed_json`, so a review or occurrence that arrives
+republishes them. The `del`'s `restore` body is kept in
+`vocabulary_word_sync.acked_base_json` and `drive_record_state.restore_json`,
+and its `observed` vector in `drive_record_state.observed_json`, so a review or occurrence that arrives
 after the tombstone and is not covered restores the word and is
-republished; a covered one is ignored; with no baseline (snapshot rebuild)
-the child stays staged until the author republishes the word. Equal
+republished; a covered one is ignored. The restore payload travels in the
+`del` record itself, so a device that rebuilt from snapshots restores the
+word the same way, with nothing staged. Equal
 timestamps in `mergeWordMetadata` and `mergeOccurrencePair` break by value
 (greater `notes`, definition group, `sentence` or `locator`, never the
 remote side) so the merge is commutative and two devices that swap edits
@@ -556,9 +557,14 @@ Delta batch:
 ```
 
 A `vocabWord` `del` additionally carries `observed`, a
-`{deviceId: seq}` vector of the delta batches its author had applied; it is excluded from `delFp` and lets
-the receiver detect reviews and occurrences the deleter never observed
-before it cascades any delete. Snapshots keep it on the `del` record.
+`{deviceId: seq}` vector of the delta batches its author had applied, and
+`restore`, `{fp, hlc, body}` with the last live word body. Both are excluded
+from `delFp`, the record's own `body` stays `null`, and snapshots keep both on
+the `del` record. `observed` lets the receiver detect reviews and
+occurrences the deleter never observed before it cascades any delete;
+`restore` lets any device, including one rebuilt only from snapshots,
+restore the word when an uncovered one arrives later. A `del` without a
+valid `restore` is malformed and is not applied.
 
 - A batch holds at most 2,000 records and 1 MiB; larger ones split into
   consecutive seqs.
@@ -609,7 +615,7 @@ Each snapshot part carries two sections (`docs/DRIVE_SYNC.md`):
   plus all of its append-only records (`session`, `vocabReview`
   including review `del`s, and `furthest` resets). It never copies other
   devices' records and never drops `del` records in v1; a `vocabWord` `del` keeps its `observed`
-  vector.
+  vector and `restore` payload.
 - `resolutions`: **all** durable completed resolution facts authored by
   this device (`{d, k, resolutionFp, resolvedFps, outcome, hlc}`),
   stored outside the 64-entry `anc` cap and never pruned in v1.
@@ -654,8 +660,14 @@ surviving delta applies the snapshot, which is idempotent.
    beside retained annotations with no later catalog `put`. `annotation`
    records then apply as hidden history under `drive:<workKey>` with no
    `books` row, and `metadata`, `series`, `evaluation` and `position`
-   records are kept in `drive_record_state` only, so no cursor stalls and
-   the shelf entry never returns. If the
+   records are **held**: decided by the normal causal cases but written
+   only to `drive_record_state` (`held = 1`, with body, op and lineage), so
+   no cursor stalls and no update is discarded. When the reader later
+   restores the book, each held record is applied through the same cases
+   against what the book already has. Nothing in this path creates a
+   `books` row, so arriving history never returns the book to the shelf
+   (`BookAnnotation` has no foreign key to `books`, so hidden annotations
+   are safe). If the
    author prunes those deltas meanwhile, the reader falls back to the
    author's snapshot, which carries the record's latest version.
 5. Among app-created `Liseur` folders, the one with the lowest
@@ -681,7 +693,7 @@ restored device gets its own `deviceId`.
 | `drive_cursor` | `(permission_id, device_id, domain)` | `applied_seq`, `paused_schema_version` |
 | `drive_file` | `(permission_id, file_id)` | `name`, `kind`, `device_id`, `seq`, `sha256`, `size`, `md5`, `trashed`, `created_time`; index `(permission_id, kind, sha256)` |
 | `drive_outbox` | `(permission_id, seq)` | `batch_id`, `payload`, `state` (BUILT / UPLOADED / ACKED), `file_id`, `created_at` |
-| `drive_record_state` | `(permission_id, domain, record_key)` | `version_fp`, `version_op`, `published_fp`, `content_fp`, `last_synced_revision`, `origin_device_id`, `origin_seq`, `ancestors_json`, `res_refs_json`, `last_hlc`, `body_json`, `observed_json` (`vocabWord` `del` only) |
+| `drive_record_state` | `(permission_id, domain, record_key)` | `version_fp`, `version_op`, `published_fp`, `content_fp`, `last_synced_revision`, `origin_device_id`, `origin_seq`, `ancestors_json`, `res_refs_json`, `last_hlc`, `body_json`, `observed_json` and `restore_json` (`vocabWord` `del` only), `held` (book tombstoned, version not yet applied to `liseur.db`) |
 | `drive_resolution` | `(permission_id, domain, record_key, resolution_fp)` | `resolved_fps_json`, `outcome` (`put` / `delete`), `hlc`, `author_device_id`, `created_at` |
 | `drive_conflict` | `(permission_id, conflict_id)` | `domain`, `record_key`, `book_url`, `kind`, `local_fp`, `remote_fp`, `remote_json`, `remote_device_id`, `remote_hlc`, `state` (OPEN / RESOLVING / RESOLVED), `choice`, `resolution_fp`, `opened_at`, `resolved_at` |
 | `drive_session_ack` | `(permission_id, remote_session_id)` | `batch_seq`, `acked_at` |
@@ -862,8 +874,9 @@ Mutual exclusion invariant: never both `remote_server.id = 1` and a
    locally when the EPUB is downloaded.
 3. Vocabulary delete versus concurrent review, occurrence or edit: add-wins,
    silently. A review that arrives after the word's tombstone and was not
-   covered by its `observed` vector restores the word from the retained
-   deleted baseline.
+   covered by its `observed` vector restores the word from the `restore`
+   payload carried by the `del` itself, which snapshots keep, so a device
+   rebuilt from snapshots restores it too.
 4. Concurrent differing resolutions: higher HLC wins silently by `(hlc,
    fp)` lexicographical order **only** when both current versions are
    themselves competing `op: "resolve"` records (whether keep-vs-keep or
