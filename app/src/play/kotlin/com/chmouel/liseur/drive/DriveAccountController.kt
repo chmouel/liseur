@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -22,9 +23,10 @@ data class LocalLibrarySummary(
     val booksCount: Int,
     val notesCount: Int,
     val readingSessionsCount: Int,
+    val vocabularyWordsCount: Int = 0,
 ) {
     val hasLocalData: Boolean
-        get() = booksCount > 0 || notesCount > 0 || readingSessionsCount > 0
+        get() = booksCount > 0 || notesCount > 0 || readingSessionsCount > 0 || vocabularyWordsCount > 0
 }
 
 /**
@@ -39,6 +41,8 @@ data class PendingAccountSwitchConfirmation(
     val targetEmail: String,
     val localSummary: LocalLibrarySummary,
     val mainServerConnected: Boolean,
+    /** The connection the reader was shown; activation re-asks if another one replaced it. */
+    val confirmedServer: ServerConnectionStamp? = null,
 ) {
     val isAccountSwitch: Boolean
         get() = previousAccount != null && previousAccount.permissionId != targetPermissionId
@@ -92,6 +96,10 @@ internal class DriveAccountController(
     @Volatile
     private var accountGeneration = 0L
     private val ephemeral = MutableStateFlow(EphemeralState())
+
+    /** True only while an interactive authorization result is expected; anything else is stale. */
+    @Volatile
+    private var awaitingAuthorizationResult = false
 
     /**
      * Transient access token held only in memory while awaiting confirmation
@@ -192,6 +200,7 @@ internal class DriveAccountController(
                     is DriveAuthResult.NeedsResolution -> {
                         if (result.pendingIntent != null) {
                             awaitingActivityResult = true
+                            awaitingAuthorizationResult = true
                             ephemeral.value = ephemeral.value.copy(
                                 busy = true,
                                 pendingAuthIntent = result.pendingIntent,
@@ -232,9 +241,22 @@ internal class DriveAccountController(
         ephemeral.value = ephemeral.value.copy(pendingAuthIntent = null)
     }
 
+    /**
+     * Drops an interactive authorization whose result can no longer be delivered
+     * (the settings section left composition), freeing the controller for a retry.
+     * A result that still arrives later is ignored.
+     */
+    fun abandonAuthorization() {
+        if (!awaitingAuthorizationResult) return
+        awaitingAuthorizationResult = false
+        ephemeral.update { it.copy(busy = false, pendingAuthIntent = null) }
+    }
+
     /** Handles the result of launching Play Services' interactive authorization [PendingIntent]. */
     suspend fun onAuthorizationActivityResult(resultCode: Int, data: Intent?) {
         transitionMutex.withLock {
+            if (!awaitingAuthorizationResult) return
+            awaitingAuthorizationResult = false
             ephemeral.value = ephemeral.value.copy(pendingAuthIntent = null)
             try {
                 if (resultCode != Activity.RESULT_OK || data == null) {
@@ -315,6 +337,7 @@ internal class DriveAccountController(
                     email = pending.targetEmail,
                     now = clock(),
                     confirmedDisconnectServer = pending.mainServerConnected,
+                    confirmedServer = pending.confirmedServer,
                 )
                 pendingAccessToken = null
                 ephemeral.value = EphemeralState()
@@ -325,7 +348,10 @@ internal class DriveAccountController(
             } catch (e: MainServerConnectedException) {
                 ephemeral.value = ephemeral.value.copy(
                     busy = false,
-                    pendingConfirmation = pending.copy(mainServerConnected = true),
+                    pendingConfirmation = pending.copy(
+                        mainServerConnected = true,
+                        confirmedServer = e.server,
+                    ),
                 )
             } catch (e: Exception) {
                 ephemeral.value = ephemeral.value.copy(
@@ -360,6 +386,7 @@ internal class DriveAccountController(
     /** Disconnects Google Drive, pausing workers and keeping all local Drive state intact. */
     suspend fun disconnect() {
         transitionMutex.withLock {
+            awaitingAuthorizationResult = false
             accountGeneration++
             pendingAccessToken = null
             ephemeral.value = EphemeralState()
@@ -464,13 +491,26 @@ internal class DriveAccountController(
 
     /** Reads exact local library counts from `liseur.db` for the confirmation dialog. */
     internal suspend fun readLocalLibrarySummary(): LocalLibrarySummary {
-        val books = database.bookDao().allOnce().count { it.browseServerId == null || it.localUri != null }
+        val bookDao = database.bookDao()
+        // Untouched previews of a connected server are deleted on activation, so they are not
+        // books Drive will carry.
+        val discarded = if (remoteAccount.current() != null) {
+            val preserved = bookDao.remoteNotDownloadedPreservedStubs().mapTo(HashSet()) { it.url }
+            bookDao.remoteNotDownloadedUrls().filterNotTo(HashSet()) { it in preserved }
+        } else {
+            emptySet()
+        }
+        val books = bookDao.allOnce().count {
+            (it.browseServerId == null || it.localUri != null) && it.url !in discarded
+        }
         val notes = database.annotationDao().all().size
         val sessions = database.readingSessionDao().closedForBackup().size
         return LocalLibrarySummary(
             booksCount = books,
             notesCount = notes,
             readingSessionsCount = sessions,
+            // Only unowned words: other accounts' vocabulary is not this library's to disclose.
+            vocabularyWordsCount = database.vocabularyDao().countForOwner(""),
         )
     }
 
@@ -507,7 +547,8 @@ internal class DriveAccountController(
             primaryExisting.permissionId == about.permissionId
 
         val localSummary = readLocalLibrarySummary()
-        val mainServerConnected = remoteAccount.current() != null
+        val connectedServer = remoteAccount.current()?.let(::ServerConnectionStamp)
+        val mainServerConnected = connectedServer != null
 
         val needsConfirmation = isSwitchingFromOtherAccount ||
             mainServerConnected ||
@@ -530,6 +571,7 @@ internal class DriveAccountController(
                     targetEmail = about.emailAddress.ifBlank { about.permissionId },
                     localSummary = localSummary,
                     mainServerConnected = mainServerConnected,
+                    confirmedServer = connectedServer,
                 ),
             )
             return
@@ -560,6 +602,7 @@ internal class DriveAccountController(
                     targetEmail = about.emailAddress.ifBlank { about.permissionId },
                     localSummary = localSummary,
                     mainServerConnected = true,
+                    confirmedServer = e.server,
                 ),
             )
         } catch (e: Exception) {
