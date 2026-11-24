@@ -20,9 +20,11 @@ import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import okhttp3.ResponseBody.Companion.toResponseBody
+import okio.BufferedSink
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -298,7 +300,7 @@ class DriveRestClient(
             Request.Builder()
                 .url(createUrl)
                 .header("Authorization", bearer(accessToken))
-                .post(metadata.toString().toRequestBody(JSON_MEDIA_TYPE))
+                .post(metadata.toString().toRequestBody(JSON_MEDIA_TYPE).oneShot())
                 .build()
         }
         val created = parseDriveFile(parseJsonObject(createdBody, "createFolder"))
@@ -446,7 +448,7 @@ class DriveRestClient(
             val request = Request.Builder()
                 .url(uploadUrl)
                 .header("Authorization", bearer(accessToken))
-                .post(multipart.bytes.toRequestBody("multipart/related; boundary=${multipart.boundary}".toMediaType()))
+                .post(multipart.bytes.toRequestBody("multipart/related; boundary=${multipart.boundary}".toMediaType()).oneShot())
                 .build()
 
             try {
@@ -509,7 +511,7 @@ class DriveRestClient(
             Request.Builder()
                 .url(uploadUrl)
                 .header("Authorization", bearer(accessToken))
-                .post(multipart.bytes.toRequestBody("multipart/related; boundary=${multipart.boundary}".toMediaType()))
+                .post(multipart.bytes.toRequestBody("multipart/related; boundary=${multipart.boundary}".toMediaType()).oneShot())
                 .build()
         }
         return parseDriveFile(parseJsonObject(body, "createAppDataFile"))
@@ -820,7 +822,8 @@ class DriveRestClient(
                         mimeType = mimeType,
                     )
                 } catch (e: DriveQuotaException) {
-                    if (e.isStorageQuota || attempt >= maxRetries || shouldDeferRetry(e.retryAfterMs)) throw e
+                    val rateLimited = e.httpCode == 429 || e.reason in RETRYABLE_403_RATE_LIMIT_REASONS
+                    if (!rateLimited || attempt >= maxRetries || shouldDeferRetry(e.retryAfterMs)) throw e
                     sleep(computeBackoffMs(attempt, e.retryAfterMs))
                     attempt++
                     when (val probed = queryResumableUploadOffset(accessToken, activeUri, totalBytes)) {
@@ -1123,10 +1126,32 @@ class DriveRestClient(
     private suspend fun executeCall(
         request: Request,
         streamSuccessBody: Boolean = false,
-    ): Response = withContext(Dispatchers.IO) {
+    ): Response {
+        // A cancelled caller can drop the value `withContext` returns, so the
+        // streaming response stays reachable here until the hand-off completes.
+        var undelivered: Response? = null
+        try {
+            val result = withContext(Dispatchers.IO) {
+                executeCallBlocking(request, streamSuccessBody) { undelivered = it }
+            }
+            undelivered = null
+            return result
+        } finally {
+            undelivered?.close()
+        }
+    }
+
+    private fun executeCallBlocking(
+        request: Request,
+        streamSuccessBody: Boolean,
+        onStreaming: (Response) -> Unit,
+    ): Response {
         val response = client.newCall(request).execute()
-        if (streamSuccessBody && response.isSuccessful) return@withContext response
-        response.use { res ->
+        if (streamSuccessBody && response.isSuccessful) {
+            onStreaming(response)
+            return response
+        }
+        return response.use { res ->
             val declared = res.body.contentLength()
             if (declared > MAX_BUFFERED_BODY_BYTES) throw oversizedBody(request, declared)
             val buffer = ByteArrayOutputStream()
@@ -1422,6 +1447,18 @@ class DriveRestClient(
         private val UPLOAD_RANGE_REGEX = Regex("""bytes=0-(\d+)""")
         private val DOWNLOAD_CONTENT_RANGE_REGEX = Regex("""bytes\s+(\d+)-(\d+)/(\d+|\*)""")
         private val UNSATISFIABLE_RANGE_REGEX = Regex("""bytes\s+\*/(\d+)""")
+
+        // OkHttp replays a 503 carrying `Retry-After: 0` itself unless the body is
+        // one-shot, which would repost a create that may already have committed.
+        private fun RequestBody.oneShot(): RequestBody {
+            val delegate = this
+            return object : RequestBody() {
+                override fun contentType() = delegate.contentType()
+                override fun contentLength() = delegate.contentLength()
+                override fun writeTo(sink: BufferedSink) = delegate.writeTo(sink)
+                override fun isOneShot() = true
+            }
+        }
 
         fun defaultClient(): OkHttpClient = RemoteHttp.default().newBuilder()
             .followRedirects(false)
