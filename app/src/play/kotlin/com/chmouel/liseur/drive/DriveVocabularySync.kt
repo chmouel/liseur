@@ -507,8 +507,17 @@ internal class DriveVocabularySync(
                     )
                     if (record.d == DriveWireCodec.DOMAIN_VOCAB_WORD && record.op == DriveRecordState.OP_DEL) {
                         val occPrefix = "${record.k}/"
+                        val wordKeys = recordStates.forDomain(permissionId, DriveWireCodec.DOMAIN_VOCAB_WORD)
+                            .map { it.recordKey }
                         for (occState in recordStates.forDomain(permissionId, DriveWireCodec.DOMAIN_VOCAB_OCCURRENCE)) {
-                            if (occState.recordKey.startsWith(occPrefix)) {
+                            if (!occState.recordKey.startsWith(occPrefix)) continue
+                            val ownerWordKey = occState.bodyJson
+                                ?.let { raw -> runCatching { JSONObject(raw).optString("wordKey") }.getOrNull() }
+                                ?.takeIf { it.isNotEmpty() }
+                                ?: wordKeys
+                                    .filter { occState.recordKey.startsWith("$it/") }
+                                    .maxByOrNull { it.length }
+                            if (ownerWordKey == null || ownerWordKey == record.k) {
                                 recordStates.delete(permissionId, DriveWireCodec.DOMAIN_VOCAB_OCCURRENCE, occState.recordKey)
                             }
                         }

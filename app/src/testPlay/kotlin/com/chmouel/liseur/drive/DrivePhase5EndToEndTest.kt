@@ -804,6 +804,44 @@ class DrivePhase5EndToEndTest {
     }
 
     @Test
+    fun `deleting a word keeps occurrence state of a word whose key extends it`() = runTest {
+        deviceA.connect(PERM_A, "a@example.com")
+        val bookA = seedBook(deviceA, "prince-slash.epub", "9780156012196", "Le Petit Prince", "Antoine")
+        val now = 1_745_000_000_000L
+        val ids = listOf("and", "and/or").map { norm ->
+            val id = deviceA.liseurDb.vocabularyDao().insertWord(
+                VocabularyWord(word = norm, normalized = norm, language = "en", definition = "", translationLanguage = "en", addedAt = now, dueAt = now),
+            )
+            deviceA.liseurDb.vocabularyDao().insertOccurrence(
+                VocabularyOccurrence(
+                    wordId = id,
+                    bookUrl = bookA.url,
+                    bookTitle = "Le Petit Prince",
+                    locationKey = "ch01#p1",
+                    locator = """{"href":"ch01.xhtml"}""",
+                    sentence = "Sentence with $norm.",
+                    lastSeenAt = now,
+                    encounters = 1,
+                ),
+            )
+            id
+        }
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        val states = deviceA.driveDb.recordStates()
+        val andKey = DriveVocabularySync.wordKey("en", "and")
+        val andOrKey = DriveVocabularySync.wordKey("en", "and/or")
+        suspend fun occKeys() = states.forDomain(PERM_A, DriveWireCodec.DOMAIN_VOCAB_OCCURRENCE).map { it.recordKey }
+        assertEquals(2, occKeys().size)
+
+        VocabularyRepository(deviceA.liseurDb).deleteWord(ids[0])
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+
+        val remaining = occKeys()
+        assertTrue("and/or occurrence state must survive: $remaining", remaining.any { it.startsWith("$andOrKey/") })
+        assertTrue("and occurrence state must be removed: $remaining", remaining.none { it.startsWith("$andKey/") && !it.startsWith("$andOrKey/") })
+    }
+
+    @Test
     fun `occurrences arriving before their parent word are deferred and applied once the word arrives`() = runTest {
         val isolatedServer = Phase5FakeDriveServer()
         // Note device ID ordering: "dev-b-editor" sorts lexicographically BEFORE "dev-z-creator".
