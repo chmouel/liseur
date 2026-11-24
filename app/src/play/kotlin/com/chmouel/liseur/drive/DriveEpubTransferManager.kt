@@ -9,6 +9,7 @@ import com.chmouel.liseur.data.db.BookFingerprintRow
 import com.chmouel.liseur.data.db.DownloadState
 import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.data.library.BookFingerprintStore
+import com.chmouel.liseur.data.library.BookRemoval
 import com.chmouel.liseur.data.library.openableUri
 import com.chmouel.liseur.domain.BookFingerprints
 import java.io.File
@@ -82,6 +83,19 @@ internal class DriveEpubTransferManager(
 ) {
     private val books get() = database.bookDao()
     private val identities get() = database.workIdentityDao()
+    private val bookRemoval by lazy {
+        BookRemoval(
+            bookDao = database.bookDao(),
+            sessionDao = database.readingSessionDao(),
+            peerStateDao = database.syncPeerStateDao(),
+            identityDao = database.workIdentityDao(),
+            progressDao = database.readingProgressDao(),
+            annotationDao = database.annotationDao(),
+            annotationSyncDao = database.annotationSyncDao(),
+            inTransaction = { work -> database.withTransaction { work() } },
+            metadataDao = database.bookMetadataDao(),
+        )
+    }
     private val accounts get() = store.accounts()
     private val uploads get() = store.uploads()
     private val driveFiles get() = store.files()
@@ -494,7 +508,7 @@ internal class DriveEpubTransferManager(
         val localUri = Uri.fromFile(targetFile).toString()
         val downloadedAt = clock()
         val modifiedAt = targetFile.lastModified()
-        books.markDownloaded(book.url, localUri, downloadedAt, modifiedAt)
+        bookRemoval.downloadArrived(book.url, localUri, downloadedAt, modifiedAt)
         identities.upsert(
             BookFingerprintRow(
                 bookUrl = book.url,

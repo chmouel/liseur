@@ -14,9 +14,12 @@ import androidx.work.PeriodicWorkRequest
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import androidx.work.await
 import com.chmouel.liseur.container
 import com.chmouel.liseur.data.calibre.BookDownloadRepository
+import com.chmouel.liseur.data.calibre.resolveWorkId
 import com.chmouel.liseur.data.remote.SyncOutcome
+import kotlinx.coroutines.flow.first
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 import org.readium.r2.shared.util.AbsoluteUrl
@@ -227,18 +230,19 @@ internal object DriveSyncWorkers {
         )
     }
 
-    fun enqueueEpubDownload(
+    suspend fun enqueueEpubDownload(
         context: Context,
         bookUrl: String,
         allowMetered: Boolean,
-    ): UUID {
+    ): UUID? {
+        val wm = WorkManager.getInstance(context.applicationContext)
+        val name = epubDownloadWorkName(bookUrl)
+        val workInfos = wm.getWorkInfosForUniqueWorkFlow(name)
+        val previous = workInfos.first()
+        previous.firstOrNull { !it.state.isFinished }?.let { return it.id }
         val request = buildEpubDownloadRequest(bookUrl = bookUrl, allowMetered = allowMetered)
-        WorkManager.getInstance(context.applicationContext).enqueueUniqueWork(
-            epubDownloadWorkName(bookUrl),
-            ExistingWorkPolicy.KEEP,
-            request,
-        )
-        return request.id
+        wm.enqueueUniqueWork(name, ExistingWorkPolicy.KEEP, request).await()
+        return resolveWorkId(request.id, previous.mapTo(mutableSetOf()) { it.id }, workInfos.first().map { it.id })
     }
 
     fun cancelEpubDownload(context: Context, bookUrl: String) {
