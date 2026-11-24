@@ -71,4 +71,17 @@ class FurthestPositionDaoTest {
         db.readingProgressDao().forget("book")
         assertNull(dao.delivered("account", "book", "work"))
     }
+
+    @Test
+    fun `deleteUpToForOrigin drops only rows for the matching origin at or below floor`() = runTest {
+        dao.observe(candidate(0.5, 10, edition = "ed1", origin = "dev-a"))
+        dao.observe(candidate(0.6, 15, edition = "ed2", origin = "dev-a"))
+        dao.observe(candidate(0.7, 5, edition = "ed1", origin = "dev-b"))
+
+        dao.deleteUpToForOrigin("account", "work", "dev-a", 10L)
+
+        val remaining = dao.forWork("account", "work")
+        assertEquals(2, remaining.size)
+        assertEquals(setOf("ed2:dev-a", "ed1:dev-b"), remaining.map { "${it.edition}:${it.origin}" }.toSet())
+    }
 }

@@ -217,4 +217,28 @@
         <item quantity="one">%d unresolved conflict</item>
         <item quantity="other">%d unresolved conflicts</item>
     </plurals>
+    <string name="drive_sync_now">Sync now</string>
+    <string name="drive_sync_syncing">Syncing with Google Drive…</string>
+    <string name="drive_sync_upload_epubs">Upload EPUB files</string>
+    <string name="drive_sync_upload_epubs_title">Upload EPUB files</string>
+    <string name="drive_sync_upload_epubs_intro">Choose which locally available EPUB files to upload to your Google Drive Liseur folder. Your catalog, notes, and reading progress already sync for your whole library.</string>
+    <string name="drive_sync_upload_epubs_empty">No locally available EPUB files found on this device.</string>
+    <string name="drive_sync_upload_epubs_select_all">Select all</string>
+    <string name="drive_sync_upload_epubs_clear">Clear</string>
+    <string name="drive_sync_upload_epubs_unmetered_only">Upload EPUB files on Wi-Fi only</string>
+    <string name="drive_sync_upload_epubs_unmetered_summary">Wait for an unmetered connection before transferring bulk EPUB files.</string>
+    <string name="drive_sync_upload_epubs_confirm">Upload selected</string>
+    <string name="drive_sync_upload_epubs_status_uploaded">Uploaded</string>
+    <string name="drive_sync_upload_epubs_status_pending">Pending</string>
+    <string name="drive_sync_upload_epubs_status_uploading">Uploading</string>
+    <string name="drive_sync_upload_epubs_status_failed">Failed</string>
+    <plurals name="drive_sync_upload_epubs_selection_summary">
+        <item quantity="one">%1$d book selected · %2$s</item>
+        <item quantity="other">%1$d books selected · %2$s</item>
+    </plurals>
+    <string name="drive_sync_upgrade_required">Update Liseur to read newer Google Drive sync changes from %1$s.</string>
+    <string name="drive_sync_match_section_title">Possible duplicate books</string>
+    <string name="drive_sync_match_body">“%1$s” looks like the same book as “%2$s” on Google Drive. Merge them to share reading progress?</string>
+    <string name="drive_sync_match_merge">Merge books</string>
+    <string name="drive_sync_match_keep_separate">Keep separate</string>
 </resources>

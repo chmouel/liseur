@@ -96,7 +96,7 @@ class LiseurApplication : Application(), SingletonImageLoader.Factory {
                             now,
                             kosync = container.kosyncAccount.current(),
                             externalLibrarySyncActive = container.librarySync.isActive(),
-                        )
+                        ) || container.librarySync.shouldSyncOnForeground(now)
                         if (!due) return@launch
                         runCatching { container.positionSync.request(SyncScope.Full, now) }
                     }
