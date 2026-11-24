@@ -450,8 +450,9 @@ internal class DriveEpubTransferManager(
                 continue
             }
 
-            // Deduplicate if an identical non-trashed EPUB already exists in any Liseur/ folder.
-            val existingRemote = driveFiles.byKindAndSha256(permissionId, DriveFile.KIND_EPUB, sha).firstOrNull()
+            val advertised = catalogSync.advertisedEpubFileIds(permissionId)[sha].orEmpty()
+            val existingRemote = driveFiles.byKindAndSha256(permissionId, DriveFile.KIND_EPUB, sha)
+                .firstOrNull { it.fileId in advertised }
             if (existingRemote != null) {
                 if (uploads.markUploadedIfSelected(permissionId, sha, existingRemote.fileId, clock()) > 0) {
                     uploadedCount++
