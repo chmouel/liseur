@@ -13,6 +13,7 @@ import java.util.concurrent.TimeUnit
 import kotlin.math.min
 import kotlin.random.Random
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrl
@@ -895,6 +896,9 @@ class DriveRestClient(
                     }
                 }
             }
+        } catch (e: Throwable) {
+            chunks.close(e)
+            throw e
         } finally {
             chunks.close()
         }
@@ -1183,19 +1187,28 @@ class DriveRestClient(
                 position = offset + filled
                 if (filled == length) buffer else buffer.copyOf(filled)
             } catch (e: Throwable) {
-                close()
+                closeStream(e)
                 throw e
             }
         }
 
-        fun close() {
+        /** Closes on IO even when cancelled; a failing close never replaces [primary] or the result. */
+        suspend fun close(primary: Throwable? = null) {
+            withContext(Dispatchers.IO + NonCancellable) { closeStream(primary) }
+        }
+
+        private fun closeStream(primary: Throwable?) {
             val stream = input
             input = null
-            stream?.close()
+            try {
+                stream?.close()
+            } catch (e: Exception) {
+                if (primary != null && primary !== e) primary.addSuppressed(e)
+            }
         }
 
         private fun reopenAt(offset: Long): InputStream {
-            close()
+            closeStream(null)
             val stream = openStream()
             input = stream
             position = 0L
