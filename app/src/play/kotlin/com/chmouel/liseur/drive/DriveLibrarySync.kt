@@ -481,7 +481,9 @@ internal class DriveLibrarySync(
     }
 
     @Composable
-    override fun BookManageAction(book: Book, onDone: () -> Unit) = Unit
+    override fun BookManageAction(book: Book, onDone: () -> Unit) {
+        DriveBookManageAction(controller = accountController, book = book, onDone = onDone)
+    }
 
     /** Stops background workers and transitions [permissionId] to `NEEDS_RECONNECT` while preserving all state. */
     internal suspend fun markNeedsReconnect(permissionId: String, reason: String) {

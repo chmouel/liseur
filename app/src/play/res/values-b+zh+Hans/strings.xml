@@ -224,4 +224,36 @@
     <plurals name="drive_sync_upload_epubs_selection_summary">
         <item quantity="other">已选择 %1$d 本书 · %2$s</item>
     </plurals>
+    <string name="drive_sync_account_summary_conflicts">%1$s · %2$s · %3$s</string>
+    <string name="drive_sync_resolve_conflicts">解决冲突</string>
+    <string name="drive_sync_conflicts_dialog_title">解决同步冲突</string>
+    <string name="drive_sync_conflicts_dialog_intro">选择要保留的版本。你的选择会同步到其他设备。</string>
+    <string name="drive_sync_conflicts_dialog_close">关闭</string>
+    <string name="drive_sync_conflict_local_label">此设备上</string>
+    <string name="drive_sync_conflict_remote_label">其他设备上</string>
+    <string name="drive_sync_conflict_deleted_value">已删除</string>
+    <string name="drive_sync_conflict_keep_mine">保留我的</string>
+    <string name="drive_sync_conflict_keep_other">保留另一个</string>
+    <string name="drive_sync_conflict_keep_edited_note">保留编辑后的笔记</string>
+    <string name="drive_sync_conflict_delete_note">删除笔记</string>
+    <string name="drive_sync_conflict_keep_edited">保留编辑</string>
+    <string name="drive_sync_conflict_delete_value">删除</string>
+    <string name="drive_sync_conflict_series_keep_mine">保留此设备的顺序</string>
+    <string name="drive_sync_conflict_series_keep_other">保留其他设备的顺序</string>
+    <string name="drive_sync_conflict_domain_annotation">批注</string>
+    <string name="drive_sync_conflict_domain_evaluation">评分和书评</string>
+    <string name="drive_sync_conflict_domain_metadata">书籍详情</string>
+    <string name="drive_sync_conflict_domain_series">系列顺序</string>
+    <string name="drive_sync_conflict_field_rating">评分</string>
+    <string name="drive_sync_conflict_field_review">书评</string>
+    <string name="drive_sync_conflict_field_title">标题</string>
+    <string name="drive_sync_conflict_field_author">作者</string>
+    <string name="drive_sync_conflict_field_description">简介</string>
+    <string name="drive_sync_conflict_field_cover">自定义封面</string>
+    <string name="drive_sync_delete_from_library">从同步书库中删除</string>
+    <string name="drive_sync_delete_from_library_title">从同步书库中删除？</string>
+    <string name="drive_sync_delete_from_library_warning_remote">“%1$s”将从你的 Google Drive 同步书库中移除，其已上传的 EPUB 将移至 Google Drive 回收站。你的笔记和高亮会保留。</string>
+    <string name="drive_sync_delete_from_library_warning_local">“%1$s”将从你的 Google Drive 同步书库中移除，其已上传的 EPUB 将移至 Google Drive 回收站。此设备上的本地文件不受影响。</string>
+    <string name="drive_sync_delete_from_library_confirm">从同步书库中删除</string>
+    <string name="drive_sync_delete_from_library_failed">无法从同步书库中删除。请重试。</string>
 </resources>
