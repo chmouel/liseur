@@ -425,14 +425,15 @@ interface DriveUploadDao {
 
     @Query(
         "UPDATE drive_upload SET state = :state, updated_at = :updatedAt " +
-            "WHERE permission_id = :permissionId AND sha256 = :sha256",
+            "WHERE permission_id = :permissionId AND sha256 = :sha256 " +
+            "AND state IN ('PENDING', 'UPLOADING', 'FAILED')",
     )
     suspend fun updateState(
         permissionId: String,
         sha256: String,
         state: String,
         updatedAt: Long,
-    )
+    ): Int
 
     @Query(
         "UPDATE drive_upload SET state = 'UPLOADED', file_id = :fileId, session_uri = NULL, " +
@@ -454,6 +455,12 @@ interface DriveUploadDao {
             "AND state = 'UPLOADED' AND file_id = :fileId",
     )
     suspend fun deleteUploadedByFileId(permissionId: String, fileId: String)
+
+    @Query(
+        "DELETE FROM drive_upload WHERE permission_id = :permissionId AND sha256 = :sha256 " +
+            "AND book_url = :bookUrl AND state IN ('PENDING', 'UPLOADING', 'FAILED')",
+    )
+    suspend fun deleteIfSelected(permissionId: String, sha256: String, bookUrl: String): Int
 
     @Query("DELETE FROM drive_upload WHERE permission_id = :permissionId AND sha256 = :sha256")
     suspend fun delete(permissionId: String, sha256: String)
