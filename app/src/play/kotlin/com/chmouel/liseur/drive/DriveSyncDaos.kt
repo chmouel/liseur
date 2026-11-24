@@ -229,11 +229,17 @@ interface DriveRecordStateDao {
     @Upsert
     suspend fun upsert(state: DriveRecordState)
 
+    @Upsert
+    suspend fun upsertAll(states: List<DriveRecordState>)
+
     @Query(
         "DELETE FROM drive_record_state WHERE permission_id = :permissionId AND domain = :domain " +
             "AND record_key = :recordKey",
     )
     suspend fun delete(permissionId: String, domain: String, recordKey: String)
+
+    @Query("DELETE FROM drive_record_state WHERE permission_id = :permissionId AND domain = :domain")
+    suspend fun deleteDomain(permissionId: String, domain: String)
 }
 
 @Dao

@@ -1903,6 +1903,206 @@ class DrivePhase6CompactionAndResilienceTest {
         )
     }
 
+    private suspend fun reviewSyncIds(device: Phase6Device, language: String, normalized: String): Set<String> {
+        val word = device.liseurDb.vocabularyDao().findWord(normalized, language) ?: return emptySet()
+        return device.liseurDb.vocabularyDao().reviews(word.id).mapNotNull { it.syncId }.toSet()
+    }
+
+    private suspend fun reviewWord(
+        device: Phase6Device,
+        language: String,
+        normalized: String,
+        now: Long,
+    ): String {
+        val before = reviewSyncIds(device, language, normalized)
+        val card = device.liseurDb.vocabularyDao().findWord(normalized, language)!!
+        assertNotNull(VocabularyRepository(device.liseurDb).review(card, Recall.GOOD, 0, 0, now = now))
+        return (reviewSyncIds(device, language, normalized) - before).single()
+    }
+
+    @Test
+    fun `authored version index is stored in bounded per-key rows and round-trips for 20k keys`() = runTest {
+        val devA = createDevice(deviceId = "dev-a")
+        devA.connect()
+        val book = seedBook(devA, "bounded-index.epub", "9780451524936", "Bounded", "Author")
+        devA.liseurDb.annotationDao().upsert(
+            BookAnnotation(
+                id = "ann-real", bookId = book.url, kind = AnnotationKind.NOTE.name,
+                locatorJson = """{"href":"ch01.xhtml"}""", text = "real", note = "n",
+                createdAt = 1_746_000_000_000L, updatedAt = 1_746_000_000_000_000L,
+            ),
+        )
+        assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
+        val hlc = devA.driveDb.recordStates().forDomain(PERM_ID, DriveWireCodec.DOMAIN_ANNOTATION).first().lastHlc
+
+        val total = 20_000
+        val foreign = 5
+        val seeded = (0 until total).map { i ->
+            DriveRecordState(
+                permissionId = PERM_ID,
+                domain = DriveWireCodec.DOMAIN_ANNOTATION,
+                recordKey = "00000000-0000-4000-8000-${i.toString().padStart(12, '0')}",
+                versionFp = "fp-seed-$i",
+                versionOp = DriveRecordState.OP_PUT,
+                publishedFp = "fp-seed-$i",
+                contentFp = "fp-seed-$i",
+                originDeviceId = if (i < foreign) "dev-b" else null,
+                originSeq = if (i < foreign) 9L else null,
+                lastHlc = hlc,
+                bodyJson = """{"id":"seed-$i"}""",
+            )
+        }
+        devA.driveDb.recordStates().upsertAll(seeded)
+
+        val compactor = DriveCompactor(devA.driveDb, server.clientFor("dev-a"), deltaCountThreshold = 1)
+        val result = compactor.compactIfNeeded(PERM_ID, "dev-a", "token-dev-a", { hlc }, { _, _ -> null })
+        assertTrue(result.failureReason, result.compacted)
+
+        val internalRows = DriveWireCodec.SUPPORTED_DOMAIN_VERSIONS.keys.flatMap {
+            devA.driveDb.recordStates().forDomain(PERM_ID, DriveCompactor.AUTHORED_DOMAIN_PREFIX + it)
+        } + devA.driveDb.recordStates().forDomain(PERM_ID, DriveCompactor.COMPACTION_STATE_DOMAIN)
+        assertTrue(internalRows.size > total - foreign)
+        val largest = internalRows.maxOf { (it.bodyJson?.length ?: 0) + it.recordKey.length + it.versionFp.length }
+        assertTrue("single row must stay far below the CursorWindow size: $largest", largest < 4_096)
+
+        val restarted = DriveCompactor(devA.driveDb, server.clientFor("dev-a"))
+        assertNotNull(restarted.currentCompactionState(PERM_ID).snapshot)
+        val index = restarted.loadAuthoredIndex(PERM_ID)
+        val annotationKeys = index.keys.filter { it.first == DriveWireCodec.DOMAIN_ANNOTATION }.map { it.second }.toSet()
+        assertEquals(total - foreign + 1, annotationKeys.size)
+        assertEquals("fp-seed-${total - 1}", index[DriveWireCodec.DOMAIN_ANNOTATION to "00000000-0000-4000-8000-${(total - 1).toString().padStart(12, '0')}"]?.fp)
+        assertFalse(
+            "remote-origin versions must not be marked locally authored",
+            index.containsKey(DriveWireCodec.DOMAIN_ANNOTATION to "00000000-0000-4000-8000-000000000000"),
+        )
+    }
+
+    @Test
+    fun `snapshot keeps the exact local publication seq when agreement replaced provenance with a remote origin, even after outbox pruning`() = runTest {
+        val devA = createDevice(deviceId = "dev-a", compactionDeltaThreshold = 2)
+        devA.connect()
+        val book = seedBook(devA, "foreign-origin.epub", "9780451524936", "Foreign", "Author")
+        val repoA = VocabularyRepository(devA.liseurDb)
+        val baseTime = 1_746_400_000_000L
+        repoA.collect(VocabularyLookup("lumière", "fr", null), "light", "en", now = baseTime)
+        assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
+        val reviewId = reviewWord(devA, "fr", "lumière", baseTime + 1_000L)
+        assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
+
+        val states = devA.driveDb.recordStates()
+        val authored = states.get(PERM_ID, DriveWireCodec.DOMAIN_VOCAB_REVIEW, reviewId)!!
+        val localSeq = authored.originSeq!!
+        assertNull(authored.originDeviceId)
+        // A later agreement with dev-b replaced the provenance of the identical version.
+        states.upsert(authored.copy(originDeviceId = "dev-b", originSeq = 50L))
+
+        // Three snapshot generations: the review's batch is pruned from the outbox after the second.
+        repeat(3) { syncWithNewNoteUntilSnapshotAdvances(devA, book.url, "fo$it") }
+        assertNotNull(restartedCompactionState(devA).previousSnapshot)
+        assertTrue(
+            "the review's batch must be gone so only the persisted index can supply its seq",
+            devA.driveDb.outbox().forAccount(PERM_ID).none { it.seq == localSeq },
+        )
+
+        val devC = createDevice(deviceId = "dev-c")
+        devC.connect()
+        assertEquals(SyncOutcome.Success, devC.changeEngine.sync().outcome)
+        val received = devC.driveDb.recordStates().get(PERM_ID, DriveWireCodec.DOMAIN_VOCAB_REVIEW, reviewId)!!
+        assertEquals("dev-a", received.originDeviceId)
+        assertEquals(localSeq, received.originSeq)
+        assertEquals(setOf(reviewId), reviewSyncIds(devC, "fr", "lumière"))
+        val internalLeak = devC.driveDb.recordStates().forAccount(PERM_ID)
+            .any { it.domain.startsWith(DriveCompactor.AUTHORED_DOMAIN_PREFIX) }
+        assertFalse("snapshot receivers must not adopt the producer's internal index", internalLeak)
+    }
+
+    @Test
+    fun `delete then compact then fresh install then recollect drops covered reviews but keeps a concurrent unobserved review`() = runTest {
+        val devA = createDevice(deviceId = "dev-a", compactionDeltaThreshold = 2)
+        val devB = createDevice(deviceId = "dev-b")
+        devA.connect()
+        devB.connect()
+        val book = seedBook(devA, "delete-compact.epub", "9780451524936", "DeleteCompact", "Author")
+        val repoA = VocabularyRepository(devA.liseurDb)
+        val baseTime = 1_746_500_000_000L
+        val day = 86_400_000L
+        val lookup = VocabularyLookup("lumière", "fr", null)
+        repoA.collect(lookup, "light", "en", now = baseTime)
+        assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
+        assertEquals(SyncOutcome.Success, devB.changeEngine.sync().outcome)
+
+        val coveredA = reviewWord(devA, "fr", "lumière", baseTime + 1_000L)
+        assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
+        assertEquals(SyncOutcome.Success, devB.changeEngine.sync().outcome)
+        val coveredB = reviewWord(devB, "fr", "lumière", baseTime + 30 * day)
+        assertEquals(SyncOutcome.Success, devB.changeEngine.sync().outcome)
+        assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
+
+        // B reviews again but A never sees it before deleting.
+        val concurrent = reviewWord(devB, "fr", "lumière", baseTime + 90 * day)
+        server.hideOtherDeviceDeltasFor("dev-a")
+        assertEquals(SyncOutcome.Success, devB.changeEngine.sync().outcome)
+        val wordA = devA.liseurDb.vocabularyDao().findWord("lumière", "fr")!!
+        repoA.deleteWord(wordA.id)
+        assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
+        repeat(2) { syncWithNewNoteUntilSnapshotAdvances(devA, book.url, "dc$it") }
+        server.unhideAll()
+        assertNotNull(restartedCompactionState(devA).snapshot)
+
+        val boundaryRow = devA.driveDb.recordStates()
+            .get(PERM_ID, "_vocab_delete_boundary", DriveVocabularySync.wordKey("fr", "lumière"))!!
+        assertTrue("the delete must also cover A's own reviews", boundaryRow.bodyJson!!.contains("dev-a"))
+
+        // Fresh install reads A's snapshots + B's deltas in either order and then recollects the word.
+        val devC = createDevice(deviceId = "dev-c")
+        devC.connect()
+        repeat(3) { assertEquals(SyncOutcome.Success, devC.changeEngine.sync().outcome) }
+        assertNull(devC.liseurDb.vocabularyDao().findWord("lumière", "fr"))
+        // The word is collected again on another device; its word record reaches C remotely.
+        repoA.collect(lookup, "light", "en", now = baseTime + 120 * day)
+        assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
+        repeat(2) { assertEquals(SyncOutcome.Success, devC.changeEngine.sync().outcome) }
+
+        val recollected = reviewSyncIds(devC, "fr", "lumière")
+        assertFalse("A's covered review resurrected", coveredA in recollected)
+        assertFalse("B's covered review resurrected", coveredB in recollected)
+        assertEquals("concurrent unobserved review must survive", setOf(concurrent), recollected)
+
+        // A's own restart-free view: nothing leaked into A's snapshot either.
+        val restarted = DriveCompactor(devA.driveDb, server.clientFor("dev-a"))
+        assertNull(
+            restarted.loadAuthoredIndex(PERM_ID)[DriveWireCodec.DOMAIN_VOCAB_REVIEW to coveredA],
+        )
+    }
+
+    @Test
+    fun `review authored after a recollect is not covered by the earlier delete and survives snapshot reinstall`() = runTest {
+        val devA = createDevice(deviceId = "dev-a", compactionDeltaThreshold = 2)
+        devA.connect()
+        val book = seedBook(devA, "recollect.epub", "9780451524936", "Recollect", "Author")
+        val repoA = VocabularyRepository(devA.liseurDb)
+        val baseTime = 1_746_600_000_000L
+        val lookup = VocabularyLookup("lumière", "fr", null)
+        repoA.collect(lookup, "light", "en", now = baseTime)
+        assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
+        val old = reviewWord(devA, "fr", "lumière", baseTime + 1_000L)
+        assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
+        repoA.deleteWord(devA.liseurDb.vocabularyDao().findWord("lumière", "fr")!!.id)
+        assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
+        repoA.collect(lookup, "light", "en", now = baseTime + 10_000L)
+        assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
+        val fresh = reviewWord(devA, "fr", "lumière", baseTime + 86_400_000L * 30)
+        assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
+        repeat(2) { syncWithNewNoteUntilSnapshotAdvances(devA, book.url, "rc$it") }
+
+        val devC = createDevice(deviceId = "dev-c")
+        devC.connect()
+        repeat(2) { assertEquals(SyncOutcome.Success, devC.changeEngine.sync().outcome) }
+        val reviews = reviewSyncIds(devC, "fr", "lumière")
+        assertTrue("post-recollect review must survive", fresh in reviews)
+        assertFalse("pre-delete review must not be resurrected", old in reviews)
+    }
+
     private suspend fun restartedCompactionState(device: Phase6Device): DriveCompactionState =
         DriveCompactor(device.driveDb, server.clientFor(device.deviceId)).currentCompactionState(PERM_ID)
 
