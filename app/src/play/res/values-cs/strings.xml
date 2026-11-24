@@ -253,4 +253,36 @@
         <item quantity="many">Vybráno %1$d knihy · %2$s</item>
         <item quantity="other">Vybráno %1$d knih · %2$s</item>
     </plurals>
+    <string name="drive_sync_account_summary_conflicts">%1$s · %2$s · %3$s</string>
+    <string name="drive_sync_resolve_conflicts">Vyřešit konflikty</string>
+    <string name="drive_sync_conflicts_dialog_title">Vyřešit konflikty synchronizace</string>
+    <string name="drive_sync_conflicts_dialog_intro">Vyberte, kterou verzi ponechat. Vaše volba se synchronizuje do ostatních zařízení.</string>
+    <string name="drive_sync_conflicts_dialog_close">Zavřít</string>
+    <string name="drive_sync_conflict_local_label">Na tomto zařízení</string>
+    <string name="drive_sync_conflict_remote_label">Na jiném zařízení</string>
+    <string name="drive_sync_conflict_deleted_value">Smazáno</string>
+    <string name="drive_sync_conflict_keep_mine">Ponechat moji</string>
+    <string name="drive_sync_conflict_keep_other">Ponechat druhou</string>
+    <string name="drive_sync_conflict_keep_edited_note">Ponechat upravenou poznámku</string>
+    <string name="drive_sync_conflict_delete_note">Smazat poznámku</string>
+    <string name="drive_sync_conflict_keep_edited">Ponechat úpravu</string>
+    <string name="drive_sync_conflict_delete_value">Smazat</string>
+    <string name="drive_sync_conflict_series_keep_mine">Ponechat pořadí z tohoto zařízení</string>
+    <string name="drive_sync_conflict_series_keep_other">Ponechat pořadí z jiného zařízení</string>
+    <string name="drive_sync_conflict_domain_annotation">Anotace</string>
+    <string name="drive_sync_conflict_domain_evaluation">Hodnocení a recenze</string>
+    <string name="drive_sync_conflict_domain_metadata">Podrobnosti knihy</string>
+    <string name="drive_sync_conflict_domain_series">Pořadí v sérii</string>
+    <string name="drive_sync_conflict_field_rating">Hodnocení</string>
+    <string name="drive_sync_conflict_field_review">Recenze</string>
+    <string name="drive_sync_conflict_field_title">Název</string>
+    <string name="drive_sync_conflict_field_author">Autor</string>
+    <string name="drive_sync_conflict_field_description">Popis</string>
+    <string name="drive_sync_conflict_field_cover">Vlastní obálka</string>
+    <string name="drive_sync_delete_from_library">Smazat ze synchronizované knihovny</string>
+    <string name="drive_sync_delete_from_library_title">Smazat ze synchronizované knihovny?</string>
+    <string name="drive_sync_delete_from_library_warning_remote">„%1$s“ bude odebrána z vaší knihovny synchronizované s Google Drive a její nahraný soubor EPUB bude přesunut do koše Google Drive. Vaše poznámky a zvýraznění zůstanou zachovány.</string>
+    <string name="drive_sync_delete_from_library_warning_local">„%1$s“ bude odebrána z vaší knihovny synchronizované s Google Drive a její nahraný soubor EPUB bude přesunut do koše Google Drive. Místní soubor na tomto zařízení zůstane nedotčen.</string>
+    <string name="drive_sync_delete_from_library_confirm">Smazat ze synchronizované knihovny</string>
+    <string name="drive_sync_delete_from_library_failed">Nepodařilo se smazat ze synchronizované knihovny. Zkuste to znovu.</string>
 </resources>
