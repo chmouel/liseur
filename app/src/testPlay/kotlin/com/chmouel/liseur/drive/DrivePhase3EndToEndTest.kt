@@ -1100,6 +1100,51 @@ class DrivePhase3EndToEndTest {
         assertTrue(deviceA.collectPeaks().records.none { it.d == DriveWireCodec.DOMAIN_FURTHEST && it.k.startsWith("peak/") })
     }
 
+    @Test
+    fun `a remote reset clears every pre-reset peak of duplicate local rows and keeps one authored after the floor`() = runTest {
+        deviceA.connect()
+        deviceB.connect()
+        val sha = "a".repeat(64)
+        val workKey = "sha:$sha"
+        val first = peakBook("rr-a")
+        val second = peakBook("rr-b")
+        deviceA.addBook(first, sha)
+        deviceA.addBook(second, sha)
+        deviceA.read(first.url, 0.80, 1_000L)
+        deviceA.read(first.url, 0.20, 2_000L)
+        deviceA.read(second.url, 0.60, 3_000L)
+        deviceA.read(second.url, 0.40, 4_000L)
+
+        deviceA.changeEngine.sync()
+        deviceB.changeEngine.sync()
+        val published = deviceB.observed(workKey).single()
+        assertEquals(0.80, published.progression, 0.0001)
+
+        // Device C (not modelled) forgot after seeing only the published 80% peak.
+        deviceA.applyFurthest(remoteReset(workKey, "rr1", mapOf("dev-a" to published.seq)), "dev-c")
+
+        val progress = deviceA.liseurDb.readingProgressDao()
+        assertEquals(0.20, progress.get(first.url)!!.peakProgression!!, 0.0001)
+        assertEquals(0.40, progress.get(second.url)!!.peakProgression!!, 0.0001)
+
+        // Nothing from before the floor can be published again, even across a restarted sync object.
+        val afterReset = deviceA.collectPeaks().records.filter { it.d == DriveWireCodec.DOMAIN_FURTHEST && it.k.startsWith("peak/") }
+        for (record in afterReset) {
+            val peak = DriveWireCodec.decodeFurthestBody(requireNotNull(record.body)) as DriveFurthestBody.Peak
+            assertTrue(peak.progression < 0.5)
+            assertTrue(peak.seq > published.seq)
+        }
+
+        // A peak the reader authors after the floor survives and publishes above it.
+        deviceA.read(second.url, 0.90, 5_000L)
+        deviceA.changeEngine.sync()
+        deviceB.changeEngine.sync()
+        val genuine = deviceB.observed(workKey).single()
+        assertEquals(0.90, genuine.progression, 0.0001)
+        assertTrue(genuine.seq > published.seq)
+        assertEquals(0.90, progress.get(second.url)!!.peakProgression!!, 0.0001)
+    }
+
     private suspend fun DeviceHarness.seedDownloadable(): Pair<String, BookFingerprint> {
         val bytes = "DEACTIVATION-RACE-EPUB-BYTES-1234567890".toByteArray()
         val fp = BookFingerprints.of(ByteArrayInputStream(bytes))
