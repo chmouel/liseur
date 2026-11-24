@@ -366,6 +366,12 @@ internal class DrivePositionSync(
                     versionFp = fp,
                     versionOp = DriveRecordState.OP_PUT,
                     lastHlc = hlc,
+                    bodyJson = JSONObject().put(
+                        PENDING_REVISIONS,
+                        JSONObject().apply {
+                            for (edition in editions) put(edition.alias.bookUrl, edition.progress.localRevision)
+                        },
+                    ).toString(),
                 ),
             )
         }
@@ -387,6 +393,7 @@ internal class DrivePositionSync(
                     workIdentity.canonicalWorkKey(permissionId, reset.workKey),
                     reset.floors,
                     localDeviceId,
+                    guardRevisions = pendingRevisions(marker.bodyJson),
                 )
             }
             store.withTransaction {
@@ -395,15 +402,25 @@ internal class DrivePositionSync(
         }
     }
 
+    private fun pendingRevisions(bodyJson: String?): Map<String, Long> {
+        val revisions = bodyJson
+            ?.let { runCatching { JSONObject(it).optJSONObject(PENDING_REVISIONS) }.getOrNull() }
+            ?: return emptyMap()
+        return revisions.keys().asSequence().associateWith { revisions.getLong(it) }
+    }
+
     /**
      * Drops observations at or below each origin's floor and resets every local edition whose
-     * bound peak sequence is covered by this device's floor.
+     * bound peak sequence is covered by this device's floor. With [guardRevisions] (a replayed
+     * forget) a book is reset only while its local revision is still the one recorded when the
+     * forget was persisted, so a replay after the reader moved never erases a newer peak.
      */
     private suspend fun applyFloorsLocally(
         permissionId: String,
         workKey: String,
         floors: Map<String, Long>,
         localDeviceId: String,
+        guardRevisions: Map<String, Long>? = null,
     ) {
         val drivePeerId = DriveLibrarySync.accountPeerId(permissionId)
         val localFloor = floors[localDeviceId]
@@ -411,6 +428,11 @@ internal class DrivePositionSync(
         if (localFloor != null) {
             for (edition in localEditions(permissionId, drivePeerId, workKey)) {
                 val peakRev = edition.progress.peakRevision ?: continue
+                if (guardRevisions != null &&
+                    guardRevisions[edition.alias.bookUrl] != edition.progress.localRevision
+                ) {
+                    continue
+                }
                 val template = peakTemplate(workKey, localDeviceId, edition.alias.bookUrl, edition.alias.editionSha, edition.progress) ?: continue
                 val existing = recordStates.get(
                     permissionId,
@@ -426,7 +448,10 @@ internal class DrivePositionSync(
                 furthestDao.deleteUpToForOrigin(drivePeerId, workKey, origin, floor)
             }
             for ((bookUrl, editionSha, peakRev) in covered) {
-                if (progressDao.get(bookUrl)?.peakRevision == peakRev) {
+                val current = progressDao.get(bookUrl)
+                if (current?.peakRevision == peakRev &&
+                    (guardRevisions == null || guardRevisions[bookUrl] == current.localRevision)
+                ) {
                     progressDao.resetPeak(bookUrl, editionSha)
                     furthestDao.deleteDelivery(drivePeerId, bookUrl, workKey)
                 }
@@ -1494,6 +1519,7 @@ internal class DrivePositionSync(
         private const val PEAK_SEQ_DOMAIN = "_furthest_peak_seq"
         private const val PEAK_SEQ_KEY = "self"
         private const val RESET_PENDING_DOMAIN = "_furthest_reset_pending"
+        private const val PENDING_REVISIONS = "revisions"
 
         /** Latest reading wins a shared `(workKey, deviceId)` slot; the URL keeps the choice stable. */
         private val POSITION_WINNER_ORDER: Comparator<LocalPosition> = compareBy<LocalPosition>(
