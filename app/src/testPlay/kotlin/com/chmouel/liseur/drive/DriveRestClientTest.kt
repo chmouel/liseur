@@ -336,6 +336,97 @@ class DriveRestClientTest {
         assertEquals(payload.sliceArray(8..11).toList(), bodies[5])
     }
 
+    private class TrackedStream(
+        payload: ByteArray,
+        private val failRead: Boolean = false,
+        private val failClose: Boolean = false,
+    ) : ByteArrayInputStream(payload) {
+        var closes = 0
+        var closeThread: String? = null
+
+        override fun read(b: ByteArray, off: Int, len: Int): Int {
+            if (failRead) throw java.io.IOException("read failed")
+            return super.read(b, off, len)
+        }
+
+        override fun close() {
+            closes++
+            closeThread = Thread.currentThread().name
+            if (failClose) throw java.io.IOException("close failed")
+        }
+    }
+
+    private fun enqueueSession(path: String): Unit = server.enqueue(
+        MockResponse.Builder().code(200).addHeader("Location", server.url(path).toString()).build(),
+    )
+
+    private suspend fun uploadTracked(payload: ByteArray, stream: () -> TrackedStream) = client.uploadResumableFile(
+        accessToken = "tok",
+        name = "book.epub",
+        mimeType = "application/epub+zip",
+        totalBytes = payload.size.toLong(),
+        parents = listOf("folder-1"),
+        chunkSizeBytes = 4,
+        openStream = stream,
+    )
+
+    @Test
+    fun `resumable upload closes its stream on success even when close throws`() = runTest {
+        val payload = ByteArray(8) { it.toByte() }
+        val streams = mutableListOf<TrackedStream>()
+        enqueueSession("/upload/session/close-ok")
+        server.enqueue(MockResponse.Builder().code(308).addHeader("Range", "bytes=0-3").build())
+        server.enqueue(MockResponse.Builder().code(200).body("""{"id":"done","name":"book.epub"}""").build())
+
+        val file = uploadTracked(payload) { TrackedStream(payload, failClose = true).also(streams::add) }
+
+        assertEquals("done", file.id)
+        assertEquals(1, streams.size)
+        assertEquals(1, streams[0].closes)
+    }
+
+    @Test
+    fun `resumable upload closes its stream on failure and keeps the primary error`() = runTest {
+        val payload = ByteArray(8) { it.toByte() }
+        val streams = mutableListOf<TrackedStream>()
+        enqueueSession("/upload/session/close-fail")
+        server.enqueue(MockResponse.Builder().code(400).body("""{"error":{"message":"bad"}}""").build())
+
+        val error = try {
+            uploadTracked(payload) { TrackedStream(payload, failClose = true).also(streams::add) }
+            null
+        } catch (e: DriveApiException) {
+            e
+        }
+
+        assertNotNull(error)
+        assertTrue(error!!.suppressed.any { it.message == "close failed" })
+        assertEquals(1, streams.size)
+        assertTrue(streams[0].closes >= 1)
+        assertTrue(streams[0].closeThread, streams[0].closeThread!!.contains("DefaultDispatcher"))
+    }
+
+    @Test
+    fun `resumable upload read failure is not masked by a throwing close`() = runTest {
+        val payload = ByteArray(8) { it.toByte() }
+        val streams = mutableListOf<TrackedStream>()
+        enqueueSession("/upload/session/read-fail")
+
+        val error = try {
+            uploadTracked(payload) { TrackedStream(payload, failRead = true, failClose = true).also(streams::add) }
+            null
+        } catch (e: java.io.IOException) {
+            e
+        }
+
+        assertEquals("read failed", error?.message)
+        // Debug stack-trace recovery may hand back a copy whose cause is the original.
+        val chain = generateSequence<Throwable>(error) { it.cause }
+        assertTrue(chain.any { t -> t.suppressed.any { it.message == "close failed" } })
+        assertEquals(1, streams.size)
+        assertEquals(1, streams[0].closes)
+    }
+
     @Test
     fun `createAppDataFile never retries a 503 so an ambiguous create stays with the caller`() = runTest {
         server.enqueue(
