@@ -1903,6 +1903,80 @@ class DrivePhase6CompactionAndResilienceTest {
         )
     }
 
+    private suspend fun restartedCompactionState(device: Phase6Device): DriveCompactionState =
+        DriveCompactor(device.driveDb, server.clientFor(device.deviceId)).currentCompactionState(PERM_ID)
+
+    private suspend fun syncWithNewNoteUntilSnapshotAdvances(device: Phase6Device, bookId: String, prefix: String) {
+        val before = device.driveDb.accounts().get(PERM_ID)!!.snapshotThroughSeq
+        for (i in 1..6) {
+            device.liseurDb.annotationDao().upsert(
+                BookAnnotation(
+                    id = "$prefix-$i-${System.nanoTime()}",
+                    bookId = bookId,
+                    kind = AnnotationKind.NOTE.name,
+                    locatorJson = """{"href":"ch0$i.xhtml"}""",
+                    text = "Quote $i",
+                    note = "Note $i",
+                    createdAt = 1_746_300_000_000L + i,
+                    updatedAt = (1_746_300_000_000L + i) * 1_000L,
+                ),
+            )
+            assertEquals(SyncOutcome.Success, device.changeEngine.sync().outcome)
+            if (device.driveDb.accounts().get(PERM_ID)!!.snapshotThroughSeq > before) return
+        }
+        throw AssertionError("snapshot did not advance")
+    }
+
+    @Test
+    fun `first snapshot orphan listing failure persists cleanup flag across restart and retries without edits`() = runTest {
+        val devA = createDevice(deviceId = "dev-a", compactionDeltaThreshold = 2)
+        devA.connect()
+        val book = seedBook(devA, "orphan-first.epub", "9780451524936", "Orphan First", "Author")
+        server.failSnapshotListingAfterSnapshotAdvancesBeyond(0L)
+        syncWithNewNoteUntilSnapshotAdvances(devA, book.url, "first")
+        server.clearSnapshotListingFailure()
+
+        val failed = restartedCompactionState(devA)
+        assertTrue(failed.snapshot != null)
+        assertNull(failed.previousSnapshot)
+        assertEquals(0L, failed.prunedThroughSeq)
+        assertTrue(failed.pendingPruneFileIds.isEmpty())
+        assertTrue("Failed discovery must persist the cleanup flag", failed.orphanCleanupNeeded)
+
+        val orphanId = server.plantOrphanSnapshot("dev-a")
+        assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
+        assertTrue(server.liveSnapshotFilesFor("dev-a").none { it.id == orphanId })
+        assertFalse(restartedCompactionState(devA).orphanCleanupNeeded)
+    }
+
+    @Test
+    fun `orphan listing failure after last pending id is pruned persists cleanup flag across restart`() = runTest {
+        val devA = createDevice(deviceId = "dev-a", compactionDeltaThreshold = 2)
+        devA.connect()
+        val book = seedBook(devA, "orphan-pruned.epub", "9780451524936", "Orphan Pruned", "Author")
+        syncWithNewNoteUntilSnapshotAdvances(devA, book.url, "a")
+        syncWithNewNoteUntilSnapshotAdvances(devA, book.url, "b")
+
+        server.failNextDeletes(1)
+        syncWithNewNoteUntilSnapshotAdvances(devA, book.url, "c")
+        server.failNextDeletes(0)
+        val stuck = restartedCompactionState(devA)
+        assertTrue(stuck.pendingPruneFileIds.isNotEmpty())
+
+        server.failSnapshotListingNow()
+        assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
+        val failed = restartedCompactionState(devA)
+        assertTrue(failed.pendingPruneFileIds.isEmpty())
+        assertEquals(failed.previousSnapshot!!.throughSeq, failed.prunedThroughSeq)
+        assertTrue("Failed discovery must persist the cleanup flag", failed.orphanCleanupNeeded)
+        server.clearSnapshotListingFailure()
+
+        val orphanId = server.plantOrphanSnapshot("dev-a")
+        assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
+        assertTrue(server.liveSnapshotFilesFor("dev-a").none { it.id == orphanId })
+        assertFalse(restartedCompactionState(devA).orphanCleanupNeeded)
+    }
+
     @Test
     fun `crash between remote manifest publication and local state commit adopts published snapshot on retry with zero orphan parts`() = runTest {
         val devA = createDevice(
@@ -2590,6 +2664,10 @@ class DrivePhase6CompactionAndResilienceTest {
 
         fun failSnapshotListingAfterSnapshotAdvancesBeyond(throughSeq: Long) {
             armSnapshotListingFailureAboveSeq = throughSeq
+        }
+
+        fun failSnapshotListingNow() {
+            failSnapshotListing = true
         }
 
         fun clearSnapshotListingFailure() {
