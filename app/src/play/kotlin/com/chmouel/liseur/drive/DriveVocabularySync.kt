@@ -64,6 +64,8 @@ internal class DriveVocabularySync(
         // Step 2: crash recovery if Tx1 (liseur.db) committed before Tx2 (drive_sync.db).
         recoverFromCommittedSyncAcks(permissionId, peerId)
 
+        attachStagedReviewsForLocalWords(permissionId, peerId)
+
         val visibleWords = vocabularyDao.exportWords()
         val wordsByKey = linkedMapOf<Pair<String, String>, VocabularyWord>()
         for (w in visibleWords) {
@@ -1574,6 +1576,25 @@ internal class DriveVocabularySync(
             store.withTransaction {
                 for (u in wordUpdates) recordStates.upsert(u)
                 for (u in reviewUpdates) recordStates.upsert(u)
+            }
+        }
+    }
+
+    /**
+     * A review can arrive while its word is deleted and the review cursor then moves on; once the
+     * word is re-collected locally nothing else attaches it. Reviews a delete already covered stay dropped.
+     */
+    private suspend fun attachStagedReviewsForLocalWords(permissionId: String, peerId: String) {
+        for (word in vocabularyDao.exportWords()) {
+            if (vocabSyncDao.stagedForWord(peerId, word.language, word.normalized, DRIVE_STAGED_GENERATION).isEmpty()) {
+                continue
+            }
+            val boundary = readDeleteBoundary(permissionId, wordKey(word.language, word.normalized))
+            database.withTransaction {
+                dropCoveredStagedReviews(permissionId, peerId, word.language, word.normalized, boundary)
+                if (attachStagedReviews(peerId, word.language, word.normalized, word.id)) {
+                    reconcileWordSchedule(word.id)
+                }
             }
         }
     }

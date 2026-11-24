@@ -1535,6 +1535,37 @@ class DrivePhase5EndToEndTest {
         )
     }
 
+    @Test
+    fun `recollecting a deleted word locally attaches only its concurrent staged reviews for this account`() = runTest {
+        deviceA.connect(PERM_A, "a@example.com")
+        val vocabSync = deviceA.driveSync.vocabularySync
+        val dao = deviceA.liseurDb.vocabularyDao()
+        val syncDao = deviceA.liseurDb.vocabularySyncDao()
+        val key = DriveVocabularySync.wordKey("fr", "givre")
+        val del = DriveWireCodec.delRecord(DriveWireCodec.DOMAIN_VOCAB_WORD, key, nextTestHlc(), observed = mapOf("dev-c" to 3L))
+        vocabSync.applyRemoteWord(PERM_A, del, "dev-x", 5L, localDeviceId = "dev-a", remoteObserved = del.observed)
+        vocabSync.applyRemoteReview(PERM_A, reviewPut("covered", "givre", 1_000L), "dev-c", 3L)
+        vocabSync.applyRemoteReview(PERM_A, reviewPut("concurrent", "givre", 2_000L), "dev-c", 4L)
+        vocabSync.applyRemoteReview(PERM_B, reviewPut("other-account", "givre", 3_000L), "dev-c", 4L)
+
+        val wordId = VocabularyRepository(deviceA.liseurDb)
+            .collect(VocabularyLookup("givre", "fr", null), "frost", "en", 1_746_010_000_000L)!!
+        assertTrue(dao.reviews(wordId).isEmpty())
+
+        vocabSync.collectDirtyRecords(PERM_A) { nextTestHlc() }
+
+        val word = dao.word(wordId)!!
+        assertEquals(listOf("concurrent"), dao.reviews(wordId).mapNotNull { it.syncId })
+        assertEquals(2_000L, word.reviewedAt)
+        assertNull(dao.reviewBySyncIdAnyOwner("covered"))
+        assertNull(dao.reviewBySyncIdAnyOwner("other-account"))
+        assertTrue(syncDao.stagedForWord(DriveLibrarySync.accountPeerId(PERM_A), "fr", "givre", 0L).isEmpty())
+        assertEquals(
+            listOf("other-account"),
+            syncDao.stagedForWord(DriveLibrarySync.accountPeerId(PERM_B), "fr", "givre", 0L).map { it.reviewId },
+        )
+    }
+
     private var testHlcCounter = 0
 
     private fun nextTestHlc(): String = "0017460000000-%04d-dev-a".format(++testHlcCounter)

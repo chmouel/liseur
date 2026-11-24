@@ -1719,7 +1719,7 @@ internal object DriveWireCodec {
                         body = if (obj.isNull("body")) null else obj.optJSONObject("body"),
                         outcome = obj.optNullableString("outcome"),
                         resolvedFps = parseStringList(obj.optJSONArray("resolvedFps")),
-                        observed = if (obj.has("observed") && !obj.isNull("observed")) {
+                        observed = if (obj.has("observed")) {
                             parseLongMap(obj.optJSONObject("observed"))
                         } else {
                             null
