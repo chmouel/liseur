@@ -180,8 +180,11 @@ origin_seq, anc_json, res_refs_json, body_json, row_fp, republish)`.
 `addedAt`, `archivedAt`), and `republish` marks a merged body that differs
 from `R.body`. The protocol is unreleased, so the table ships with the
 first schema that has Drive and needs no migration. Recovery runs before
-diffing and pulling for every receipt whose `version_fp` is neither `L` nor
-in `anc(L)`: if the row projection still equals `row_fp`, restore
+diffing and pulling for every receipt whose `receipt_id` (a UUID unique per
+apply) differs from `drive_record_state.acked_receipt_id`, which Tx 2 sets
+with the rest of the record's state and which local versions and the
+64-entry `anc` cap never change, so a long-committed receipt is never
+re-applied: if the row projection still equals `row_fp`, restore
 `drive_record_state` from the receipt (a merged body with `republish = 1`
 becomes a new unpublished local version with the receipt's `version_fp` in
 `anc`); if not, the post-crash edit becomes the new local version with
@@ -353,14 +356,24 @@ before cascading any delete. A child with unknown provenance, or a local
 occurrence edit not yet published, counts as uncovered, and snapshot
 records carry their original publication `seq` so restored children can
 be checked. An uncovered child makes the delete a concurrent write, so
-add-wins keeps the word with all its reviews and occurrences and
-republishes them. The `del`'s `restore` body is kept in
+add-wins keeps the word with all its children and republishes them. A
+covered child is not discarded by a cascade: it becomes non-live history
+(`vocabulary_staged_review.state = COVERED` for reviews, `held = 1` in
+`drive_record_state` for occurrences), never shown or counted while the
+delete holds, and children that arrive before the parent are `STAGED` the
+same way. The `del`'s `restore` body is kept in
 `vocabulary_word_sync.acked_base_json` and `drive_record_state.restore_json`,
 and its `observed` vector in `drive_record_state.observed_json`, so a review or occurrence that arrives
 after the tombstone and is not covered restores the word and is
-republished; a covered one is ignored. The restore payload travels in the
+republished along with the same eligible set of retained children
+(`STAGED` and `COVERED`, minus undone reviews) whichever order the `del`,
+covered children and uncovered child arrived in; a tombstone that arrives
+after a staged uncovered child and finds the parent absent restores the word
+the same way, from the incoming `restore`. Snapshots build `records` from
+`drive_record_state`, so every author's child records survive compaction
+and a snapshot-only device reconstructs the set. The restore payload travels in the
 `del` record itself, so a device that rebuilt from snapshots restores the
-word the same way, with nothing staged. Equal
+word the same way. Equal
 timestamps in `mergeWordMetadata` and `mergeOccurrencePair` break by value
 (greater `notes`, definition group, `sentence` or `locator`, never the
 remote side) so the merge is commutative and two devices that swap edits
@@ -693,7 +706,7 @@ restored device gets its own `deviceId`.
 | `drive_cursor` | `(permission_id, device_id, domain)` | `applied_seq`, `paused_schema_version` |
 | `drive_file` | `(permission_id, file_id)` | `name`, `kind`, `device_id`, `seq`, `sha256`, `size`, `md5`, `trashed`, `created_time`; index `(permission_id, kind, sha256)` |
 | `drive_outbox` | `(permission_id, seq)` | `batch_id`, `payload`, `state` (BUILT / UPLOADED / ACKED), `file_id`, `created_at` |
-| `drive_record_state` | `(permission_id, domain, record_key)` | `version_fp`, `version_op`, `published_fp`, `content_fp`, `last_synced_revision`, `origin_device_id`, `origin_seq`, `ancestors_json`, `res_refs_json`, `last_hlc`, `body_json`, `observed_json` and `restore_json` (`vocabWord` `del` only), `held` (book tombstoned, version not yet applied to `liseur.db`) |
+| `drive_record_state` | `(permission_id, domain, record_key)` | `version_fp`, `version_op`, `published_fp`, `content_fp`, `last_synced_revision`, `origin_device_id`, `origin_seq`, `ancestors_json`, `res_refs_json`, `last_hlc`, `body_json`, `observed_json` and `restore_json` (`vocabWord` `del` only), `held` (version recorded but not applied to `liseur.db`: book tombstoned, or `vocabOccurrence` child of an absent or tombstoned word), `acked_receipt_id` |
 | `drive_resolution` | `(permission_id, domain, record_key, resolution_fp)` | `resolved_fps_json`, `outcome` (`put` / `delete`), `hlc`, `author_device_id`, `created_at` |
 | `drive_conflict` | `(permission_id, conflict_id)` | `domain`, `record_key`, `book_url`, `kind`, `local_fp`, `remote_fp`, `remote_json`, `remote_device_id`, `remote_hlc`, `state` (OPEN / RESOLVING / RESOLVED), `choice`, `resolution_fp`, `opened_at`, `resolved_at` |
 | `drive_session_ack` | `(permission_id, remote_session_id)` | `batch_seq`, `acked_at` |
