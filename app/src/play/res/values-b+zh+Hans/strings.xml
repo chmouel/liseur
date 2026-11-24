@@ -152,4 +152,5 @@
     <string name="hardcover_conflict_review_too_long">这条 Hardcover 书评太长，无法导入 Liseur。</string>
     <string name="hardcover_conflict_stale">Liseur 中的值在此期间已更改。请检查后重新选择。</string>
     <string name="hardcover_review_public_note">公开。也会作为你在 Hardcover 上的书评发布。</string>
+    <string name="drive_sync_use_instead">改用 Google Drive</string>
 </resources>
