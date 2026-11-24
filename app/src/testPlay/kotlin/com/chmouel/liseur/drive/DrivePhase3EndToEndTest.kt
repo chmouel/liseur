@@ -331,6 +331,59 @@ class DrivePhase3EndToEndTest {
     }
 
     @Test
+    fun `an oversized record stays unpublished while a fitting record publishes, and nothing is lost on retry`() = runTest {
+        deviceA.connect()
+        suspend fun addCatalogBook(name: String, isbn: String, title: String, shaChar: Char, displayTitle: String = title) {
+            val book = Book(
+                url = "file:///$name.epub", title = displayTitle, author = "Author",
+                coverPath = null, source = null, addedAt = 100L, lastOpenedAt = null,
+                localUri = "file:///$name.epub", downloadState = DownloadState.DOWNLOADED,
+                fileTitle = title, fileAuthor = "Author", fileMetadataChecked = true,
+            )
+            deviceA.liseurDb.bookDao().upsert(book)
+            deviceA.liseurDb.workIdentityDao().upsert(BookFingerprintRow(book.url, shaChar.toString().repeat(64), "m1", 100L, null, 1L))
+            deviceA.liseurDb.bookMetadataDao().upsert(
+                BookMetadata.of(book.url, MetadataSource.FILE, MetadataSnapshot(identifiers = listOf(Identifier("isbn", isbn)))),
+            )
+        }
+        addCatalogBook("small", "9780441172719", "Dune", 'a')
+        addCatalogBook("huge", "9780765326355", "x".repeat(DriveWireCodec.MAX_BATCH_BYTES + 1_000), 'b', displayTitle = "Huge")
+
+        val first = deviceA.changeEngine.sync()
+        assertTrue(first.outcome is SyncOutcome.Partial)
+        assertEquals(listOf("catalog:isbn:9780765326355"), first.oversizedRecords)
+        val payloads = driveServer.deltaPayloads()
+        assertTrue(payloads.isNotEmpty())
+        assertTrue(payloads.all { it.size <= DriveWireCodec.MAX_BATCH_BYTES })
+        assertTrue(payloads.any { String(it).contains("isbn:9780441172719") })
+        assertTrue(payloads.none { String(it).contains("isbn:9780765326355") })
+        val states = deviceA.driveDb.recordStates()
+        val small = states.get(PERM_ID, DriveWireCodec.DOMAIN_CATALOG, "isbn:9780441172719")!!
+        val huge = states.get(PERM_ID, DriveWireCodec.DOMAIN_CATALOG, "isbn:9780765326355")!!
+        assertEquals(small.versionFp, small.publishedFp)
+        assertNull(huge.publishedFp)
+        assertNull(deviceA.driveDb.outbox().inFlight(PERM_ID))
+        assertTrue(deviceA.driveDb.accounts().active()!!.lastError!!.contains("too large"))
+
+        val deltasAfterFirst = payloads.size
+        val retry = deviceA.changeEngine.sync()
+        assertTrue(retry.outcome is SyncOutcome.Partial)
+        assertEquals(0, retry.publishedBatches)
+        assertEquals(deltasAfterFirst, driveServer.deltaPayloads().size)
+        assertNull(states.get(PERM_ID, DriveWireCodec.DOMAIN_CATALOG, "isbn:9780765326355")!!.publishedFp)
+
+        val stored = deviceA.liseurDb.bookDao().getByUrl("file:///huge.epub")!!
+        deviceA.liseurDb.bookDao().upsert(stored.copy(title = "Hyperion", fileTitle = "Hyperion"))
+        val fixed = deviceA.changeEngine.sync()
+        assertEquals(SyncOutcome.Success, fixed.outcome)
+        assertTrue(fixed.oversizedRecords.isEmpty())
+        assertEquals(deltasAfterFirst + 1, driveServer.deltaPayloads().size)
+        val published = states.get(PERM_ID, DriveWireCodec.DOMAIN_CATALOG, "isbn:9780765326355")!!
+        assertEquals(published.versionFp, published.publishedFp)
+        assertNull(deviceA.driveDb.accounts().active()!!.lastError)
+    }
+
+    @Test
     fun `an incoming catalog entry matches a local book whose fingerprint is still missing`() = runTest {
         deviceA.connect()
         deviceB.connect()
@@ -1887,6 +1940,9 @@ class DrivePhase3EndToEndTest {
         var lastDownloadStartOffset: Long = -1L
 
         fun appDataFileCount(): Int = appDataFiles.size
+
+        fun deltaPayloads(): List<ByteArray> =
+            appDataFiles.values.map { it.second }.filter { String(it).contains("\"records\"") }
 
         fun seedFolder(id: String, createdTime: String) {
             val folder = DriveRemoteFile(
