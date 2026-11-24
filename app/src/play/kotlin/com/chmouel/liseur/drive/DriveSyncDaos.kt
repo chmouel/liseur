@@ -295,6 +295,12 @@ interface DriveConflictDao {
     suspend fun markResolving(permissionId: String, conflictId: String, choice: String)
 
     @Query(
+        "UPDATE drive_conflict SET state = 'OPEN', choice = NULL " +
+            "WHERE permission_id = :permissionId AND conflict_id = :conflictId AND state = 'RESOLVING'",
+    )
+    suspend fun reopen(permissionId: String, conflictId: String)
+
+    @Query(
         "UPDATE drive_conflict SET state = 'RESOLVED', choice = :choice, resolution_fp = :resolutionFp, " +
             "resolved_at = :resolvedAt WHERE permission_id = :permissionId AND conflict_id = :conflictId",
     )
