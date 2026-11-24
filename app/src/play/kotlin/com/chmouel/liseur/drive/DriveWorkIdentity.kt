@@ -218,6 +218,17 @@ internal class DriveWorkIdentity(
     }
 
     /**
+     * SHA-256 of [book]'s file, hashing it now when its metadata is checked but
+     * its lazy fingerprint is still missing. Null for fileless or unchecked books.
+     */
+    suspend fun editionSha(book: Book): String? {
+        identities.fingerprint(book.url)?.let { return it.sha256.lowercase(Locale.ROOT) }
+        if (book.openableUrl == null || !book.fileMetadataChecked) return null
+        fingerprintStore?.of(book)
+        return identities.fingerprint(book.url)?.sha256?.lowercase(Locale.ROOT)
+    }
+
+    /**
      * Resolves [workKey] through all known `workAlias` `merge:` records to its
      * deterministic lexicographical minimum fixpoint.
      */

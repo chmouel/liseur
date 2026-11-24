@@ -53,6 +53,7 @@ abstract class DriveSyncDatabase : RoomDatabase() {
         val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(connection: SQLiteConnection) {
                 connection.execSQL("ALTER TABLE drive_account ADD COLUMN pending_switch_previous_state TEXT")
+                connection.execSQL("ALTER TABLE drive_outbox ADD COLUMN ack_metadata_json TEXT")
             }
         }
 

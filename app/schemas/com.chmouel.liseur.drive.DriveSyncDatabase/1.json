@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 1,
-    "identityHash": "99b24a9fdc819da3edf072ed11d330ca",
+    "identityHash": "2b6401f31650720b957732085241c597",
     "entities": [
       {
         "tableName": "drive_install",
@@ -327,7 +327,7 @@
       },
       {
         "tableName": "drive_outbox",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`permission_id` TEXT NOT NULL, `seq` INTEGER NOT NULL, `batch_id` TEXT NOT NULL, `payload` TEXT NOT NULL, `state` TEXT NOT NULL, `file_id` TEXT, `created_at` INTEGER NOT NULL, `ack_metadata_json` TEXT, PRIMARY KEY(`permission_id`, `seq`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`permission_id` TEXT NOT NULL, `seq` INTEGER NOT NULL, `batch_id` TEXT NOT NULL, `payload` TEXT NOT NULL, `state` TEXT NOT NULL, `file_id` TEXT, `created_at` INTEGER NOT NULL, PRIMARY KEY(`permission_id`, `seq`))",
         "fields": [
           {
             "fieldPath": "permissionId",
@@ -369,11 +369,6 @@
             "columnName": "created_at",
             "affinity": "INTEGER",
             "notNull": true
-          },
-          {
-            "fieldPath": "ackMetadataJson",
-            "columnName": "ack_metadata_json",
-            "affinity": "TEXT"
           }
         ],
         "primaryKey": {
@@ -786,7 +781,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '99b24a9fdc819da3edf072ed11d330ca')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '2b6401f31650720b957732085241c597')"
     ]
   }
 }

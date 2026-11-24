@@ -331,6 +331,38 @@ class DrivePhase3EndToEndTest {
     }
 
     @Test
+    fun `an incoming catalog entry matches a local book whose fingerprint is still missing`() = runTest {
+        deviceA.connect()
+        deviceB.connect()
+        val bytes = "dune bytes".toByteArray()
+        val sha = java.security.MessageDigest.getInstance("SHA-256").digest(bytes)
+            .joinToString("") { "%02x".format(it) }
+        val bookA = Book(
+            url = "file:///dune-a.epub", title = "Dune", author = "Frank Herbert",
+            coverPath = null, source = null, addedAt = 100L, lastOpenedAt = null,
+            localUri = "file:///dune-a.epub", downloadState = DownloadState.DOWNLOADED,
+            fileTitle = "Dune", fileAuthor = "Frank Herbert", fileMetadataChecked = true,
+        )
+        deviceA.liseurDb.bookDao().upsert(bookA)
+        deviceA.liseurDb.workIdentityDao().upsert(BookFingerprintRow(bookA.url, sha, "m1", 100L, null, 1L))
+        deviceA.changeEngine.sync()
+
+        val file = File(tempDir, "dune-b.epub").apply { writeBytes(bytes) }
+        val bookB = bookA.copy(url = file.toURI().toString(), localUri = file.toURI().toString())
+        deviceB.liseurDb.bookDao().upsert(bookB)
+        assertNull(deviceB.liseurDb.workIdentityDao().fingerprint(bookB.url))
+
+        deviceB.changeEngine.sync()
+
+        val urls = deviceB.liseurDb.bookDao().allOnce().map { it.url }
+        assertEquals(listOf(bookB.url), urls)
+        assertEquals(sha, deviceB.liseurDb.workIdentityDao().fingerprint(bookB.url)!!.sha256)
+        val alias = deviceB.liseurDb.workIdentityDao()
+            .alias(bookB.url, DriveLibrarySync.accountPeerId(PERM_ID))!!
+        assertEquals("sha:$sha", alias.workId)
+    }
+
+    @Test
     fun `confirming a match applies remote positions received before the confirmation`() = runTest {
         deviceA.connect()
         deviceB.connect()
