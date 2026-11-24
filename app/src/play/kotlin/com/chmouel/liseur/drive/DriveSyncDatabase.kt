@@ -30,7 +30,7 @@ import androidx.sqlite.execSQL
         DriveSessionAck::class,
         DriveUpload::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 abstract class DriveSyncDatabase : RoomDatabase() {
@@ -62,7 +62,20 @@ abstract class DriveSyncDatabase : RoomDatabase() {
             }
         }
 
-        val MIGRATIONS: Array<Migration> get() = arrayOf(MIGRATION_1_2, MIGRATION_2_3)
+        /**
+         * Adds the remote branch's envelope fields, so a conflict reopened from a
+         * compacted successor still knows what it was resolving against.
+         */
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL("ALTER TABLE drive_conflict ADD COLUMN remote_op TEXT")
+                connection.execSQL("ALTER TABLE drive_conflict ADD COLUMN remote_seq INTEGER")
+                connection.execSQL("ALTER TABLE drive_conflict ADD COLUMN remote_anc_json TEXT")
+                connection.execSQL("ALTER TABLE drive_conflict ADD COLUMN remote_res_refs_json TEXT")
+            }
+        }
+
+        val MIGRATIONS: Array<Migration> get() = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
 
         fun open(context: Context): DriveSyncDatabase =
             Room.databaseBuilder(context.applicationContext, DriveSyncDatabase::class.java, NAME)
