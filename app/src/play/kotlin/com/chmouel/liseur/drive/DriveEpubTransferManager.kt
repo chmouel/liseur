@@ -263,8 +263,9 @@ internal class DriveEpubTransferManager(
                 clean = false
                 continue
             }
+            var fileId = upload.fileId
             val resolved = try {
-                val fileId = upload.fileId ?: upload.sessionUri?.let { session ->
+                fileId = upload.fileId ?: upload.sessionUri?.let { session ->
                     when (val status = driveApi.queryResumableUploadOffset(accessToken, session, upload.sizeBytes)) {
                         is ResumableUploadStatus.Completed -> status.file.id
                         // An unfinished or expired session never created a visible file.
@@ -272,14 +273,24 @@ internal class DriveEpubTransferManager(
                     }
                 }
                 if (fileId != null) {
-                    try {
-                        driveApi.trashFile(accessToken, fileId)
-                    } catch (_: DriveNotFoundException) {
-                        // Already gone.
+                    // Persist before trashing: a failed trash plus an expired session must not
+                    // lose the file. A row that moved on to another upload owns its own file.
+                    if (upload.fileId == null &&
+                        uploads.recordRecoveredFile(permissionId, upload.sha256, upload.sessionUri, fileId) == 0
+                    ) {
+                        false
+                    } else {
+                        try {
+                            driveApi.trashFile(accessToken, fileId)
+                        } catch (_: DriveNotFoundException) {
+                            // Already gone.
+                        }
+                        driveFiles.setTrashed(permissionId, fileId, true)
+                        true
                     }
-                    driveFiles.setTrashed(permissionId, fileId, true)
+                } else {
+                    true
                 }
-                true
             } catch (e: CancellationException) {
                 throw e
             } catch (e: DriveAuthExpiredException) {
@@ -293,8 +304,8 @@ internal class DriveEpubTransferManager(
             }
             // Conditional on the current state: the reader may have re-selected or deselected
             // the edition while the session was probed or the file trashed.
-            if (uploads.deleteIfCancelled(permissionId, upload.sha256) == 0 &&
-                uploads.requeueAfterCleanup(permissionId, upload.sha256, clock()) > 0
+            if (uploads.deleteIfCancelled(permissionId, upload.sha256, upload.sessionUri, fileId) == 0 &&
+                uploads.requeueAfterCleanup(permissionId, upload.sha256, upload.sessionUri, fileId, clock()) > 0
             ) {
                 requeued = true
             }
@@ -787,7 +798,9 @@ internal class DriveEpubTransferManager(
         var retriedAuth = false
         while (true) {
             try {
-                return downloadWithToken(book, permissionId, fileId, expectedSha, accessToken, onProgress)
+                return downloadWithToken(book, permissionId, fileId, expectedSha, accessToken, onProgress).also {
+                    if (it is DriveEpubDownloadOutcome.Downloaded) pinInstalledEdition(permissionId, book.url, it.sha256)
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: DriveAuthExpiredException) {
@@ -827,6 +840,12 @@ internal class DriveEpubTransferManager(
                 return DriveEpubDownloadOutcome.RetryableFailure(e.message ?: "Download failed")
             }
         }
+    }
+
+    /** Once installed, the alias keeps the edition so a later re-download fetches the same one. */
+    private suspend fun pinInstalledEdition(permissionId: String, bookUrl: String, sha256: String) {
+        val alias = identities.alias(bookUrl, DriveLibrarySync.accountPeerId(permissionId)) ?: return
+        if (alias.editionSha != sha256) identities.upsert(alias.copy(editionSha = sha256))
     }
 
     private suspend fun downloadWithToken(
