@@ -54,6 +54,10 @@ interface LibrarySyncBackend {
     @Composable
     fun BookServerPickerRow(selected: Boolean, onPick: () -> Unit) = Unit
 
+    /** Action on a connected main server that opens this backend's controls to switch to it. */
+    @Composable
+    fun BookServerSwitchAction(onClick: () -> Unit) = Unit
+
     /** No-op backend for builds without an external library-sync provider. */
     object None : LibrarySyncBackend {
         override val active: Flow<Boolean> = flowOf(false)
