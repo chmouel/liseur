@@ -19,7 +19,13 @@ internal data class DriveSyncRunSummary(
     val appliedDeltas: Int = 0,
     val publishedBatches: Int = 0,
     val pausedBySchemaVersion: Boolean = false,
+    /** `domain:key` of records too large for any batch; they stay unpublished until they shrink. */
+    val oversizedRecords: List<String> = emptyList(),
 )
+
+private const val OVERSIZED_REPORT_LIMIT = 5
+
+private data class PublishResult(val batches: Int, val oversized: List<String> = emptyList())
 
 /**
  * Implements `appDataFolder` delta batch transport, `changes.getStartPageToken()`
@@ -229,7 +235,7 @@ internal class DriveChangeEngine(
         }
 
         // 2. Publish outgoing batches (first draining any frozen in-flight outbox entry).
-        val publishedBatches = publishPending(
+        val published = publishPending(
             permissionId = permissionId,
             localDeviceId = localDeviceId,
             accessToken = accessToken,
@@ -240,12 +246,27 @@ internal class DriveChangeEngine(
             return DriveSyncRunSummary(SyncOutcome.NotApplicable)
         }
 
-        accounts.recordSuccess(permissionId, clock())
         val paused = cursors.pausedForAccount(permissionId).isNotEmpty()
+        if (published.oversized.isNotEmpty()) {
+            accounts.recordError(
+                permissionId,
+                "${published.oversized.size} record(s) are too large to sync and were left unsent: " +
+                    published.oversized.take(OVERSIZED_REPORT_LIMIT).joinToString(", ") +
+                    ". Shorten or remove the oversized content.",
+            )
+            return DriveSyncRunSummary(
+                outcome = SyncOutcome.Partial(SyncFailure.Forbidden),
+                appliedDeltas = appliedDeltas,
+                publishedBatches = published.batches,
+                pausedBySchemaVersion = paused,
+                oversizedRecords = published.oversized,
+            )
+        }
+        accounts.recordSuccess(permissionId, clock())
         return DriveSyncRunSummary(
             outcome = SyncOutcome.Success,
             appliedDeltas = appliedDeltas,
-            publishedBatches = publishedBatches,
+            publishedBatches = published.batches,
             pausedBySchemaVersion = paused,
         )
     }
@@ -668,7 +689,7 @@ internal class DriveChangeEngine(
         localDeviceId: String,
         accessToken: String,
         bookUrlFilter: String?,
-    ): Int {
+    ): PublishResult {
         var publishedCount = 0
 
         // Step 1: drain any frozen in-flight batch from a previous interrupted run,
@@ -741,11 +762,14 @@ internal class DriveChangeEngine(
             if (publishedCount > 0) {
                 publishManifest(permissionId, localDeviceId, accessToken)
             }
-            return publishedCount
+            return PublishResult(publishedCount)
         }
 
-        val chunks = DriveWireCodec.chunkRecordsForBatches(allRecords)
-        for (chunk in chunks) {
+        // Oversized records are never marked published, so they stay dirty and are retried
+        // once they shrink; they must not hold back the records that do fit.
+        val chunking = DriveWireCodec.chunkRecordsForBatches(allRecords)
+        val oversized = chunking.oversized.mapTo(mutableListOf()) { "${it.d}:${it.k}" }
+        for (chunk in chunking.chunks) {
             val chunkKeys = chunk.map { it.d to it.k }.toSet()
             val chunkPosAcks = posBundle.positionAcks.filter { ack ->
                 ack.recordKey.isEmpty() || (DriveWireCodec.DOMAIN_POSITION to ack.recordKey) in chunkKeys
@@ -779,6 +803,7 @@ internal class DriveChangeEngine(
                     records = chunk,
                 )
                 val payload = DriveWireCodec.encodeDeltaBatch(batch)
+                if (payload.toByteArray(Charsets.UTF_8).size > DriveWireCodec.MAX_BATCH_BYTES) return@withTransaction null
                 val entry = DriveOutbox(
                     permissionId = permissionId,
                     seq = seq,
@@ -792,6 +817,10 @@ internal class DriveChangeEngine(
                 accounts.setNextSeq(permissionId, seq + 1L)
                 outbox.upsert(entry)
                 entry
+            }
+            if (frozen == null) {
+                chunk.mapTo(oversized) { "${it.d}:${it.k}" }
+                continue
             }
 
             val uploaded = driveApi.uploadAppDataJsonBatch(
@@ -833,7 +862,7 @@ internal class DriveChangeEngine(
         if (publishedCount > 0) {
             publishManifest(permissionId, localDeviceId, accessToken)
         }
-        return publishedCount
+        return PublishResult(publishedCount, oversized)
     }
 
     private suspend fun publishManifest(
