@@ -181,7 +181,7 @@
     <string name="drive_sync_connecting">Connecting to Google Drive…</string>
     <string name="drive_sync_needs_reconnect_detail">Google Drive authorization expired or was revoked. Reconnect to resume syncing.</string>
     <string name="drive_sync_switch_title">Sync with %1$s?</string>
-    <string name="drive_sync_switch_body_summary">Liseur will sync your local library with %1$s: %2$s, %3$s, and %4$s.</string>
+    <string name="drive_sync_switch_body_summary">Liseur will sync your local library with %1$s: %2$s, %3$s, %4$s, and %5$s.</string>
     <string name="drive_sync_switch_body_keep_previous">Your previous account (%1$s) will stay paused on this device with its sync progress preserved.</string>
     <string name="drive_sync_switch_body_disconnect_server">Your current book server will be disconnected. Downloaded books, reading history, and browse-only catalogs will be kept.</string>
     <string name="drive_sync_switch_confirm">Sync with this account</string>
@@ -198,6 +198,10 @@
     <plurals name="drive_sync_sessions_count">
         <item quantity="one">%d reading session</item>
         <item quantity="other">%d reading sessions</item>
+    </plurals>
+    <plurals name="drive_sync_vocabulary_count">
+        <item quantity="one">%d saved word</item>
+        <item quantity="other">%d saved words</item>
     </plurals>
     <plurals name="drive_sync_pending_uploads_count">
         <item quantity="one">%d upload pending</item>
