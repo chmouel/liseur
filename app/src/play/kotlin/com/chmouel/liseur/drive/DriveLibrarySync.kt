@@ -55,7 +55,7 @@ internal class DriveLibrarySync(
     private val stopWorkers: () -> Unit = {},
     private val onResumeActive: () -> Unit = {},
     private val scheduleEpubUploadsWork: (allowMetered: Boolean) -> Unit = {},
-    private val enqueueEpubDownloadWork: (bookUrl: String, allowMetered: Boolean) -> UUID? = { _, _ -> null },
+    private val enqueueEpubDownloadWork: suspend (bookUrl: String, allowMetered: Boolean) -> UUID? = { _, _ -> null },
     private val cancelEpubDownloadWork: (bookUrl: String) -> Unit = {},
     private val deviceIdGenerator: () -> String = { UUID.randomUUID().toString().lowercase(Locale.ROOT) },
     private val openStore: (() -> DriveSyncDatabase)? = null,

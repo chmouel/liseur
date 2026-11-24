@@ -396,17 +396,13 @@ internal class DrivePositionSync(
         nextHlc: suspend () -> String,
     ): OutboundBundle {
         val drivePeerId = DriveLibrarySync.accountPeerId(permissionId)
-        val allBooks = if (bookUrlFilter != null) {
-            listOfNotNull(books.getByUrl(bookUrlFilter))
-        } else {
-            books.allOnce()
-        }.filter { it.browseServerId == null }
+        val allBooks = books.allOnce().filter { it.browseServerId == null }
 
         val records = mutableListOf<DriveWireRecord>()
         val posAcks = mutableListOf<DrivePositionAckMeta>()
         val peakAcks = mutableListOf<DrivePeakAckMeta>()
 
-        val local = allBooks.mapNotNull { book ->
+        val resolved = allBooks.mapNotNull { book ->
             val alias = workIdentity.resolveBook(permissionId, book) ?: return@mapNotNull null
             if (!alias.usable) return@mapNotNull null
             val progress = progressDao.get(book.url) ?: return@mapNotNull null
@@ -422,10 +418,13 @@ internal class DrivePositionSync(
         // The wire holds one `position` record per (workKey, deviceId), so two local books of
         // the same work must not both publish into that slot: the furthest-along book speaks
         // for the group and the others stay dirty until one of them wins. The winner is chosen
-        // before the dirty filter so an older edition never overwrites an ACKed winner.
-        for (winner in local.groupBy { it.workKey to deviceId }
+        // before the dirty filter, and across every local edition even for a single-book sync,
+        // so an older edition never overwrites an ACKed winner.
+        val local = if (bookUrlFilter == null) resolved else resolved.filter { it.book.url == bookUrlFilter }
+        for (winner in resolved.groupBy { it.workKey to deviceId }
             .values
             .map { group -> group.maxWith(POSITION_WINNER_ORDER) }
+            .filter { bookUrlFilter == null || it.book.url == bookUrlFilter }
             .filter { it.owesPosition() }) {
             val book = winner.book
             val workKey = winner.workKey
