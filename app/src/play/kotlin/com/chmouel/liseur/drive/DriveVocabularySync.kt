@@ -206,7 +206,7 @@ internal class DriveVocabularySync(
             val word = wordsById[rawOcc.wordId] ?: continue
             val wKey = wordKey(word.language, word.normalized)
             val resolvedWorkKey = resolveOccurrenceWorkKey(permissionId, rawOcc, aliasByBookUrl)
-            val occ = upgradeOccurrenceKeyIfNeeded(rawOcc, resolvedWorkKey)
+            val occ = upgradeOccurrenceKeyIfNeeded(rawOcc, resolvedWorkKey) ?: continue
             val occRecordKey = occurrenceRecordKey(wKey, occ.occurrenceKey)
             if (!emittedOccKeys.add(occRecordKey)) continue
 
@@ -938,6 +938,7 @@ internal class DriveVocabularySync(
                 remote = listOf(remoteMergeOcc),
             )
             val localBookByKey = localOccs.associate { it.occurrenceKey to it.bookUrl }
+            val localIdByKey = localOccs.associate { it.occurrenceKey to it.id }
             val localBookByWorkLoc = localOccs
                 .filter { !it.workId.isNullOrBlank() && it.bookUrl.isNotEmpty() }
                 .associate { (it.workId!! to VocabularyMerge.wireLocationKey(it.locationKey)) to it.bookUrl }
@@ -949,6 +950,7 @@ internal class DriveVocabularySync(
                     ?: if (item.occurrenceKey == canonicalOccKey) resolvedBookUrl else ""
                 vocabularyDao.insertOccurrence(
                     VocabularyOccurrence(
+                        id = localIdByKey[item.occurrenceKey] ?: 0,
                         wordId = localWord.id,
                         bookUrl = bookUrl,
                         bookTitle = item.bookTitle,
@@ -1249,9 +1251,11 @@ internal class DriveVocabularySync(
                 val sorted = group.sortedWith(compareBy({ it.ownerAccount.isNotEmpty() }, { it.id }))
                 val primary = sorted.first()
                 var mergedMeta = primary.toMergeMetadata()
-                var mergedOccs = vocabularyDao.occurrencesList(primary.id).map { it.toMergeOccurrence() }
+                val primaryOccs = vocabularyDao.occurrencesList(primary.id)
+                var mergedOccs = primaryOccs.map { it.toMergeOccurrence() }
+                val primaryIdByKey = primaryOccs.associate { it.occurrenceKey to it.id }
                 val localBookByKey = linkedMapOf<String, String>()
-                for (o in vocabularyDao.occurrencesList(primary.id)) {
+                for (o in primaryOccs) {
                     if (o.bookUrl.isNotEmpty()) localBookByKey[o.occurrenceKey] = o.bookUrl
                 }
                 val existingReviews = vocabularyDao.reviews(primary.id)
@@ -1293,6 +1297,7 @@ internal class DriveVocabularySync(
                     val resolvedWorkKey = occ.workId ?: aliasByBookUrl[bookUrl]?.workId
                     vocabularyDao.insertOccurrence(
                         VocabularyOccurrence(
+                            id = primaryIdByKey[occ.occurrenceKey] ?: 0,
                             wordId = primary.id,
                             bookUrl = bookUrl,
                             bookTitle = occ.bookTitle,
@@ -1589,10 +1594,10 @@ internal class DriveVocabularySync(
         return workIdentity.canonicalWorkKey(permissionId, raw)
     }
 
-    private suspend fun upgradeOccurrenceKeyIfNeeded(
+    internal suspend fun upgradeOccurrenceKeyIfNeeded(
         occ: VocabularyOccurrence,
         resolvedWorkKey: String?,
-    ): VocabularyOccurrence {
+    ): VocabularyOccurrence? {
         val targetKey = if (resolvedWorkKey != null) {
             VocabularyMerge.canonicalOccurrenceKey(resolvedWorkKey, occ.locationKey)
         } else {
@@ -1603,16 +1608,19 @@ internal class DriveVocabularySync(
         if (targetKey == occ.occurrenceKey && resolvedWorkKey == occ.workId) {
             return occ
         }
-        var result = occ.copy(workId = resolvedWorkKey, occurrenceKey = targetKey)
+        var result: VocabularyOccurrence? = null
         database.withTransaction {
-            val existingCanonical = vocabularyDao.occurrenceByKey(occ.wordId, targetKey)
-            if (existingCanonical == null) {
-                vocabularyDao.updateOccurrence(result)
-            } else if (existingCanonical.id != occ.id) {
+            val current = vocabularyDao.occurrenceById(occ.id) ?: return@withTransaction
+            val upgraded = current.copy(workId = resolvedWorkKey, occurrenceKey = targetKey)
+            val existingCanonical = vocabularyDao.occurrenceByKey(current.wordId, targetKey)
+            if (existingCanonical == null || existingCanonical.id == current.id) {
+                if (upgraded != current) vocabularyDao.updateOccurrence(upgraded)
+                result = upgraded
+            } else {
                 val merged = VocabularyMerge.mergeOccurrencePair(
                     base = null,
                     local = existingCanonical.toMergeOccurrence(),
-                    remote = result.toMergeOccurrence(),
+                    remote = upgraded.toMergeOccurrence(),
                 )
                 val updated = existingCanonical.copy(
                     workId = merged.workId,
@@ -1627,7 +1635,7 @@ internal class DriveVocabularySync(
                     encounters = merged.encounters,
                 )
                 vocabularyDao.updateOccurrence(updated)
-                vocabularyDao.deleteOccurrence(occ.id)
+                vocabularyDao.deleteOccurrence(current.id)
                 result = updated
             }
         }
