@@ -6,6 +6,7 @@ import java.net.InetAddress
 import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.test.runTest
 import mockwebserver3.MockResponse
@@ -252,6 +253,87 @@ class DriveRestClientTest {
         )
         assertEquals("committed-id", recovered.id)
         assertEquals(4, server.requestCount) // 1 from scenario 1 + (list, POST 503, list)
+    }
+
+    @Test
+    fun `uploadAppDataJsonBatch without a batchId does not repost after an ambiguous 503`() = runTest {
+        server.enqueue(MockResponse.Builder().code(503).body("""{"error":{"message":"Backend error"}}""").build())
+        server.enqueue(MockResponse.Builder().code(200).body("""{"id":"duplicate"}""").build())
+
+        val failure = runCatching {
+            client.uploadAppDataJsonBatch(
+                accessToken = "tok",
+                name = "device-dev-1-seq-0000000001.json",
+                jsonPayload = """{"ok":true}""".toByteArray(),
+                appProperties = mapOf("batchId" to "  "),
+            )
+        }.exceptionOrNull()
+
+        assertTrue(failure is DriveApiException)
+        assertEquals(1, server.requestCount)
+        assertTrue(sleepDelays.isEmpty())
+    }
+
+    @Test
+    fun `uploadAppDataJsonBatch without a batchId still retries a rate limited post`() = runTest {
+        server.enqueue(
+            MockResponse.Builder()
+                .code(429)
+                .addHeader("Retry-After", "5")
+                .body("""{"error":{"message":"Rate limit exceeded"}}""")
+                .build(),
+        )
+        server.enqueue(MockResponse.Builder().code(200).body("""{"id":"created-id"}""").build())
+
+        val uploaded = client.uploadAppDataJsonBatch(
+            accessToken = "tok",
+            name = "device-dev-1-seq-0000000001.json",
+            jsonPayload = """{"ok":true}""".toByteArray(),
+            appProperties = mapOf("liseur" to "1"),
+        )
+
+        assertEquals("created-id", uploaded.id)
+        assertEquals(2, server.requestCount)
+        assertEquals(listOf(5_000L), sleepDelays)
+    }
+
+    @Test
+    fun `resumable upload reads sequential chunks from one stream and reopens when retrying a chunk`() = runTest {
+        val payload = ByteArray(12) { (it + 1).toByte() }
+        val sessionUrl = server.url("/upload/session/reuse").toString()
+        var opens = 0
+        val openStream = { opens++; ByteArrayInputStream(payload) }
+        suspend fun upload() = client.uploadResumableFile(
+            accessToken = "tok",
+            name = "book.epub",
+            mimeType = "application/epub+zip",
+            totalBytes = payload.size.toLong(),
+            parents = listOf("folder-1"),
+            chunkSizeBytes = 4,
+            openStream = openStream,
+        )
+
+        server.enqueue(MockResponse.Builder().code(200).addHeader("Location", sessionUrl).build())
+        server.enqueue(MockResponse.Builder().code(308).addHeader("Range", "bytes=0-3").build())
+        server.enqueue(MockResponse.Builder().code(308).addHeader("Range", "bytes=0-7").build())
+        server.enqueue(MockResponse.Builder().code(200).body("""{"id":"seq-id","name":"book.epub"}""").build())
+        assertEquals("seq-id", upload().id)
+        assertEquals(1, opens)
+        repeat(4) { assertNotNull(server.takeRequest(5, TimeUnit.SECONDS)) }
+
+        opens = 0
+        server.enqueue(MockResponse.Builder().code(200).addHeader("Location", sessionUrl).build())
+        server.enqueue(MockResponse.Builder().code(308).addHeader("Range", "bytes=0-3").build())
+        server.enqueue(MockResponse.Builder().code(503).body("""{"error":{"message":"Backend error"}}""").build())
+        server.enqueue(MockResponse.Builder().code(308).addHeader("Range", "bytes=0-3").build())
+        server.enqueue(MockResponse.Builder().code(308).addHeader("Range", "bytes=0-7").build())
+        server.enqueue(MockResponse.Builder().code(200).body("""{"id":"retry-id","name":"book.epub"}""").build())
+        assertEquals("retry-id", upload().id)
+        assertEquals(2, opens)
+        val bodies = (1..6).map { server.takeRequest(5, TimeUnit.SECONDS)?.body?.toByteArray()?.toList() }
+        assertEquals(payload.sliceArray(4..7).toList(), bodies[2])
+        assertEquals(payload.sliceArray(4..7).toList(), bodies[4])
+        assertEquals(payload.sliceArray(8..11).toList(), bodies[5])
     }
 
     @Test
