@@ -9,6 +9,7 @@ import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -74,16 +75,38 @@ internal class DriveChangeEngine(
     private val conflicts get() = store.conflicts()
 
     /**
-     * Cancels any in-flight `sync()` run (including runs started through the shared
-     * position coordinator) and waits until the mutex is released.
+     * Cancels every in-flight `sync()` run and [withSyncLock] holder (including runs started
+     * through the shared position coordinator) and waits until the mutex is released. The
+     * caller's own job is never cancelled. Cancellation repeats until the mutex is free so a
+     * holder that registers after the first pass cannot leave the caller waiting on it.
      */
     suspend fun cancelAndDrain() {
-        activeJobs.forEach { it.cancel() }
-        runMutex.withLock { /* fence until active sync unwinds */ }
+        val self = currentCoroutineContext()[Job]
+        while (true) {
+            activeJobs.forEach { if (it !== self) it.cancel() }
+            if (runMutex.tryLock()) {
+                runMutex.unlock()
+                return
+            }
+            delay(DRAIN_POLL_MS)
+        }
     }
 
-    /** Runs [block] while no sync cycle is running, so local commits never interleave with pulls or compaction. */
-    suspend fun <T> withSyncLock(block: suspend () -> T): T = runMutex.withLock { block() }
+    internal val isSyncLockHeld: Boolean get() = runMutex.isLocked
+
+    /**
+     * Runs [block] while no sync cycle is running, so local commits never interleave with pulls or compaction.
+     * The holder is cancelled by [cancelAndDrain], so it can wait on the account-switch lock without deadlocking a switch.
+     */
+    suspend fun <T> withSyncLock(block: suspend () -> T): T {
+        val job = currentCoroutineContext()[Job]
+        val registered = job != null && activeJobs.add(job)
+        return try {
+            runMutex.withLock { block() }
+        } finally {
+            if (registered) activeJobs.remove(job)
+        }
+    }
 
     /**
      * Runs a full or single-book `drive.appdata` sync cycle:
@@ -1264,6 +1287,8 @@ internal class DriveChangeEngine(
     }
 
     private companion object {
+        const val DRAIN_POLL_MS = 5L
+
         /** Domains whose records only apply to a local book and wait for its catalog entry. */
         val CATALOG_GATED_DOMAINS = setOf(
             DriveWireCodec.DOMAIN_METADATA,

@@ -213,6 +213,9 @@ interface WorkIdentityDao {
     @Query("SELECT COUNT(*) FROM work_ambiguity WHERE peer_id = :peerId")
     fun observeAmbiguityCount(peerId: String): Flow<Int>
 
+    @Query("SELECT EXISTS(SELECT 1 FROM work_alias WHERE book_url = :bookUrl AND peer_id != :peerId)")
+    suspend fun hasAliasFromOtherPeer(bookUrl: String, peerId: String): Boolean
+
     @Query("SELECT * FROM work_alias WHERE peer_id = :peerId")
     suspend fun aliasesFor(peerId: String): List<WorkAlias>
 
