@@ -426,6 +426,112 @@ internal object DriveConflictEngine {
 
             val incomingResolvedSet = incoming.resolvedFps.toSet()
 
+            // 2-pre. A successor that carried this resolution in its lineage arrived first and is
+            // parked in an open conflict. The successor descends from R, so R's own outcome is older.
+            val incomingWinsItsFps = incomingResolution != null &&
+                winningResolutionFor(allResolutions, decodeFps(incomingResolution.resolvedFpsJson))
+                    ?.resolutionFp == incoming.fp
+            val successors = if (incomingWinsItsFps) {
+                remainingOpenConflicts.filter { incoming.fp in remoteLineage(it) }
+            } else {
+                emptyList()
+            }
+            if (successors.isNotEmpty()) {
+                val tips = successors
+                    .filter { c -> successors.none { o -> o.remoteFp != c.remoteFp && c.remoteFp in decodeFps(o.remoteAncJson) } }
+                    .distinctBy { it.remoteFp }
+                val tip = tips.singleOrNull()
+                val settledBySuccessor = if (tip != null && (lFp == tip.remoteFp || lFp in incomingResolvedSet) && local.localRowMatchesContentFp) {
+                    successors.map { c ->
+                        ConflictSettlement(
+                            conflictId = c.conflictId,
+                            choice = if (tip.remoteJson != null) DriveResolution.OUTCOME_PUT else DriveResolution.OUTCOME_DELETE,
+                            resolutionFp = incoming.fp,
+                            resolvedAt = now,
+                            coveredLocalFp = c.localFp,
+                        )
+                    }
+                } else {
+                    emptyList()
+                }
+                if (tip != null && settledBySuccessor.isNotEmpty()) {
+                    val allSettlements = (settlements + settledBySuccessor).associateBy { it.conflictId }.values.toList()
+                    val refs = local.resRefs + incoming.resRefs + step0ResRefsToAdd + incoming.fp + decodeList(tip.remoteResRefsJson)
+                    if (lFp == tip.remoteFp) {
+                        return ReconciliationResult(
+                            reconciliationCase = ReconciliationCase.RESOLVE_STALE,
+                            dataAction = ReconciliationDataAction.NoDataChange,
+                            updatedRecordState = stateKeepingLocal(extraResRefs = refs),
+                            resolutionsToPersist = resolutionsToPersist,
+                            conflictsToSettle = allSettlements,
+                        )
+                    }
+                    val tipBody = tip.remoteJson?.let(::JSONObject)
+                    val tipContentFp = tipBody?.let(DriveCanonicalJson::contentFp)
+                    return ReconciliationResult(
+                        reconciliationCase = ReconciliationCase.RESOLUTION_BRIDGED_SUPERSESSION,
+                        dataAction = if (tipBody != null && tipContentFp != null) {
+                            ReconciliationDataAction.ApplyPut(tipBody, tipContentFp)
+                        } else {
+                            ReconciliationDataAction.ApplyDelete
+                        },
+                        updatedRecordState = DriveRecordState(
+                            permissionId = permissionId,
+                            domain = domain,
+                            recordKey = recordKey,
+                            versionFp = tip.remoteFp,
+                            versionOp = tip.remoteOp ?: if (tipBody != null) DriveRecordState.OP_PUT else DriveRecordState.OP_DEL,
+                            publishedFp = tip.remoteFp,
+                            contentFp = tipContentFp,
+                            lastSyncedRevision = local.lastSyncedRevision,
+                            originDeviceId = tip.remoteDeviceId,
+                            originSeq = tip.remoteSeq,
+                            ancestorsJson = DriveCanonicalJson.encode(
+                                (listOf(lFp) + decodeList(tip.remoteAncJson) + incoming.fp + local.ancestors)
+                                    .distinct()
+                                    .filter { it != tip.remoteFp }
+                                    .take(DriveWireCodec.MAX_ANCESTORS),
+                            ),
+                            resRefsJson = DriveCanonicalJson.encode(refs.distinct().sorted()),
+                            lastHlc = maxOf(local.lastHlc, incoming.hlc, tip.remoteHlc),
+                            bodyJson = tipBody?.let(DriveCanonicalJson::encode),
+                        ),
+                        resolutionsToPersist = resolutionsToPersist,
+                        conflictsToSettle = allSettlements,
+                    )
+                }
+                // Local moved on (or is dirty): never apply R's older outcome over it.
+                val rebased = tip?.takeIf {
+                    local.localRowMatchesContentFp && lFp != it.remoteFp && lFp !in incomingResolvedSet &&
+                        remainingOpenConflicts.none { c -> c.localFp == lFp && c.remoteFp == it.remoteFp }
+                }
+                if (rebased != null) {
+                    return openConflictResult(
+                        permissionId = permissionId,
+                        domain = domain,
+                        recordKey = recordKey,
+                        bookUrl = bookUrl,
+                        localFp = lFp,
+                        localIsLivePut = local.isLivePut,
+                        incoming = rebased.toWireRecord(),
+                        incomingIsLivePut = rebased.remoteJson != null,
+                        remoteDeviceId = rebased.remoteDeviceId,
+                        remoteSeq = rebased.remoteSeq ?: remoteSeq,
+                        now = now,
+                        keptLocalState = stateKeepingLocal(includeCandidateRefs = false),
+                        resolutionsToPersist = resolutionsToPersist,
+                        settlements = settlements,
+                    )
+                }
+                return ReconciliationResult(
+                    reconciliationCase = ReconciliationCase.RESOLVE_STALE,
+                    dataAction = ReconciliationDataAction.NoDataChange,
+                    updatedRecordState = stateKeepingLocal(includeCandidateRefs = false),
+                    resolutionsToPersist = resolutionsToPersist,
+                    conflictsToSettle = settlements,
+                )
+            }
+
             // 2b. Competing offline resolutions: STRICTLY restricted to when BOTH
             // current local L (`version_op == "resolve"`) AND incoming R (`op == "resolve"`)
             // are competing resolutions with equal `resolvedFps` sets and neither in the other's `anc`.
@@ -545,6 +651,7 @@ internal object DriveConflictEngine {
                 incoming = incoming,
                 incomingIsLivePut = isIncomingLivePut,
                 remoteDeviceId = remoteDeviceId,
+                remoteSeq = remoteSeq,
                 now = now,
                 keptLocalState = stateKeepingLocal(includeCandidateRefs = false),
                 resolutionsToPersist = resolutionsToPersist,
@@ -623,6 +730,7 @@ internal object DriveConflictEngine {
             incoming = incoming,
             incomingIsLivePut = isIncomingLivePut,
             remoteDeviceId = remoteDeviceId,
+            remoteSeq = remoteSeq,
             now = now,
             keptLocalState = stateKeepingLocal(includeCandidateRefs = false),
             resolutionsToPersist = resolutionsToPersist,
@@ -743,6 +851,22 @@ internal object DriveConflictEngine {
         )
     }
 
+    private fun decodeList(json: String?): List<String> = DriveWorkIdentity.decodeStringArray(json)
+
+    private fun remoteLineage(conflict: DriveConflict): Set<String> =
+        decodeFps(conflict.remoteResRefsJson) + decodeFps(conflict.remoteAncJson)
+
+    private fun DriveConflict.toWireRecord() = DriveWireRecord(
+        d = domain,
+        k = recordKey,
+        op = remoteOp ?: if (remoteJson != null) DriveRecordState.OP_PUT else DriveRecordState.OP_DEL,
+        hlc = remoteHlc,
+        fp = remoteFp,
+        anc = decodeList(remoteAncJson),
+        resRefs = decodeList(remoteResRefsJson),
+        body = remoteJson?.let(::JSONObject),
+    )
+
     fun decodeFps(jsonArrayString: String?): Set<String> =
         DriveWorkIdentity.decodeStringArray(jsonArrayString).toSet()
 
@@ -756,6 +880,7 @@ internal object DriveConflictEngine {
         incoming: DriveWireRecord,
         incomingIsLivePut: Boolean,
         remoteDeviceId: String,
+        remoteSeq: Long,
         now: Long,
         keptLocalState: DriveRecordState,
         resolutionsToPersist: List<DriveResolution>,
@@ -784,6 +909,10 @@ internal object DriveConflictEngine {
             remoteJson = remoteJson,
             remoteDeviceId = remoteDeviceId,
             remoteHlc = incoming.hlc,
+            remoteOp = incoming.op,
+            remoteSeq = remoteSeq,
+            remoteAncJson = DriveCanonicalJson.encode(incoming.anc),
+            remoteResRefsJson = DriveCanonicalJson.encode(incoming.resRefs),
             state = DriveConflict.STATE_OPEN,
             choice = null,
             resolutionFp = null,
