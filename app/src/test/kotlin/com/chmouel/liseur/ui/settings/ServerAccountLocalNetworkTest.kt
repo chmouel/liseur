@@ -385,6 +385,20 @@ class ServerAccountLocalNetworkTest {
         assertEquals(1, sync.fullRuns)
     }
 
+    @Test
+    fun `disconnecting leaves the absent server marked as loaded`() = scenario {
+        db.remoteServerDao().upsert(server(baseUrl = "https://books.example.com"))
+        val model = model()
+        runCurrent()
+        assertTrue(model.state.value.serverLoaded)
+
+        model.disconnect()
+        runCurrent()
+
+        assertTrue(model.state.value.serverLoaded)
+        assertEquals(null, model.state.value.server)
+    }
+
     /**
      * A pairing left behind by an account switch is shown so that it
      * can be disconnected, and nothing will ever dial it. Asking for a
