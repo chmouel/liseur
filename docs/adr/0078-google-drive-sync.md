@@ -83,8 +83,16 @@ Identifiers:
 - `fp` (version fingerprint, lowercase hex SHA-256 of canonical JSON:
   sorted keys, UTF-8, no whitespace, canonical numbers as specified in
   `docs/DRIVE_SYNC.md`):
-  - For `op: "put"`: `contentFp = sha256({"op":"put","body":<body>})`.
-    Recomputable directly from the committed `liseur.db` row.
+  - For `op: "put"`: `putFp = sha256({"op":"put","body":<body>,"hlc":<hlc>})`.
+    The record's authoring `hlc` makes every put version unique, so a body
+    that recurs (a note changed X → Y → X under a regressing wall clock)
+    never reuses an ancestor's `fp` and never makes two versions each
+    other's ancestors. The `fp` is persisted (`drive_record_state.version_fp`,
+    `sent_json.vfp`, or the apply receipt), not recomputed from the row.
+    `contentFp = sha256({"op":"put","body":<body>})` is a separate content
+    identity, recomputable from the committed `liseur.db` row and stored as
+    `content_fp`. It detects local edits and lets two live puts with equal
+    bodies meet in Agreement; it is never sent as `fp`.
   - For `op: "del"`: `delFp = sha256({"op":"del","d":<d>,"k":<k>,"hlc":<hlc>})`.
     Including `hlc` guarantees a later delete after a kept resolution
     never collides with an earlier tombstone in `anc`.
@@ -99,7 +107,7 @@ Identifiers:
   forward across every subsequent edit, delete, or resolution for
   `(d, k)` **outside** the 64-entry `anc` cap (persisted in
   `drive_record_state.res_refs_json` and emitted on wire records;
-  excluded from `contentFp`). Serves as the durable causal proof for
+  excluded from `fp`). Serves as the durable causal proof for
   resolution-bridged supersession after compaction.
 - Durable resolution facts (`drive_resolution` in `drive_sync.db` and
   the dedicated `resolutions` section in snapshots): uncapped records of
@@ -161,9 +169,10 @@ Existing `liseur.db` per-peer tables fall into two shapes:
      Transaction 1 and Transaction 2):
      - If `row.revision == sync.acked_revision` (no local edit occurred
        after the crash): **recompute `contentFp` directly from the
-       committed `liseur.db` row**, pair it with `vfp` from
-       `sync.sent_json` (falling back to the recomputed `contentFp`),
-       and repair `drive_record_state` (`published_fp = vfp`,
+       committed `liseur.db` row** (or `"DELETED"` when the row holds a
+       cleared value or reset override), pair it with `vfp` from
+       `sync.sent_json` (always present, because every Tx 1 that changes
+       the row writes it), and repair `drive_record_state` (`published_fp = vfp`,
        `content_fp = contentFp`, `last_synced_revision =
        sync.acked_revision`, adding `vfp` to `ancestors_json`). When the
        un-advanced batch replays, it hits Agreement and advances the
@@ -174,9 +183,17 @@ Existing `liseur.db` per-peer tables fall into two shapes:
      - If `row.revision > sync.acked_revision` (the reader edited the
        field again locally after restart before recovery ran): seed
        `drive_record_state`'s causal ancestry with `sync.sent_json.vfp`
-       (the exact pre-edit committed baseline at `acked_revision`), keep
-       the current row dirty (`L = contentFp(row)`), and publish the new
-       edit with `sync.sent_json.vfp` in its `anc`. Replaying the
+       (the exact pre-edit committed baseline at `acked_revision`), record
+       the current row as a new dirty local version, and publish it with
+       `sync.sent_json.vfp` in its `anc`. The new version's op follows
+       the row. A live value is a put: mint a fresh HLC `h`,
+       `L = putFp(<body built from the row>, h)`, `content_fp =
+       contentFp(<body>)`. A cleared rating or review (`value == null`) or
+       a reset metadata override (`*_override = 0`) is a **delete**, since
+       a put with a null value is invalid and one rebuilt from the
+       fallback file/catalog value would restore the cleared override:
+       mint `h`, `L = delFp(d, k, h)`, `version_op = "del"`,
+       `body_json = NULL`, and leave the tombstone owed. Replaying the
        already-applied batch sees `R.fp ∈ anc(L)` (Stale) and never
        overwrites the reader's new edit (while still running the
        mandatory `op: "resolve"` persistence/settlement pre-step if the
@@ -198,7 +215,17 @@ local_version, revives_json)`.
 `addedAt`, `archivedAt`), and `republish` marks a merged body that differs
 from `R.body`. A `vocabWord` revival or add-wins keep minted by this device
 writes a receipt with `local_version = 1`, so recovery restores
-`L := reviveFp` with its lineage and leaves it unpublished. Migration 84→85
+`L := reviveFp` with its lineage and leaves it unpublished. A local conflict
+resolution does the same: before applying the choice, a `drive_sync.db`
+transaction persists the exact resolution in `drive_conflict.resolution_json`,
+and the Tx 1 that applies it writes a receipt with `local_version = 1`,
+`version_fp = resolveFp` and `version_op = "resolve"` (`evaluation` and
+`metadata` raise `acked_revision` with `sent_json.vfp = resolveFp`). A
+restart never re-applies the stored choice once that receipt exists, so an
+edit the reader made after the crash and before the `resolve` batch was
+frozen is kept as a descendant with `resolveFp` in its `anc`, and the stored
+`resolve` freezes first in its own batch (see `drive_authored_record`
+below). Migration 84→85
 creates the table empty; the protocol is unreleased, so nothing is
 backfilled. Recovery runs before
 diffing and pulling for every receipt whose `receipt_id` (a UUID unique per
@@ -207,9 +234,9 @@ with the rest of the record's state and which local versions and the
 64-entry `anc` cap never change, so a long-committed receipt is never
 re-applied: if the row projection still equals `row_fp`, restore
 `drive_record_state` from the receipt (a merged body with `republish = 1`
-becomes a new unpublished local version with the receipt's `version_fp` in
-`anc`); if not, the post-crash edit becomes the new local version with
-`version_fp` in `anc`, so replay is Stale and the edit survives. For
+becomes a new unpublished local version, with a fresh HLC and `putFp`, and the
+receipt's `version_fp` in `anc`); if not, the post-crash edit becomes the new local version (a put with a fresh HLC
+and `putFp`) with `version_fp` in `anc`, so replay is Stale and the edit survives. For
 `catalog` only the row-backed fields are replaced, and `archiveHlc` is
 minted fresh only if `archivedAt` changed, so unrelated editions and
 availability groups survive. If the reader deleted an `annotation` or
@@ -247,7 +274,7 @@ strictly separated:
   facts) decides conflict detection.
 
 Let `L` be the local version fp (`none` if the record has never existed
-locally; a `put` `contentFp`, `delFp`, or `resolveFp` otherwise), and
+locally; a `put` `putFp`, `delFp`, or `resolveFp` otherwise), and
 `R` be an incoming record `(R.op, R.fp, R.anc, R.resRefs, R.hlc,
 R.deviceId, R.seq)`.
 
@@ -284,7 +311,7 @@ Then evaluate in order:
 | Case | Condition | Result |
 |---|---|---|
 | 0. Unseen | `L == none` | Apply `R` silently; set `L := R.fp`, `version_op := R.op`, `published_fp := R.fp`, `anc(L) := R.anc`, `res_refs(L) := R.resRefs ∪ ({R.fp} if R.op == "resolve" else ∅)`. |
-| 1. Agreement | `R.fp == L`, OR both `L` and `R` are deletions (`del`, or a `del` paired with a `resolve` whose `outcome` is `"delete"` — two **distinct** `op: "resolve"` records never agree here and are routed to Case 2 first), OR (`R.op == "resolve" && R.outcome == "put"` and committed `liseur.db` row already matches `contentFp(R.body)` with matching per-peer ack after crash recovery) | No data conflict: merge `anc(L) := anc(L) ∪ R.anc` and `res_refs(L) := res_refs(L) ∪ R.resRefs`; for concurrent deletes keep deleted and adopt the higher-HLC `delFp` (or `R.fp` if `R.op == "resolve"`); for resolved-body replay agreement adopt `L := R.fp`, `version_op := "resolve"`, and add `R.fp` to `res_refs(L)`; set `published_fp := L`. (Any incoming `op: "resolve"` side effects were already completed by the mandatory pre-step before cursor advancement.) |
+| 1. Agreement | `R.fp == L`, OR both `L` and `R` are deletions (`del`, or a `del` paired with a `resolve` whose `outcome` is `"delete"` — two **distinct** `op: "resolve"` records never agree here and are routed to Case 2 first), OR both `L` and `R` are live `put`s with equal `contentFp` and neither `fp` in the other's `anc` (two devices that made the same edit or merged to the same body each minted their own `putFp`), OR (`R.op == "resolve" && R.outcome == "put"` and committed `liseur.db` row already matches `contentFp(R.body)` with matching per-peer ack after crash recovery) | No data conflict: merge `anc(L) := anc(L) ∪ R.anc` and `res_refs(L) := res_refs(L) ∪ R.resRefs`; for concurrent deletes keep deleted and adopt the higher-HLC `delFp` (or `R.fp` if `R.op == "resolve"`) together with that `del`'s own `restore` and `observed` (a losing delete's payloads are discarded, never copied beside the winning `fp`, so every delivery order yields the same causal boundary); for concurrent equal-body puts adopt the higher `(hlc, fp)` and keep the other in `anc(L)`; for resolved-body replay agreement adopt `L := R.fp`, `version_op := "resolve"`, and add `R.fp` to `res_refs(L)`; set `published_fp := L` (for equal-body puts, only when `R` is adopted; a retained local `L` is still owed). (Any incoming `op: "resolve"` side effects were already completed by the mandatory pre-step before cursor advancement.) |
 | 2. Incoming resolution | `R.op == "resolve"` | Run the resolution rule below (the mandatory pre-step has already persisted `drive_resolution` and closed covered `OPEN` conflicts). |
 | 3. Causal supersession | (No `OPEN` conflict on `(d, k)` and `L` is not retired by any `drive_resolution`, AND (`L ∈ R.anc` OR `L` was applied unmodified from `R.deviceId` at `origin_seq(L) < R.seq`)), OR (`∃` winning `res ∈ drive_resolution` for `(d, k)` with `L ∈ res.resolvedFps` **AND `res.resolutionFp ∈ R.resRefs`** — never merely `R.hlc >= res.hlc`) | **Fast-forward silently:** apply `R` (including a remote `del` on an untouched copy), close any `OPEN` conflict covered by `res.resolvedFps` on resolution-bridged supersession, set `L := R.fp`, `version_op := R.op`, `published_fp := R.fp`, merge `anc(L) := {L} ∪ anc(L) ∪ R.anc` and `res_refs(L) := res_refs(L) ∪ R.resRefs`. |
 | 4. Stale | `R.fp ∈ anc(L)` OR `∃ res ∈ drive_resolution` with `R.fp ∈ res.resolvedFps` | Ignore `R`'s body (already superseded or retired by a completed resolution; any incoming `op: "resolve"` side effects were already persisted by the mandatory pre-step). |
@@ -408,7 +435,7 @@ envelope `revives = {del, restore}` and `fp = reviveFp(delFp, restore.fp)`,
 a hash distinct from `restore.fp` (`content_fp` stays
 `contentFp(restore.body)`; the Tx 1 that mints it records `reviveFp`, `anc`
 and `revives` in `drive_apply_receipt`, so crash recovery never falls back to
-`restore.fp`). Because the original `del`'s `anc` holds
+`restore.fp`, which is the version `fp` of the last live word version). Because the original `del`'s `anc` holds
 `restore.fp` but no `del` holds `reviveFp`, a late replay of that `del`
 is Stale and cannot delete the revived word again. The revival is
 republished along with the same eligible set of retained children
@@ -482,10 +509,16 @@ reading sessions (`remote_session_id`), and work aliases
   `annotation_sync` row remains, so a `del` with `anc` is published. Book
   removal is not a delete.
 - Furthest position: peaks keep the max per slot
-  (`FurthestPositionDao.observe`); a reset `{floors:{deviceId:seq}}` wins
-  over peaks with `seq ≤ floor[device]`. This needs a new DAO query
-  deleting `furthest_position` rows for a peer, work and origin with
-  `seq <= :floor`. Resets are kept forever. A reset covers the whole
+  (`FurthestPositionDao.observe`), and a lower peak with a higher `seq` is
+  kept as a newer candidate in `drive_sync.db` (`drive_peak_candidate`)
+  instead of being dropped; a reset `{floors:{deviceId:seq}}` wins over
+  peaks with `seq ≤ floor[device]`. This needs a new DAO query deleting
+  `furthest_position` rows for a peer, work and origin with
+  `seq <= :floor`; the reset also deletes the covered candidates and
+  re-materializes each slot's visible row from the best remaining one, so
+  a post-reset 30% peak at `seq = 11` survives whether it arrives before
+  or after the reset that deletes B's 80% peak at `seq = 10`. Resets are
+  kept forever. A reset covers the whole
   work: it also resets the local `reading_progress` peak of every local
   edition whose bound peak `seq` is at or below the floor and clears its
   `peak_delivery`, while preserving unsent or newer peaks. Peak `seq`
@@ -775,12 +808,19 @@ restored device gets its own `deviceId`.
 | `drive_authored_record` | `(permission_id, domain, record_key, seq)` | `op`, `hlc`, `fp`, `anc_json`, `res_refs_json`, `body_json`, `observed_json`, `restore_json`, `revives_json`, `first_seq` (original publication seq, for `vocabOccurrence` / `vocabReview`) |
 | `drive_record_state` | `(permission_id, domain, record_key)` | `version_fp`, `version_op`, `published_fp`, `content_fp`, `last_synced_revision`, `origin_device_id`, `origin_seq`, `ancestors_json`, `res_refs_json`, `last_hlc`, `body_json`, `observed_json` and `restore_json` (`vocabWord` `del` only), `held` (version recorded but not applied to `liseur.db`: book tombstoned, or `vocabOccurrence` child of an absent or tombstoned word), `acked_receipt_id` |
 | `drive_resolution` | `(permission_id, domain, record_key, resolution_fp)` | `resolved_fps_json`, `outcome` (`put` / `delete`), `hlc`, `author_device_id`, `created_at` |
-| `drive_conflict` | `(permission_id, conflict_id)` | `domain`, `record_key`, `book_url`, `kind`, `local_fp`, `remote_fp`, `remote_json`, `remote_device_id`, `remote_hlc`, `state` (OPEN / RESOLVING / RESOLVED), `choice`, `resolution_fp`, `opened_at`, `resolved_at` |
+| `drive_conflict` | `(permission_id, conflict_id)` | `domain`, `record_key`, `book_url`, `kind`, `local_fp`, `remote_fp`, `remote_json`, `remote_device_id`, `remote_hlc`, `state` (OPEN / RESOLVING / RESOLVED), `choice`, `resolution_json` (the exact `op: "resolve"` record, written before the choice is applied), `resolution_fp`, `opened_at`, `resolved_at` |
+| `drive_peak_candidate` | `(permission_id, work_id, edition, origin, seq)` | `progression`, `payload_json` (newer lower-progression peaks kept until a reset floor or a dominating peak removes them; `docs/DRIVE_SYNC.md` §4.6) |
 | `drive_session_ack` | `(permission_id, remote_session_id)` | `batch_seq`, `acked_at` |
 | `drive_upload` | `(permission_id, sha256)` | `book_url`, `size_bytes`, `state`, `session_uri`, `bytes_sent`, `file_id`, `selected_at`, `updated_at` |
 
 `drive_authored_record` holds the records this device authored, one row
-per record per batch. Its rows are inserted in the same `drive_sync.db`
+per record per batch. A batch holds at most one record per `(d, k)`, so
+the key `(permission_id, domain, record_key, seq)` never collides: when
+two versions of one record must both reach the wire (a `vocabReview` `put`
+and its final undo `del` queued before the next sync, which share a
+`syncId`, or a local resolution that must precede a later edit), the
+freeze places them in consecutive batches in version order, and a snapshot
+keeps both envelopes. Its rows are inserted in the same `drive_sync.db`
 transaction that allocates `seq` and inserts the `drive_outbox` row, so
 provenance and sequence are atomic. Adopting a remote version never touches
 it. A snapshot with `throughSeq = T` takes, per key, the row with the
@@ -794,11 +834,16 @@ Batch receipts are `drive_outbox` for own uploads, `drive_session_ack`
 for per-account session delivery, and `drive_cursor` for other devices;
 there is no incoming-receipt table because apply is idempotent.
 `conflict_id` is `sha256(domain|key|sorted(fpA, fpB))`.
-Resolving a conflict writes `RESOLVING` and the choice, applies the
-choice to `liseur.db`, publishes the `op: "resolve"` record (encoding
-`outcome: "put"` or `"delete"` and `resolvedFps`), persists the durable
-fact in `drive_resolution`, then marks `RESOLVED`; on restart a
-`RESOLVING` row is re-applied idempotently. Acks stay atomic with their
+Resolving a conflict writes `RESOLVING` with the choice and the exact
+`op: "resolve"` record (`resolution_json`), applies the choice to
+`liseur.db` together with its `drive_apply_receipt` (or the raised
+`acked_revision` for `evaluation` and `metadata`), publishes the stored
+record (encoding `outcome: "put"` or `"delete"` and `resolvedFps`),
+persists the durable fact in `drive_resolution`, then marks `RESOLVED`. On
+restart a `RESOLVING` row is re-applied from `resolution_json` only when
+no receipt exists (Tx 1 never committed); otherwise it is recovered
+through the receipt, so an edit made after the crash is never overwritten
+and the stored `resolve` is still published ahead of it. Acks stay atomic with their
 data in `liseur.db` (natively via `acked_fingerprint` or through the
 revision-to-fingerprint adapter on `evaluation_sync` and
 `metadata_override_sync`); transport, causal ancestry, and resolution
@@ -1051,7 +1096,11 @@ Mutual exclusion invariant: never both `remote_server.id = 1` and a
   successor edits and multiple compactions alongside the independent-
   branch/skewed-clock repro (`fB → fD` without `resRefs` proof), and
   Server → Drive switch preservation plus Drive seeding for both
-  history-bearing and metadata-only fileless stubs.
+  history-bearing and metadata-only fileless stubs. The contract cases in
+  `docs/DRIVE_SYNC.md` §5.3 add repeated put bodies under a regressing
+  clock, concurrent word deletes in both delivery orders, peaks against a
+  reset in both orders, a review `put` and undo queued together, a local
+  resolution crash followed by an edit, and a post-crash clear.
 
 ### Rejected alternatives
 
