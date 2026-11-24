@@ -266,7 +266,9 @@ internal class DriveLibrarySync(
                 val bySource = metadataRows.associateBy { it.source }
                 listOf(MetadataSource.FILE.key, MetadataSource.CATALOG.key).forEach { source ->
                     bySource[source]?.toSnapshot()?.identifiers?.forEach { identifier ->
-                        if (identifier.value.isNotBlank()) add(schemeQualified(identifier.scheme, identifier.value))
+                        if (identifier.value.trim().lowercase(Locale.ROOT) !in USELESS_IDENTIFIERS) {
+                            add(schemeQualified(identifier.scheme, identifier.value))
+                        }
                     }
                 }
             }.map { candidate -> schemeQualified(null, candidate).lowercase(Locale.ROOT) }
@@ -291,11 +293,20 @@ internal class DriveLibrarySync(
          * a preserved stub derive one identity for one identifier.
          */
         internal fun schemeQualified(scheme: String?, value: String): String {
+            val qualified = qualify(scheme, value)
+            return if (qualified.startsWith(BARE_UUID_PREFIX, ignoreCase = true)) {
+                "urn:uuid:" + qualified.substring(BARE_UUID_PREFIX.length)
+            } else {
+                qualified
+            }
+        }
+
+        private fun qualify(scheme: String?, value: String): String {
             val trimmed = value.trim()
             val declared = scheme?.trim()?.lowercase(Locale.ROOT)?.removePrefix("urn:").orEmpty()
             if (declared.isEmpty()) {
                 val split = identifierOf(trimmed) ?: return trimmed
-                return if (split.scheme.isEmpty()) trimmed else schemeQualified(split.scheme, split.value)
+                return if (split.scheme.isEmpty()) trimmed else qualify(split.scheme, split.value)
             }
             val lowered = trimmed.lowercase(Locale.ROOT)
             if (lowered.startsWith("$declared:") || lowered.startsWith("urn:$declared:")) return trimmed
@@ -313,6 +324,7 @@ internal class DriveLibrarySync(
             }
         }
 
+        private const val BARE_UUID_PREFIX = "uuid:"
         private const val HEX_CHARS = "0123456789abcdef"
     }
 }
