@@ -266,7 +266,9 @@ internal class DriveLibrarySync(
                 val bySource = metadataRows.associateBy { it.source }
                 listOf(MetadataSource.FILE.key, MetadataSource.CATALOG.key).forEach { source ->
                     bySource[source]?.toSnapshot()?.identifiers?.forEach { identifier ->
-                        if (identifier.value.trim().lowercase(Locale.ROOT) !in USELESS_IDENTIFIERS) {
+                        if (identifier.value.isNotBlank() &&
+                            identifier.value.trim().lowercase(Locale.ROOT) !in USELESS_IDENTIFIERS
+                        ) {
                             add(schemeQualified(identifier.scheme, identifier.value))
                         }
                     }
