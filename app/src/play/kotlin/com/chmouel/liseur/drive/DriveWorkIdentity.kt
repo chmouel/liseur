@@ -193,6 +193,7 @@ internal class DriveWorkIdentity(
      * strong identifier (e.g. ISBN) link to the existing local book cleanly.
      */
     suspend fun resolveAllLocalBooks(permissionId: String) {
+        replayPendingAliasEffects(permissionId)
         for (book in books.allOnce()) {
             if (book.browseServerId != null) continue
             if (book.url.startsWith(DRIVE_BOOK_URL_PREFIX)) continue
@@ -236,6 +237,7 @@ internal class DriveWorkIdentity(
         remoteTitle: String?,
         remoteAuthor: String?,
     ): Boolean {
+        replayPendingAliasEffects(permissionId)
         val remoteTa = WorkIdentifiers.titleAuthor(remoteTitle, remoteAuthor) ?: return false
         val peerId = DriveLibrarySync.accountPeerId(permissionId)
         val merges = loadMergeMap(permissionId)
@@ -292,6 +294,7 @@ internal class DriveWorkIdentity(
 
     /** Lists all pending ambiguous title/author matches for [permissionId]. */
     suspend fun pendingMatches(permissionId: String): List<DrivePendingWorkMatch> {
+        replayPendingAliasEffects(permissionId)
         val peerId = DriveLibrarySync.accountPeerId(permissionId)
         val merges = loadMergeMap(permissionId)
         val allBooks = books.allOnce().associateBy { it.url }
@@ -396,26 +399,8 @@ internal class DriveWorkIdentity(
         val bodyJson = DriveCanonicalJson.encode(bodyMap)
         val fp = DriveCanonicalJson.contentFp(bodyMap)
 
-        // Transaction 1 (`liseur.db`): update aliases and clear ambiguity.
-        database.withTransaction {
-            val allAliases = identities.aliasesFor(peerId)
-            for (alias in allAliases) {
-                if (resolveCanonical(alias.workId, merges) == from) {
-                    // Only the book the reader confirmed is promoted; other books keep their
-                    // confidence, so a guess or rejection there is not turned into consent.
-                    identities.upsert(
-                        if (alias.bookUrl == bookUrl) {
-                            alias.copy(workId = to, confidence = WorkAlias.HIGH, confirmed = true, seeded = false)
-                        } else {
-                            alias.copy(workId = to)
-                        },
-                    )
-                }
-            }
-            identities.clearAmbiguity(bookUrl, peerId)
-        }
-
-        // Transaction 2 (`drive_sync.db`): queue `workAlias` merge record (unpublished -> `publishedFp = null`).
+        // The wire record and the recovery marker commit together, before any `liseur.db` change.
+        val intent = PendingAliasEffect.Merge(bookUrl = bookUrl, from = from, to = to)
         store.withTransaction {
             val existing = recordStates.get(permissionId, DriveWireCodec.DOMAIN_WORK_ALIAS, mergeKey)
             val ancestors = buildAncestors(existing)
@@ -436,7 +421,9 @@ internal class DriveWorkIdentity(
             )
             // Merge supersedes any prior reject for this pair.
             recordStates.delete(permissionId, DriveWireCodec.DOMAIN_WORK_ALIAS, rejectRecordKey(to, from))
+            queuePendingEffect(permissionId, intent, hlc)
         }
+        replayPendingAliasEffects(permissionId)
         return to
     }
 
@@ -455,14 +442,10 @@ internal class DriveWorkIdentity(
     ) {
         val peerId = DriveLibrarySync.accountPeerId(permissionId)
         val now = clock()
-        database.withTransaction {
-            identities.clearAmbiguity(bookUrl, peerId)
-            val alias = identities.alias(bookUrl, peerId)
-            if (alias != null && alias.awaitingAnswer) {
-                identities.reject(bookUrl, peerId)
-            }
+        if (keyA.isBlank() || keyB.isBlank() || keyA == keyB) {
+            applyPendingEffect(peerId, PendingAliasEffect.Reject(bookUrl, a = "", b = ""), emptyMap())
+            return
         }
-        if (keyA.isBlank() || keyB.isBlank() || keyA == keyB) return
 
         val low = minOf(keyA, keyB)
         val high = maxOf(keyA, keyB)
@@ -490,6 +473,97 @@ internal class DriveWorkIdentity(
                     bodyJson = bodyJson,
                 ),
             )
+            queuePendingEffect(permissionId, PendingAliasEffect.Reject(bookUrl, low, high), hlc)
+        }
+        replayPendingAliasEffects(permissionId)
+    }
+
+    /**
+     * Completes `liseur.db` effects of a confirm/reject whose wire record is already durable.
+     * Each effect is idempotent, so a crash at any point is recovered by the next call.
+     */
+    suspend fun replayPendingAliasEffects(permissionId: String) {
+        val peerId = DriveLibrarySync.accountPeerId(permissionId)
+        val pending = recordStates.forDomain(permissionId, DOMAIN_PENDING_ALIAS_EFFECT)
+            .sortedWith(compareBy({ it.lastHlc }, { it.recordKey }))
+        for (row in pending) {
+            val effect = row.bodyJson?.let { PendingAliasEffect.decode(it) }
+            if (effect != null) applyPendingEffect(peerId, effect, loadMergeMap(permissionId))
+            recordStates.delete(permissionId, DOMAIN_PENDING_ALIAS_EFFECT, row.recordKey)
+        }
+    }
+
+    private suspend fun applyPendingEffect(
+        peerId: String,
+        effect: PendingAliasEffect,
+        merges: Map<String, String>,
+    ) {
+        database.withTransaction {
+            when (effect) {
+                is PendingAliasEffect.Merge -> {
+                    val target = resolveCanonical(effect.to, merges)
+                    for (alias in identities.aliasesFor(peerId)) {
+                        val resolved = resolveCanonical(alias.workId, merges)
+                        if (resolved == alias.workId) continue
+                        // Only the book the reader confirmed is promoted; other books keep their
+                        // confidence, so a guess or rejection there is not turned into consent.
+                        identities.upsert(
+                            if (alias.bookUrl == effect.bookUrl && resolved == target) {
+                                alias.copy(workId = resolved, confidence = WorkAlias.HIGH, confirmed = true, seeded = false)
+                            } else {
+                                alias.copy(workId = resolved)
+                            },
+                        )
+                    }
+                }
+                is PendingAliasEffect.Reject -> {
+                    val alias = identities.alias(effect.bookUrl, peerId)
+                    if (alias != null && alias.awaitingAnswer) identities.reject(effect.bookUrl, peerId)
+                }
+            }
+            identities.clearAmbiguity(effect.bookUrl, peerId)
+        }
+    }
+
+    /** Runs inside the caller's `drive_sync.db` transaction. Never published: `publishedFp == versionFp`. */
+    private suspend fun queuePendingEffect(permissionId: String, effect: PendingAliasEffect, hlc: String) {
+        val bodyJson = DriveCanonicalJson.encode(effect.toMap())
+        val fp = DriveCanonicalJson.sha256Hex(bodyJson)
+        recordStates.upsert(
+            DriveRecordState(
+                permissionId = permissionId,
+                domain = DOMAIN_PENDING_ALIAS_EFFECT,
+                recordKey = fp,
+                versionFp = fp,
+                versionOp = DriveRecordState.OP_PUT,
+                publishedFp = fp,
+                contentFp = fp,
+                lastHlc = hlc,
+                bodyJson = bodyJson,
+            ),
+        )
+    }
+
+    private sealed interface PendingAliasEffect {
+        val bookUrl: String
+
+        data class Merge(override val bookUrl: String, val from: String, val to: String) : PendingAliasEffect
+        data class Reject(override val bookUrl: String, val a: String, val b: String) : PendingAliasEffect
+
+        fun toMap(): Map<String, Any?> = when (this) {
+            is Merge -> mapOf("kind" to "merge", "bookUrl" to bookUrl, "from" to from, "to" to to)
+            is Reject -> mapOf("kind" to "reject", "bookUrl" to bookUrl, "a" to a, "b" to b)
+        }
+
+        companion object {
+            fun decode(json: String): PendingAliasEffect? = runCatching {
+                val o = JSONObject(json)
+                when (o.getString("kind")) {
+                    "merge" -> Merge(o.getString("bookUrl"), o.getString("from"), o.getString("to"))
+                    "reject" -> Reject(o.getString("bookUrl"), o.getString("a"), o.getString("b"))
+                    else -> null
+                }
+            }.getOrNull()
         }
     }
 
@@ -723,6 +797,9 @@ internal class DriveWorkIdentity(
         const val DRIVE_BOOK_URL_PREFIX = "drive:"
         const val MERGE_KEY_PREFIX = "merge:"
         const val REJECT_KEY_PREFIX = "reject:"
+
+        /** Local-only recovery markers in `drive_record_state`; not a wire domain. */
+        const val DOMAIN_PENDING_ALIAS_EFFECT = "_work_alias_pending"
 
         fun driveBookUrl(workKey: String): String = "$DRIVE_BOOK_URL_PREFIX$workKey"
 

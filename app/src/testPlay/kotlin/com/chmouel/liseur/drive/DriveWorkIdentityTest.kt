@@ -9,6 +9,7 @@ import com.chmouel.liseur.data.db.BookMetadata
 import com.chmouel.liseur.data.db.DownloadState
 import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.data.db.WorkAlias
+import com.chmouel.liseur.data.db.WorkAmbiguity
 import com.chmouel.liseur.domain.Identifier
 import com.chmouel.liseur.domain.MetadataSnapshot
 import com.chmouel.liseur.domain.MetadataSource
@@ -426,5 +427,142 @@ class DriveWorkIdentityTest {
         val mmm = requireNotNull(driveDb.recordStates().get(perm, DriveWireCodec.DOMAIN_WORK_ALIAS, "merge:isbn:mmm"))
         assertTrue(mmm.bodyJson!!.contains("dc:aaa"))
         assertEquals(listOf("merge:dc:bbb"), identity.collectDirtyRecords(perm).map { it.k })
+    }
+
+    private fun failWorkAliasWrites() {
+        val db = liseurDb.openHelper.writableDatabase
+        for (op in listOf("INSERT", "UPDATE", "DELETE")) {
+            db.execSQL("CREATE TRIGGER crash_$op BEFORE $op ON work_alias BEGIN SELECT RAISE(ABORT, 'crash'); END")
+        }
+    }
+
+    private fun allowWorkAliasWrites() {
+        val db = liseurDb.openHelper.writableDatabase
+        for (op in listOf("INSERT", "UPDATE", "DELETE")) db.execSQL("DROP TRIGGER crash_$op")
+    }
+
+    private fun freshIdentity() = DriveWorkIdentity(liseurDb, driveDb, null) { nowMs }
+
+    private suspend fun pendingMarkers(perm: String) =
+        driveDb.recordStates().forDomain(perm, DriveWorkIdentity.DOMAIN_PENDING_ALIAS_EFFECT)
+
+    @Test
+    fun `a confirmed merge survives a crash before local aliases change and replays on a fresh instance`() = runTest {
+        val perm = "perm-1"
+        val peerId = DriveLibrarySync.accountPeerId(perm)
+        val dao = liseurDb.workIdentityDao()
+        val otherPeer = DriveLibrarySync.accountPeerId("perm-2")
+        dao.upsert(WorkAlias("file:///a.epub", peerId, "sha:ccc", WorkAlias.HIGH, confirmed = false, resolvedAt = 1L))
+        dao.upsert(WorkAlias("file:///guess.epub", peerId, "sha:ccc", WorkAlias.LOW, confirmed = false, resolvedAt = 1L))
+        dao.upsert(WorkAlias("file:///a.epub", otherPeer, "sha:ccc", WorkAlias.LOW, confirmed = false, resolvedAt = 1L))
+        dao.upsert(WorkAmbiguity("file:///a.epub", peerId, "sha:ccc\nisbn:bbb", 1L))
+
+        failWorkAliasWrites()
+        try {
+            identity.confirmMerge(perm, "file:///a.epub", "sha:ccc", "isbn:bbb", "0017450000000-0001-dev-a")
+            org.junit.Assert.fail("expected the local write to fail")
+        } catch (_: Exception) {
+        }
+        allowWorkAliasWrites()
+
+        assertEquals(listOf("merge:sha:ccc"), identity.collectDirtyRecords(perm).map { it.k })
+        assertEquals(1, pendingMarkers(perm).size)
+        assertEquals("sha:ccc", dao.alias("file:///a.epub", peerId)?.workId)
+
+        val fresh = freshIdentity()
+        assertTrue(fresh.pendingMatches(perm).isEmpty())
+
+        val confirmed = requireNotNull(dao.alias("file:///a.epub", peerId))
+        assertEquals("isbn:bbb", confirmed.workId)
+        assertEquals(WorkAlias.HIGH, confirmed.confidence)
+        assertTrue(confirmed.confirmed)
+        val guess = requireNotNull(dao.alias("file:///guess.epub", peerId))
+        assertEquals("isbn:bbb", guess.workId)
+        assertEquals(WorkAlias.LOW, guess.confidence)
+        assertFalse(guess.confirmed)
+        val other = requireNotNull(dao.alias("file:///a.epub", otherPeer))
+        assertEquals("sha:ccc", other.workId)
+        assertEquals(WorkAlias.LOW, other.confidence)
+        assertTrue(dao.ambiguitiesFor(peerId).isEmpty())
+        assertTrue(pendingMarkers(perm).isEmpty())
+        assertEquals(listOf("merge:sha:ccc"), fresh.collectDirtyRecords(perm).map { it.k })
+
+        // A second replay changes nothing.
+        fresh.replayPendingAliasEffects(perm)
+        assertEquals(confirmed, dao.alias("file:///a.epub", peerId))
+    }
+
+    @Test
+    fun `a pair rejection survives a crash before the local effects and no prompt returns after replay`() = runTest {
+        val perm = "perm-1"
+        val peerId = DriveLibrarySync.accountPeerId(perm)
+        val dao = liseurDb.workIdentityDao()
+        val book = localBook("file:///classic.epub", "Pride and Prejudice", "Jane Austen")
+        liseurDb.bookDao().upsert(book)
+        val remoteKey = "isbn:9780141439518"
+        assertTrue(identity.detectAmbiguousTitleAuthorMatch(perm, remoteKey, "Pride and Prejudice", "Jane Austen"))
+        assertTrue(requireNotNull(dao.alias(book.url, peerId)).awaitingAnswer)
+
+        failWorkAliasWrites()
+        try {
+            identity.rejectMerge(perm, book.url, "", remoteKey, "0017450000000-0001-dev-a")
+            org.junit.Assert.fail("expected the local write to fail")
+        } catch (_: Exception) {
+        }
+        allowWorkAliasWrites()
+        // A reject with a blank endpoint has no wire record to protect, so a failed attempt is simply retried.
+        assertTrue(pendingMarkers(perm).isEmpty())
+        assertTrue(requireNotNull(dao.alias(book.url, peerId)).awaitingAnswer)
+        assertTrue(identity.collectDirtyRecords(perm).isEmpty())
+        identity.rejectMerge(perm, book.url, "", remoteKey, "0017450000000-0003-dev-a")
+        assertEquals(WorkAlias.REJECTED, dao.alias(book.url, peerId)?.confidence)
+
+        val pairBook = localBook("file:///pair.epub", "Emma", "Jane Austen")
+        liseurDb.bookDao().upsert(pairBook)
+        dao.upsert(WorkAlias(pairBook.url, peerId, "sha:aaa", WorkAlias.LOW, confirmed = false, resolvedAt = 1L))
+        dao.upsert(WorkAmbiguity(pairBook.url, peerId, "sha:aaa\nisbn:emma", 1L))
+        failWorkAliasWrites()
+        try {
+            identity.rejectMerge(perm, pairBook.url, "sha:aaa", "isbn:emma", "0017450000000-0002-dev-a")
+        } catch (_: Exception) {
+        }
+        allowWorkAliasWrites()
+        assertEquals(listOf("reject:isbn:emma|sha:aaa"), identity.collectDirtyRecords(perm).map { it.k })
+        assertEquals(1, dao.ambiguitiesFor(peerId).size)
+
+        val fresh = freshIdentity()
+        assertFalse(fresh.detectAmbiguousTitleAuthorMatch(perm, remoteKey, "Pride and Prejudice", "Jane Austen"))
+        assertTrue(fresh.pendingMatches(perm).isEmpty())
+        assertTrue(dao.ambiguitiesFor(peerId).isEmpty())
+        assertTrue(pendingMarkers(perm).isEmpty())
+        assertEquals(listOf("reject:isbn:emma|sha:aaa"), fresh.collectDirtyRecords(perm).map { it.k })
+        assertEquals(WorkAlias.REJECTED, dao.alias(pairBook.url, peerId)?.confidence)
+    }
+
+    @Test
+    fun `replaying one account's pending effects never touches another account`() = runTest {
+        val perm = "perm-1"
+        val otherPerm = "perm-2"
+        val dao = liseurDb.workIdentityDao()
+        val otherPeer = DriveLibrarySync.accountPeerId(otherPerm)
+        dao.upsert(WorkAlias("file:///a.epub", DriveLibrarySync.accountPeerId(perm), "sha:ccc", WorkAlias.HIGH, confirmed = false, resolvedAt = 1L))
+        dao.upsert(WorkAlias("file:///a.epub", otherPeer, "sha:ccc", WorkAlias.LOW, confirmed = false, resolvedAt = 1L))
+        dao.upsert(WorkAmbiguity("file:///a.epub", otherPeer, "sha:ccc\nisbn:bbb", 1L))
+        failWorkAliasWrites()
+        try {
+            identity.confirmMerge(perm, "file:///a.epub", "sha:ccc", "isbn:bbb", "0017450000000-0001-dev-a")
+        } catch (_: Exception) {
+        }
+        allowWorkAliasWrites()
+
+        freshIdentity().replayPendingAliasEffects(otherPerm)
+        assertEquals(1, pendingMarkers(perm).size)
+        assertEquals("sha:ccc", dao.alias("file:///a.epub", DriveLibrarySync.accountPeerId(perm))?.workId)
+
+        freshIdentity().replayPendingAliasEffects(perm)
+        val other = requireNotNull(dao.alias("file:///a.epub", otherPeer))
+        assertEquals("sha:ccc", other.workId)
+        assertEquals(WorkAlias.LOW, other.confidence)
+        assertEquals(1, dao.ambiguitiesFor(otherPeer).size)
     }
 }
