@@ -71,6 +71,7 @@ internal class DriveWorkIdentity(
             }
             return existing
         }
+        if (existing?.confidence == WorkAlias.REJECTED) return null
 
         val now = clock()
         // Remote Drive catalog stub: key is encoded in its `drive:<workKey>` URL.
@@ -125,7 +126,7 @@ internal class DriveWorkIdentity(
                 resolvedAt = now,
             )
             val persistedBook = if (book.id > 0L) book else books.getByUrl(book.url) ?: book
-            identities.saveResolution(persistedBook, alias)
+            if (!identities.saveResolution(persistedBook, alias)) return null
             return identities.alias(book.url, peerId) ?: alias
         }
 
@@ -314,6 +315,7 @@ internal class DriveWorkIdentity(
                 val canonicalCandidate = resolveCanonical(candidate, merges)
                 if (canonicalCandidate == localKey) continue
                 if (localKey.isNotEmpty() && isRejectedPair(permissionId, localKey, canonicalCandidate)) continue
+                if (results.any { it.bookUrl == localBook.url && it.candidateWorkKey == canonicalCandidate }) continue
                 val remoteBook = allBooks[driveBookUrl(canonicalCandidate)]
                     ?: aliasesByWork[canonicalCandidate]?.firstNotNullOfOrNull { allBooks[it.bookUrl] }
                 results.add(
@@ -334,6 +336,7 @@ internal class DriveWorkIdentity(
         for (alias in identities.aliasesFor(peerId).filter { it.awaitingAnswer }) {
             val localBook = allBooks[alias.bookUrl] ?: continue
             val canonicalCandidate = resolveCanonical(alias.workId, merges)
+            if (results.any { it.bookUrl == localBook.url && it.candidateWorkKey == canonicalCandidate }) continue
             val remoteBook = allBooks[driveBookUrl(canonicalCandidate)]
             results.add(
                 DrivePendingWorkMatch(
@@ -831,7 +834,9 @@ internal class DriveWorkIdentity(
                 )?.let(::add)
                 val fileMeta = metadataRows.firstOrNull { it.source == MetadataSource.FILE.key }
                 fileMeta?.toSnapshot()?.identifiers?.forEach { identifier ->
-                    if (identifier.value.isNotBlank()) {
+                    if (identifier.value.isNotBlank() &&
+                        identifier.value.trim().lowercase(Locale.ROOT) !in USELESS_IDENTIFIERS
+                    ) {
                         add(DriveLibrarySync.schemeQualified(identifier.scheme, identifier.value))
                     }
                 }

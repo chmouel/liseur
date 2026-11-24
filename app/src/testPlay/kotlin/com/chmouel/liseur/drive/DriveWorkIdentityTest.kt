@@ -349,6 +349,72 @@ class DriveWorkIdentityTest {
     }
 
     @Test
+    fun `a rejected alias is never resolved again`() = runTest {
+        val perm = "perm-1"
+        val peerId = DriveLibrarySync.accountPeerId(perm)
+        val dao = liseurDb.workIdentityDao()
+        val book = localBook("file:///refused.epub", "The Hobbit", "J. R. R. Tolkien")
+        liseurDb.bookDao().upsert(book)
+        dao.upsert(BookFingerprintRow(book.url, "5".repeat(64), "md5-5", 1000L, null, 1L))
+        dao.upsert(WorkAlias(book.url, peerId, "sha:ddd", WorkAlias.REJECTED, confirmed = false, resolvedAt = 1L))
+
+        assertNull(identity.resolveBook(perm, book, computeFingerprintIfMissing = false))
+
+        val kept = dao.alias(book.url, peerId)!!
+        assertEquals(WorkAlias.REJECTED, kept.confidence)
+        assertEquals("sha:ddd", kept.workId)
+    }
+
+    @Test
+    fun `a resolution refused for a relinked book is neither returned nor stored`() = runTest {
+        val perm = "perm-1"
+        val peerId = DriveLibrarySync.accountPeerId(perm)
+        val dao = liseurDb.workIdentityDao()
+        liseurDb.bookDao().upsert(localBook("file:///relinked.epub", "Relinked"))
+        val stored = liseurDb.bookDao().getByUrl("file:///relinked.epub")!!
+        dao.upsert(BookFingerprintRow(stored.url, "6".repeat(64), "md5-6", 1000L, null, 1L))
+        val stale = stored.copy(linkGeneration = stored.linkGeneration + 1)
+
+        assertNull(identity.resolveBook(perm, stale, computeFingerprintIfMissing = false))
+        assertNull(dao.alias(stored.url, peerId))
+
+        assertEquals("sha:${"6".repeat(64)}", identity.resolveBook(perm, stored, computeFingerprintIfMissing = false)?.workId)
+    }
+
+    @Test
+    fun `a candidate offered twice for one unconfirmed book is listed once`() = runTest {
+        val perm = "perm-1"
+        val peerId = DriveLibrarySync.accountPeerId(perm)
+        val dao = liseurDb.workIdentityDao()
+        val book = localBook("file:///dune.epub", "Dune", "Frank Herbert")
+        liseurDb.bookDao().upsert(book)
+        dao.upsert(WorkAlias(book.url, peerId, "isbn:aaa", WorkAlias.LOW, confirmed = false, resolvedAt = 1L))
+        dao.upsert(WorkAmbiguity(book.url, peerId, "isbn:aaa\nisbn:bbb", 1L))
+
+        val pending = identity.pendingMatches(perm)
+
+        assertEquals(listOf("isbn:aaa", "isbn:bbb"), pending.map { it.candidateWorkKey })
+    }
+
+    @Test
+    fun `a placeholder identifier under a scheme falls back to the edition sha`() = runTest {
+        val perm = "perm-1"
+        val sha = "7".repeat(64)
+        val book = localBook("file:///placeholder.epub", "Placeholder")
+        liseurDb.bookDao().upsert(book)
+        liseurDb.workIdentityDao().upsert(BookFingerprintRow(book.url, sha, "md5-7", 1000L, null, 1L))
+        liseurDb.bookMetadataDao().upsert(
+            BookMetadata.of(
+                bookUrl = book.url,
+                source = MetadataSource.FILE,
+                snapshot = MetadataSnapshot(identifiers = listOf(Identifier("isbn", "unknown"))),
+            ),
+        )
+
+        assertEquals("sha:$sha", identity.resolveBook(perm, book, computeFingerprintIfMissing = false)?.workId)
+    }
+
+    @Test
     fun `a rejection still suppresses the pair after either endpoint is merged into another key`() = runTest {
         val perm = "perm-1"
         identity.rejectMerge(perm, "file:///x.epub", "isbn:bbb", "sha:ccc", "0017450000000-0001-dev-a")
