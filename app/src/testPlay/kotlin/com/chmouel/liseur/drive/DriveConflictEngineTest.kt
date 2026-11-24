@@ -1217,6 +1217,15 @@ class DriveConflictEngineTest {
             putFp("final"),
         )
         assertNotNull(unproven.conflictToOpen)
+
+        val edited = reconcile(
+            local.copy(localRowMatchesContentFp = false),
+            listOf(res1),
+            resolveRecord(res2, putBody("final"), listOf(res1.resolutionFp, res2.resolutionFp)),
+            putFp("final"),
+        )
+        assertEquals(ReconciliationDataAction.NoDataChange, edited.dataAction)
+        assertNotNull(edited.conflictToOpen)
         assertEquals(fB, unproven.updatedRecordState!!.versionFp)
     }
 }
