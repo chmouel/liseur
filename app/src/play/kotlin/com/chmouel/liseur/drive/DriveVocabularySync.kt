@@ -362,6 +362,7 @@ internal class DriveVocabularySync(
         records: List<DriveWireRecord>,
         wordAcks: List<DriveVocabWordAckMeta>,
         reviewAcks: List<DriveVocabReviewAckMeta>,
+        localDeviceId: String? = null,
     ) {
         val vocabRecords = records.filter {
             it.d == DriveWireCodec.DOMAIN_VOCAB_WORD ||
@@ -379,7 +380,9 @@ internal class DriveVocabularySync(
             val observed = records.firstOrNull {
                 it.d == DriveWireCodec.DOMAIN_VOCAB_WORD && it.k == ack.recordKey && it.op == DriveRecordState.OP_DEL
             }?.observed.orEmpty()
-            if (observed.isNotEmpty()) deleteBoundaries[ack.recordKey] = observed
+            // The delete also covers this device's own records up to this batch.
+            val covered = if (localDeviceId != null) observed + (localDeviceId to batchSeq) else observed
+            if (covered.isNotEmpty()) deleteBoundaries[ack.recordKey] = covered
         }
         if (deleteBoundaries.isNotEmpty()) {
             store.withTransaction {
@@ -2019,7 +2022,7 @@ internal class DriveVocabularySync(
         private const val DRIVE_STAGED_GENERATION = 0L
 
         /** Local-only record state (never published): per-word vector of deleted review origins. */
-        private const val DELETE_BOUNDARY_DOMAIN = "_vocab_delete_boundary"
+        internal const val DELETE_BOUNDARY_DOMAIN = "_vocab_delete_boundary"
 
         /**
          * What an applied word delete proves was seen: its `observed` vector plus the deleter's own

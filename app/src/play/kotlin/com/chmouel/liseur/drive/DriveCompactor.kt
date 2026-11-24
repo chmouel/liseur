@@ -15,16 +15,21 @@ internal data class DrivePendingSnapshot(
     val parts: List<DriveSnapshotPartRef> = emptyList(),
 )
 
-/** Persisted per-account compaction pointers stored in `drive_record_state(_compaction_state/self)`. */
+/**
+ * Persisted per-account compaction pointers stored in `drive_record_state(_compaction_state/self)`.
+ * The authored-version index lives in per-key `_authored:<domain>` rows to keep every row small.
+ */
 internal data class DriveCompactionState(
     val snapshot: DriveSnapshotRef? = null,
     val previousSnapshot: DriveSnapshotRef? = null,
     val prunedThroughSeq: Long = 0L,
     val pendingPruneFileIds: List<String> = emptyList(),
     val pendingSnapshot: DrivePendingSnapshot? = null,
-    val authoredVersionFps: Map<String, Map<String, String>> = emptyMap(),
     val orphanCleanupNeeded: Boolean = false,
 )
+
+/** One locally authored version: its fingerprint and the local delta seq that published it, when known. */
+internal data class DriveAuthoredEntry(val fp: String, val seq: Long?)
 
 /** Outcome of evaluating and optionally running per-device snapshot compaction. */
 internal data class DriveCompactionResult(
@@ -274,7 +279,7 @@ internal class DriveCompactor(
             return earlyResult()
         }
         val (snapshotRecords, nextAuthoredFps) =
-            collectAuthoredRecords(permissionId, state.authoredVersionFps, allStates, allResolutions)
+            collectAuthoredRecords(permissionId, localDeviceId, allStates, allResolutions)
         val snapshotResolutions = collectAuthoredResolutions(localDeviceId, allResolutions)
 
         // Reuse the pending generation's HLC across retries for the same `throughSeq` so
@@ -421,7 +426,6 @@ internal class DriveCompactor(
             prunedThroughSeq = state.prunedThroughSeq,
             pendingPruneFileIds = newPendingPruneIds,
             pendingSnapshot = null,
-            authoredVersionFps = nextAuthoredFps,
             orphanCleanupNeeded = state.orphanCleanupNeeded,
         )
         store.withTransaction {
@@ -436,6 +440,7 @@ internal class DriveCompactor(
                 deltasSinceSnapshot = 0,
             )
             persistCompactionState(permissionId, updatedState, createdHlc)
+            persistAuthoredIndex(permissionId, nextAuthoredFps)
         }
 
         // 5. Prune superseded snapshot parts (S_{k-2}), orphan snapshot parts belonging to
@@ -513,7 +518,7 @@ internal class DriveCompactor(
         // Adopt the already-published remote manifest snapshot into local compaction state.
         val (adoptStates, adoptResolutions) = readStatesAndResolutions(permissionId)
         val (_, refreshedAuthoredFps) =
-            collectAuthoredRecords(permissionId, state.authoredVersionFps, adoptStates, adoptResolutions)
+            collectAuthoredRecords(permissionId, localDeviceId, adoptStates, adoptResolutions)
         val adoptedPrev = remoteManifest.previousSnapshot
         val liveAdoptedIds = (remoteSnap.parts + adoptedPrev?.parts.orEmpty())
             .map { it.fileId }
@@ -533,7 +538,6 @@ internal class DriveCompactor(
             prunedThroughSeq = state.prunedThroughSeq,
             pendingPruneFileIds = newlySupersededIds,
             pendingSnapshot = null,
-            authoredVersionFps = refreshedAuthoredFps,
             orphanCleanupNeeded = state.orphanCleanupNeeded,
         )
         val deltasAfterAdopted = outbox.ackedAfter(permissionId, remoteSnap.throughSeq).size
@@ -565,6 +569,7 @@ internal class DriveCompactor(
                 deltasSinceSnapshot = deltasAfterAdopted,
             )
             persistCompactionState(permissionId, adoptedState, remoteManifest.updatedHlc)
+            persistAuthoredIndex(permissionId, refreshedAuthoredFps)
         }
 
         return RemoteManifestReconcileOutcome(
@@ -672,12 +677,45 @@ internal class DriveCompactor(
             recordStates.forAccount(permissionId) to resolutions.forAccount(permissionId)
         }
 
+    internal suspend fun loadAuthoredIndex(permissionId: String): Map<Pair<String, String>, DriveAuthoredEntry> {
+        val index = linkedMapOf<Pair<String, String>, DriveAuthoredEntry>()
+        for (domain in DriveWireCodec.SUPPORTED_DOMAIN_VERSIONS.keys) {
+            for (row in recordStates.forDomain(permissionId, AUTHORED_DOMAIN_PREFIX + domain)) {
+                index[domain to row.recordKey] = DriveAuthoredEntry(row.versionFp, row.originSeq)
+            }
+        }
+        return index
+    }
+
+    /** Replaces the index with one small row per key; must run inside a `store` transaction. */
+    private suspend fun persistAuthoredIndex(
+        permissionId: String,
+        index: Map<String, Map<String, DriveAuthoredEntry>>,
+    ) {
+        for (domain in DriveWireCodec.SUPPORTED_DOMAIN_VERSIONS.keys) {
+            val internalDomain = AUTHORED_DOMAIN_PREFIX + domain
+            recordStates.deleteDomain(permissionId, internalDomain)
+            val rows = index[domain].orEmpty().map { (key, entry) ->
+                DriveRecordState(
+                    permissionId = permissionId,
+                    domain = internalDomain,
+                    recordKey = key,
+                    versionFp = entry.fp,
+                    versionOp = DriveRecordState.OP_PUT,
+                    originSeq = entry.seq,
+                    lastHlc = "",
+                )
+            }
+            if (rows.isNotEmpty()) recordStates.upsertAll(rows)
+        }
+    }
+
     private suspend fun collectAuthoredRecords(
         permissionId: String,
-        persistedAuthoredFps: Map<String, Map<String, String>>,
+        localDeviceId: String,
         allStates: List<DriveRecordState>,
         allResolutions: List<DriveResolution>,
-    ): Pair<List<DriveWireRecord>, Map<String, Map<String, String>>> {
+    ): Pair<List<DriveWireRecord>, Map<String, Map<String, DriveAuthoredEntry>>> {
         val resolutionsByKey = allResolutions
             .associateBy { Triple(it.domain, it.recordKey, it.resolutionFp) }
 
@@ -685,32 +723,32 @@ internal class DriveCompactor(
         // combining persisted authored fps from prior compactions with still-unpruned ACKED outbox
         // batches. This guarantees converged records whose current versionFp matches what this device
         // itself authored & published are never dropped even if a remote agreement updated originDeviceId.
-        val locallyPublishedFps = linkedMapOf<Pair<String, String>, String>()
-        for ((domain, keyMap) in persistedAuthoredFps) {
-            for ((key, fp) in keyMap) {
-                locallyPublishedFps[domain to key] = fp
-            }
-        }
-        for (entry in outbox.forAccount(permissionId)) {
+        val locallyPublished = linkedMapOf<Pair<String, String>, DriveAuthoredEntry>()
+        locallyPublished.putAll(loadAuthoredIndex(permissionId))
+        for (entry in outbox.forAccount(permissionId).sortedBy { it.seq }) {
             if (entry.state != DriveOutbox.STATE_ACKED) continue
             val batch = runCatching { DriveWireCodec.decodeDeltaBatch(entry.payload) }.getOrNull() ?: continue
             for (rec in batch.records) {
                 if (rec.d in DriveWireCodec.SUPPORTED_DOMAIN_VERSIONS && rec.fp.isNotBlank()) {
-                    locallyPublishedFps[rec.d to rec.k] = rec.fp
+                    locallyPublished[rec.d to rec.k] = DriveAuthoredEntry(rec.fp, entry.seq)
                 }
             }
         }
+        val deleteBoundaries = recordStates.forDomain(permissionId, DriveVocabularySync.DELETE_BOUNDARY_DOMAIN)
+            .associate { it.recordKey to parseDeleteBoundary(it.bodyJson) }
 
         val records = mutableListOf<DriveWireRecord>()
-        val nextAuthoredByDomain = linkedMapOf<String, MutableMap<String, String>>()
+        val nextAuthoredByDomain = linkedMapOf<String, MutableMap<String, DriveAuthoredEntry>>()
 
         for (state in allStates) {
             if (state.domain !in DriveWireCodec.SUPPORTED_DOMAIN_VERSIONS) continue
             if (state.publishedFp.isNullOrBlank() || state.publishedFp != state.versionFp) continue
 
-            val authoredLocally = state.originDeviceId == null ||
-                locallyPublishedFps[state.domain to state.recordKey] == state.versionFp
-            if (!authoredLocally) continue
+            val published = locallyPublished[state.domain to state.recordKey]?.takeIf { it.fp == state.versionFp }
+            if (state.originDeviceId != null && published == null) continue
+            // originSeq is the local publication seq only while provenance is still local; an
+            // agreement may have replaced it with the remote author's.
+            val localSeq = (if (state.originDeviceId == null) state.originSeq else null) ?: published?.seq
 
             val anc = DriveWorkIdentity.decodeStringArray(state.ancestorsJson)
                 .distinct()
@@ -725,7 +763,10 @@ internal class DriveCompactor(
                     val body = state.bodyJson?.let { raw ->
                         runCatching { JSONObject(raw) }.getOrNull()
                     }
-                    body?.let {
+                    val coveredReview = body != null &&
+                        state.domain == DriveWireCodec.DOMAIN_VOCAB_REVIEW &&
+                        reviewCoveredByDelete(body, localDeviceId, localSeq, deleteBoundaries)
+                    body?.takeUnless { coveredReview }?.let {
                         DriveWireRecord(
                             d = state.domain,
                             k = state.recordKey,
@@ -735,7 +776,7 @@ internal class DriveCompactor(
                             anc = anc,
                             resRefs = resRefs,
                             body = it,
-                            seq = state.originSeq.takeIf { state.domain in SEQ_CARRYING_DOMAINS },
+                            seq = localSeq.takeIf { state.domain in SEQ_CARRYING_DOMAINS },
                         )
                     }
                 }
@@ -804,7 +845,8 @@ internal class DriveCompactor(
 
             if (emitted != null) {
                 records.add(emitted)
-                nextAuthoredByDomain.getOrPut(state.domain) { linkedMapOf() }[state.recordKey] = state.versionFp
+                nextAuthoredByDomain.getOrPut(state.domain) { linkedMapOf() }[state.recordKey] =
+                    DriveAuthoredEntry(state.versionFp, localSeq)
             }
         }
         val sortedRecords = records.sortedWith(
@@ -815,6 +857,29 @@ internal class DriveCompactor(
             ),
         )
         return sortedRecords to nextAuthoredByDomain
+    }
+
+    private fun parseDeleteBoundary(bodyJson: String?): Map<String, Long> {
+        val obj = bodyJson?.let { runCatching { JSONObject(it) }.getOrNull() } ?: return emptyMap()
+        return buildMap {
+            for (device in obj.keys()) {
+                val seq = obj.optLong(device, 0L)
+                if (seq > 0L) put(device, seq)
+            }
+        }
+    }
+
+    /** A review the word's applied delete had observed must not be resurrected through a snapshot. */
+    private fun reviewCoveredByDelete(
+        body: JSONObject,
+        localDeviceId: String,
+        localSeq: Long?,
+        deleteBoundaries: Map<String, Map<String, Long>>,
+    ): Boolean {
+        val review = DriveWireCodec.decodeVocabReviewBody(body) ?: return false
+        val boundary = deleteBoundaries[DriveVocabularySync.wordKey(review.language, review.normalized)]
+            ?: return false
+        return DriveVocabularySync.boundaryCovers(boundary, localDeviceId, localSeq)
     }
 
     private fun collectAuthoredResolutions(
@@ -1207,7 +1272,6 @@ internal class DriveCompactor(
                     },
                 )
             },
-            "authoredVersionFps" to state.authoredVersionFps,
             "orphanCleanupNeeded" to state.orphanCleanupNeeded,
         ),
     )
@@ -1258,32 +1322,12 @@ internal class DriveCompactor(
                 }
             }
         }
-        val authoredObj = if (obj.isNull("authoredVersionFps")) null else obj.optJSONObject("authoredVersionFps")
-        val authoredVersionFps = buildMap<String, Map<String, String>> {
-            if (authoredObj != null) {
-                val domains = authoredObj.keys()
-                while (domains.hasNext()) {
-                    val domain = domains.next()
-                    val keyObj = authoredObj.optJSONObject(domain) ?: continue
-                    val inner = buildMap<String, String> {
-                        val keys = keyObj.keys()
-                        while (keys.hasNext()) {
-                            val key = keys.next()
-                            val fp = keyObj.optString(key).trim()
-                            if (fp.isNotEmpty()) put(key, fp)
-                        }
-                    }
-                    if (inner.isNotEmpty()) put(domain, inner)
-                }
-            }
-        }
         return DriveCompactionState(
             snapshot = snapshot,
             previousSnapshot = previousSnapshot,
             prunedThroughSeq = prunedThroughSeq,
             pendingPruneFileIds = pendingIds,
             pendingSnapshot = pendingSnapshot,
-            authoredVersionFps = authoredVersionFps,
             orphanCleanupNeeded = obj.optBoolean("orphanCleanupNeeded", false),
         )
     }
@@ -1314,6 +1358,7 @@ internal class DriveCompactor(
         const val MIN_PART_BYTES = 512
 
         internal const val COMPACTION_STATE_DOMAIN = "_compaction_state"
+        internal const val AUTHORED_DOMAIN_PREFIX = "_authored:"
         internal const val COMPACTION_STATE_KEY = "self"
     }
 }
