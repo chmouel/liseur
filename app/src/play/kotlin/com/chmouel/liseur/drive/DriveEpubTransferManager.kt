@@ -162,18 +162,7 @@ internal class DriveEpubTransferManager(
             if (upload.bookUrl in selectedBookUrls) continue
             // Every transition is conditional on the state just read, so a concurrent cleanup or
             // upload that moved the row on is never overwritten from this stale copy.
-            if (upload.state == DriveUpload.STATE_REQUEUE) {
-                // Deselected again before its cleanup ran: just the cleanup remains.
-                uploads.transition(permissionId, upload.sha256, upload.state, DriveUpload.STATE_CANCELLED, now)
-                continue
-            }
-            if (upload.state == DriveUpload.STATE_UPLOADING || upload.sessionUri != null) {
-                // Recorded before any worker is cancelled: its session may already have created the
-                // file, so cleanup resolves that session instead of forgetting it.
-                uploads.transition(permissionId, upload.sha256, upload.state, DriveUpload.STATE_CANCELLED, now)
-            } else {
-                uploads.delete(permissionId, upload.sha256)
-            }
+            deselect(permissionId, upload, now)
             discardStaged(permissionId, upload.sha256)
         }
         var queued = 0
@@ -225,6 +214,27 @@ internal class DriveEpubTransferManager(
             queued++
         }
         queued
+    }
+
+    /**
+     * Drops or cancels one deselected row. Every step is conditional on the state last read; when a
+     * worker moved the row on meanwhile it is re-read, so a session attached after the picker's
+     * snapshot is kept as a cleanup obligation instead of being deleted with the row.
+     */
+    private suspend fun deselect(permissionId: String, observed: DriveUpload, now: Long) {
+        var current: DriveUpload? = observed
+        while (current != null) {
+            when {
+                current.state == DriveUpload.STATE_UPLOADED || current.state == DriveUpload.STATE_CANCELLED -> return
+                // REQUEUE was deselected again before its cleanup ran: just the cleanup remains. An
+                // uploading row's session may already have created the file, so cleanup resolves it.
+                current.state == DriveUpload.STATE_REQUEUE || current.state == DriveUpload.STATE_UPLOADING ||
+                    current.sessionUri != null || current.fileId != null ->
+                    if (uploads.transition(permissionId, current.sha256, current.state, DriveUpload.STATE_CANCELLED, now) > 0) return
+                else -> if (uploads.deleteIfIdle(permissionId, current.sha256, current.state) > 0) return
+            }
+            current = uploads.get(permissionId, current.sha256)
+        }
     }
 
     /**
@@ -535,7 +545,9 @@ internal class DriveEpubTransferManager(
                             val latest = currentQueuedUpload(permissionId, sha, item.bookUrl)
                                 ?: throw UploadDeselectedException()
                             val bytes = if (latest.sessionUri == sessionUri) latest.bytesSent else 0L
-                            uploads.updateProgress(
+                            // Conditional on the row still being selected: a deselection since the read
+                            // above keeps its CANCELLED/REQUEUE state and its older session.
+                            val attached = uploads.updateProgress(
                                 permissionId = permissionId,
                                 sha256 = sha,
                                 state = DriveUpload.STATE_UPLOADING,
@@ -543,23 +555,21 @@ internal class DriveEpubTransferManager(
                                 bytesSent = bytes,
                                 updatedAt = clock(),
                             )
+                            if (attached == 0) throw UploadDeselectedException()
                         },
                         onProgress = { bytesSent, sessionUri ->
-                            if (currentQueuedUpload(permissionId, sha, item.bookUrl) == null) {
-                                // Only abort while bytes remain; if the final PUT already created the
-                                // remote file, let uploadResumableFile return its ID so we can trash it.
-                                if (bytesSent < totalBytes) {
-                                    throw UploadDeselectedException()
-                                }
-                            } else {
-                                uploads.updateProgress(
-                                    permissionId = permissionId,
-                                    sha256 = sha,
-                                    state = DriveUpload.STATE_UPLOADING,
-                                    sessionUri = sessionUri,
-                                    bytesSent = bytesSent,
-                                    updatedAt = clock(),
-                                )
+                            val recorded = uploads.updateProgress(
+                                permissionId = permissionId,
+                                sha256 = sha,
+                                state = DriveUpload.STATE_UPLOADING,
+                                sessionUri = sessionUri,
+                                bytesSent = bytesSent,
+                                updatedAt = clock(),
+                            )
+                            // Only abort while bytes remain; if the final PUT already created the
+                            // remote file, let uploadResumableFile return its ID so we can trash it.
+                            if (recorded == 0 && bytesSent < totalBytes) {
+                                throw UploadDeselectedException()
                             }
                         },
                     )
@@ -571,19 +581,24 @@ internal class DriveEpubTransferManager(
                 // Deselected during the final PUT: record the created file before trying to
                 // trash it, so a failed or interrupted cleanup is retried and never advertised.
                 suspend fun cleanUpDeselectedCompletion() {
-                    val requeued = uploads.get(permissionId, sha)?.state == DriveUpload.STATE_REQUEUE
-                    uploads.upsert(
-                        DriveUpload(
-                            permissionId = permissionId,
-                            sha256 = sha,
-                            bookUrl = item.bookUrl,
-                            sizeBytes = totalBytes,
-                            state = if (requeued) DriveUpload.STATE_REQUEUE else DriveUpload.STATE_CANCELLED,
-                            fileId = remoteFile.id,
-                            selectedAt = clock(),
-                            updatedAt = clock(),
-                        ),
-                    )
+                    // One transaction, so a re-selection cannot slip between reading the state and
+                    // recording the file.
+                    store.withTransaction {
+                        val existing = uploads.get(permissionId, sha)
+                        val requeued = existing?.state == DriveUpload.STATE_REQUEUE
+                        uploads.upsert(
+                            DriveUpload(
+                                permissionId = permissionId,
+                                sha256 = sha,
+                                bookUrl = item.bookUrl,
+                                sizeBytes = totalBytes,
+                                state = if (requeued) DriveUpload.STATE_REQUEUE else DriveUpload.STATE_CANCELLED,
+                                fileId = remoteFile.id,
+                                selectedAt = clock(),
+                                updatedAt = clock(),
+                            ),
+                        )
+                    }
                     discardStaged(permissionId, sha)
                     trashCancelledUploads(permissionId, accessToken)
                 }
@@ -605,8 +620,9 @@ internal class DriveEpubTransferManager(
                         createdTime = remoteFile.createdTime,
                     ),
                 )
-                // Conditional: the reader may have deselected the edition since the check above.
-                if (uploads.markUploadedIfUploading(permissionId, sha, remoteFile.id, finishedAt) == 0) {
+                // Conditional: the reader may have deselected the edition since the check above, while any
+                // still-selected state (a picker reconfirmation resets UPLOADING to PENDING) completes.
+                if (uploads.markUploadedIfSelected(permissionId, sha, remoteFile.id, finishedAt) == 0) {
                     driveFiles.setTrashed(permissionId, remoteFile.id, true)
                     cleanUpDeselectedCompletion()
                     continue

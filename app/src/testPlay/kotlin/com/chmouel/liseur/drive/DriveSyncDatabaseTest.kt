@@ -276,6 +276,44 @@ class DriveSyncDatabaseTest {
     }
 
     @Test
+    fun `upload row writes are conditional on the row still being selected or idle`() = runTest {
+        val dao = db.uploads()
+        fun row(sha: String, state: String, session: String? = null, file: String? = null) = DriveUpload(
+            permissionId = "perm-a", sha256 = sha, bookUrl = "file:///$sha.epub", sizeBytes = 100L,
+            state = state, sessionUri = session, fileId = file, selectedAt = 1L, updatedAt = 1L,
+        )
+
+        // The picker's delete never drops a row a worker has since given a session or moved on.
+        dao.upsert(row("idle", DriveUpload.STATE_PENDING))
+        dao.upsert(row("session", DriveUpload.STATE_PENDING, session = "session://1"))
+        dao.upsert(row("moved", DriveUpload.STATE_UPLOADING))
+        assertEquals(0, dao.deleteIfIdle("perm-a", "session", DriveUpload.STATE_PENDING))
+        assertEquals(0, dao.deleteIfIdle("perm-a", "moved", DriveUpload.STATE_PENDING))
+        assertEquals(1, dao.deleteIfIdle("perm-a", "idle", DriveUpload.STATE_PENDING))
+        assertNull(dao.get("perm-a", "idle"))
+        assertEquals("session://1", dao.get("perm-a", "session")?.sessionUri)
+        assertEquals(DriveUpload.STATE_UPLOADING, dao.get("perm-a", "moved")?.state)
+
+        // Progress and completion never revive a deselected edition.
+        for (state in listOf(DriveUpload.STATE_CANCELLED, DriveUpload.STATE_REQUEUE)) {
+            dao.upsert(row("dead-$state", state, session = "session://old"))
+            assertEquals(0, dao.updateProgress("perm-a", "dead-$state", DriveUpload.STATE_UPLOADING, "session://new", 5L, 2L))
+            assertEquals(0, dao.markUploadedIfSelected("perm-a", "dead-$state", "file-1", 2L))
+            val kept = dao.get("perm-a", "dead-$state")!!
+            assertEquals(state, kept.state)
+            assertEquals("session://old", kept.sessionUri)
+            assertNull(kept.fileId)
+        }
+
+        // A reconfirmed (PENDING) or failed row still completes.
+        for (state in listOf(DriveUpload.STATE_PENDING, DriveUpload.STATE_UPLOADING, DriveUpload.STATE_FAILED)) {
+            dao.upsert(row("live-$state", state, session = "session://1"))
+            assertEquals(1, dao.markUploadedIfSelected("perm-a", "live-$state", "file-2", 3L))
+            assertEquals(DriveUpload.STATE_UPLOADED, dao.get("perm-a", "live-$state")?.state)
+        }
+    }
+
+    @Test
     fun `android backup and device transfer rules exclude drive_sync db`() {
         val context = ApplicationProvider.getApplicationContext<Application>()
         for (xmlRes in listOf(R.xml.backup_rules, R.xml.data_extraction_rules)) {

@@ -1447,6 +1447,100 @@ class DrivePhase4EndToEndTest {
     }
 
     @Test
+    fun `reconfirming the picker after the final progress write still completes the selected upload`() = runTest {
+        deviceA.connect()
+        val book = seedBook(deviceA, "reconfirm.epub", "9780547928401", "Reconfirm", "Author", customBytes = "EPUB-RECONFIRM".toByteArray())
+        val sha = deviceA.liseurDb.workIdentityDao().fingerprint(book.url)!!.sha256
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        assertEquals(1, deviceA.epubTransfers.queueSelectedBooks(PERM_ID, setOf(book.url)))
+
+        // The picker is confirmed again after the final progress write, resetting UPLOADING to PENDING.
+        driveServer.afterUploadFinalProgress = { name ->
+            if (name == "Reconfirm.epub") deviceA.epubTransfers.queueSelectedBooks(PERM_ID, setOf(book.url))
+        }
+        val summary = try {
+            deviceA.epubTransfers.uploadPending()
+        } finally {
+            driveServer.afterUploadFinalProgress = null
+        }
+
+        assertEquals(1, summary.uploadedCount)
+        assertFalse(driveServer.epubFilesSnapshot().single().trashed)
+        val row = deviceA.driveDb.uploads().get(PERM_ID, sha)!!
+        assertEquals(DriveUpload.STATE_UPLOADED, row.state)
+        assertEquals(driveServer.epubFilesSnapshot().single().id, row.fileId)
+    }
+
+    @Test
+    fun `a resumed session deselected before its final chunk is not revived and its file is trashed`() = runTest {
+        deviceA.connect()
+        val book = seedBook(deviceA, "resumed-deselect.epub", "9780547928418", "Resumed Deselect", "Author", customBytes = "EPUB-RESUMED-DESELECT".toByteArray())
+        val sha = deviceA.liseurDb.workIdentityDao().fingerprint(book.url)!!.sha256
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        assertEquals(1, deviceA.epubTransfers.queueSelectedBooks(PERM_ID, setOf(book.url)))
+
+        // First worker is cancelled after its session was recorded; the cancellation must surface.
+        driveServer.beforeUploadCommit = { name ->
+            if (name == "Resumed Deselect.epub") throw kotlinx.coroutines.CancellationException("worker replaced")
+        }
+        try {
+            assertTrue(runCatching { deviceA.epubTransfers.uploadPending() }.exceptionOrNull() is kotlinx.coroutines.CancellationException)
+        } finally {
+            driveServer.beforeUploadCommit = null
+        }
+        val interrupted = deviceA.driveDb.uploads().get(PERM_ID, sha)!!
+        assertEquals(DriveUpload.STATE_UPLOADING, interrupted.state)
+        assertNotNull(interrupted.sessionUri)
+
+        // The resumed worker's session is attached, then the reader deselects before the last chunk.
+        driveServer.beforeUploadCommit = { name ->
+            if (name == "Resumed Deselect.epub") deviceA.epubTransfers.queueSelectedBooks(PERM_ID, emptySet())
+        }
+        val summary = try {
+            deviceA.epubTransfers.uploadPending()
+        } finally {
+            driveServer.beforeUploadCommit = null
+        }
+
+        assertEquals(0, summary.uploadedCount)
+        assertTrue(driveServer.epubFilesSnapshot().single().trashed)
+        assertNull(deviceA.driveDb.uploads().get(PERM_ID, sha))
+        assertTrue(driveServer.listDriveEpubFiles("token-dev-a").isEmpty())
+    }
+
+    @Test
+    fun `re-selecting during the final PUT keeps the new selection and uploads a fresh copy`() = runTest {
+        deviceA.connect()
+        val book = seedBook(deviceA, "final-put-reselect.epub", "9780547928425", "Final Reselect", "Author", customBytes = "EPUB-FINAL-RESELECT".toByteArray())
+        val sha = deviceA.liseurDb.workIdentityDao().fingerprint(book.url)!!.sha256
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        assertEquals(1, deviceA.epubTransfers.queueSelectedBooks(PERM_ID, setOf(book.url)))
+
+        // Deselect then select again while the final PUT is committing: CANCELLED becomes REQUEUE.
+        driveServer.onUploadResumableFinalPut = { name ->
+            if (name == "Final Reselect.epub") {
+                deviceA.epubTransfers.queueSelectedBooks(PERM_ID, emptySet())
+                deviceA.epubTransfers.queueSelectedBooks(PERM_ID, setOf(book.url))
+            }
+        }
+        try {
+            assertEquals(0, deviceA.epubTransfers.uploadPending().uploadedCount)
+        } finally {
+            driveServer.onUploadResumableFinalPut = null
+        }
+        val first = driveServer.epubFilesSnapshot().single()
+        assertTrue(first.trashed)
+        val requeued = deviceA.driveDb.uploads().get(PERM_ID, sha)!!
+        assertEquals(DriveUpload.STATE_PENDING, requeued.state)
+        assertNull(requeued.fileId)
+
+        assertEquals(1, deviceA.epubTransfers.uploadPending().uploadedCount)
+        val active = driveServer.epubFilesSnapshot().filterNot { it.trashed }
+        assertEquals(1, active.size)
+        assertEquals(active.single().id, deviceA.driveDb.uploads().get(PERM_ID, sha)!!.fileId)
+    }
+
+    @Test
     fun `a deselected upload whose trash fails is retried and never advertised`() = runTest {
         deviceA.connect()
         deviceB.connect()
@@ -2910,6 +3004,7 @@ class DrivePhase4EndToEndTest {
 
         /** Runs once the bytes were read, before Drive commits the file (its session still in progress). */
         var beforeUploadCommit: (suspend (name: String) -> Unit)? = null
+        var afterUploadFinalProgress: (suspend (name: String) -> Unit)? = null
 
         fun failNextCoverDownloads(count: Int) {
             coverDownloadFailuresRemaining.set(count)
@@ -3167,6 +3262,7 @@ class DrivePhase4EndToEndTest {
             recordChange(meta)
             onUploadResumableFinalPut?.invoke(name)
             onProgress(bytes.size.toLong(), sessionUri)
+            afterUploadFinalProgress?.invoke(name)
             return meta
         }
 
