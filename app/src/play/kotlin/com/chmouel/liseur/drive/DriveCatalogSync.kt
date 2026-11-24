@@ -104,18 +104,10 @@ internal class DriveCatalogSync(
                     driveFiles.get(permissionId, it.fileId)?.trashed != true
             }
             .associateBy { it.sha256.lowercase(Locale.ROOT) }
-        // A deselected upload's file awaiting trash is never advertised as available; while only
-        // its session is known, no Drive copy of that edition is.
+        // A deselected upload's file awaiting trash is never advertised as available.
         val awaitingCleanup = uploads.forAccount(permissionId)
             .filter { it.state == DriveUpload.STATE_CANCELLED || it.state == DriveUpload.STATE_REQUEUE }
         val cancelledFileIds = awaitingCleanup.mapNotNull { it.fileId }.toSet()
-        val unresolvedShas = awaitingCleanup.filter { it.fileId == null }.map { it.sha256.lowercase(Locale.ROOT) }.toSet()
-        val remoteEpubsBySha = driveFiles.byKind(permissionId, DriveFile.KIND_EPUB)
-            .filter {
-                !it.trashed && !it.sha256.isNullOrBlank() && it.fileId !in cancelledFileIds &&
-                    it.sha256!!.lowercase(Locale.ROOT) !in unresolvedShas
-            }
-            .groupBy { it.sha256!!.lowercase(Locale.ROOT) }
 
         val grouped = linkedMapOf<String, MutableList<Pair<Book, WorkAlias>>>()
         for (book in eligibleBooks) {
@@ -162,16 +154,14 @@ internal class DriveCatalogSync(
                 if (sha.isNullOrEmpty()) continue
                 val existingEd = editionsBySha[sha]
                 val upload = uploadedBySha[sha]
-                val knownFile = remoteEpubsBySha[sha]?.firstOrNull()
                 val trashedFile = existingEd?.driveFileId?.let { fid ->
                     driveFiles.get(permissionId, fid)?.trashed == true
                 } == true
 
                 val resolvedFileId = when {
                     upload?.fileId != null -> upload.fileId
-                    knownFile != null -> knownFile.fileId
                     trashedFile -> null
-                    else -> existingEd?.driveFileId
+                    else -> existingEd?.driveFileId?.takeIf { it !in cancelledFileIds }
                 }
                 val resolvedUploadedAt = when {
                     resolvedFileId == null -> null
@@ -180,7 +170,6 @@ internal class DriveCatalogSync(
                 }
                 val resolvedFileName = when {
                     resolvedFileId == null -> null
-                    knownFile != null -> knownFile.name
                     else -> existingEd?.fileName ?: sanitizeEpubFileName(primaryBook.stableTitle ?: primaryBook.title)
                 }
                 editionsBySha[sha] = DriveCatalogEdition(
@@ -982,13 +971,26 @@ internal class DriveCatalogSync(
                 return fid to ed.sha256.lowercase(Locale.ROOT)
             }
         }
-        // Fallback: match any non-trashed drive_file by edition SHA-256.
-        for (ed in editions) {
-            val file = driveFiles.byKindAndSha256(permissionId, DriveFile.KIND_EPUB, ed.sha256.lowercase(Locale.ROOT))
-                .firstOrNull()
-            if (file != null) return file.fileId to ed.sha256.lowercase(Locale.ROOT)
-        }
         return null
+    }
+
+    /**
+     * File IDs that live catalog editions publish per SHA-256. An indexed EPUB nobody
+     * advertises may be an unfinished or cancelled upload, so it is never reused.
+     */
+    suspend fun advertisedEpubFileIds(permissionId: String): Map<String, Set<String>> {
+        val out = linkedMapOf<String, MutableSet<String>>()
+        for (state in recordStates.forDomain(permissionId, DriveWireCodec.DOMAIN_CATALOG)) {
+            if (state.versionOp == DriveRecordState.OP_DEL) continue
+            val body = state.bodyJson?.let {
+                runCatching { DriveWireCodec.decodeCatalogBody(JSONObject(it)) }.getOrNull()
+            } ?: continue
+            for (ed in body.editions) {
+                val fid = ed.driveFileId?.takeIf { it.isNotBlank() } ?: continue
+                out.getOrPut(ed.sha256.lowercase(Locale.ROOT)) { linkedSetOf() }.add(fid)
+            }
+        }
+        return out
     }
 
     /**
