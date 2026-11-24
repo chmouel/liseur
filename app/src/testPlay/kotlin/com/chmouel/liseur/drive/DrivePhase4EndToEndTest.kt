@@ -1988,6 +1988,216 @@ class DrivePhase4EndToEndTest {
         assertTrue(store.forRecord(PERM_ID, DriveWireCodec.DOMAIN_METADATA, "sha:ccc/title").isEmpty())
     }
 
+    @Test
+    fun `catalog tombstone without local cleanup is finished on the next sync and keeps annotations`() = runTest {
+        deviceA.connect()
+        deviceB.connect()
+        seedBook(deviceA, "crash-cleanup.epub", "9780441013593", "Dune Messiah", "Frank Herbert")
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+        val stubB = "drive:isbn:9780441013593"
+        val stub = deviceB.liseurDb.bookDao().getByUrl(stubB)!!
+        deviceB.liseurDb.annotationDao().upsert(
+            BookAnnotation(
+                id = "ann-keep", bookId = stubB, kind = AnnotationKind.NOTE.name,
+                locatorJson = """{"href":"ch01.xhtml"}""", text = "Kept", note = "survives",
+                createdAt = 1_000L, updatedAt = 1_000L,
+            ),
+        )
+        val peer = DriveLibrarySync.accountPeerId(PERM_ID)
+        assertNotNull(deviceB.liseurDb.workIdentityDao().alias(stubB, peer))
+
+        // The process dies after the tombstone commits but before the book rows are removed.
+        val sqlite = deviceB.liseurDb.openHelper.writableDatabase
+        sqlite.execSQL("CREATE TRIGGER crash_on_book_delete BEFORE DELETE ON books BEGIN SELECT RAISE(ABORT, 'crash'); END")
+        assertTrue(runCatching { deviceB.driveSync.deleteFromSyncedLibrary(stub) }.isFailure)
+        sqlite.execSQL("DROP TRIGGER crash_on_book_delete")
+
+        val workKey = "isbn:9780441013593"
+        val tombstone = deviceB.driveDb.recordStates().get(PERM_ID, DriveWireCodec.DOMAIN_CATALOG, workKey)!!
+        assertEquals(DriveRecordState.OP_DEL, tombstone.versionOp)
+        assertNotNull(deviceB.liseurDb.bookDao().getByUrl(stubB))
+
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+
+        assertNull(deviceB.liseurDb.bookDao().getByUrl(stubB))
+        assertNull(deviceB.liseurDb.workIdentityDao().alias(stubB, peer))
+        assertEquals("survives", deviceB.liseurDb.annotationDao().byId("ann-keep")!!.note)
+        assertFalse(deviceB.driveDb.recordStates().get(PERM_ID, DriveWireCodec.DOMAIN_CATALOG, workKey)!!.bodyJson.orEmpty().contains("cleanupPending"))
+        // A second run changes nothing and does not re-create the book.
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+        assertNull(deviceB.liseurDb.bookDao().getByUrl(stubB))
+    }
+
+    @Test
+    fun `evaluation and series resets wait for the catalog on a fresh device and are not undone by an older put`() = runTest {
+        // Remote streams apply in device-id order: dev-a (resets) is read before dev-z (catalog and puts).
+        val owner = createDevice("dev-z", File(tempDir, "z-reset"))
+        val fresh = createDevice("dev-c", File(tempDir, "c-reset"))
+        try {
+            owner.connect()
+            deviceA.connect()
+            fresh.connect()
+            val book = seedBook(owner, "reset.epub", "9780441172719", "Dune", "Frank Herbert")
+            owner.liseurDb.bookEvaluationDao().edit(book.url, PersonalEvaluation.REVIEW, "Original review", "Dune", "Frank Herbert", 1_000L)
+            owner.liseurDb.bookDao().setSeriesOverride(book.url, "Original series", 1.0, 1_000L)
+            assertEquals(SyncOutcome.Success, owner.changeEngine.sync().outcome)
+
+            assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+            val stub = "drive:isbn:9780441172719"
+            assertEquals("Original review", deviceA.liseurDb.bookEvaluationDao().get(stub, PersonalEvaluation.REVIEW)!!.value)
+            deviceA.liseurDb.bookEvaluationDao().edit(stub, PersonalEvaluation.REVIEW, null, "Dune", "Frank Herbert", 2_000L)
+            deviceA.liseurDb.bookDao().clearSeriesOverride(stub, 2_000L)
+            assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+
+            assertEquals(SyncOutcome.Success, fresh.changeEngine.sync().outcome)
+            assertEquals(SyncOutcome.Success, fresh.changeEngine.sync().outcome)
+
+            assertNotNull(fresh.liseurDb.bookDao().getByUrl(stub))
+            assertNull(fresh.liseurDb.bookEvaluationDao().get(stub, PersonalEvaluation.REVIEW)?.value)
+            assertNull(fresh.liseurDb.bookDao().getByUrl(stub)!!.userSeriesName)
+        } finally {
+            owner.close()
+            fresh.close()
+        }
+    }
+
+    @Test
+    fun `evaluation crash repair of an adopted incoming version drops the previous author's origin`() = runTest {
+        deviceA.connect()
+        val book = seedBook(deviceA, "origin.epub", "9780441172719", "Dune", "Frank Herbert")
+        val peer = DriveLibrarySync.accountPeerId(PERM_ID)
+        val workKey = "isbn:9780441172719"
+        val key = DriveEvaluationSync.recordKey(workKey, PersonalEvaluation.REVIEW)
+        deviceA.liseurDb.bookEvaluationDao().edit(book.url, PersonalEvaluation.REVIEW, "Incoming", "Dune", "Frank Herbert", 3_000L)
+        val row = deviceA.liseurDb.bookEvaluationDao().get(book.url, PersonalEvaluation.REVIEW)!!
+        val adoptedFp = "adopted-fp"
+        deviceA.liseurDb.bookEvaluationDao().upsertState(
+            EvaluationSync(
+                peerId = peer, bookUrl = book.url, field = PersonalEvaluation.REVIEW, workId = workKey,
+                ackedRevision = row.revision,
+                sentJson = DriveWireCodec.encodeRevisionAckJson(
+                    DriveRevisionAckPayload(vfp = adoptedFp, cfp = null, rev = row.revision, op = DriveRecordState.OP_PUT),
+                ),
+                sentRevision = row.revision, polledAt = 1L,
+            ),
+        )
+        val previous = DriveRecordState(
+            permissionId = PERM_ID, domain = DriveWireCodec.DOMAIN_EVALUATION, recordKey = key,
+            versionFp = "previous-fp", versionOp = DriveRecordState.OP_PUT, publishedFp = "previous-fp",
+            originDeviceId = "dev-prev", originSeq = 7L, lastHlc = "h1",
+        )
+        deviceA.driveDb.recordStates().upsert(previous)
+
+        val repaired = deviceA.driveSync.evaluationSync.recoverFromRevisionSync(
+            permissionId = PERM_ID, workKey = workKey, field = PersonalEvaluation.REVIEW, recordKey = key, row = row,
+            sync = deviceA.liseurDb.bookEvaluationDao().state(peer, book.url, PersonalEvaluation.REVIEW),
+            nextHlc = { "h2" },
+        )!!
+        assertEquals(adoptedFp, repaired.versionFp)
+        assertNull(repaired.originDeviceId)
+        assertNull(repaired.originSeq)
+
+        // An unchanged fingerprint keeps its provenance.
+        deviceA.driveDb.recordStates().upsert(previous.copy(versionFp = adoptedFp, publishedFp = adoptedFp))
+        val kept = deviceA.driveSync.evaluationSync.recoverFromRevisionSync(
+            permissionId = PERM_ID, workKey = workKey, field = PersonalEvaluation.REVIEW, recordKey = key, row = row,
+            sync = deviceA.liseurDb.bookEvaluationDao().state(peer, book.url, PersonalEvaluation.REVIEW),
+            nextHlc = { "h3" },
+        )!!
+        assertEquals("dev-prev", kept.originDeviceId)
+    }
+
+    @Test
+    fun `annotation KEEP_EDITED crash before it reached liseur_db recovers the persisted choice and never undoes a later deletion`() = runTest {
+        val id = "ann-keep-edited"
+        val conflict = openAnnotationEditConflict(id)
+        deviceA.liseurDb.annotationDao().upsert(
+            deviceA.liseurDb.annotationDao().byId(id)!!.copy(note = "Edited while the conflict was open", updatedAt = 7_000_000L),
+        )
+
+        // Crash after the choice is durable in drive_sync.db but before liseur.db commits it.
+        val sqlite = deviceA.liseurDb.openHelper.writableDatabase
+        sqlite.execSQL("CREATE TRIGGER crash_ins BEFORE INSERT ON annotation_sync BEGIN SELECT RAISE(ABORT, 'crash'); END")
+        sqlite.execSQL("CREATE TRIGGER crash_upd BEFORE UPDATE ON annotation_sync BEGIN SELECT RAISE(ABORT, 'crash'); END")
+        assertTrue(runCatching { deviceA.driveSync.resolveConflicts(listOf(conflict), DriveConflictChoice.KEEP_EDITED, syncAfter = false) }.isFailure)
+        sqlite.execSQL("DROP TRIGGER crash_ins")
+        sqlite.execSQL("DROP TRIGGER crash_upd")
+        val resolving = deviceA.driveDb.conflicts().resolvingForAccount(PERM_ID).single()
+        assertNotNull(resolving.resolutionFp)
+
+        // The reader deletes the note before recovery runs.
+        deviceA.liseurDb.annotationDao().deleteById(id)
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+
+        assertNull("recovery must not restore a note the reader deleted", deviceA.liseurDb.annotationDao().byId(id))
+        assertEquals(1, deviceA.driveDb.conflicts().resolvingForAccount(PERM_ID).size)
+    }
+
+    @Test
+    fun `annotation KEEP_EDITED crash before liseur_db completes from the persisted body when the note is untouched`() = runTest {
+        val id = "ann-keep-edited-ok"
+        val conflict = openAnnotationEditConflict(id)
+        deviceA.liseurDb.annotationDao().upsert(
+            deviceA.liseurDb.annotationDao().byId(id)!!.copy(note = "Edited while the conflict was open", updatedAt = 7_000_000L),
+        )
+        val sqlite = deviceA.liseurDb.openHelper.writableDatabase
+        sqlite.execSQL("CREATE TRIGGER crash_ins BEFORE INSERT ON annotation_sync BEGIN SELECT RAISE(ABORT, 'crash'); END")
+        sqlite.execSQL("CREATE TRIGGER crash_upd BEFORE UPDATE ON annotation_sync BEGIN SELECT RAISE(ABORT, 'crash'); END")
+        assertTrue(runCatching { deviceA.driveSync.resolveConflicts(listOf(conflict), DriveConflictChoice.KEEP_EDITED, syncAfter = false) }.isFailure)
+        sqlite.execSQL("DROP TRIGGER crash_ins")
+        sqlite.execSQL("DROP TRIGGER crash_upd")
+
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+
+        assertEquals("Edited while the conflict was open", deviceA.liseurDb.annotationDao().byId(id)!!.note)
+        assertTrue(deviceA.driveDb.conflicts().openForAccount(PERM_ID).isEmpty())
+        assertTrue(deviceA.driveDb.conflicts().resolvingForAccount(PERM_ID).isEmpty())
+        assertEquals("Edited while the conflict was open", deviceB.liseurDb.annotationDao().byId(id)!!.note)
+    }
+
+    @Test
+    fun `annotation KEEP_EDITED committed to liseur_db is not undone by a later deletion before the choice publishes`() = runTest {
+        val id = "ann-keep-edited-del"
+        val conflict = openAnnotationEditConflict(id)
+        deviceA.liseurDb.annotationDao().upsert(
+            deviceA.liseurDb.annotationDao().byId(id)!!.copy(note = "Edited while the conflict was open", updatedAt = 7_000_000L),
+        )
+        deviceA.driveSync.resolveConflicts(listOf(conflict), DriveConflictChoice.KEEP_EDITED, syncAfter = false)
+        deviceA.liseurDb.annotationDao().deleteById(id)
+
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+
+        assertNull(deviceA.liseurDb.annotationDao().byId(id))
+        assertTrue(deviceA.driveDb.conflicts().openForAccount(PERM_ID).isEmpty())
+    }
+
+    private suspend fun openAnnotationEditConflict(id: String): DriveConflict {
+        deviceA.connect()
+        deviceB.connect()
+        val bookA = seedBook(deviceA, "$id.epub", "9780547928227", "The Hobbit", "J.R.R. Tolkien")
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+        val base = BookAnnotation(
+            id = id, bookId = bookA.url, kind = AnnotationKind.NOTE.name,
+            locatorJson = """{"href":"ch01.xhtml"}""", text = "Hole", note = "base",
+            createdAt = 1_000L, updatedAt = 1_000_000L,
+        )
+        deviceA.liseurDb.annotationDao().upsert(base)
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+        deviceA.liseurDb.annotationDao().upsert(base.copy(note = "from A", updatedAt = 4_000_000L))
+        deviceB.liseurDb.annotationDao().upsert(deviceB.liseurDb.annotationDao().byId(id)!!.copy(note = "from B", updatedAt = 4_500_000L))
+        driveServer.hideOtherDeviceDeltasFor("dev-a")
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        driveServer.hideOtherDeviceDeltasFor("dev-b")
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+        driveServer.unhideAll()
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        return deviceA.driveDb.conflicts().openForAccount(PERM_ID).single { it.recordKey == id }
+    }
+
     private suspend fun seedBook(
         device: Phase4Device,
         fileName: String,
