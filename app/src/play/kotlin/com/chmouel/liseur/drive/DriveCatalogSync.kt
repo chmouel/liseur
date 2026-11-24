@@ -588,7 +588,7 @@ internal class DriveCatalogSync(
             val shas = editions.map { it.sha256.lowercase(Locale.ROOT) }.toSet()
             for (book in books.allOnce()) {
                 if (book.browseServerId != null) continue
-                val fp = identities.fingerprint(book.url)?.sha256?.lowercase(Locale.ROOT) ?: continue
+                val fp = workIdentity.editionSha(book) ?: continue
                 if (fp in shas) matched.add(book.url)
             }
         }

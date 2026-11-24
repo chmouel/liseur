@@ -3,6 +3,7 @@ package com.chmouel.liseur.drive
 import android.app.Application
 import androidx.test.core.app.ApplicationProvider
 import androidx.work.Configuration
+import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.runTest
@@ -42,5 +43,16 @@ class DriveSyncWorkersTest {
                 .getWorkInfosForUniqueWork(DriveSyncWorkers.epubDownloadWorkName(bookUrl)).get()
         }
         assertEquals(listOf(first), infos.filter { !it.state.isFinished }.map { it.id })
+    }
+
+    @Test
+    fun `cancelling a download returns only once the work is cancelled`() = runTest {
+        val bookUrl = "drive:isbn:9780547928227"
+        val id = DriveSyncWorkers.enqueueEpubDownload(context, bookUrl, allowMetered = false)!!
+
+        DriveSyncWorkers.cancelEpubDownload(context, bookUrl)
+
+        val info = withContext(Dispatchers.IO) { WorkManager.getInstance(context).getWorkInfoById(id).get() }
+        assertEquals(WorkInfo.State.CANCELLED, info!!.state)
     }
 }

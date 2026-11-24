@@ -103,6 +103,12 @@ class DriveEpubDownloadWorker(
             ?: return Result.failure()
         if (!backend.isActive()) return Result.failure()
 
+        return applicationContext.container.bookDownloads.withBookLock(bookUrl) {
+            download(backend, bookUrl)
+        }
+    }
+
+    private suspend fun download(backend: DriveLibrarySync, bookUrl: String): Result {
         val outcome = backend.epubTransfers.downloadBook(bookUrl) { fraction ->
             val builder = Data.Builder().putString(BookDownloadRepository.KEY_BOOK_URL, bookUrl)
             if (fraction != null) builder.putFloat(BookDownloadRepository.KEY_FRACTION, fraction)
@@ -245,9 +251,10 @@ internal object DriveSyncWorkers {
         return resolveWorkId(request.id, previous.mapTo(mutableSetOf()) { it.id }, workInfos.first().map { it.id })
     }
 
-    fun cancelEpubDownload(context: Context, bookUrl: String) {
+    suspend fun cancelEpubDownload(context: Context, bookUrl: String) {
         WorkManager.getInstance(context.applicationContext)
             .cancelUniqueWork(epubDownloadWorkName(bookUrl))
+            .await()
     }
 
     fun cancelAll(context: Context) {
