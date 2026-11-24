@@ -321,6 +321,8 @@ internal class DriveCatalogSync(
                 for (sha in shasToClear) {
                     uploads.delete(permissionId, sha)
                 }
+                val current = recordStates.get(permissionId, DriveWireCodec.DOMAIN_CATALOG, canonical)
+                val pendingTrash = current?.takeIf { it.versionOp == DriveRecordState.OP_DEL }?.bodyJson
                 val anc = (listOfNotNull(existing?.versionFp) +
                     DriveWorkIdentity.decodeStringArray(existing?.ancestorsJson) + record.anc)
                     .distinct()
@@ -339,7 +341,7 @@ internal class DriveCatalogSync(
                         ancestorsJson = DriveCanonicalJson.encode(anc),
                         resRefsJson = DriveCanonicalJson.encode(record.resRefs.distinct().sorted()),
                         lastHlc = maxOf(existing?.lastHlc ?: "", record.hlc),
-                        bodyJson = null,
+                        bodyJson = pendingTrash,
                     ),
                 )
             }
