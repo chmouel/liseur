@@ -19,8 +19,12 @@ import java.io.IOException
 import java.io.InputStream
 import java.net.URI
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 
 /** Row displayed in the Play-only "Upload EPUB files" picker UI. */
@@ -97,6 +101,14 @@ internal class DriveEpubTransferManager(
         )
     }
     private val accounts get() = store.accounts()
+    private val activeDownloads: MutableSet<Job> = ConcurrentHashMap.newKeySet()
+
+    /** Cancels in-flight downloads and waits until each has unwound, so none installs afterwards. */
+    suspend fun cancelAndDrain() {
+        val jobs = activeDownloads.toList()
+        jobs.forEach { it.cancel() }
+        jobs.forEach { it.join() }
+    }
     private val uploads get() = store.uploads()
     private val driveFiles get() = store.files()
 
@@ -386,6 +398,19 @@ internal class DriveEpubTransferManager(
         bookUrl: String,
         onProgress: suspend (fraction: Float?) -> Unit = {},
     ): DriveEpubDownloadOutcome {
+        val job = currentCoroutineContext()[Job]
+        job?.let(activeDownloads::add)
+        try {
+            return downloadBookTracked(bookUrl, onProgress)
+        } finally {
+            job?.let(activeDownloads::remove)
+        }
+    }
+
+    private suspend fun downloadBookTracked(
+        bookUrl: String,
+        onProgress: suspend (fraction: Float?) -> Unit,
+    ): DriveEpubDownloadOutcome {
         val tokenResult = acquireToken(null)
         val (initialToken, permissionId) = when (tokenResult) {
             is SilentTokenResult.Token -> tokenResult.accessToken to tokenResult.permissionId
@@ -406,7 +431,7 @@ internal class DriveEpubTransferManager(
         var retriedAuth = false
         while (true) {
             try {
-                return downloadWithToken(book, fileId, expectedSha, accessToken, onProgress)
+                return downloadWithToken(book, permissionId, fileId, expectedSha, accessToken, onProgress)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: DriveAuthExpiredException) {
@@ -449,6 +474,7 @@ internal class DriveEpubTransferManager(
 
     private suspend fun downloadWithToken(
         book: Book,
+        permissionId: String,
         fileId: String,
         expectedSha: String,
         accessToken: String,
@@ -494,6 +520,12 @@ internal class DriveEpubTransferManager(
             return DriveEpubDownloadOutcome.PermanentFailure(
                 "Downloaded EPUB SHA-256 mismatch (expected $expectedSha, got ${computed.sha256})",
             )
+        }
+
+        currentCoroutineContext().ensureActive()
+        if (accounts.active()?.permissionId != permissionId) {
+            books.setDownloadState(book.url, DownloadState.QUEUED, null)
+            return DriveEpubDownloadOutcome.RetryableFailure("Google Drive account changed")
         }
 
         // Move verified file atomically into place.
