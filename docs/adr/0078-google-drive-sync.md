@@ -229,10 +229,13 @@ below). Migration 84→85
 creates the table empty; the protocol is unreleased, so nothing is
 backfilled. Recovery runs before
 diffing and pulling for every receipt whose `receipt_id` (a UUID unique per
-apply) differs from `drive_record_state.acked_receipt_id`, which Tx 2 sets
-with the rest of the record's state and which local versions and the
-64-entry `anc` cap never change, so a long-committed receipt is never
-re-applied: if the row projection still equals `row_fp`, restore
+apply) differs from `drive_record_state.acked_receipt_id`, which the Tx 2 of
+every receipt-writing record sets with the rest of the record's state (a
+remote apply, and this device's own revival, keep or resolution, whose
+version stays owed) and which later local writes that create no receipt and
+the 64-entry `anc` cap never change, so a long-committed receipt is never
+re-applied, and a later edit that returns to a receipt's body cannot make
+recovery restore an older `reviveFp` or `resolveFp` over a newer version: if the row projection still equals `row_fp`, restore
 `drive_record_state` from the receipt (a merged body with `republish = 1`
 becomes a new unpublished local version, with a fresh HLC and `putFp`, and the
 receipt's `version_fp` in `anc`); if not, the post-crash edit becomes the new local version (a put with a fresh HLC
@@ -421,7 +424,13 @@ add-wins keeps the word with all its children and republishes them. If
 the kept word's version is in the `del`'s `anc` (unchanged since the deleter
 saw it), the republished word is a revival (`reviveFp(delFp, restore.fp)`,
 body `restore.body`), so a replay of the `del` after the child is undone is
-Stale rather than a causal supersession. A
+Stale rather than a causal supersession. A revival is a synthetic version,
+not a reader edit: when a distinct concurrent `del` meets it, the two
+deletes are arbitrated by the higher `(hlc, fp)` (the word's concurrent
+`del` rule) and the children are judged again against the winner, so the
+outcome equals the one reached by receiving both deletes before the child, in
+every interleaving. Only a genuine concurrent word edit keeps the word
+without that re-judgement. A
 covered child is not discarded by a cascade: it becomes non-live history
 (`vocabulary_staged_review.state = COVERED` for reviews, `held = 1` in
 `drive_record_state` for occurrences), never shown or counted while the
@@ -455,7 +464,14 @@ timestamps in `mergeWordMetadata` and `mergeOccurrencePair` break by value
 remote side) so the merge is commutative and two devices that swap edits
 compute the same body. Reading
 progress reuses `reconcileReadingState`, and `SyncDecision.Conflict`
-goes through the existing position-choice UI. Uploading to a device's own
+goes through the existing position-choice UI. That function compares
+`ReadingStatus` and position only, and at one position `automatic` and an
+explicit `reading` choice both map to `READING`, so it reports `InSync` for a
+changed `finishedOverride`. The explicit choice is therefore reconciled
+separately, against a per-device `agreed_status_choice` baseline (a nullable
+`sync_peer_state` column added in migration 84→85), and the status revision
+is acknowledged only after the choice is adopted, kept or raised as a
+prompt. Uploading to a device's own
 stream is delivery, not agreement: it never marks a local position as
 reconciled with another device, so a concurrent position on two devices
 still opens a conflict whether the upload or the pull happens first.
@@ -670,7 +686,15 @@ restore the word when an uncovered one arrives later. A `del` without a
 valid `restore` is malformed and is not applied.
 
 - A batch holds at most 2,000 records and 1 MiB; larger ones split into
-  consecutive seqs.
+  consecutive seqs. A single record can exceed 1 MiB by itself (annotation
+  notes have no wire length bound, `resRefs` is uncapped), and splitting
+  cannot help it. Such an oversized record is withheld: never truncated or
+  dropped, left owed with `published_fp` unchanged, skipped by every freeze
+  without allocating a `seq`, and reported by the run, so unrelated records
+  keep syncing. Peers keep its last published version until a later version
+  fits. An oversized local `resolve` leaves its conflict `RESOLVING` and does
+  not hold back a later version of the key that fits
+  (`docs/DRIVE_SYNC.md` §2.3).
 - One batch is in flight. It is built, frozen into `drive_outbox` (seq
   allocated in the same transaction), then uploaded. Retries look it up
   with `files.list(spaces=appDataFolder, q="appProperties has
