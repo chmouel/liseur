@@ -74,7 +74,11 @@ data class DriveConflictUiGroup(
     val localDeleted: Boolean,
     val remoteDeleted: Boolean,
     val conflicts: List<DriveConflict>,
-)
+) {
+    /** Series shelves always choose between device orders; Keep edited/Delete applies to other domains. */
+    val offersKeepEditedOrDelete: Boolean
+        get() = kind == DriveConflict.KIND_DELETE_EDIT && domain != DriveWireCodec.DOMAIN_SERIES
+}
 
 /** Snapshot rendered by Play's Google Drive Sync Settings UI. */
 data class DriveSettingsUiState(
