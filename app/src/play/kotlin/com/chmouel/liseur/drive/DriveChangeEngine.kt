@@ -461,7 +461,7 @@ internal class DriveChangeEngine(
         return applied
     }
 
-    private data class SnapshotApplyOutcome(
+    internal data class SnapshotApplyOutcome(
         val appliedAnyRecord: Boolean = false,
         val advancedAnyCursor: Boolean = false,
         val hasDeferredDomains: Boolean = false,
