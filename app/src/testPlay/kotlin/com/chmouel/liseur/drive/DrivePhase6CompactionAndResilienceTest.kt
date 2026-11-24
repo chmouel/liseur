@@ -1144,9 +1144,12 @@ class DrivePhase6CompactionAndResilienceTest {
         )
         assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
         assertEquals(SyncOutcome.Success, devB.changeEngine.sync().outcome)
+        val peersAfterReset = devB.liseurDb.furthestPositionDao()
+            .forWork(DriveLibrarySync.accountPeerId(PERM_ID), "isbn:9780060850524")
+        val resetFloorOnB = devB.driveSync.positionSync.getPersistedFloor(PERM_ID, "isbn:9780060850524", "dev-a")
         assertTrue(
-            "Furthest reset must delete peaks <= floor on B",
-            devB.liseurDb.furthestPositionDao().forWork(DriveLibrarySync.accountPeerId(PERM_ID), "isbn:9780060850524").isEmpty(),
+            "Furthest reset must delete peaks <= floor on B and keep only the post-reset peak",
+            peersAfterReset.all { it.seq > resetFloorOnB } && peersAfterReset.size == 1,
         )
 
         // Late-arriving stale peak from A with seq <= floor MUST be dropped on B;
@@ -1172,9 +1175,10 @@ class DrivePhase6CompactionAndResilienceTest {
             ),
         )
         devB.driveSync.positionSync.applyRemoteFurthest(PERM_ID, "dev-b", stalePeak, "dev-a", 99L)
-        assertTrue(
+        assertEquals(
             "Stale peak with seq <= floor must be ignored",
-            devB.liseurDb.furthestPositionDao().forWork(DriveLibrarySync.accountPeerId(PERM_ID), "isbn:9780060850524").isEmpty(),
+            peersAfterReset,
+            devB.liseurDb.furthestPositionDao().forWork(DriveLibrarySync.accountPeerId(PERM_ID), "isbn:9780060850524"),
         )
 
         val freshPeak = DriveWireCodec.putRecord(
