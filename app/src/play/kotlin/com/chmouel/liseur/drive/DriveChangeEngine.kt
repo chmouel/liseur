@@ -624,7 +624,7 @@ internal class DriveChangeEngine(
         return appliedCount
     }
 
-    private suspend fun applySnapshot(
+    internal suspend fun applySnapshot(
         permissionId: String,
         localDeviceId: String,
         remoteDeviceId: String,
@@ -670,9 +670,25 @@ internal class DriveChangeEngine(
             .toSet()
         val appliedSeqByDomain = deviceCursors.associate { it.domain to it.appliedSeq }
 
+        val deferredDomains = mutableSetOf<String>()
+        val ordered = allRecords
+            .filter {
+                it.d !in pausedDomains &&
+                    it.d in DriveWireCodec.SUPPORTED_DOMAIN_VERSIONS &&
+                    snapshot.throughSeq > (appliedSeqByDomain[it.d] ?: 0L)
+            }
+            .sortedBy { DriveWireCodec.domainRank(it.d) }
+        val (aliasRecords, otherRecords) = ordered.partition { it.d == DriveWireCodec.DOMAIN_WORK_ALIAS }
         // Per docs/DRIVE_SYNC.md §2.4: ingest ALL snapshot `resolutions` across all parts
         // BEFORE reconciling `records` so `resRefs`-bridged supersession works across compaction.
+        // Aliases apply first so work-scoped resolution keys land under their canonical work key.
         val now = clock()
+        for (record in aliasRecords) {
+            if (record.d in deferredDomains) continue
+            if (!applySingleRecord(permissionId, localDeviceId, remoteDeviceId, snapshot.throughSeq, accessToken, record)) {
+                deferredDomains.add(record.d)
+            }
+        }
         if (allResolutions.isNotEmpty()) {
             store.withTransaction {
                 for (res in allResolutions) {
@@ -681,7 +697,7 @@ internal class DriveChangeEngine(
                         DriveResolution(
                             permissionId = permissionId,
                             domain = res.d,
-                            recordKey = res.k,
+                            recordKey = canonicalResolutionKey(permissionId, res.d, res.k),
                             resolutionFp = res.resolutionFp,
                             resolvedFpsJson = DriveCanonicalJson.encode(res.resolvedFps.distinct().sorted()),
                             outcome = res.outcome,
@@ -694,15 +710,7 @@ internal class DriveChangeEngine(
             }
         }
 
-        val deferredDomains = mutableSetOf<String>()
-        val ordered = allRecords
-            .filter {
-                it.d !in pausedDomains &&
-                    it.d in DriveWireCodec.SUPPORTED_DOMAIN_VERSIONS &&
-                    snapshot.throughSeq > (appliedSeqByDomain[it.d] ?: 0L)
-            }
-            .sortedBy { DriveWireCodec.domainRank(it.d) }
-        for (record in ordered) {
+        for (record in otherRecords) {
             if (record.d in deferredDomains) continue
             val recordApplied = applySingleRecord(
                 permissionId = permissionId,
@@ -732,6 +740,18 @@ internal class DriveChangeEngine(
                 )
             }
         }
+    }
+
+    private suspend fun canonicalResolutionKey(permissionId: String, domain: String, key: String): String {
+        if (domain != DriveWireCodec.DOMAIN_SERIES &&
+            domain != DriveWireCodec.DOMAIN_METADATA &&
+            domain != DriveWireCodec.DOMAIN_EVALUATION
+        ) {
+            return key
+        }
+        val split = if (domain == DriveWireCodec.DOMAIN_SERIES) key.length else key.lastIndexOf('/')
+        if (split <= 0) return key
+        return workIdentity.canonicalWorkKey(permissionId, key.substring(0, split)) + key.substring(split)
     }
 
     private suspend fun applySingleRecord(
@@ -771,36 +791,30 @@ internal class DriveChangeEngine(
                     remoteSeq = remoteSeq,
                     nextHlc = { nextHlc(permissionId) },
                 ) ?: true
-            DriveWireCodec.DOMAIN_SERIES -> {
+            DriveWireCodec.DOMAIN_SERIES ->
                 seriesSync?.applyRemoteRecord(
                     permissionId = permissionId,
                     record = record,
                     remoteDeviceId = remoteDeviceId,
                     remoteSeq = remoteSeq,
                     nextHlc = { nextHlc(permissionId) },
-                )
-                true
-            }
-            DriveWireCodec.DOMAIN_EVALUATION -> {
+                ) ?: true
+            DriveWireCodec.DOMAIN_EVALUATION ->
                 evaluationSync?.applyRemoteRecord(
                     permissionId = permissionId,
                     record = record,
                     remoteDeviceId = remoteDeviceId,
                     remoteSeq = remoteSeq,
                     nextHlc = { nextHlc(permissionId) },
-                )
-                true
-            }
-            DriveWireCodec.DOMAIN_ANNOTATION -> {
+                ) ?: true
+            DriveWireCodec.DOMAIN_ANNOTATION ->
                 annotationSync?.applyRemoteRecord(
                     permissionId = permissionId,
                     record = record,
                     remoteDeviceId = remoteDeviceId,
                     remoteSeq = remoteSeq,
                     nextHlc = { nextHlc(permissionId) },
-                )
-                true
-            }
+                ) ?: true
             DriveWireCodec.DOMAIN_POSITION -> {
                 positionSync.applyRemotePosition(
                     permissionId = permissionId,

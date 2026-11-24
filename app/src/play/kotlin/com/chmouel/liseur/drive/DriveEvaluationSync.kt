@@ -339,25 +339,25 @@ internal class DriveEvaluationSync(
         remoteDeviceId: String,
         remoteSeq: Long,
         nextHlc: suspend () -> String,
-    ) {
+    ): Boolean {
         val peerId = DriveLibrarySync.accountPeerId(permissionId)
         val isIncomingDelete = record.op == DriveRecordState.OP_DEL ||
             (record.op == DriveRecordState.OP_RESOLVE && record.outcome == DriveResolution.OUTCOME_DELETE)
         val decodedBody = if (!isIncomingDelete) {
-            record.body?.let(DriveWireCodec::decodeEvaluationBody) ?: return
+            record.body?.let(DriveWireCodec::decodeEvaluationBody) ?: return true
         } else {
             null
         }
         val (rawWorkKey, field) = if (decodedBody != null) {
             decodedBody.workKey to decodedBody.field
         } else {
-            parseRecordKey(record.k) ?: return
+            parseRecordKey(record.k) ?: return true
         }
-        if (field !in FIELDS) return
+        if (field !in FIELDS) return true
 
         val canonicalWorkKey = workIdentity.canonicalWorkKey(permissionId, rawWorkKey)
         val canonicalKey = recordKey(canonicalWorkKey, field)
-        val bookUrl = findBookUrlForWorkKey(permissionId, canonicalWorkKey) ?: return
+        val bookUrl = findBookUrlForWorkKey(permissionId, canonicalWorkKey) ?: return true
         val book = books.getByUrl(bookUrl)
         val incomingContentFp = decodedBody?.let {
             DriveCanonicalJson.contentFp(DriveWireCodec.encodeEvaluationBody(it.copy(workKey = canonicalWorkKey)))
@@ -409,12 +409,17 @@ internal class DriveEvaluationSync(
         )
 
         var appliedRev: Long? = null
+        var staleLocal = false
         val now = clock()
         // Transaction 1 (`liseur.db`): atomic data + `evaluation_sync` revision-to-fp ack.
         when (val action = result.dataAction) {
             is ReconciliationDataAction.ApplyPut -> {
-                val body = decodedBody ?: return
+                val body = decodedBody ?: return true
                 database.withTransaction {
+                    if (evaluations.get(bookUrl, field)?.revision != row?.revision) {
+                        staleLocal = true
+                        return@withTransaction
+                    }
                     val revApplied = evaluations.nextRevision()
                     val prior = evaluations.get(bookUrl, field)
                     evaluations.upsert(
@@ -453,6 +458,10 @@ internal class DriveEvaluationSync(
             }
             ReconciliationDataAction.ApplyDelete -> {
                 database.withTransaction {
+                    if (evaluations.get(bookUrl, field)?.revision != row?.revision) {
+                        staleLocal = true
+                        return@withTransaction
+                    }
                     val revApplied = evaluations.nextRevision()
                     val prior = evaluations.get(bookUrl, field)
                     evaluations.upsert(
@@ -492,6 +501,9 @@ internal class DriveEvaluationSync(
             ReconciliationDataAction.NoDataChange -> Unit
         }
 
+        // Defer: the record replays and reconciles against the reader's newer edit.
+        if (staleLocal) return false
+
         // Transaction 2 (`drive_sync.db`): Step 0 side effects + causal state BEFORE cursor advance.
         store.withTransaction {
             for (res in result.resolutionsToPersist) {
@@ -513,6 +525,7 @@ internal class DriveEvaluationSync(
                 )
             }
         }
+        return true
     }
 
     /** Applies a reader's conflict choice for an evaluation conflict and queues `op: "resolve"`. */
@@ -624,6 +637,7 @@ internal class DriveEvaluationSync(
                             rev = revApplied,
                             op = DriveRecordState.OP_RESOLVE,
                             hlc = hlc,
+                            bodyJson = chosenBodyMap?.let(DriveCanonicalJson::encode),
                         ),
                     ),
                     sentRevision = revApplied,
@@ -654,7 +668,10 @@ internal class DriveEvaluationSync(
         nextHlc: suspend () -> String,
     ) {
         val existingState = recordStates.get(permissionId, DriveWireCodec.DOMAIN_EVALUATION, conflict.recordKey)
-        if (existingState != null && existingState.versionOp == DriveRecordState.OP_RESOLVE) {
+        if (existingState != null &&
+            existingState.versionOp == DriveRecordState.OP_RESOLVE &&
+            existingState.versionFp == conflict.resolutionFp
+        ) {
             val res = resolutions.get(permissionId, DriveWireCodec.DOMAIN_EVALUATION, conflict.recordKey, existingState.versionFp)
             if (res != null && existingState.publishedFp == existingState.versionFp) {
                 conflicts.markResolved(permissionId, conflict.conflictId, conflict.choice ?: res.outcome, res.resolutionFp, clock())
@@ -685,37 +702,26 @@ internal class DriveEvaluationSync(
             val remoteBody = conflict.remoteJson?.let { raw ->
                 runCatching { DriveWireCodec.decodeEvaluationBody(JSONObject(raw)) }.getOrNull()
             }
-            val existingBody = existingState?.bodyJson?.let { raw ->
-                runCatching { DriveWireCodec.decodeEvaluationBody(JSONObject(raw)) }.getOrNull()
-            }
             val outcome = if (sentMeta!!.cfp != null) {
                 DriveResolution.OUTCOME_PUT
             } else {
                 DriveResolution.OUTCOME_DELETE
             }
             val recoveredBody: DriveEvaluationBody? = if (outcome == DriveResolution.OUTCOME_PUT) {
-                when (choice) {
-                    DriveConflictChoice.KEEP_REMOTE -> remoteBody?.copy(workKey = workKey)
-                    DriveConflictChoice.KEEP_LOCAL,
-                    DriveConflictChoice.KEEP_EDITED,
-                    -> {
-                        if (row != null && row.revision == sync!!.ackedRevision && row.value != null) {
-                            DriveEvaluationBody(workKey, field, row.value, row.updatedAt)
-                        } else {
-                            existingBody?.copy(workKey = workKey)
-                                ?: remoteBody?.copy(workKey = workKey)
-                        }
-                    }
-                    DriveConflictChoice.DELETE -> null
-                }
+                val candidates = listOfNotNull(
+                    sentMeta.bodyJson?.let { decodeBodyJson(it) },
+                    row?.takeIf { it.revision == sync!!.ackedRevision && it.value != null }
+                        ?.let { DriveEvaluationBody(workKey, field, it.value!!, it.updatedAt) },
+                    conflict.remoteJson?.let { decodeBodyJson(it)?.copy(workKey = workKey) },
+                )
+                // Never publish a body that does not hash to the fingerprint Tx 1 acknowledged.
+                candidates.firstOrNull { body ->
+                    DriveCanonicalJson.contentFp(DriveWireCodec.encodeEvaluationBody(body)) == sentMeta.cfp
+                } ?: return
             } else {
                 null
             }
-            val finalOutcome = if (outcome == DriveResolution.OUTCOME_PUT && recoveredBody != null) {
-                DriveResolution.OUTCOME_PUT
-            } else {
-                DriveResolution.OUTCOME_DELETE
-            }
+            val finalOutcome = outcome
             val chosenBodyMap = recoveredBody?.let(DriveWireCodec::encodeEvaluationBody)
             val chosenContentFp = chosenBodyMap?.let(DriveCanonicalJson::contentFp) ?: sentMeta.cfp
             val now = clock()
@@ -768,6 +774,9 @@ internal class DriveEvaluationSync(
 
         resolveLocalConflict(permissionId, conflict, choice, localDeviceId, nextHlc)
     }
+
+    private fun decodeBodyJson(raw: String): DriveEvaluationBody? =
+        runCatching { DriveWireCodec.decodeEvaluationBody(JSONObject(raw)) }.getOrNull()
 
     /**
      * Exact ADR-0078 revision-to-fingerprint crash recovery for `evaluation_sync`.
