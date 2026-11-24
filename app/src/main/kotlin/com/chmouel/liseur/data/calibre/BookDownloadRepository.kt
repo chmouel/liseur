@@ -168,6 +168,8 @@ class BookDownloadRepository(
     private val browseServer: suspend (Long) -> RemoteServer? = { null },
     private val bulkTransferGate: BulkTransferGate = BulkTransferGate(),
     private val inTransaction: suspend (suspend () -> Unit) -> Unit = { it() },
+    private val externalDownload: suspend (Book) -> UUID? = { null },
+    private val externalCancel: suspend (Book) -> Unit = {},
 ) {
     private val workManager get() = WorkManager.getInstance(context)
     private val bookLocks = BookDownloadLocks()
@@ -238,6 +240,9 @@ class BookDownloadRepository(
      * the reader added at once.
      */
     suspend fun enqueue(book: Book, guardSpace: Boolean = false): UUID? {
+        if (book.remoteUuid == null && book.browseServerId == null) {
+            return externalDownload(book)
+        }
         val key = if (book.browseServerId != null) {
             browseServer(book.browseServerId)?.accountKey ?: return null
         } else {
@@ -481,7 +486,11 @@ class BookDownloadRepository(
             .build()
 
     suspend fun cancel(book: Book) {
-        stopWork(book)
+        if (book.remoteUuid == null && book.browseServerId == null) {
+            externalCancel(book)
+        } else {
+            stopWork(book)
+        }
         withBookLock(book.url) {
             val current = bookDao.getByUrl(book.url)
             if (current != null && current.localUri == null && current.downloadState != DownloadState.DOWNLOADED) {
@@ -501,11 +510,15 @@ class BookDownloadRepository(
      * it again.
      */
     suspend fun removeDownload(book: Book) {
-        val key = fileKey(book) ?: return
-        fileFor(key).delete()
-        File(booksDir(), "$key.epub.part").delete()
-        File(booksDir(), "$key.epub.etag").delete()
-        deleteOwnedCopy(book)
+        val key = fileKey(book)
+        if (key != null) {
+            fileFor(key).delete()
+            File(booksDir(), "$key.epub.part").delete()
+            File(booksDir(), "$key.epub.etag").delete()
+        }
+        val owned = ownedCopyOf(book)
+        if (key == null && owned == null) return
+        owned?.delete()
         bookRemoval.downloadRemoved(book.url)
     }
 

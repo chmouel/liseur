@@ -137,6 +137,7 @@ interface DriveRemoteApi {
     suspend fun getAbout(accessToken: String): DriveUserAbout
     suspend fun listLiseurFolders(accessToken: String): List<DriveRemoteFile>
     suspend fun ensureLiseurFolder(accessToken: String): LiseurFolderResolution
+    suspend fun listDriveEpubFiles(accessToken: String): List<DriveRemoteFile> = emptyList()
     suspend fun getStartPageToken(accessToken: String): String
     suspend fun listChanges(accessToken: String, pageToken: String, pageSize: Int = 1000): DriveChangesPage
     suspend fun listAppDataFiles(
@@ -316,6 +317,16 @@ class DriveRestClient(
         merged.putIfAbsent(created.id, created)
         val sorted = merged.values.sortedWith(CANONICAL_FOLDER_ORDER)
         return LiseurFolderResolution(canonical = sorted.first(), allFolders = sorted)
+    }
+
+    override suspend fun listDriveEpubFiles(accessToken: String): List<DriveRemoteFile> {
+        val query = "appProperties has { key='liseurKind' and value='epub' } and trashed = false"
+        return listFiles(
+            accessToken = accessToken,
+            spaces = SPACE_DRIVE,
+            query = query,
+            pageSize = 1000,
+        )
     }
 
     override suspend fun getStartPageToken(accessToken: String): String {

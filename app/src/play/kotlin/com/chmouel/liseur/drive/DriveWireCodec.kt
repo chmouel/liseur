@@ -658,6 +658,76 @@ internal object DriveWireCodec {
         else -> null
     }
 
+    /** Encodes frozen outbox delivery ACK metadata for crash-safe replay. */
+    fun encodeOutboxAckMetadata(metadata: DriveOutboxAckMetadata): String =
+        DriveCanonicalJson.encode(
+            mapOf(
+                "positionAcks" to metadata.positionAcks.map { ack ->
+                    mapOf(
+                        "bookUrl" to ack.bookUrl,
+                        "localRevision" to ack.localRevision,
+                        "statusRevision" to ack.statusRevision,
+                        "progression" to ack.progression,
+                        "status" to ack.status,
+                        "recordKey" to ack.recordKey,
+                        "recordFp" to ack.recordFp,
+                    )
+                },
+                "peakAcks" to metadata.peakAcks.map { ack ->
+                    mapOf(
+                        "bookUrl" to ack.bookUrl,
+                        "workKey" to ack.workKey,
+                        "peakRevision" to ack.peakRevision,
+                        "recordKey" to ack.recordKey,
+                        "recordFp" to ack.recordFp,
+                    )
+                },
+            ),
+        )
+
+    /** Decodes persisted outbox delivery ACK metadata for crash-safe replay. */
+    fun decodeOutboxAckMetadata(rawJson: String): DriveOutboxAckMetadata {
+        val json = JSONObject(rawJson)
+        val posArr = json.optJSONArray("positionAcks") ?: JSONArray()
+        val positionAcks = buildList(posArr.length()) {
+            for (i in 0 until posArr.length()) {
+                val obj = posArr.optJSONObject(i) ?: continue
+                val bookUrl = obj.optString("bookUrl").trim()
+                if (bookUrl.isEmpty()) continue
+                add(
+                    DrivePositionAckMeta(
+                        bookUrl = bookUrl,
+                        localRevision = obj.optLong("localRevision", 0L),
+                        statusRevision = obj.optLong("statusRevision", 0L),
+                        progression = obj.optNullableDouble("progression"),
+                        status = obj.optString("status").ifBlank { "ReadyToRead" },
+                        recordKey = obj.optString("recordKey"),
+                        recordFp = obj.optString("recordFp"),
+                    ),
+                )
+            }
+        }
+        val peakArr = json.optJSONArray("peakAcks") ?: JSONArray()
+        val peakAcks = buildList(peakArr.length()) {
+            for (i in 0 until peakArr.length()) {
+                val obj = peakArr.optJSONObject(i) ?: continue
+                val bookUrl = obj.optString("bookUrl").trim()
+                val workKey = obj.optString("workKey").trim()
+                if (bookUrl.isEmpty() || workKey.isEmpty()) continue
+                add(
+                    DrivePeakAckMeta(
+                        bookUrl = bookUrl,
+                        workKey = workKey,
+                        peakRevision = obj.optLong("peakRevision", 0L),
+                        recordKey = obj.optString("recordKey"),
+                        recordFp = obj.optString("recordFp"),
+                    ),
+                )
+            }
+        }
+        return DriveOutboxAckMetadata(positionAcks = positionAcks, peakAcks = peakAcks)
+    }
+
     /** Creates a `put` [DriveWireRecord] with canonical fingerprint and capped ancestry. */
     fun putRecord(
         domain: String,

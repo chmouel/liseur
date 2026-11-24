@@ -946,9 +946,10 @@ with outcome `delete`) when it reaches those records:
     `sizeBytes` prefers non-null, then the greater value; `identifiers` union; `addedAt = minOf`; `archivedAt` comes
     from the body with the higher `archiveHlc` (the record HLC only when
     neither has one), so a newer record that merely carries an old archive
-    state, such as an edition upload, never overrides a later archive choice;
-    `title`, `author`, `fileSeriesName`, `fileSeriesIndex` and `updatedAt`
-    come from the body whose record has the higher `(hlc, fp)`.
+    state, such as an edition upload, never overrides a later archive choice,
+    and an archive change made locally but not yet collected is kept over a
+    pull; `title`, `author`, `fileSeriesName`, `fileSeriesIndex` and
+    `updatedAt` come from the body whose record has the higher `(hlc, fp)`.
   - **`hidden_at` is excluded** (local-only).
 - **`del` semantics:**
   - Published **only** by explicit **Delete from synced library** (never by
