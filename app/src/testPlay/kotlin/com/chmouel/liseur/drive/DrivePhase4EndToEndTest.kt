@@ -41,6 +41,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import javax.crypto.KeyGenerator
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -51,6 +52,8 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import org.json.JSONArray
+import org.json.JSONObject
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
@@ -82,6 +85,7 @@ class DrivePhase4EndToEndTest {
     private lateinit var deviceA: Phase4Device
     private lateinit var deviceB: Phase4Device
     private lateinit var tempDir: File
+    private val clockHooks = mutableMapOf<String, () -> Unit>()
 
     @Before
     fun setUp() {
@@ -1674,6 +1678,231 @@ class DrivePhase4EndToEndTest {
 
     // -- Harness --------------------------------------------------------------
 
+    /** Leaves device A holding one open review conflict against device B's concurrent edit. */
+    private suspend fun openReviewConflict(): Pair<Book, DriveConflict> {
+        deviceA.connect()
+        deviceB.connect()
+        val bookA = seedBook(deviceA, "recovery.epub", "9780441172719", "Dune", "Frank Herbert")
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+        val stubB = "drive:isbn:9780441172719"
+        deviceA.liseurDb.bookEvaluationDao().edit(bookA.url, PersonalEvaluation.REVIEW, "Review v0", "Dune", "Frank Herbert", 1_000L)
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+        deviceA.liseurDb.bookEvaluationDao().edit(bookA.url, PersonalEvaluation.REVIEW, "Review A", "Dune", "Frank Herbert", 2_000L)
+        deviceB.liseurDb.bookEvaluationDao().edit(stubB, PersonalEvaluation.REVIEW, "Review B", "Dune", "Frank Herbert", 2_100L)
+        driveServer.hideOtherDeviceDeltasFor("dev-a")
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        driveServer.hideOtherDeviceDeltasFor("dev-b")
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+        driveServer.unhideAll()
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        return bookA to deviceA.driveDb.conflicts().openForAccount(PERM_ID).single()
+    }
+
+    private fun crashBeforeResolutionCommit(device: Phase4Device) {
+        device.driveDb.openHelper.writableDatabase.execSQL(
+            "CREATE TRIGGER crash_tx2 BEFORE INSERT ON drive_resolution BEGIN SELECT RAISE(ABORT, 'injected crash'); END",
+        )
+    }
+
+    private fun restoreAfterCrash(device: Phase4Device) {
+        device.driveDb.openHelper.writableDatabase.execSQL("DROP TRIGGER crash_tx2")
+    }
+
+    @Test
+    fun `a resolving conflict is not settled by an older published resolution of the same record`() = runTest {
+        val (bookA, conflict) = openReviewConflict()
+        val reviewKey = DriveEvaluationSync.recordKey("isbn:9780441172719", PersonalEvaluation.REVIEW)
+        val state = deviceA.driveDb.recordStates().get(PERM_ID, DriveWireCodec.DOMAIN_EVALUATION, reviewKey)!!
+        deviceA.driveDb.resolutions().upsert(
+            DriveResolution(
+                PERM_ID, DriveWireCodec.DOMAIN_EVALUATION, reviewKey, "old-resolution", """["old-fp"]""",
+                DriveResolution.OUTCOME_PUT, "0017450000000-0001-dev-a", "dev-a", 1L,
+            ),
+        )
+        deviceA.driveDb.recordStates().upsert(
+            state.copy(versionFp = "old-resolution", versionOp = DriveRecordState.OP_RESOLVE, publishedFp = "old-resolution"),
+        )
+        // Crash window: the new choice is recorded but its resolution never committed.
+        deviceA.driveDb.conflicts().upsert(
+            conflict.copy(state = DriveConflict.STATE_RESOLVING, choice = DriveConflictChoice.KEEP_REMOTE.name, resolutionFp = null),
+        )
+
+        deviceA.changeEngine.sync()
+
+        val settled = deviceA.driveDb.conflicts().get(PERM_ID, conflict.conflictId)!!
+        assertEquals(DriveConflict.STATE_RESOLVED, settled.state)
+        assertNotEquals("old-resolution", settled.resolutionFp)
+        assertEquals("Review B", deviceA.liseurDb.bookEvaluationDao().get(bookA.url, PersonalEvaluation.REVIEW)!!.value)
+    }
+
+    @Test
+    fun `evaluation crash recovery republishes the exact chosen body after a later edit`() = runTest {
+        val (bookA, conflict) = openReviewConflict()
+        val evaluations = deviceA.liseurDb.bookEvaluationDao()
+        evaluations.edit(bookA.url, PersonalEvaluation.REVIEW, "A edited", "Dune", "Frank Herbert", 3_000L)
+        crashBeforeResolutionCommit(deviceA)
+        val failure = runCatching {
+            deviceA.driveSync.resolveConflicts(listOf(conflict), DriveConflictChoice.KEEP_EDITED, syncAfter = false)
+        }
+        assertTrue(failure.isFailure)
+        restoreAfterCrash(deviceA)
+        assertEquals(1, deviceA.driveDb.conflicts().resolvingForAccount(PERM_ID).size)
+        val peerId = DriveLibrarySync.accountPeerId(PERM_ID)
+        val receipt = DriveWireCodec.decodeRevisionAckJson(evaluations.state(peerId, bookA.url, PersonalEvaluation.REVIEW)!!.sentJson)!!
+        assertEquals(DriveRecordState.OP_RESOLVE, receipt.op)
+
+        evaluations.edit(bookA.url, PersonalEvaluation.REVIEW, "A edited again", "Dune", "Frank Herbert", 4_000L)
+        deviceA.changeEngine.sync()
+
+        val published = driveServer.deltaRecords("dev-a").single {
+            it.d == DriveWireCodec.DOMAIN_EVALUATION && it.op == DriveRecordState.OP_RESOLVE && it.fp == receipt.vfp
+        }
+        val body = DriveWireCodec.decodeEvaluationBody(published.body!!)!!
+        assertEquals("A edited", body.value)
+        assertEquals(receipt.cfp, DriveCanonicalJson.contentFp(DriveWireCodec.encodeEvaluationBody(body)))
+        assertEquals("A edited again", evaluations.get(bookA.url, PersonalEvaluation.REVIEW)!!.value)
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+        assertEquals("A edited again", deviceB.liseurDb.bookEvaluationDao().get("drive:isbn:9780441172719", PersonalEvaluation.REVIEW)!!.value)
+        assertTrue(deviceB.driveDb.conflicts().openForAccount(PERM_ID).isEmpty())
+    }
+
+    @Test
+    fun `evaluation crash recovery without a provable chosen body stays resolving and publishes nothing`() = runTest {
+        val (bookA, conflict) = openReviewConflict()
+        val evaluations = deviceA.liseurDb.bookEvaluationDao()
+        evaluations.edit(bookA.url, PersonalEvaluation.REVIEW, "A edited", "Dune", "Frank Herbert", 3_000L)
+        crashBeforeResolutionCommit(deviceA)
+        runCatching {
+            deviceA.driveSync.resolveConflicts(listOf(conflict), DriveConflictChoice.KEEP_EDITED, syncAfter = false)
+        }
+        restoreAfterCrash(deviceA)
+        val peerId = DriveLibrarySync.accountPeerId(PERM_ID)
+        val sync = evaluations.state(peerId, bookA.url, PersonalEvaluation.REVIEW)!!
+        val receipt = DriveWireCodec.decodeRevisionAckJson(sync.sentJson)!!
+        evaluations.upsertState(sync.copy(sentJson = DriveWireCodec.encodeRevisionAckJson(receipt.copy(bodyJson = null))))
+        evaluations.edit(bookA.url, PersonalEvaluation.REVIEW, "A edited again", "Dune", "Frank Herbert", 4_000L)
+
+        deviceA.changeEngine.sync()
+
+        assertEquals(1, deviceA.driveDb.conflicts().resolvingForAccount(PERM_ID).size)
+        assertTrue(driveServer.deltaRecords("dev-a").none { it.op == DriveRecordState.OP_RESOLVE && it.fp == receipt.vfp })
+        assertEquals("A edited again", evaluations.get(bookA.url, PersonalEvaluation.REVIEW)!!.value)
+    }
+
+    @Test
+    fun `remote apply defers when the reader edits between reconciliation and commit`() = runTest {
+        deviceA.connect()
+        deviceB.connect()
+        val bookA = seedBook(deviceA, "race.epub", "9780441172719", "Dune", "Frank Herbert")
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+        val stubB = "drive:isbn:9780441172719"
+        val annotation = BookAnnotation(
+            id = "ann-race", bookId = bookA.url, kind = AnnotationKind.NOTE.name,
+            locatorJson = """{"href":"ch01.xhtml"}""", text = "Spice", note = "v0",
+            createdAt = 1_000L, updatedAt = 1_000_000L,
+        )
+        deviceA.liseurDb.annotationDao().upsert(annotation)
+        deviceA.liseurDb.bookEvaluationDao().edit(bookA.url, PersonalEvaluation.REVIEW, "v0", "Dune", "Frank Herbert", 1_000L)
+        deviceA.liseurDb.bookDao().setSeriesOverride(bookA.url, "Series v0", 1.0, 1_000L)
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+
+        deviceA.liseurDb.annotationDao().upsert(annotation.copy(note = "A", updatedAt = 2_000_000L))
+        deviceA.liseurDb.bookEvaluationDao().edit(bookA.url, PersonalEvaluation.REVIEW, "A", "Dune", "Frank Herbert", 2_000L)
+        deviceA.liseurDb.bookDao().setSeriesOverride(bookA.url, "Series A", 2.0, 2_000L)
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+
+        // The reader's edit lands once per domain, after the record is reconciled and before it commits.
+        val fired = mutableSetOf<String>()
+        clockHooks["dev-b"] = {
+            val inside = Throwable().stackTrace.map { it.className }
+            fun entering(name: String) = inside.any { it.startsWith("com.chmouel.liseur.drive.$name") } && fired.add(name)
+            runBlocking {
+                when {
+                    entering("DriveAnnotationSync") -> deviceB.liseurDb.annotationDao().upsert(
+                        deviceB.liseurDb.annotationDao().byId("ann-race")!!.copy(note = "B newer", updatedAt = 9_000_000L),
+                    )
+                    entering("DriveEvaluationSync") ->
+                        deviceB.liseurDb.bookEvaluationDao().edit(stubB, PersonalEvaluation.REVIEW, "B newer", "Dune", "Frank Herbert", 9_000L)
+                    entering("DriveSeriesSync") -> deviceB.liseurDb.bookDao().setSeriesOverride(stubB, "Series B newer", 3.0, 9_000L)
+                }
+            }
+        }
+        deviceB.changeEngine.sync()
+        clockHooks.remove("dev-b")
+
+        assertEquals(setOf("DriveAnnotationSync", "DriveEvaluationSync", "DriveSeriesSync"), fired)
+        assertEquals("B newer", deviceB.liseurDb.annotationDao().byId("ann-race")!!.note)
+        assertEquals("B newer", deviceB.liseurDb.bookEvaluationDao().get(stubB, PersonalEvaluation.REVIEW)!!.value)
+        assertEquals("Series B newer", deviceB.liseurDb.bookDao().getByUrl(stubB)!!.userSeriesName)
+
+        // The deferred records replay and reconcile against the newer edits instead of erasing them.
+        deviceB.changeEngine.sync()
+        assertEquals("B newer", deviceB.liseurDb.annotationDao().byId("ann-race")!!.note)
+        assertEquals("B newer", deviceB.liseurDb.bookEvaluationDao().get(stubB, PersonalEvaluation.REVIEW)!!.value)
+        assertEquals("Series B newer", deviceB.liseurDb.bookDao().getByUrl(stubB)!!.userSeriesName)
+    }
+
+    @Test
+    fun `snapshot resolutions are keyed by canonical work after an alias merge and annotation ids stay`() = runTest {
+        deviceA.connect()
+        val hlc = "0017450000000-0002-dev-c"
+        val merge = DriveWireCodec.putRecord(
+            domain = DriveWireCodec.DOMAIN_WORK_ALIAS,
+            key = "merge:sha:ccc",
+            hlc = hlc,
+            bodyMap = DriveWireCodec.encodeWorkAliasBody(DriveWorkAliasBody.Merge("sha:ccc", "isbn:bbb", 100L)),
+        )
+        val batch = DriveDeltaBatch(
+            batchId = "snapshot-part",
+            deviceId = "dev-c",
+            seq = 1L,
+            createdHlc = hlc,
+            domains = DriveWireCodec.SUPPORTED_DOMAIN_VERSIONS,
+            records = listOf(merge),
+        )
+        val resolutions = JSONArray()
+        for ((domain, key) in listOf(
+            DriveWireCodec.DOMAIN_SERIES to "sha:ccc",
+            DriveWireCodec.DOMAIN_EVALUATION to "sha:ccc/review",
+            DriveWireCodec.DOMAIN_METADATA to "sha:ccc/title",
+            DriveWireCodec.DOMAIN_ANNOTATION to "ann-snapshot",
+        )) {
+            resolutions.put(
+                JSONObject()
+                    .put("d", domain).put("k", key).put("resolutionFp", "res-$domain")
+                    .put("resolvedFps", JSONArray(listOf("fp-1", "fp-2")))
+                    .put("outcome", DriveResolution.OUTCOME_DELETE).put("hlc", hlc),
+            )
+        }
+        val bytes = JSONObject(DriveWireCodec.encodeDeltaBatch(batch))
+            .put("throughSeq", 5L).put("partIndex", 0).put("partCount", 1).put("resolutions", resolutions)
+            .toString().toByteArray()
+        val file = driveServer.clientFor("dev-c").createAppDataFile("token", "snapshot-part.json", "application/json", bytes)
+
+        deviceA.changeEngine.applySnapshot(
+            PERM_ID, "dev-a", "dev-c",
+            DriveSnapshotRef(5L, listOf(DriveSnapshotPartRef("snapshot-part.json", file.id, DriveCanonicalJson.sha256Hex(bytes), 1, 4))),
+            "token",
+        )
+
+        val store = deviceA.driveDb.resolutions()
+        for ((domain, key) in listOf(
+            DriveWireCodec.DOMAIN_SERIES to "isbn:bbb",
+            DriveWireCodec.DOMAIN_EVALUATION to "isbn:bbb/review",
+            DriveWireCodec.DOMAIN_METADATA to "isbn:bbb/title",
+            DriveWireCodec.DOMAIN_ANNOTATION to "ann-snapshot",
+        )) {
+            assertEquals("canonical $domain/$key", listOf("res-$domain"), store.forRecord(PERM_ID, domain, key).map { it.resolutionFp })
+        }
+        assertTrue(store.forRecord(PERM_ID, DriveWireCodec.DOMAIN_SERIES, "sha:ccc").isEmpty())
+        assertTrue(store.forRecord(PERM_ID, DriveWireCodec.DOMAIN_EVALUATION, "sha:ccc/review").isEmpty())
+        assertTrue(store.forRecord(PERM_ID, DriveWireCodec.DOMAIN_METADATA, "sha:ccc/title").isEmpty())
+    }
+
     private suspend fun seedBook(
         device: Phase4Device,
         fileName: String,
@@ -1748,7 +1977,10 @@ class DrivePhase4EndToEndTest {
             inTransaction = { work -> liseurDb.withTransaction { work() } },
         )
         val clockVal = AtomicLong(1_745_000_000_000L)
-        val clock: () -> Long = { clockVal.addAndGet(100L) }
+        val clock: () -> Long = {
+            clockHooks[deviceId]?.invoke()
+            clockVal.addAndGet(100L)
+        }
         val deterministicEncoder = DriveWebpEncoder { sourceBytes, _, quality ->
             val payload = "WEBP-Q$quality:".toByteArray() + sourceBytes
             EncodedImageFrame(bytes = payload, width = 800, height = 1200)
@@ -1842,6 +2074,11 @@ class DrivePhase4EndToEndTest {
 
         fun appDataFilesSnapshot(): List<DriveRemoteFile> =
             files.values.filter { it.space == "appDataFolder" }.map { it.meta }
+
+        fun deltaRecords(deviceId: String): List<DriveWireRecord> =
+            files.values
+                .filter { it.meta.name.startsWith("device-$deviceId-seq-") }
+                .flatMap { DriveWireCodec.decodeDeltaBatch(it.bytes.toString(Charsets.UTF_8)).records }
 
         fun epubFilesSnapshot(): List<DriveRemoteFile> =
             files.values.filter { it.meta.appProperties["liseurKind"] == DriveFile.KIND_EPUB }.map { it.meta }
