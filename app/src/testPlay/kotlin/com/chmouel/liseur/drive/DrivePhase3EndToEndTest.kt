@@ -470,6 +470,32 @@ class DrivePhase3EndToEndTest {
     }
 
     @Test
+    fun `a newer remote catalog deletion keeps this device's queued EPUB trash ids`() = runTest {
+        deviceA.connect()
+        val key = "isbn:9780441172719"
+        val pending = DriveCanonicalJson.encode(mapOf("pendingTrashFileIds" to listOf("file-1")))
+        deviceA.driveDb.recordStates().upsert(
+            DriveRecordState(
+                permissionId = PERM_ID, domain = DriveWireCodec.DOMAIN_CATALOG, recordKey = key,
+                versionFp = "local-del", versionOp = DriveRecordState.OP_DEL, publishedFp = null,
+                contentFp = null, originDeviceId = null, originSeq = null, ancestorsJson = "[]",
+                resRefsJson = "[]", lastHlc = "0017450000000-0001-dev-a", bodyJson = pending,
+            ),
+        )
+
+        deviceA.catalogSync.applyRemoteRecord(
+            PERM_ID,
+            DriveWireCodec.delRecord(DriveWireCodec.DOMAIN_CATALOG, key, "0017450000500-0001-dev-b"),
+            "dev-b",
+            1L,
+        )
+
+        val state = deviceA.driveDb.recordStates().get(PERM_ID, DriveWireCodec.DOMAIN_CATALOG, key)!!
+        assertEquals("0017450000500-0001-dev-b", state.lastHlc)
+        assertEquals(pending, state.bodyJson)
+    }
+
+    @Test
     fun `an incoming catalog entry matches a local book whose fingerprint is still missing`() = runTest {
         deviceA.connect()
         deviceB.connect()
