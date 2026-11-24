@@ -708,6 +708,70 @@ class DriveLibrarySyncTest {
         )
     }
 
+    @Test
+    fun `scheme-qualified placeholder identifiers fall through to the stub key`() {
+        val base = Book(
+            url = "file:///book.epub",
+            title = "Book",
+            author = "Author",
+            coverPath = null,
+            source = null,
+            addedAt = 1L,
+            lastOpenedAt = null,
+        )
+        fun keyFor(vararg identifiers: Identifier) = DriveLibrarySync.preservedStubWorkKey(
+            base,
+            identifiers.map {
+                BookMetadata.of(
+                    bookUrl = base.url,
+                    source = MetadataSource.FILE,
+                    snapshot = MetadataSnapshot(identifiers = listOf(it)),
+                )
+            },
+            retiringEditionSha = null,
+        )
+
+        val placeholders = listOf("unknown", "calibre_id", " UNKNOWN ", "none")
+        for (value in placeholders) {
+            val key = keyFor(Identifier("isbn", value), Identifier("calibre", value))
+            assertTrue("$value -> $key", key.startsWith("stub:"))
+        }
+        assertTrue(keyFor(Identifier("calibre", "calibre_id"), Identifier("uuid", "abc-1")).startsWith("dc:"))
+    }
+
+    @Test
+    fun `equivalent uuid spellings derive one key while other schemes stay apart`() {
+        val id = "12345678-1234-1234-1234-1234567890ab"
+        val base = Book(
+            url = "file:///book.epub",
+            title = "Book",
+            author = "Author",
+            coverPath = null,
+            source = null,
+            addedAt = 1L,
+            lastOpenedAt = null,
+        )
+        fun keyFor(scheme: String?, value: String) = DriveLibrarySync.preservedStubWorkKey(
+            base,
+            listOf(
+                BookMetadata.of(
+                    bookUrl = base.url,
+                    source = MetadataSource.FILE,
+                    snapshot = MetadataSnapshot(identifiers = listOf(Identifier(scheme.orEmpty(), value))),
+                ),
+            ),
+            retiringEditionSha = null,
+        )
+
+        val canonical = keyFor("uuid", id)
+        assertEquals(canonical, keyFor("uuid", "urn:uuid:$id"))
+        assertEquals(canonical, keyFor("uuid", "uuid:$id"))
+        assertEquals(canonical, keyFor("", "uuid:$id"))
+        assertEquals(canonical, keyFor("", "URN:UUID:${id.uppercase()}"))
+        assertNotEquals(canonical, keyFor("calibre", id))
+        assertNotEquals(canonical, keyFor("calibre", "uuid:$id"))
+    }
+
     private fun stub(url: String) = Book(
         url = url,
         title = "Stub $url",
