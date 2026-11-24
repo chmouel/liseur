@@ -379,6 +379,13 @@ interface DriveUploadDao {
     )
     suspend fun transition(permissionId: String, sha256: String, from: String, to: String, now: Long): Int
 
+    /** Drops a row only while it is still in [state] and holds no session or file to clean up. */
+    @Query(
+        "DELETE FROM drive_upload WHERE permission_id = :permissionId AND sha256 = :sha256 " +
+            "AND state = :state AND session_uri IS NULL AND file_id IS NULL",
+    )
+    suspend fun deleteIfIdle(permissionId: String, sha256: String, state: String): Int
+
     @Query("DELETE FROM drive_upload WHERE permission_id = :permissionId AND sha256 = :sha256 AND state = 'CANCELLED'")
     suspend fun deleteIfCancelled(permissionId: String, sha256: String): Int
 
@@ -404,7 +411,8 @@ interface DriveUploadDao {
 
     @Query(
         "UPDATE drive_upload SET state = :state, session_uri = :sessionUri, bytes_sent = :bytesSent, " +
-            "updated_at = :updatedAt WHERE permission_id = :permissionId AND sha256 = :sha256",
+            "updated_at = :updatedAt WHERE permission_id = :permissionId AND sha256 = :sha256 " +
+            "AND state IN ('PENDING', 'UPLOADING', 'FAILED')",
     )
     suspend fun updateProgress(
         permissionId: String,
@@ -413,7 +421,7 @@ interface DriveUploadDao {
         sessionUri: String?,
         bytesSent: Long,
         updatedAt: Long,
-    )
+    ): Int
 
     @Query(
         "UPDATE drive_upload SET state = :state, updated_at = :updatedAt " +
@@ -436,9 +444,10 @@ interface DriveUploadDao {
     @Query(
         "UPDATE drive_upload SET state = 'UPLOADED', file_id = :fileId, session_uri = NULL, " +
             "bytes_sent = size_bytes, updated_at = :updatedAt " +
-            "WHERE permission_id = :permissionId AND sha256 = :sha256 AND state = 'UPLOADING'",
+            "WHERE permission_id = :permissionId AND sha256 = :sha256 " +
+            "AND state IN ('PENDING', 'UPLOADING', 'FAILED')",
     )
-    suspend fun markUploadedIfUploading(permissionId: String, sha256: String, fileId: String, updatedAt: Long): Int
+    suspend fun markUploadedIfSelected(permissionId: String, sha256: String, fileId: String, updatedAt: Long): Int
 
     @Query(
         "DELETE FROM drive_upload WHERE permission_id = :permissionId " +
