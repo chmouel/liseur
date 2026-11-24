@@ -273,9 +273,11 @@ Then evaluate in order:
     but sets not equivalent): never arbitrate the independently chosen
     branches silently. The fps covered by both sets may be applied, every
     branch behind an fps present in only one set is preserved, and a
-    conflict (`EDIT_EDIT` if either uncovered outcome is `"put"`,
-    `DELETE_EDIT` if both are `"delete"`) is opened for the uncovered fps
-    so an independently chosen edit is never silently discarded.
+    conflict is opened for the uncovered fps, classified by the two
+    effective outcomes: `EDIT_EDIT` if both are `"put"`, `DELETE_EDIT` if
+    exactly one is `"put"` (the live body is the keep option), and none if
+    both are `"delete"` (no live body to offer; the deletes are kept). An
+    independently chosen edit is never silently discarded.
   - **Subsequent edit after local resolution (`version_op(L) !=
     "resolve"`):** if local already resolved the conflict as `resA` and
     then moved on to a subsequent edit `fNew` (so `L = fNew`, not
@@ -304,9 +306,10 @@ Then evaluate in order:
     falling through to conflict, so a `resolve` that provably descends
     from the winning resolution never opens a spurious conflict.
   - Else: local has an independent or subsequent edit (e.g., `fNew`) not
-    covered by `R.resolvedFps` (and `L ∉ R.anc`): open a new conflict
-    (`EDIT_EDIT` if `R.outcome == "put"`, `DELETE_EDIT` if
-    `R.outcome == "delete"`) preserving both.
+    covered by `R.resolvedFps` (and `L ∉ R.anc`): classify the local
+    version's effective outcome (`put` or `del`) against `R.outcome`.
+    Both `put` opens `EDIT_EDIT`; exactly one `put` opens `DELETE_EDIT`
+    preserving both; both delete is agreement, so no conflict opens.
 
 Append-only sets (sessions, vocabulary reviews) dedupe by event id; a
 review `del` (undo) is final. Vocabulary words and occurrences merge
@@ -320,17 +323,22 @@ mergedBaseline, liveReviews)`, while the optional legacy `baseline`
 identically. A word `del` is silent when the receiver is untouched; a
 concurrent edit or review wins silently and is republished. Because
 vocabulary reviews are append-only and outside `anc(L)`, a word `del`
-records the causal review boundary as an `observed` vector (the sorted
-`syncId`s of the reviews its author had seen, or the snapshot provenance
-`seq` of a restored one) and the receiver checks for uncovered live local
-reviews before cascading any delete: an uncovered review makes the delete
-a concurrent review, so add-wins keeps the word, keeps its reviews, and
-republishes. Reading
+records the causal review boundary as an `observed` vector (the highest
+delta `seq` its author had applied from each device) and the receiver
+checks for uncovered live local reviews before cascading any delete. A
+review with unknown provenance counts as uncovered, and snapshot records
+carry their original publication `seq` so restored reviews can be checked.
+An uncovered review makes the delete a concurrent review, so add-wins
+keeps the word, keeps its reviews, and republishes. Reading
 progress reuses `reconcileReadingState`, and `SyncDecision.Conflict`
-goes through the existing position-choice UI. Series conflicts are
+goes through the existing position-choice UI. Uploading to a device's own
+stream is delivery, not agreement: it never marks a local position as
+reconciled with another device, so a concurrent position on two devices
+still opens a conflict whether the upload or the pull happens first. Series conflicts are
 grouped by `seriesKey` and resolved per shelf, written as per-book
 `op: "resolve"` records. Metadata override and evaluation conflicts
-prompt per field. `archived_at` auto-resolves to the higher HLC.
+prompt per field. `archived_at` auto-resolves to the higher HLC of the archive choice itself
+(`archiveHlc`), not of the whole catalog record.
 
 ### Synced domains
 
@@ -361,7 +369,11 @@ reading sessions (`remote_session_id`), and work aliases
   (`FurthestPositionDao.observe`); a reset `{floors:{deviceId:seq}}` wins
   over peaks with `seq ≤ floor[device]`. This needs a new DAO query
   deleting `furthest_position` rows for a peer, work and origin with
-  `seq <= :floor`. Resets are kept forever.
+  `seq <= :floor`. Resets are kept forever. A reset covers the whole
+  work: it also resets the local `reading_progress` peak of every local
+  edition whose bound peak `seq` is at or below the floor and clears its
+  `peak_delivery`, while preserving unsent or newer peaks. Peak `seq`
+  comes from a per-device counter, not from a book's `peak_revision`.
 - Reading progress applies the locator only when `editionSha` equals the
   local sha; otherwise it applies progression only. "Mark unread" is a
   status act (`unread_reset_revision`).
@@ -498,8 +510,8 @@ Delta batch:
  ]}
 ```
 
-A `vocabWord` `del` additionally carries `observed`, the sorted `syncId`s
-of the reviews its author had seen; it is excluded from `delFp` and lets
+A `vocabWord` `del` additionally carries `observed`, a
+`{deviceId: seq}` vector of the delta batches its author had applied; it is excluded from `delFp` and lets
 the receiver detect reviews the deleter never observed before it cascades
 any delete.
 
