@@ -153,6 +153,11 @@ internal class DriveLibrarySync(
         DriveBookServerPickerRow(selected = selected, onPick = onPick)
     }
 
+    @Composable
+    override fun BookServerSwitchAction(onClick: () -> Unit) {
+        DriveBookServerSwitchAction(onClick)
+    }
+
     /** Stops background workers and transitions [permissionId] to `NEEDS_RECONNECT` while preserving all state. */
     internal suspend fun markNeedsReconnect(permissionId: String, reason: String) {
         stopWorkers()

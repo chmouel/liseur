@@ -173,12 +173,16 @@ fun ServerAccountScreen(
         mutableStateOf(librarySync.supportsBookServerOption && state.server == null)
     }
     var pickingDriveKind by rememberSaveable { mutableStateOf(false) }
-    LaunchedEffect(state.server, driveActive) {
-        if (state.server != null) {
-            driveSelected = false
-        } else if (driveActive && librarySync.supportsBookServerOption) {
-            driveSelected = true
-        }
+    var driveSwitchRequested by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(state.server, driveActive, driveSwitchRequested) {
+        if (state.server == null) driveSwitchRequested = false
+        driveSelected = nextLibrarySyncSelected(
+            current = driveSelected,
+            hasServer = state.server != null,
+            switchRequested = driveSwitchRequested,
+            backendActive = driveActive,
+            supported = librarySync.supportsBookServerOption,
+        )
     }
     LifecycleResumeEffect(Unit) {
         onRefreshLocalNetworkAccess()
@@ -214,16 +218,30 @@ fun ServerAccountScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 val server = state.server
-                val showingDrive = server == null &&
-                    !state.editingAddress &&
-                    librarySync.supportsBookServerOption &&
-                    driveSelected
+                val showingDrive = showsLibrarySyncSection(
+                    hasServer = server != null,
+                    editingAddress = state.editingAddress,
+                    supported = librarySync.supportsBookServerOption,
+                    selected = driveSelected,
+                    switchRequested = driveSwitchRequested,
+                )
                 if (showingDrive) {
                     librarySync.BookServerSelectedRow(
-                        enabled = true,
+                        enabled = server == null,
                         onClick = { pickingDriveKind = true },
                     )
-                    if (pickingDriveKind) {
+                    if (server != null) {
+                        TextButton(
+                            onClick = {
+                                driveSwitchRequested = false
+                                driveSelected = false
+                            },
+                            modifier = Modifier.align(Alignment.End),
+                        ) {
+                            Text(stringResource(R.string.cancel))
+                        }
+                    }
+                    if (pickingDriveKind && server == null) {
                         ServerKindSheet(
                             selected = state.kind,
                             onPick = {
@@ -337,6 +355,14 @@ fun ServerAccountScreen(
                         onCancelDownloadAll = onCancelDownloadAll,
                         onDismissBatch = onDismissBatch,
                     )
+                    if (librarySync.supportsBookServerOption && !state.editingAddress) {
+                        librarySync.BookServerSwitchAction(
+                            onClick = {
+                                driveSwitchRequested = true
+                                driveSelected = true
+                            },
+                        )
+                    }
                     if (state.localNetworkBlocked) {
                         LocalNetworkNotice(
                             text = stringResource(R.string.server_local_network_blocked),

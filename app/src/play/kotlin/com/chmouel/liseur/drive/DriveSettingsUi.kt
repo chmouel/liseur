@@ -104,6 +104,14 @@ internal fun DriveBookServerSelectedRow(
     }
 }
 
+/** Switch entry on a connected main server; the controller confirms before disconnecting it. */
+@Composable
+internal fun DriveBookServerSwitchAction(onClick: () -> Unit) {
+    OutlinedButton(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+        Text(stringResource(R.string.drive_sync_use_instead))
+    }
+}
+
 /** First option row in [com.chmouel.liseur.ui.settings.ServerKindSheet] on Play builds. */
 @Composable
 internal fun DriveBookServerPickerRow(
