@@ -268,6 +268,10 @@ dependencies {
     // it. See DEVELOPER.md, F-Droid readiness.
     "playImplementation"(libs.mlkit.translate)
 
+    // Play build only. Google Play Services AuthorizationClient for
+    // opt-in Google Drive sync (ADR-0078). F-Droid builds never carry it.
+    "playImplementation"(libs.play.services.auth)
+
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)
     ksp(libs.room.compiler)
