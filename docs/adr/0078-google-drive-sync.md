@@ -427,7 +427,7 @@ identically. A word `del` is silent when the receiver is untouched; a
 concurrent edit or review wins silently and is republished. Because
 vocabulary reviews are append-only and, like occurrences, outside the
 word's `anc(L)`, a word `del` records the causal boundary as an `observed` vector (the highest
-delta `seq` its author had applied from each device) and the receiver
+delta `seq` its author had applied from each device, plus the author's own entry: the `seq` of the batch that first carries the `del`, set in the freeze transaction) and the receiver
 checks for uncovered live local reviews and occurrences
 before cascading any delete. A child with unknown provenance, or a local
 occurrence edit not yet published, counts as uncovered, and snapshot
@@ -446,7 +446,7 @@ every interleaving. Only a genuine concurrent word edit keeps the word
 without that re-judgement. The same
 holds when the earlier delete was seen only through the revival: the
 revival's `revives` envelope carries the complete originating `del`
-(`delRecord`: `hlc`, `anc`, `resRefs`, `observed`, `restore`), which
+(`delRecord`: `hlc`, `anc`, `resRefs`, `observed` with its own-author entry, `restore`), which
 snapshots and the apply receipt keep, so a device that adopted the revival
 without the `del` can still order it against a later concurrent delete. A
 covered child is not discarded by a cascade: it becomes non-live history
@@ -818,7 +818,19 @@ surviving delta applies the snapshot, which is idempotent.
    contiguous seq order; a gap waits or falls back to the snapshot. Commit
    the token only after both database writes for that page.
 3. An invalid or expired token (HTTP 400/404 on `pageToken`) triggers the
-   full rescan from step 1, which is idempotent.
+   full rescan from step 1, which is idempotent. Devices that were offline
+   never saw a `removed` change for an EPUB deleted meanwhile, and the new
+   listing names only surviving files, so the rescan also **reconciles
+   deletions** against the full inventory. Once every page of the EPUB
+   listing has been read, each `drive_file` row of kind `epub` and each
+   `driveFileId` advertised by a catalog edition, in `drive_record_state`
+   or the local catalog, that is absent from the inventory (or listed
+   `trashed`) is treated as a removed EPUB: its `drive_file.trashed` is set
+   and its edition's availability group is cleared through a catalog `put`
+   (`docs/DRIVE_SYNC.md` §4.2). A listing that failed or stopped early
+   reconciles nothing. The new `start_page_token` is committed only after
+   that reconciliation and both database writes complete, so a crash
+   repeats the rescan, never leaves a deleted EPUB advertised as available.
 4. Apply order within a run: `workAlias` → `catalog` → `metadata` /
    `series` → `evaluation` → `annotation` → `position` / `furthest` →
    `vocab*` → `session`. A book-scoped record (`metadata`, `series`,
@@ -864,7 +876,7 @@ restored device gets its own `deviceId`.
 | `drive_file` | `(permission_id, file_id)` | `name`, `kind` (`manifest` / `delta` / `snapshot` / `cover`, or `epub` from `liseurKind`), `device_id`, `seq`, `sha256`, `size`, `md5`, `trashed`, `created_time`; index `(permission_id, kind, sha256)` |
 | `drive_outbox` | `(permission_id, seq)` | `batch_id`, `payload`, `state` (BUILT / UPLOADED / ACKED), `file_id`, `created_at` |
 | `drive_authored_record` | `(permission_id, domain, record_key, seq)` | `op`, `hlc`, `fp`, `anc_json`, `res_refs_json`, `body_json`, `observed_json`, `restore_json`, `revives_json` (including `delRecord`), `first_seq` (original publication seq, for `vocabOccurrence` / `vocabReview`), `origin_device_id`, `origin_seq` (the republished child's own provenance, wire `origin`; `NULL` on a first publication) |
-| `drive_record_state` | `(permission_id, domain, record_key)` | `version_fp`, `version_op`, `published_fp`, `content_fp`, `last_synced_revision`, `origin_device_id`, `origin_seq`, `ancestors_json`, `res_refs_json`, `last_hlc`, `body_json`, `observed_json`, `restore_json` and `del_json` (`vocabWord` only: a `del`, or a revival while its originating delete is the one in force; `del_json` holds that delete's `fp`, `hlc`, `anc` and `resRefs`), `held` (version recorded but not applied to `liseur.db`: book tombstoned, or `vocabOccurrence` child of an absent or tombstoned word), `acked_receipt_id` |
+| `drive_record_state` | `(permission_id, domain, record_key)` | `version_fp`, `version_op` (a `vocabReview` row with `del` and `body_json = NULL` is the ID-only undo tombstone kept when an undo arrives before its `put`, which carries no `language` or `normalized`; the later `put` consults it and is stored `UNDONE`), `published_fp`, `content_fp`, `last_synced_revision`, `origin_device_id`, `origin_seq`, `ancestors_json`, `res_refs_json`, `last_hlc`, `body_json`, `observed_json`, `restore_json` and `del_json` (`vocabWord` only: a `del`, or a revival while its originating delete is the one in force; `del_json` holds that delete's `fp`, `hlc`, `anc` and `resRefs`), `held` (version recorded but not applied to `liseur.db`: book tombstoned, or `vocabOccurrence` child of an absent or tombstoned word), `acked_receipt_id` |
 | `drive_resolution` | `(permission_id, domain, record_key, resolution_fp)` | `resolved_fps_json`, `outcome` (`put` / `delete`), `hlc`, `author_device_id`, `created_at` |
 | `drive_conflict` | `(permission_id, conflict_id)` | `domain`, `record_key`, `book_url`, `kind`, `local_fp`, `remote_fp`, `remote_json`, `remote_device_id`, `remote_hlc`, `state` (OPEN / RESOLVING / RESOLVED), `choice`, `resolution_json` (the exact `op: "resolve"` record, written before the choice is applied), `resolution_fp`, `opened_at`, `resolved_at` |
 | `drive_peak_candidate` | `(permission_id, work_id, edition, origin, seq)` | `progression`, `payload_json` (newer lower-progression peaks kept until a reset floor or a dominating peak removes them; `docs/DRIVE_SYNC.md` §4.6) |
@@ -1074,7 +1086,10 @@ Mutual exclusion invariant: never both `remote_server.id = 1` and a
    rebuilt from snapshots restores it too. An uncovered review keeps or
    restores the word even if it is later undone: the undo is final for the
    review, which stays as `UNDONE` evidence, so every arrival order of the
-   delete, the review and its undo converges.
+   delete, the review and its undo converges. An undo that arrives before
+   its review carries only the `syncId` (`body: null`), so it is kept as an
+   ID-only tombstone in `drive_record_state`, and the later `put` consults it
+   and is stored `UNDONE` without touching the schedule.
 4. Concurrent differing resolutions: higher HLC wins silently by `(hlc,
    fp)` lexicographical order **only** when both current versions are
    themselves competing `op: "resolve"` records (whether keep-vs-keep or
