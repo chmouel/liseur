@@ -17,10 +17,20 @@ and two-device acceptance test matrix for Liseur's Play-only Google Drive sync
 | `permissionId` | Opaque Google Drive user string | `about.get?fields=user(permissionId,emailAddress)`; partitions all `drive_sync.db` tables. Never keyed by email. |
 | `peerId` | `"drive:" + permissionId` | Used in every per-peer table of `liseur.db` (`work_alias`, `sync_peer_state`, `furthest_position`, `peak_delivery`, `annotation_sync`, `evaluation_sync`, `metadata_override_sync`, `vocabulary_word_sync`, `vocabulary_review_sync`, `vocabulary_staged_review`, `drive_apply_receipt`). |
 | `deviceId` | Lowercase UUIDv4 (`36` chars) | Generated once per install in `drive_sync.db` (`drive_install.device_id`), excluded from Android backup/transfer. Never derived from `DeviceIdentity.id`. |
-| `hlc` | `"%013d-%04x-%s".format(wallMs, counter, deviceId)` | Monotonic hybrid logical clock persisted in `drive_account(hlc_wall_ms, hlc_counter)`. Compared lexicographically (strict total order because `deviceId` breaks ties). On send: if `nowMs > wallMs`, `wallMs = nowMs; counter = 0`, else `counter += 1`. **Counter overflow:** when `counter` would become `0x10000`, do NOT widen the field — set `wallMs += 1` (a logical tick strictly ahead of any real clock reading) and reset `counter = 0`, so the fixed-width `%04x` stays 4 hex digits and lexicographic ordering stays monotonic across the overflow. On receive: `maxWall = max(localWall, nowMs, remoteWall)`; update `counter` accordingly. |
+| `hlc` | `String.format(Locale.ROOT, "%013d-%04x-%s", wallMs, counter, deviceId)` | Monotonic hybrid logical clock persisted in `drive_account(hlc_wall_ms, hlc_counter)`. Compared lexicographically (strict total order because `deviceId` breaks ties). On send: if `nowMs > wallMs`, `wallMs = nowMs; counter = 0`, else `counter += 1`. **Counter overflow:** when `counter` would become `0x10000`, do NOT widen the field — set `wallMs += 1` (a logical tick strictly ahead of any real clock reading) and reset `counter = 0`, so the fixed-width `%04x` stays 4 hex digits and lexicographic ordering stays monotonic across the overflow. On receive: `maxWall = max(localWall, nowMs, remoteWall)`; update `counter` accordingly. |
 | `batchId` | `UUID.nameUUIDFromBytes("batch|$deviceId|$seq".toByteArray(UTF_8)).toString()` | Deterministic per `(deviceId, seq)` for idempotent retry deduplication in `appDataFolder`. |
 | `workKey` | `"isbn:<isbn13>"` \| `"dc:<sha256hex>"` \| `"sha:<editionSha256>"` \| `"stub:<sha256hex>"` | For local/downloaded books, computed once `book_fingerprint` exists AND `books.file_metadata_checked = 1`. First match wins: (1) normalized ISBN-13 via `hardcover/Isbn.from` on `WorkIdentifiers.dcFrom(books.work_id, ...)` or `book_metadata(source='file').identifiers`; (2) `sha256Hex(trim.lowercase(id))` for any usable `dc:identifier` not in `USELESS_IDENTIFIERS`; (3) `book_fingerprint.sha256`. **Shared-identifier collision:** a local file's ISBN or `dc:` key falls back to `sha:<editionSha>` when that key already names a different edition (another local book, or a catalog entry whose `editions[]` lacks this sha) with a different normalized title+author, so two unrelated EPUBs carrying the same erroneous identifier stay separate. Known v1 limitation: two devices that each mint the same key for different books before either sees the other's catalog publish one catalog entry with two editions, and v1 has no split operation for it. **Fileless preserved stubs on Server → Drive switch** (where `BookRemoval.downloadRemoved()` cleared `book_fingerprint` and `file_metadata_checked = 0`, or the book was never downloaded): captured **before** `forgetSyncPeer(server)` deletes server `work_alias` rows in priority order: (1) ISBN-13 from `books.work_id` or `book_metadata(source='catalog'\|'file').identifiers`; (2) usable `dc:identifier` from `books.work_id` or `book_metadata(source='catalog'\|'file').identifiers`; (3) `sha:<edition_sha>` from the retiring server's `work_alias.edition_sha`; (4) deterministic portable fallback `stub:<sha256Hex("liseur-stub\|v1\|" + book.url)>` when none of (1)–(3) exist (later mergeable with a downloaded EPUB via title+author confirmed matching emitting a `workAlias` `merge:` record). Upserted into `work_alias(peer_id = drive:<permissionId>, confidence = 'high', confirmed = 1, seeded = 0)` so preserved fileless books seed Drive immediately. Frozen in `work_alias.work_id` once published; a stronger identifier found later emits a `workAlias` record instead of rekeying. |
 | `conflictId` | `sha256Hex("$domain|$recordKey|${minOf(fpA, fpB)}|${maxOf(fpA, fpB)}")` | Primary key (with `permission_id`) in `drive_conflict`. |
+
+**Locale-independent wire numbers.** Every number written into a wire string
+(the HLC, the `%010d` and `%03d` file-name parts, and numeric `appProperties`
+values such as `seq`, `throughSeq` and `partIndex`) is formatted with
+`String.format(Locale.ROOT, ...)` or an equivalent that emits only ASCII
+digits `0-9` and lowercase hex `a-f`; the default locale is never used, because
+`%d` can emit non-ASCII digits (for example Arabic-Indic) that sort
+differently. Readers parse these strings with ASCII-only digits and treat an
+HLC or file name that contains any other digit as invalid, so every device
+orders the same HLC strings identically.
 
 ### 1.2 Canonical JSON & Number Formatting
 
@@ -37,14 +47,15 @@ All fingerprinted objects and wire payloads use deterministic canonical JSON:
 4. **Strings:** Standard RFC 8259 JSON escaping (`\"`, `\\`, `\b`, `\f`, `\n`,
    `\r`, `\t`, and `\u00XX` lowercase hex for other control characters `< 0x20`).
    Non-ASCII UTF-8 characters are written unescaped.
-5. **Integers (`Int`, `Long`):** Base-10 decimal, no leading zeros except `0`,
-   no decimal point.
+5. **Integers (`Int`, `Long`):** Base-10 ASCII decimal (`Locale.ROOT`, §1.1),
+   no leading zeros except `0`, no decimal point.
 6. **Floating-point (`Double`):**
    - Reject `NaN` and `±Infinity` before serialization.
    - Normalize `-0.0` to `"0"`.
    - Format via `BigDecimal.valueOf(value).stripTrailingZeros().toPlainString()`,
      so `0.50` → `0.5`, `1.0` → `1`, `0.0` → `0`, `7.50` → `7.5` (matches
-     `seriesIndexLabel` in `Series.kt`).
+     `seriesIndexLabel` in `Series.kt`). `toPlainString()` is
+     locale-independent and always emits ASCII digits and `.`.
    - Progressions (`totalProgression`, `startProgression`, `endProgression`,
      `progression`) must lie in `[0.0, 1.0]`.
 7. **Embedded JSON strings (`locatorJson`, `locator`):** Canonicalized recursively
@@ -61,6 +72,7 @@ All fingerprints are 64-char lowercase hex SHA-256 digests of canonical JSON:
 |---|---|---|
 | `op: "put"` | `contentFp(body) = sha256Hex(canonicalJson({"op":"put","body":<canonicalBody>}))` | Depends only on content fields (never `editionSha` for annotations, never `position`, never local-only columns). Recomputable directly from the committed `liseur.db` row for every domain whose body is fully stored there. `catalog` is not (`archiveHlc`, edition availability and `updatedAt` have no `books` column), so its recovery uses the apply receipt (§3.3). |
 | `op: "del"` | `delFp(d, k, hlc) = sha256Hex(canonicalJson({"op":"del","d":<d>,"k":<k>,"hlc":<hlc>}))` | Including `hlc` makes every delete event unique, so deleting a record after keeping it in an earlier `DELETE_EDIT` resolution never collides with the old delete in `anc`. |
+| `op: "put"` revival (`vocabWord` only, §4.9) | `reviveFp(delFp, restoreFp) = sha256Hex(canonicalJson({"op":"revive","delFp":<delFp>,"restoreFp":<restoreFp>}))` | A revival is a wire `op: "put"` whose `fp` is `reviveFp`, not `contentFp(body)`. Its body is `restore.body`, so `drive_record_state.content_fp` (and `acked_fingerprint`) stay `contentFp(restore.body)` and local diffing compares the row against `content_fp`, never against `version_fp`. Every device that revives from the same `del` computes the same `reviveFp`, so concurrent revivals agree (§3.1 Step 2). |
 | `op: "resolve"` | `resolveFp(outcome, resolvedFps, hlc, body) = sha256Hex(canonicalJson({"op":"resolve","outcome":<outcome>,"resolvedFps":<sorted>,"hlc":<hlc>,"body":<bodyOrNull>}))` | Distinct from both conflicting fps even when the reader keeps a local version verbatim (`outcome: "put"`), guaranteeing strict causal supersession over both sides. |
 
 **Golden test invariant:** Phase 4–6 unit tests include a golden fingerprint
@@ -213,6 +225,7 @@ Record envelope fields:
 | `observed` | `Object<deviceId, seq>` | Only when `d == "vocabWord" && op == "del"` | Vector of the highest delta `seq` the deleting device had applied from each other device when it authored the delete — the causal boundary for the word's reviews and occurrences (§4.9). A value that is not an object decodes to `{}`, which keeps data. Absent otherwise. Excluded from `delFp` (§1.3). Snapshots keep it on the `del` record. |
 | `restore` | `Object` | Only when `d == "vocabWord" && op == "del"` (required there) | `{"fp": <contentFp of the last live word body>, "hlc": <record hlc of that version>, "body": <that full vocabWord body, §4.9>}`: the parent content a receiver needs to restore the word when a review or occurrence it did not cover arrives later. It is the last live version the deleter held before deleting, so `fp` is normally `anc[0]`. The record's own `body` stays `null`, so the general `op: "del"` contract is unchanged. Excluded from `delFp`. Snapshots keep it on the `del` record, so a device rebuilt from snapshots has it. A `del` without a valid `restore` is malformed: it is not applied (no cascade, nothing is deleted), the cursor advances, and the receiver logs it. |
 | `seq` | `Long` | Snapshot `vocabOccurrence` / `vocabReview` records only | The author's delta `seq` that first published this version. Readers store it as the record's provenance instead of `snapshot.throughSeq`, so a later `vocabWord` `del` whose `observed` vector covers that seq still counts the record as seen. `throughSeq` only advances cursors. A record with no known provenance counts as unseen. |
+| `revives` | `Object` | Only when `d == "vocabWord" && op == "put"` and the put is a revival (§4.9) | `{"del": <delFp>, "restore": <restore.fp>}`. Required exactly when `fp` is a `reviveFp` (§1.3); a receiver recomputes `reviveFp(revives.del, revives.restore)` and rejects the record as malformed if it differs from `fp`. `anc` is `[revives.del, revives.restore]` followed by the revived version's other ancestry. Excluded from `fp`. |
 
 A `vocabWord` `del` record, with `body` still `null`:
 
@@ -288,10 +301,30 @@ against `manifest.snapshot.parts[].sha256` before parsing.
      resolution fp from which the record causally descends). Tombstones (`del`)
      are never dropped in v1, and a `vocabWord` `del` keeps its `observed` vector and `restore` payload.
    - For append-only domains (`session`, `vocabReview` including review `del`s,
-     `furthest` resets): all authored records in full.
+     `furthest` resets): all authored records in full, so a review `put` stays in
+     the snapshot beside the `del` that undid it.
    - `vocabOccurrence` and `vocabReview` records also carry `seq`, their original
      publication seq (Section 2.3), so delete observed vectors still apply to them.
    - Never copies records authored by other devices.
+   - **Source: `drive_authored_record`, not `drive_record_state`.**
+     `drive_record_state` holds one *current* version per key and is
+     overwritten when the device adopts another device's update or the reader
+     undoes a review, so it cannot supply an author's history. Each record this
+     device authors is also written to `drive_authored_record` (ADR 0078,
+     `drive_sync.db`) in the **freeze transaction**: the same `drive_sync.db`
+     transaction that allocates `seq` from `drive_account.next_seq`, inserts the
+     `drive_outbox` row and inserts one authored row per record with that
+     `seq`. Provenance (`seq`, the `observed` vector, `restore`, `revives`) is
+     therefore never written without its batch, and a batch is never frozen
+     without it. A snapshot with `throughSeq = T` takes, per `(d, k)`, the
+     authored row with the greatest `seq ≤ T` (mutable domains) or every
+     authored row with `seq ≤ T` (append-only domains), ordered by `(d, k,
+     seq)`. Adopting a remote version never touches these rows. Mutable-domain
+     rows with `seq ≤ T` that another authored row with `seq ≤ T` supersedes
+     are deleted in the same transaction that commits the new manifest;
+     append-only rows and `del` heads are never deleted in v1. Delta files
+     may be pruned only after a manifest-listed snapshot built this way
+     covers them.
 2. **`resolutions` section (uncapped):** Holds **every** durable completed
    resolution fact `{d, k, resolutionFp, resolvedFps, outcome, hlc}` authored by
    this device, outside the 64-entry `anc` cap and never pruned in v1. When
@@ -542,11 +575,28 @@ repair below sets `acked_receipt_id := receipt_id` in its own Tx 2. Recompute th
   `L := contentFp(body_json)` a new local version with
   `anc := [version_fp, <old L>] ∪ anc_json` and leave it unpublished, so
   the merged body is sent next. Replay of `R` then reaches Agreement.
-- **Changed since the apply (post-crash edit):** build the new body from
-  `body_json` with the projection fields replaced by the row's values, set
-  `L := contentFp(<new body>)`, `anc := [version_fp, <old L>] ∪ anc_json`,
-  `res_refs := res_refs_json`, and keep it dirty. Replay of `R` then
-  reaches Stale because `R.fp ∈ anc(L)`.
+- **Changed since the apply (post-crash edit):** the row projection differs
+  from `row_fp`.
+  - **Row still present:** build the new body from `body_json` with the
+    projection fields replaced by the row's values, set
+    `L := contentFp(<new body>)`, `anc := [version_fp, <old L>] ∪ anc_json`,
+    `res_refs := res_refs_json`, and keep it dirty. Replay of `R` then
+    reaches Stale because `R.fp ∈ anc(L)`. For `catalog`, only the
+    row-backed fields are replaced; every edition, its `availabilityHlc`,
+    identifiers and `updatedAt` stay as in `body_json`. `archiveHlc` is
+    minted (a fresh HLC tick persisted in `drive_account`, before
+    fingerprinting) **only when the row's `archivedAt` differs from
+    `body_json.archivedAt`**; otherwise the receipt's `archiveHlc` is kept.
+  - **Row deleted (`annotation` and `series`, where a local delete is a
+    `del`, §4.4, §4.7):** `body_json` is the last applied body but the
+    projection is `DELETED`, so there is nothing to put. Mint a fresh HLC
+    `h`, set `L := delFp(d, k, h)`, `version_op := "del"`,
+    `anc := [version_fp, <old L>] ∪ anc_json`, `res_refs := res_refs_json`,
+    `body_json := NULL`, the per-peer `acked_fingerprint` to `"DELETED"` where
+    the domain keeps one, and keep it dirty. Replay of `R` then reaches Stale
+    because `R.fp ∈ anc(L)`, the delete is published, and the incoming record
+    never resurrects the row. A receipt with `row_fp == "DELETED"` and a row
+    still absent is the *Unchanged* case above.
 - In both cases Step 0 (§3.1) still runs on replay before the cursor
   advances.
 
@@ -1302,17 +1352,26 @@ with outcome `delete`) when it reaches those records:
     review and occurrence of the word that is not undone, plus the arriving
     child. It re-runs `reconcileSchedule` and sets `acked_fingerprint`. Tx 2
     clears `held` on the attached occurrences, records a new word `put`
-    version `contentFp(restore.body)` with `anc = [delFp, restore.fp]`, and
-    the device publishes it and the attached children. The same set is
+    version with `fp = reviveFp(delFp, restore.fp)` (§1.3), body
+    `restore.body`, `revives = {del: delFp, restore: restore.fp}` and `anc =
+    [delFp, restore.fp]`, sets `content_fp := contentFp(restore.body)`, and
+    the device publishes it and the attached children. The distinct `fp`
+    means the original `del` is in the revived version's `anc` but the
+    revived `fp` is in no `del`'s `anc`, so a replay of that `del` (for
+    example after the reader undoes the uncovered review that triggered the
+    revival) is Stale under §3.1 Step 5 and can never supersede the revival
+    in Step 4. A later `del` of the revived word has `restore.fp =
+    contentFp(<the body it deleted>)` and `anc[0] = reviveFp` as usual. The same set is
     attached whichever order the `del`, covered children and uncovered child
     arrived in. A word `put` received later that supersedes the tombstone
     (`del` fp in its `anc`) attaches the same set on the receiver.
   - **Retention for a snapshot-only device:** covered and staged children
     stay reconstructable because their authors' records are never pruned for
-    being covered. Snapshots build `records` from `drive_record_state`, not
-    from live rows, so a child that is hidden locally still appears in its
-    author's snapshot: every review `put` and review `del` in full, and the
-    author's latest occurrence record with its `seq`. A word `del` never
+    being covered. Snapshots build `records` from `drive_authored_record`
+    (§2.4), not from `drive_record_state` or live rows, so a child that is
+    hidden locally, adopted over by another device, or undone still appears
+    in its author's snapshot: every review `put` and review `del` in full, and
+    the author's latest occurrence record with its original publication `seq`. A word `del` never
     removes another author's child records, and compaction and pruning
     (§2.4) may delete only delta files already covered by a snapshot that
     contains them. A device rebuilt from snapshots therefore receives the
@@ -1713,7 +1772,7 @@ transport, controllable clocks, and fault-injection hooks:
 
 ### 5.3 Contract Acceptance Cases
 
-These cases test the contracts in §3.3, §4.2, §4.9–4.11 and the §4 intro. Each
+These cases test the contracts in §1.1, §2.4, §3.3, §4.2, §4.9–4.11 and the §4 intro. Each
 runs on the §5.2 harness. Cases marked "both orders" run once per delivery
 order and must end in the same state.
 
@@ -1734,3 +1793,8 @@ order and must end in the same state.
 | C10 | A local edit lands between the apply decision and Tx 1. | The apply aborts, re-decides against the edited row, and the edit is never overwritten. |
 | C11 | Crash before Tx 1, no receipt for `R.fp`. | Replay processes `R` from scratch with no receipt-based repair. |
 | C12 | Apply a catalog record `R` fully (Tx 1 and Tx 2). Then make 65 or more local catalog versions, including new upload and clear availability groups, keeping the `books`-backed fields unchanged. Restart. | `R.fp` is no longer in `anc(L)`, but `receipt_id == acked_receipt_id`, so no recovery runs and the newer availability groups are kept. A crash between Tx 1 and Tx 2 of a later apply still recovers, because its `receipt_id` differs. |
+| C13 | Device A runs with a default locale whose `%d` emits non-ASCII digits (for example `ar-EG`). A creates an HLC, a delta file name and a snapshot file name. | All three contain only ASCII digits, and equal byte-for-byte the output under `Locale.ROOT`. B orders A's HLC against its own by plain string comparison; a hand-built HLC with non-ASCII digits is rejected as invalid. |
+| C14 | C8 with the reader **deleting** the annotation (not editing it) before restart. Variants: incoming `R` is a `put`; incoming `R` is a keep-body `resolve`. | Recovery sees projection `DELETED` against a live `row_fp`, mints a fresh HLC `h` and builds `L = delFp(d, k, h)` with `R.fp` (receipt `version_fp`) in `anc`. Replay of `R` is Stale, the annotation stays deleted, the `del` (`body: null`) is published, and the cursor advances after Tx 2. |
+| C15 | C9 (b) variants: (a) the reader unarchives and a post-crash edition upload happens; (b) the reader only changes `title` after the crash. | (a) `archiveHlc` is minted once for the unarchive and every other edition, `availabilityHlc` and identifier is unchanged. (b) the receipt's `archiveHlc` is kept unchanged; no new `archiveHlc` is minted. |
+| C16 | A deletes W, B's review `r` is uncovered, so W is revived on A with `reviveFp`. The reader then undoes `r`. The original `del` D (and the original `put` P) are replayed to A, and delivered late to B, in both orders. | `fp(revival) ≠ restore.fp`; D is Stale on every device (`D.fp ∈ anc(revival)`), P is Stale, and W stays live with the same body everywhere. Two devices that revive concurrently from D produce the same `reviveFp` and agree without a conflict. A record with `revives` whose `fp` is not `reviveFp(revives.del, revives.restore)` is rejected as malformed. |
+| C17 | B authors review `r` (published, `seq = 5`), adopts A's later update to an occurrence B had also authored, then undoes `r` (final `del` at `seq = 7`). B compacts and prunes its deltas. A fresh device D reads only B's snapshot, with a word `del` from A that covers `r` (`observed = {B: 5}`) and another that does not (`observed = {B: 4}`). | The snapshot holds `r`'s `put` (`seq = 5`) and `del` (`seq = 7`) and B's authored occurrence record with its original `seq`, although `drive_record_state` holds only the adopted or deleted version. D reaches the same state as a device that read the deltas. Crashing between seq allocation and the outbox write leaves neither an authored row nor an outbox row. |
