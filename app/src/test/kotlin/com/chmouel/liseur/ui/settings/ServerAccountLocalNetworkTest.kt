@@ -47,6 +47,8 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.yield
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -393,7 +395,18 @@ class ServerAccountLocalNetworkTest {
         assertTrue(model.state.value.serverLoaded)
 
         model.disconnect()
-        runCurrent()
+        withTimeout(2_000) {
+            while (db.remoteServerDao().get() != null) {
+                runCurrent()
+                yield()
+            }
+        }
+        withTimeout(2_000) {
+            while (model.state.value.server != null) {
+                runCurrent()
+                yield()
+            }
+        }
 
         assertTrue(model.state.value.serverLoaded)
         assertEquals(null, model.state.value.server)
@@ -508,7 +521,7 @@ class ServerAccountLocalNetworkTest {
             db.annotationSyncDao(),
         )
         val context = ApplicationProvider.getApplicationContext<android.app.Application>()
-        val scope = CoroutineScope(UnconfinedTestDispatcher())
+        val scope = CoroutineScope(Dispatchers.Main.immediate)
         val account = RemoteAccountRepository(
             dao = db.remoteServerDao(),
             bookDao = db.bookDao(),
