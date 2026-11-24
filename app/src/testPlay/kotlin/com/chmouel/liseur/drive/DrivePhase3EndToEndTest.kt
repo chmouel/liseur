@@ -1924,51 +1924,51 @@ class DrivePhase3EndToEndTest {
         deviceA.liseurDb.workIdentityDao().upsert(BookFingerprintRow(book.url, sha, "m", 100L, null, 1L))
         deviceA.workIdentity.resolveBook(PERM_ID, book, computeFingerprintIfMissing = false)
 
-        // Newer app installation publishes manifest + delta with implemented position v1 AND unimplemented annotation v1.
+        // Newer app installation publishes manifest + delta with implemented position v1 AND unimplemented Phase 5 session v1.
         val newerManifest = DriveManifest(
             schemaVersion = 1,
-            deviceId = "dev-phase4",
-            deviceLabel = "Phase 4 Reader",
+            deviceId = "dev-phase5",
+            deviceLabel = "Phase 5 Reader",
             appVersionCode = 200,
-            updatedHlc = "0017450000000-0001-dev-phase4",
-            domains = mapOf("position" to 1, "annotation" to 1),
+            updatedHlc = "0017450000000-0001-dev-phase5",
+            domains = mapOf("position" to 1, "session" to 1),
         )
         driveServer.createAppDataFile(
             "token-ok",
-            DriveWireCodec.manifestFileName("dev-phase4"),
+            DriveWireCodec.manifestFileName("dev-phase5"),
             "application/json",
             DriveWireCodec.encodeManifest(newerManifest).toByteArray(),
-            DriveWireCodec.manifestAppProperties("dev-phase4"),
+            DriveWireCodec.manifestAppProperties("dev-phase5"),
         )
         val mixedBatch = DriveDeltaBatch(
             schemaVersion = 1,
-            batchId = DriveCanonicalJson.batchId("dev-phase4", 1L),
-            deviceId = "dev-phase4",
+            batchId = DriveCanonicalJson.batchId("dev-phase5", 1L),
+            deviceId = "dev-phase5",
             seq = 1L,
-            createdHlc = "0017450000000-0002-dev-phase4",
-            domains = mapOf("position" to 1, "annotation" to 1),
+            createdHlc = "0017450000000-0002-dev-phase5",
+            domains = mapOf("position" to 1, "session" to 1),
             records = listOf(
                 DriveWireCodec.putRecord(
                     DriveWireCodec.DOMAIN_POSITION,
-                    "sha:$sha/dev-phase4",
-                    "0017450000000-0002-dev-phase4",
+                    "sha:$sha/dev-phase5",
+                    "0017450000000-0002-dev-phase5",
                     DriveWireCodec.encodePositionBody(
-                        DrivePositionBody("sha:$sha", "dev-phase4", sha, "{}", 0.48, "Reading", "automatic", null, null, 500L, 500L),
+                        DrivePositionBody("sha:$sha", "dev-phase5", sha, "{}", 0.48, "Reading", "automatic", null, null, 500L, 500L),
                     ),
                 ),
                 DriveWireCodec.putRecord(
-                    DriveWireCodec.DOMAIN_ANNOTATION,
-                    "ann-1",
-                    "0017450000000-0002-dev-phase4",
-                    mapOf("workKey" to "sha:$sha", "note" to "Important quote"),
+                    DriveWireCodec.DOMAIN_SESSION,
+                    "sess-1",
+                    "0017450000000-0002-dev-phase5",
+                    mapOf("workKey" to "sha:$sha", "durationMs" to 60_000L),
                 ),
             ),
         )
         driveServer.uploadAppDataJsonBatch(
             "token-ok",
-            DriveWireCodec.deltaFileName("dev-phase4", 1L),
+            DriveWireCodec.deltaFileName("dev-phase5", 1L),
             DriveWireCodec.encodeDeltaBatch(mixedBatch).toByteArray(),
-            DriveWireCodec.deltaAppProperties("dev-phase4", 1L, mixedBatch.batchId),
+            DriveWireCodec.deltaAppProperties("dev-phase5", 1L, mixedBatch.batchId),
         )
 
         val summary = deviceA.changeEngine.sync()
@@ -1977,16 +1977,16 @@ class DrivePhase3EndToEndTest {
 
         // Implemented position v1 applied & advanced its cursor.
         assertEquals(0.48, deviceA.liseurDb.readingProgressDao().get(book.url)!!.totalProgression!!, 0.0001)
-        val posCursor = deviceA.driveDb.cursors().get(PERM_ID, "dev-phase4", DriveWireCodec.DOMAIN_POSITION)!!
+        val posCursor = deviceA.driveDb.cursors().get(PERM_ID, "dev-phase5", DriveWireCodec.DOMAIN_POSITION)!!
         assertEquals(1L, posCursor.appliedSeq)
         assertNull(posCursor.pausedSchemaVersion)
 
-        // Unimplemented annotation v1 is paused at appliedSeq = 0 (never destructively acknowledged) & notice is surfaced.
-        val annCursor = deviceA.driveDb.cursors().get(PERM_ID, "dev-phase4", DriveWireCodec.DOMAIN_ANNOTATION)!!
-        assertEquals(0L, annCursor.appliedSeq)
-        assertEquals(1, annCursor.pausedSchemaVersion)
+        // Unimplemented Phase 5 session v1 is paused at appliedSeq = 0 (never destructively acknowledged) & notice is surfaced.
+        val sessCursor = deviceA.driveDb.cursors().get(PERM_ID, "dev-phase5", DriveWireCodec.DOMAIN_SESSION)!!
+        assertEquals(0L, sessCursor.appliedSeq)
+        assertEquals(1, sessCursor.pausedSchemaVersion)
         val uiState = deviceA.driveSync.accountController.uiState.first()
-        assertEquals(listOf("Phase 4 Reader"), uiState.pausedSchemaDeviceLabels)
+        assertEquals(listOf("Phase 5 Reader"), uiState.pausedSchemaDeviceLabels)
     }
 
     @Test

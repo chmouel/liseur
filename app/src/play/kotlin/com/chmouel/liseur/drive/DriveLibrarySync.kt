@@ -9,6 +9,7 @@ import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.data.db.RemoteServer
 import com.chmouel.liseur.data.db.WorkAlias
 import com.chmouel.liseur.data.library.BookFingerprintStore
+import com.chmouel.liseur.data.library.BookRemoval
 import com.chmouel.liseur.data.library.FinishedState
 import com.chmouel.liseur.data.remote.PeerPositionSync
 import com.chmouel.liseur.data.remote.RemoteAccountRepository
@@ -22,6 +23,7 @@ import com.chmouel.liseur.hardcover.Isbn
 import com.chmouel.liseur.providers.PlaySettingsEntries
 import com.chmouel.liseur.sync.LibrarySyncBackend
 import com.chmouel.liseur.sync.LibrarySyncSwitchCoordinator
+import java.io.File
 import java.security.MessageDigest
 import java.util.Locale
 import java.util.UUID
@@ -51,6 +53,7 @@ internal class DriveLibrarySync(
     context: Context,
     private val database: LiseurDatabase,
     private val remoteAccount: RemoteAccountRepository,
+    private val bookRemoval: BookRemoval? = null,
     private val switchCoordinator: LibrarySyncSwitchCoordinator = LibrarySyncSwitchCoordinator(),
     private val beforeServerDisconnect: suspend () -> Unit = {},
     private val stopWorkers: () -> Unit = {},
@@ -62,6 +65,8 @@ internal class DriveLibrarySync(
     private val openStore: (() -> DriveSyncDatabase)? = null,
     authClient: DriveAuthClient? = null,
     driveApi: DriveRemoteApi? = null,
+    private val coversDirProvider: () -> File = { File(context.applicationContext.filesDir, "covers") },
+    private val coverEncoder: DriveWebpEncoder = AndroidBitmapWebpEncoder,
     private val clock: () -> Long = System::currentTimeMillis,
 ) : LibrarySyncBackend {
 
@@ -125,6 +130,53 @@ internal class DriveLibrarySync(
             database = database,
             store = store,
             workIdentity = workIdentity,
+            bookRemoval = bookRemoval,
+            clock = clock,
+        )
+    }
+
+    internal val coverCodec: DriveCoverCodec by lazy {
+        DriveCoverCodec(
+            coversDir = coversDirProvider(),
+            store = store,
+            driveApi = this.driveApi,
+            encoder = coverEncoder,
+        )
+    }
+
+    internal val annotationSync: DriveAnnotationSync by lazy {
+        DriveAnnotationSync(
+            database = database,
+            store = store,
+            workIdentity = workIdentity,
+            clock = clock,
+        )
+    }
+
+    internal val evaluationSync: DriveEvaluationSync by lazy {
+        DriveEvaluationSync(
+            database = database,
+            store = store,
+            workIdentity = workIdentity,
+            clock = clock,
+        )
+    }
+
+    internal val metadataSync: DriveMetadataSync by lazy {
+        DriveMetadataSync(
+            database = database,
+            store = store,
+            workIdentity = workIdentity,
+            coverCodec = coverCodec,
+            clock = clock,
+        )
+    }
+
+    internal val seriesSync: DriveSeriesSync by lazy {
+        DriveSeriesSync(
+            database = database,
+            store = store,
+            workIdentity = workIdentity,
             clock = clock,
         )
     }
@@ -154,6 +206,10 @@ internal class DriveLibrarySync(
             acquireToken = { stale -> accountController.acquireSilentAccessToken(stale) },
             ensureDeviceId = { ensureInstall().deviceId },
             onNeedsReconnect = { permissionId, reason -> markNeedsReconnectIfActive(permissionId, reason) },
+            annotationSync = annotationSync,
+            evaluationSync = evaluationSync,
+            metadataSync = metadataSync,
+            seriesSync = seriesSync,
             clock = clock,
         )
     }
@@ -272,6 +328,119 @@ internal class DriveLibrarySync(
         cancelEpubDownloadWork(book.url)
     }
 
+    override suspend fun canDeleteFromSyncedLibrary(book: Book): Boolean {
+        if (book.browseServerId != null) return false
+        return isActive()
+    }
+
+    override suspend fun deleteFromSyncedLibrary(book: Book): Boolean {
+        if (book.browseServerId != null || !hasStore()) return false
+        val active = store.accounts().active() ?: return false
+        val token = when (val t = accountController.acquireSilentAccessToken()) {
+            is SilentTokenResult.Token -> t.accessToken
+            else -> null
+        }
+        val deleted = catalogSync.deleteFromSyncedLibrary(
+            permissionId = active.permissionId,
+            book = book,
+            nextHlc = { changeEngine.nextHlc(active.permissionId) },
+            driveApi = driveApi,
+            accessToken = token,
+        )
+        if (deleted) {
+            runCatching { changeEngine.sync() }
+        }
+        return deleted
+    }
+
+    /** Resolves one or more conflicts (e.g. a shelf-grouped series conflict) and triggers sync. */
+    internal suspend fun resolveConflicts(
+        conflictsToResolve: List<DriveConflict>,
+        choice: DriveConflictChoice,
+        syncAfter: Boolean = true,
+    ) {
+        if (!hasStore() || conflictsToResolve.isEmpty()) return
+        val active = store.accounts().active() ?: return
+        val localDeviceId = ensureInstall().deviceId
+        val tokenProvider: suspend () -> String? = {
+            when (val res = accountController.acquireSilentAccessToken()) {
+                // A token for another account must never fetch or publish this account's data.
+                is SilentTokenResult.Token -> res.accessToken.takeIf { res.permissionId == active.permissionId }
+                else -> null
+            }
+        }
+        // A dialog opened before an account switch may still hold another account's conflict.
+        val ownConflicts = conflictsToResolve.filter { it.permissionId == active.permissionId }
+        // Network first and outside the switch lock: a remote cover is fetched before anything commits.
+        // Any choice but DELETE / KEEP_LOCAL may keep the remote cover (KEEP_EDITED after a local reset).
+        if (choice != DriveConflictChoice.DELETE && choice != DriveConflictChoice.KEEP_LOCAL) {
+            for (conflict in ownConflicts.filter { it.domain == DriveWireCodec.DOMAIN_METADATA }) {
+                metadataSync.prefetchConflictCover(active.permissionId, conflict, tokenProvider)
+            }
+        }
+        // Lock order is sync mutex -> switch lock, as in DriveChangeEngine.sync, so the account
+        // cannot change between this check and the commits.
+        changeEngine.withSyncLock {
+            switchCoordinator.withSwitchLock {
+                if (store.accounts().active()?.permissionId != active.permissionId) return@withSwitchLock
+                resolveOwnConflictsLocked(active.permissionId, ownConflicts, choice, localDeviceId)
+            }
+        }
+        if (syncAfter) {
+            runCatching { changeEngine.sync() }
+        }
+    }
+
+    private suspend fun resolveOwnConflictsLocked(
+        permissionId: String,
+        ownConflicts: List<DriveConflict>,
+        choice: DriveConflictChoice,
+        localDeviceId: String,
+    ) {
+        for (requested in ownConflicts) {
+            // Only conflicts still open (not settled by a sync meanwhile) are resolved.
+            val conflict = store.conflicts().get(permissionId, requested.conflictId)
+                ?.takeIf { it.state == DriveConflict.STATE_OPEN }
+                ?: continue
+            when (conflict.domain) {
+                DriveWireCodec.DOMAIN_ANNOTATION ->
+                    annotationSync.resolveLocalConflict(
+                        permissionId = permissionId,
+                        conflict = conflict,
+                        choice = choice,
+                        localDeviceId = localDeviceId,
+                        nextHlc = { changeEngine.nextHlc(permissionId) },
+                    )
+                DriveWireCodec.DOMAIN_EVALUATION ->
+                    evaluationSync.resolveLocalConflict(
+                        permissionId = permissionId,
+                        conflict = conflict,
+                        choice = choice,
+                        localDeviceId = localDeviceId,
+                        nextHlc = { changeEngine.nextHlc(permissionId) },
+                    )
+                DriveWireCodec.DOMAIN_METADATA ->
+                    metadataSync.resolveLocalConflict(
+                        permissionId = permissionId,
+                        conflict = conflict,
+                        choice = choice,
+                        localDeviceId = localDeviceId,
+                        nextHlc = { changeEngine.nextHlc(permissionId) },
+                        // The cover was prefetched; resolving never touches the network.
+                        accessTokenProvider = null,
+                    )
+                DriveWireCodec.DOMAIN_SERIES ->
+                    seriesSync.resolveLocalConflict(
+                        permissionId = permissionId,
+                        conflict = conflict,
+                        choice = choice,
+                        localDeviceId = localDeviceId,
+                        nextHlc = { changeEngine.nextHlc(permissionId) },
+                    )
+            }
+        }
+    }
+
     internal fun triggerEpubUploads(allowMetered: Boolean) {
         scheduleEpubUploadsWork(allowMetered)
     }
@@ -309,6 +478,9 @@ internal class DriveLibrarySync(
     override fun BookServerSwitchAction(onClick: () -> Unit) {
         DriveBookServerSwitchAction(onClick)
     }
+
+    @Composable
+    override fun BookManageAction(book: Book, onDone: () -> Unit) = Unit
 
     /** Stops background workers and transitions [permissionId] to `NEEDS_RECONNECT` while preserving all state. */
     internal suspend fun markNeedsReconnect(permissionId: String, reason: String) {
