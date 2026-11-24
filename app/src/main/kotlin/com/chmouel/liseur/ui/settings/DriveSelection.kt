@@ -16,6 +16,7 @@ internal fun showsLibrarySyncSection(
 
 /** Selection after the server, backend activity or switch request changed. */
 internal fun nextLibrarySyncSelected(
+    serverLoaded: Boolean,
     current: Boolean,
     hasServer: Boolean,
     switchRequested: Boolean,
@@ -23,7 +24,15 @@ internal fun nextLibrarySyncSelected(
     supported: Boolean,
 ): Boolean = when {
     !supported -> false
+    !serverLoaded -> current
     hasServer -> current && switchRequested
     backendActive -> true
     else -> current
 }
+
+/** A restored switch request survives until the stored server is known to be absent. */
+internal fun nextSwitchRequested(
+    requested: Boolean,
+    serverLoaded: Boolean,
+    hasServer: Boolean,
+): Boolean = requested && !(serverLoaded && !hasServer)
