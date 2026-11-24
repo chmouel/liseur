@@ -153,16 +153,29 @@ Existing `liseur.db` per-peer tables fall into two shapes:
      `sent_json = {"vfp":"<R.fp>","cfp":"<contentFp>","rev":<rev_applied>}`.
      Invariant: `sent_json.vfp` never changes unless `acked_revision`
      strictly increases. This covers a local resolution and the outgoing
-     ACK in step 2 too, so step 3's gate catches every Tx 1 whose Tx 2 is
-     missing.
+     ACK in step 2 too (an ACK that would not raise it writes nothing), so
+     step 3's gate catches every Tx 1 whose Tx 2 is missing.
   2. On **outgoing batch ACK** (Transaction 1 in `liseur.db`, after
-     Drive confirms the delta `fileId`): advance `acked_revision =
-     target_revision`, `sent_revision = target_revision`, and
+     Drive confirms the delta `fileId`): **only when `target_revision >
+     sync.acked_revision`**, advance `acked_revision = target_revision`,
+     `sent_revision = target_revision`, and
      `sent_json = {"vfp":"<batchFp>","cfp":"<contentFp>","rev":<target_revision>}`.
      If the reader edited the row to `row.revision > target_revision`
      while upload was in flight, `row.owed(sync)` stays `true` so the
      newer edit is picked up in the next batch with `batchFp` in its
-     `anc`.
+     `anc`. When `target_revision <= sync.acked_revision`, a local
+     resolution (or a remote apply) committed a newer revision while the
+     batch uploaded, so Tx 1 writes nothing to `sync`: the newer
+     `acked_revision` and `sent_json.vfp` (a resolution's recovery marker)
+     must survive. Tx 2 records the older batch's delivery separately, by
+     marking its `drive_outbox` row `ACKED` and moving
+     `drive_record_state.published_fp` to `batchFp` only when `batchFp` is
+     still `L`, so the newer version stays owed. Example: revision 5 is
+     uploading, a resolution commits revision 6, the ACK for 5 arrives and
+     the process crashes. Recovery sees `row.revision == acked_revision == 6`
+     and pairs `sent_json.vfp = resolveFp` with the recomputed `contentFp`,
+     so the stored `resolve` is still published and the revision-5
+     version is never restored.
   3. On **crash recovery** (runs before diffing or pulling whenever
      `drive_record_state.last_synced_revision < sync.acked_revision` or
      the `drive_record_state` row is missing after a crash between
@@ -430,7 +443,12 @@ deletes are arbitrated by the higher `(hlc, fp)` (the word's concurrent
 `del` rule) and the children are judged again against the winner, so the
 outcome equals the one reached by receiving both deletes before the child, in
 every interleaving. Only a genuine concurrent word edit keeps the word
-without that re-judgement. A
+without that re-judgement. The same
+holds when the earlier delete was seen only through the revival: the
+revival's `revives` envelope carries the complete originating `del`
+(`delRecord`: `hlc`, `anc`, `resRefs`, `observed`, `restore`), which
+snapshots and the apply receipt keep, so a device that adopted the revival
+without the `del` can still order it against a later concurrent delete. A
 covered child is not discarded by a cascade: it becomes non-live history
 (`vocabulary_staged_review.state = COVERED` for reviews, `held = 1` in
 `drive_record_state` for occurrences), never shown or counted while the
@@ -446,7 +464,17 @@ a hash distinct from `restore.fp` (`content_fp` stays
 and `revives` in `drive_apply_receipt`, so crash recovery never falls back to
 `restore.fp`, which is the version `fp` of the last live word version). Because the original `del`'s `anc` holds
 `restore.fp` but no `del` holds `reviveFp`, a late replay of that `del`
-is Stale and cannot delete the revived word again. The revival is
+is Stale and cannot delete the revived word again. Parent existence is a function of the facts held, never of arrival
+order, carrier or child label: the known deletes (direct, snapshot, or
+inside `revives.delRecord`) and each child's best-known provenance. A
+child's provenance belongs to the child version, so every republication
+(add-wins keep or revival, by any device, including the author) carries it
+in a wire `origin` field and a review first published as `C:5` still reads
+`C:5` when re-sent as `X:9`; an unknown provenance is sent as `null` and
+counts as uncovered. Every new fact, a delete or any copy of a child,
+re-judges all children, whether `STAGED`, `COVERED`, `UNDONE` or live,
+against the delete in force, so a `COVERED` child that a newly winning
+delete does not cover revives the word. The revival is
 republished along with the same eligible set of retained children
 (`STAGED` and `COVERED`; undone reviews are kept as `UNDONE` evidence that
 still keeps or revives the word but are never attached) whichever order the
@@ -683,7 +711,10 @@ the `del` record. `observed` lets the receiver detect reviews and
 occurrences the deleter never observed before it cascades any delete;
 `restore` lets any device, including one rebuilt only from snapshots,
 restore the word when an uncovered one arrives later. A `del` without a
-valid `restore` is malformed and is not applied.
+valid `restore` is malformed and is not applied. A revival's
+`revives` envelope also carries the originating `del` (`delRecord`), and a
+republished review or occurrence carries its own provenance in `origin`
+(both excluded from `fp`, kept by snapshots, `docs/DRIVE_SYNC.md` §2.3).
 
 - A batch holds at most 2,000 records and 1 MiB; larger ones split into
   consecutive seqs. A single record can exceed 1 MiB by itself (annotation
@@ -692,8 +723,11 @@ valid `restore` is malformed and is not applied.
   dropped, left owed with `published_fp` unchanged, skipped by every freeze
   without allocating a `seq`, and reported by the run, so unrelated records
   keep syncing. Peers keep its last published version until a later version
-  fits. An oversized local `resolve` leaves its conflict `RESOLVING` and does
-  not hold back a later version of the key that fits
+  fits. A `del` is oversized only through its uncapped `resRefs`: a
+  body-only overflow is cured by deleting or shortening, but when `resRefs`
+  alone exceed 1 MiB every successor, deletes included, inherits them and is
+  withheld too. An oversized local `resolve` leaves its conflict `RESOLVING`
+  and does not hold back a later version of the key that fits
   (`docs/DRIVE_SYNC.md` §2.3).
 - One batch is in flight. It is built, frozen into `drive_outbox` (seq
   allocated in the same transaction), then uploaded. Retries look it up
@@ -829,8 +863,8 @@ restored device gets its own `deviceId`.
 | `drive_cursor` | `(permission_id, device_id, domain)` | `applied_seq`, `paused_schema_version` |
 | `drive_file` | `(permission_id, file_id)` | `name`, `kind` (`manifest` / `delta` / `snapshot` / `cover`, or `epub` from `liseurKind`), `device_id`, `seq`, `sha256`, `size`, `md5`, `trashed`, `created_time`; index `(permission_id, kind, sha256)` |
 | `drive_outbox` | `(permission_id, seq)` | `batch_id`, `payload`, `state` (BUILT / UPLOADED / ACKED), `file_id`, `created_at` |
-| `drive_authored_record` | `(permission_id, domain, record_key, seq)` | `op`, `hlc`, `fp`, `anc_json`, `res_refs_json`, `body_json`, `observed_json`, `restore_json`, `revives_json`, `first_seq` (original publication seq, for `vocabOccurrence` / `vocabReview`) |
-| `drive_record_state` | `(permission_id, domain, record_key)` | `version_fp`, `version_op`, `published_fp`, `content_fp`, `last_synced_revision`, `origin_device_id`, `origin_seq`, `ancestors_json`, `res_refs_json`, `last_hlc`, `body_json`, `observed_json` and `restore_json` (`vocabWord` `del` only), `held` (version recorded but not applied to `liseur.db`: book tombstoned, or `vocabOccurrence` child of an absent or tombstoned word), `acked_receipt_id` |
+| `drive_authored_record` | `(permission_id, domain, record_key, seq)` | `op`, `hlc`, `fp`, `anc_json`, `res_refs_json`, `body_json`, `observed_json`, `restore_json`, `revives_json` (including `delRecord`), `first_seq` (original publication seq, for `vocabOccurrence` / `vocabReview`), `origin_device_id`, `origin_seq` (the republished child's own provenance, wire `origin`; `NULL` on a first publication) |
+| `drive_record_state` | `(permission_id, domain, record_key)` | `version_fp`, `version_op`, `published_fp`, `content_fp`, `last_synced_revision`, `origin_device_id`, `origin_seq`, `ancestors_json`, `res_refs_json`, `last_hlc`, `body_json`, `observed_json`, `restore_json` and `del_json` (`vocabWord` only: a `del`, or a revival while its originating delete is the one in force; `del_json` holds that delete's `fp`, `hlc`, `anc` and `resRefs`), `held` (version recorded but not applied to `liseur.db`: book tombstoned, or `vocabOccurrence` child of an absent or tombstoned word), `acked_receipt_id` |
 | `drive_resolution` | `(permission_id, domain, record_key, resolution_fp)` | `resolved_fps_json`, `outcome` (`put` / `delete`), `hlc`, `author_device_id`, `created_at` |
 | `drive_conflict` | `(permission_id, conflict_id)` | `domain`, `record_key`, `book_url`, `kind`, `local_fp`, `remote_fp`, `remote_json`, `remote_device_id`, `remote_hlc`, `state` (OPEN / RESOLVING / RESOLVED), `choice`, `resolution_json` (the exact `op: "resolve"` record, written before the choice is applied), `resolution_fp`, `opened_at`, `resolved_at` |
 | `drive_peak_candidate` | `(permission_id, work_id, edition, origin, seq)` | `progression`, `payload_json` (newer lower-progression peaks kept until a reset floor or a dominating peak removes them; `docs/DRIVE_SYNC.md` §4.6) |
@@ -852,7 +886,8 @@ greatest `seq ≤ T` (every row with `seq ≤ T` for `session`, `vocabReview`
 and `furthest` resets); superseded mutable rows are deleted when the manifest
 naming that snapshot commits, append-only rows and `del` heads never, and
 deltas are pruned only after such a snapshot. The schema is unreleased, so
-`version = 1` gains the table with no migration.
+`version = 1` gains the table, with its `origin_*` columns, and
+`drive_record_state.del_json` with no migration.
 
 Batch receipts are `drive_outbox` for own uploads, `drive_session_ack`
 for per-account session delivery, and `drive_cursor` for other devices;
