@@ -101,6 +101,23 @@ class DriveSuccessorBeforeResolutionTest {
     }
 
     @Test
+    fun `a resolution that equals the local body still yields to its parked successor`() = runTest {
+        val sameBody = body("edit-A")
+        val sameFp = DriveCanonicalJson.resolveFp(DriveResolution.OUTCOME_PUT, resolved, resHlc, sameBody)
+        val sameRes = res1.copy(fp = sameFp, resRefs = listOf(sameFp), body = sameBody)
+        val successor = succ.copy(anc = listOf(sameFp), resRefs = listOf(sameFp))
+        val first = deliver(localAt(e1, "edit-A"), successor, "dev-c", 2L)
+        assertEquals(ReconciliationCase.CONFLICT_EDIT_EDIT, first.reconciliationCase)
+
+        val parkedView = first.updatedRecordState!!.toView().copy(postCrashAckMatchesIncoming = true)
+        val second = deliver(parkedView, sameRes, "dev-b", 1L)
+        assertEquals(ReconciliationCase.RESOLUTION_BRIDGED_SUPERSESSION, second.reconciliationCase)
+        assertEquals(succFp, (second.dataAction as ReconciliationDataAction.ApplyPut).contentFp)
+        assertEquals(succFp, second.updatedRecordState!!.versionFp)
+        assertTrue(db.conflicts().unsettledForRecord(perm, domain, key).isEmpty())
+    }
+
+    @Test
     fun `either delivery order converges on the successor`() = runTest {
         val resFirst = deliver(localAt(e1, "edit-A"), res1, "dev-c", 1L)
         val viaOrdered = deliver(resFirst.updatedRecordState!!.toView(), succ, "dev-c", 2L)
