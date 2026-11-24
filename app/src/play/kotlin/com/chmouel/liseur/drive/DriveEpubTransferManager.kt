@@ -86,6 +86,7 @@ internal class DriveEpubTransferManager(
     },
     private val stagingDirProvider: () -> File = { defaultStagingDir(context) },
     private val clock: () -> Long = System::currentTimeMillis,
+    private val afterUploadRequest: suspend () -> Unit = {},
 ) {
     private val books get() = database.bookDao()
     private val identities get() = database.workIdentityDao()
@@ -523,12 +524,12 @@ internal class DriveEpubTransferManager(
                 updatedAt = clock(),
             )
 
+            var activeSession: String? = null
+            // A resumed session can complete while its request runs: cleanup must not race it.
+            val resumedSession = queuedBeforeUpload.sessionUri
             try {
-                var activeSession: String? = null
-                // A resumed session can complete while its request runs: cleanup must not race it.
-                val resumedSession = queuedBeforeUpload.sessionUri
                 resumedSession?.let(inFlightSessions::add)
-                val remoteFile = try {
+                val remoteFile = run {
                     driveApi.uploadResumableFile(
                         accessToken = accessToken,
                         name = fileName,
@@ -573,11 +574,8 @@ internal class DriveEpubTransferManager(
                             }
                         },
                     )
-                } finally {
-                    // The request has returned (even when cancelled): its session can no longer complete.
-                    activeSession?.let(inFlightSessions::remove)
-                    resumedSession?.let(inFlightSessions::remove)
                 }
+                afterUploadRequest()
                 // Deselected during the final PUT: record the created file before trying to
                 // trash it, so a failed or interrupted cleanup is retried and never advertised.
                 suspend fun cleanUpDeselectedCompletion() {
@@ -663,6 +661,11 @@ internal class DriveEpubTransferManager(
                 } else {
                     discardStaged(permissionId, sha)
                 }
+            } finally {
+                // Held past local finalization: until the completion is recorded or handed to
+                // cleanup, cleanup must not trash the file and requeue the row under it.
+                activeSession?.let(inFlightSessions::remove)
+                resumedSession?.let(inFlightSessions::remove)
             }
         }
 
