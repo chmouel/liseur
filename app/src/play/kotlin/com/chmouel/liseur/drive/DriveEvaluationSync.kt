@@ -411,10 +411,19 @@ internal class DriveEvaluationSync(
         var appliedRev: Long? = null
         var staleLocal = false
         val now = clock()
+        // A parked successor can win over the incoming resolution; ack the version actually applied.
+        val appliedState = result.updatedRecordState?.takeIf { it.versionFp != record.fp }
+        val ackVfp = appliedState?.versionFp ?: record.fp
+        val ackOp = appliedState?.versionOp ?: record.op
+        var appliedContentFp: String? = null
         // Transaction 1 (`liseur.db`): atomic data + `evaluation_sync` revision-to-fp ack.
         when (val action = result.dataAction) {
             is ReconciliationDataAction.ApplyPut -> {
-                val body = decodedBody ?: return true
+                val body = DriveWireCodec.decodeEvaluationBody(action.body) ?: return true
+                val bodyContentFp = DriveCanonicalJson.contentFp(
+                    DriveWireCodec.encodeEvaluationBody(body.copy(workKey = canonicalWorkKey)),
+                )
+                appliedContentFp = bodyContentFp
                 database.withTransaction {
                     if (evaluations.get(bookUrl, field)?.revision != row?.revision) {
                         staleLocal = true
@@ -443,10 +452,10 @@ internal class DriveEvaluationSync(
                             ackedRevision = revApplied,
                             sentJson = DriveWireCodec.encodeRevisionAckJson(
                                 DriveRevisionAckPayload(
-                                    vfp = record.fp,
-                                    cfp = action.contentFp,
+                                    vfp = ackVfp,
+                                    cfp = bodyContentFp,
                                     rev = revApplied,
-                                    op = record.op,
+                                    op = ackOp,
                                 ),
                             ),
                             sentRevision = revApplied,
@@ -485,10 +494,10 @@ internal class DriveEvaluationSync(
                             ackedRevision = revApplied,
                             sentJson = DriveWireCodec.encodeRevisionAckJson(
                                 DriveRevisionAckPayload(
-                                    vfp = record.fp,
+                                    vfp = ackVfp,
                                     cfp = null,
                                     rev = revApplied,
-                                    op = record.op,
+                                    op = ackOp,
                                 ),
                             ),
                             sentRevision = revApplied,
@@ -520,9 +529,9 @@ internal class DriveEvaluationSync(
             }
             result.conflictToOpen?.let { conflicts.upsert(it) }
             result.updatedRecordState?.let { updated ->
-                recordStates.upsert(
-                    if (appliedRev != null) updated.copy(lastSyncedRevision = appliedRev) else updated,
-                )
+                var persisted = if (appliedRev != null) updated.copy(lastSyncedRevision = appliedRev) else updated
+                appliedContentFp?.let { persisted = persisted.copy(contentFp = it) }
+                recordStates.upsert(persisted)
             }
         }
         return true

@@ -435,6 +435,91 @@ class DrivePhase4EndToEndTest {
     }
 
     @Test
+    fun `a successor that outruns its resolution on a third device converges on the successor, not the stale resolution`() = runTest {
+        val deviceC = createDevice("dev-c", File(tempDir, "c"))
+        try {
+            deviceA.connect()
+            deviceB.connect()
+            deviceC.connect()
+            val bookA = seedBook(deviceA, "outrun.epub", "9780547928227", "The Hobbit", "J.R.R. Tolkien")
+            val id = "ann-outrun"
+            deviceA.liseurDb.annotationDao().upsert(
+                BookAnnotation(
+                    id = id, bookId = bookA.url, kind = AnnotationKind.NOTE.name,
+                    locatorJson = """{"href":"ch01.xhtml"}""", text = "Passage", note = "v0",
+                    createdAt = 1_000L, updatedAt = 1_000_000L,
+                ),
+            )
+            for (device in listOf(deviceA, deviceB, deviceC, deviceA, deviceB)) {
+                assertEquals(SyncOutcome.Success, device.changeEngine.sync().outcome)
+            }
+            suspend fun note(device: Phase4Device) = device.liseurDb.annotationDao().byId(id)?.note
+
+            // A and B edit concurrently; C sees both and settles the conflict with an op=resolve.
+            driveServer.hideAuthorsFor("dev-a", "dev-b", "dev-c")
+            deviceA.liseurDb.annotationDao().upsert(deviceA.liseurDb.annotationDao().byId(id)!!.copy(note = "edit-A", updatedAt = 2_000_000L))
+            assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+            driveServer.hideAuthorsFor("dev-b", "dev-a", "dev-c")
+            deviceB.liseurDb.annotationDao().upsert(deviceB.liseurDb.annotationDao().byId(id)!!.copy(note = "edit-B", updatedAt = 2_100_000L))
+            assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+            driveServer.clearAuthorHides()
+            assertEquals(SyncOutcome.Success, deviceC.changeEngine.sync().outcome)
+            val conflictC = deviceC.driveDb.conflicts().openForAccount(PERM_ID).single { it.recordKey == id }
+            deviceC.driveSync.resolveConflicts(listOf(conflictC), DriveConflictChoice.KEEP_LOCAL, syncAfter = true)
+            val resolution = driveServer.deltaRecords("dev-c").single { it.op == DriveRecordState.OP_RESOLVE && it.k == id }
+
+            // B adopts the resolution and then edits again: its successor descends from the resolution.
+            assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+            assertTrue(deviceB.driveDb.conflicts().openForAccount(PERM_ID).none { it.recordKey == id })
+            deviceB.liseurDb.annotationDao().upsert(deviceB.liseurDb.annotationDao().byId(id)!!.copy(note = "after-resolution", updatedAt = 3_000_000L))
+            assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+            val successor = driveServer.deltaRecords("dev-b").last { it.k == id }
+            assertTrue(resolution.fp in successor.resRefs)
+
+            // A receives B's deltas but not C's: the successor arrives before the resolution it refers to.
+            driveServer.hideAuthorsFor("dev-a", "dev-c")
+            assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+            assertEquals("edit-A", note(deviceA))
+            val parked = deviceA.driveDb.conflicts().unsettledForRecord(PERM_ID, DriveWireCodec.DOMAIN_ANNOTATION, id)
+                .single { it.remoteFp == successor.fp }
+            assertEquals(DriveRecordState.OP_PUT, parked.remoteOp)
+            assertNotNull(parked.remoteSeq)
+            assertTrue(resolution.fp in DriveConflictEngine.decodeFps(parked.remoteResRefsJson))
+            assertTrue(DriveConflictEngine.decodeFps(parked.remoteAncJson).isNotEmpty())
+
+            driveServer.clearAuthorHides()
+            assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+            assertEquals("after-resolution", note(deviceA))
+            assertTrue(deviceA.driveDb.conflicts().unsettledForRecord(PERM_ID, DriveWireCodec.DOMAIN_ANNOTATION, id).isEmpty())
+            val stateA = deviceA.driveDb.recordStates().get(PERM_ID, DriveWireCodec.DOMAIN_ANNOTATION, id)!!
+            assertEquals(successor.fp, stateA.versionFp)
+            assertEquals(
+                DriveWireCodec.annotationContentFp(DriveWireCodec.decodeAnnotationBody(successor.body!!)!!),
+                stateA.contentFp,
+            )
+            assertEquals(
+                stateA.contentFp,
+                deviceA.liseurDb.annotationSyncDao().get(DriveLibrarySync.accountPeerId(PERM_ID), id)!!.ackedFingerprint,
+            )
+
+            // Replaying every remote record, and a further run, keeps the successor.
+            for (author in listOf("dev-b", "dev-c")) {
+                deviceA.driveDb.cursors().upsert(DriveCursor(PERM_ID, author, DriveWireCodec.DOMAIN_ANNOTATION, 0L))
+            }
+            assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+            assertEquals("after-resolution", note(deviceA))
+
+            for (device in listOf(deviceC, deviceB, deviceA, deviceC)) {
+                assertEquals(SyncOutcome.Success, device.changeEngine.sync().outcome)
+                assertEquals("after-resolution", note(device))
+                assertTrue(device.driveDb.conflicts().openForAccount(PERM_ID).none { it.recordKey == id })
+            }
+        } finally {
+            deviceC.close()
+        }
+    }
+
+    @Test
     fun `evaluations sync rating and review and recover cleanly from Tx1-Tx2 crash both unedited and post-crash edited`() = runTest {
         deviceA.connect()
         deviceB.connect()
@@ -2072,6 +2157,17 @@ class DrivePhase4EndToEndTest {
             hiddenForDevice = null
         }
 
+        private val hiddenAuthors = mutableMapOf<String, Set<String>>()
+
+        /** Hides [authors]' delta files from [viewer] only; their changes are re-delivered once cleared. */
+        fun hideAuthorsFor(viewer: String, vararg authors: String) {
+            hiddenAuthors[viewer] = authors.toSet()
+        }
+
+        fun clearAuthorHides() {
+            hiddenAuthors.clear()
+        }
+
         fun appDataFilesSnapshot(): List<DriveRemoteFile> =
             files.values.filter { it.space == "appDataFolder" }.map { it.meta }
 
@@ -2086,7 +2182,9 @@ class DrivePhase4EndToEndTest {
         fun clientFor(deviceId: String): DriveRemoteApi = object : DriveRemoteApi by this@Phase4FakeDriveServer {
             override suspend fun listAppDataFiles(accessToken: String, query: String?, pageSize: Int): List<DriveRemoteFile> =
                 this@Phase4FakeDriveServer.listAppDataFiles(accessToken, query, pageSize).filter { file ->
-                    if (hiddenForDevice == deviceId) {
+                    if (file.appProperties["deviceId"] in (hiddenAuthors[deviceId] ?: emptySet())) {
+                        false
+                    } else if (hiddenForDevice == deviceId) {
                         val owner = file.appProperties["deviceId"]
                         owner == null || owner == deviceId
                     } else {
@@ -2098,7 +2196,13 @@ class DrivePhase4EndToEndTest {
                 if (hiddenForDevice == deviceId) {
                     return DriveChangesPage(emptyList(), null, pageToken)
                 }
-                return this@Phase4FakeDriveServer.listChanges(accessToken, pageToken, pageSize)
+                val page = this@Phase4FakeDriveServer.listChanges(accessToken, pageToken, pageSize)
+                val hidden = hiddenAuthors[deviceId] ?: return page
+                val isHidden = { change: DriveChange -> change.file?.appProperties?.get("deviceId") in hidden }
+                val firstHidden = page.changes.indexOfFirst(isHidden)
+                if (firstHidden < 0) return page
+                val resumeToken = ((pageToken.toIntOrNull() ?: 1) + firstHidden).toString()
+                return DriveChangesPage(page.changes.filterNot(isHidden), null, resumeToken)
             }
         }
 
