@@ -314,48 +314,7 @@ internal class DriveCatalogSync(
             if (existing != null && existing.versionOp == DriveRecordState.OP_DEL && record.hlc <= existing.lastHlc) {
                 return
             }
-            val matchingAliases = identities.aliasesFor(peerId).filter {
-                workIdentity.canonicalWorkKey(permissionId, it.workId) == canonical
-            }
-            val remoteOnlyUrls = mutableListOf<String>()
-            val unlinkBookUrls = mutableListOf<Pair<String, String>>()
-            val shasToClear = mutableSetOf<String>()
-
-            for (alias in matchingAliases) {
-                val book = books.getByUrl(alias.bookUrl) ?: continue
-                alias.editionSha?.lowercase(Locale.ROOT)?.let(shasToClear::add)
-                identities.fingerprint(book.url)?.sha256?.lowercase(Locale.ROOT)?.let(shasToClear::add)
-                if (book.url.startsWith(DriveWorkIdentity.DRIVE_BOOK_URL_PREFIX) && book.localUri == null) {
-                    remoteOnlyUrls.add(book.url)
-                } else {
-                    // Local file present: keep local file and book entry, unlink from Drive only.
-                    unlinkBookUrls.add(book.url to alias.workId)
-                }
-            }
-            // Also check canonical drive:<workKey> stub even if alias was missing.
-            val stubUrl = DriveWorkIdentity.driveBookUrl(canonical)
-            val stubBook = books.getByUrl(stubUrl)
-            if (stubBook != null && stubBook.localUri == null && stubUrl !in remoteOnlyUrls) {
-                remoteOnlyUrls.add(stubUrl)
-            }
-
-            // Remove remote-only `drive:<workKey>` rows via BookRemoval (preserves annotations & retains evaluations).
-            if (remoteOnlyUrls.isNotEmpty()) {
-                removal.deleteByUrls(remoteOnlyUrls)
-            }
-            if (unlinkBookUrls.isNotEmpty()) {
-                database.withTransaction {
-                    for ((bookUrl, staleWorkId) in unlinkBookUrls) {
-                        val alias = identities.alias(bookUrl, peerId)
-                        if (alias?.workId == staleWorkId) identities.upsert(alias.copy(confidence = WorkAlias.REJECTED, confirmed = false))
-                        identities.clearAmbiguity(bookUrl, peerId)
-                        val book = books.getByUrl(bookUrl) ?: continue
-                        if (fileIdFromHref(book.downloadHref) != null) {
-                            books.upsert(book.copy(downloadHref = null))
-                        }
-                    }
-                }
-            }
+            val shasToClear = removeLocalWorkCopies(permissionId, peerId, canonical, selected = null)
             store.withTransaction {
                 for (sha in shasToClear) {
                     uploads.delete(permissionId, sha)
@@ -597,6 +556,63 @@ internal class DriveCatalogSync(
     }
 
     /**
+     * Cleans every local copy of [canonical]: fileless `drive:` stubs go via [BookRemoval]
+     * (preserving annotations); books with a local file are only unlinked from Drive.
+     * Returns the edition SHAs of the cleaned copies.
+     */
+    private suspend fun removeLocalWorkCopies(
+        permissionId: String,
+        peerId: String,
+        canonical: String,
+        selected: Pair<Book, String?>?,
+    ): Set<String> {
+        val targets = linkedMapOf<String, Pair<Book, String?>>()
+        val shas = linkedSetOf<String>()
+        for (alias in identities.aliasesFor(peerId)) {
+            if (workIdentity.canonicalWorkKey(permissionId, alias.workId) != canonical) continue
+            val book = books.getByUrl(alias.bookUrl) ?: continue
+            alias.editionSha?.lowercase(Locale.ROOT)?.let(shas::add)
+            targets[book.url] = book to alias.workId
+        }
+        selected?.let { targets[it.first.url] = it }
+        // The canonical drive:<workKey> stub may exist without an alias.
+        val stubUrl = DriveWorkIdentity.driveBookUrl(canonical)
+        if (stubUrl !in targets) {
+            books.getByUrl(stubUrl)?.let { targets[stubUrl] = it to null }
+        }
+        val remoteOnlyUrls = mutableListOf<String>()
+        val unlinks = mutableListOf<Pair<String, String?>>()
+        for ((url, target) in targets) {
+            val (book, staleWorkId) = target
+            identities.fingerprint(url)?.sha256?.lowercase(Locale.ROOT)?.let(shas::add)
+            if (url.startsWith(DriveWorkIdentity.DRIVE_BOOK_URL_PREFIX) && book.localUri == null) {
+                remoteOnlyUrls.add(url)
+            } else {
+                unlinks.add(url to staleWorkId)
+            }
+        }
+        if (remoteOnlyUrls.isNotEmpty()) {
+            removal.deleteByUrls(remoteOnlyUrls)
+        }
+        if (unlinks.isNotEmpty()) {
+            database.withTransaction {
+                for ((bookUrl, staleWorkId) in unlinks) {
+                    val alias = identities.alias(bookUrl, peerId)
+                    if (alias != null && alias.workId == staleWorkId) {
+                        identities.upsert(alias.copy(confidence = WorkAlias.REJECTED, confirmed = false))
+                    }
+                    identities.clearAmbiguity(bookUrl, peerId)
+                    val latest = books.getByUrl(bookUrl) ?: continue
+                    if (fileIdFromHref(latest.downloadHref) != null) {
+                        books.upsert(latest.copy(downloadHref = null))
+                    }
+                }
+            }
+        }
+        return shas
+    }
+
+    /**
      * Explicit **Delete from synced library** (`docs/DRIVE_SYNC.md` §4.2 & ADR-0078):
      * 1. Writes a durable `catalog` `op: "del"` tombstone in `drive_record_state`.
      * 2. Trashes any uploaded Drive EPUB in `Liseur/` (or queues pending trash if offline).
@@ -681,22 +697,8 @@ internal class DriveCatalogSync(
             )
         }
 
-        // Local cleanup: a fileless Drive stub goes via BookRemoval (preserving annotations);
-        // any book with a local file, downloaded Drive books included, is unlinked only.
-        if (book.url.startsWith(DriveWorkIdentity.DRIVE_BOOK_URL_PREFIX) && book.localUri == null) {
-            removal.deleteByUrls(listOf(book.url))
-        } else {
-            database.withTransaction {
-                if (alias != null) {
-                    identities.deleteAliasIfStale(book.url, peerId, alias.workId)
-                }
-                identities.clearAmbiguity(book.url, peerId)
-                val latest = books.getByUrl(book.url)
-                if (latest != null && fileIdFromHref(latest.downloadHref) != null) {
-                    books.upsert(latest.copy(downloadHref = null))
-                }
-            }
-        }
+        // Every local copy of the work is cleaned, not only the selected edition.
+        removeLocalWorkCopies(permissionId, peerId, canonicalKey, selected = book to alias?.workId)
 
         // Best-effort trash immediately after the tombstone is durable; any remaining IDs
         // stay queued in `pendingTrashFileIds` for the next sync.

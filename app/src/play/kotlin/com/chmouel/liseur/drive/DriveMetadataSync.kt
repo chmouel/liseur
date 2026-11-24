@@ -524,7 +524,9 @@ internal class DriveMetadataSync(
                     when (body) {
                         is DriveMetadataBody.Text -> applyTextOverrideToBook(bookUrl, body.field, body.value)
                         is DriveMetadataBody.Cover -> {
-                            val file = downloadedCoverFile ?: return@withTransaction
+                            val file = downloadedCoverFile
+                                ?.let { coverCodec.installForBook(bookUrl, body.coverSha256) }
+                                ?: return@withTransaction
                             books.setCoverOverride(bookUrl, file.absolutePath, body.coverSha256)
                         }
                     }
@@ -751,6 +753,13 @@ internal class DriveMetadataSync(
             return
         }
 
+        val ownedCoverFile = (chosenBody as? DriveMetadataBody.Cover)
+            ?.let { coverCodec.installForBook(bookUrl, it.coverSha256) }
+        if (chosenBody is DriveMetadataBody.Cover && ownedCoverFile == null) {
+            conflicts.reopen(permissionId, conflict.conflictId)
+            return
+        }
+
         val chosenBodyMap = chosenBody?.let(DriveWireCodec::encodeMetadataBody)
         val chosenContentFp = chosenBodyMap?.let(DriveCanonicalJson::contentFp)
         val hlc = nextHlc()
@@ -772,7 +781,7 @@ internal class DriveMetadataSync(
             when (chosenBody) {
                 is DriveMetadataBody.Text -> applyTextOverrideToBook(bookUrl, chosenBody.field, chosenBody.value)
                 is DriveMetadataBody.Cover -> {
-                    books.setCoverOverride(bookUrl, requireNotNull(remoteCoverFile).absolutePath, chosenBody.coverSha256)
+                    books.setCoverOverride(bookUrl, requireNotNull(ownedCoverFile).absolutePath, chosenBody.coverSha256)
                 }
                 null -> clearOverrideOnBook(bookUrl, field)
             }
