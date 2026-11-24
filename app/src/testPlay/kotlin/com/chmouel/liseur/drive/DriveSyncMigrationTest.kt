@@ -71,9 +71,36 @@ class DriveSyncMigrationTest {
         }
     }
 
+    @Test
+    fun `open conflicts survive the upgrade that adds remote lineage columns`() {
+        helper.createDatabase(CONFLICTS_DB, 3).use { old ->
+            old.execSQL(
+                "INSERT INTO drive_conflict (permission_id, conflict_id, domain, record_key, book_url, kind, " +
+                    "local_fp, remote_fp, remote_json, remote_device_id, remote_hlc, state, choice, " +
+                    "resolution_fp, opened_at, resolved_at) VALUES ('perm-1', 'c1', 'annotation', 'k', NULL, " +
+                    "'EDIT_EDIT', 'fl', 'fr', '{\"a\":1}', 'dev-b', 'h1', 'OPEN', NULL, NULL, 5, NULL)",
+            )
+        }
+
+        helper.runMigrationsAndValidate(CONFLICTS_DB, 4, true, *DriveSyncDatabase.MIGRATIONS).use { db ->
+            db.query(
+                "SELECT local_fp, remote_fp, remote_json, state, remote_op, remote_seq, " +
+                    "remote_anc_json, remote_res_refs_json FROM drive_conflict WHERE conflict_id = 'c1'",
+            ).use {
+                assertTrue(it.moveToFirst())
+                assertEquals("fl", it.getString(0))
+                assertEquals("fr", it.getString(1))
+                assertEquals("{\"a\":1}", it.getString(2))
+                assertEquals("OPEN", it.getString(3))
+                for (column in 4..7) assertTrue(it.isNull(column))
+            }
+        }
+    }
+
     private companion object {
         const val ACCOUNTS_DB = "drive-sync-migration-accounts.db"
         const val OUTBOX_DB = "drive-sync-migration-outbox.db"
+        const val CONFLICTS_DB = "drive-sync-migration-conflicts.db"
         const val V2_OUTBOX_DB = "drive-sync-migration-v2-outbox.db"
     }
 }
