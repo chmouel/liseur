@@ -481,6 +481,33 @@ class DriveWireCodecAndHlcTest {
     }
 
     @Test
+    fun `present non-object observed decodes to empty while missing stays null`() {
+        val batch = DriveDeltaBatch(
+            batchId = DriveCanonicalJson.batchId("dev-a", 3L),
+            deviceId = "dev-a",
+            seq = 3L,
+            createdHlc = "0017450000000-0006-dev-a",
+            domains = mapOf(DriveWireCodec.DOMAIN_VOCAB_WORD to 3),
+            records = listOf(
+                DriveWireCodec.delRecord(DriveWireCodec.DOMAIN_VOCAB_WORD, "2:fr:a", "0017450000000-0006-dev-a"),
+                DriveWireCodec.delRecord(DriveWireCodec.DOMAIN_VOCAB_WORD, "2:fr:b", "0017450000000-0007-dev-a"),
+                DriveWireCodec.delRecord(DriveWireCodec.DOMAIN_VOCAB_WORD, "2:fr:c", "0017450000000-0008-dev-a"),
+            ),
+            observed = mapOf("dev-b" to 3L),
+        )
+        val json = DriveWireCodec.encodeDeltaBatch(batch)
+        val root = JSONObject(json)
+        val recs = root.getJSONArray("records")
+        recs.getJSONObject(0).put("observed", JSONObject.NULL)
+        recs.getJSONObject(1).put("observed", "garbage")
+        recs.getJSONObject(2).remove("observed")
+        val decoded = DriveWireCodec.decodeDeltaBatch(root.toString())
+        assertEquals(emptyMap<String, Long>(), decoded.records[0].observed)
+        assertEquals(emptyMap<String, Long>(), decoded.records[1].observed)
+        assertNull(decoded.records[2].observed)
+    }
+
+    @Test
     fun `word keys with impossible language lengths are rejected without throwing`() {
         assertEquals("fr" to "nuit", DriveVocabularySync.parseWordKey("2:fr:nuit"))
         for (bad in listOf("2147483647:fr:nuit", "99999999999:fr:nuit", "3:fr", "2:frnuit", "2:fr:", ":fr:nuit", "0::x", "-1:fr:x")) {

@@ -274,6 +274,62 @@ class VocabularyMergeTest {
     }
 
     @Test
+    fun `equal-timestamp notes and definitions converge regardless of which side is remote`() {
+        val a = WordMetadata(
+            word = "Ephemeral",
+            definition = "short-lived",
+            translationLanguage = null,
+            notes = "note from A",
+            definitionEdited = true,
+            definitionUpdatedAt = 100L,
+            notesUpdatedAt = 200L,
+            addedAt = 50L,
+            baseline = null,
+        )
+        val b = a.copy(notes = "note from B", definition = "fleeting")
+        val base = a.copy(notes = "old", definition = "old def", definitionEdited = false)
+        for (b0 in listOf(null, base)) {
+            val onA = VocabularyMerge.mergeWordMetadata(b0, local = a, remote = b)
+            val onB = VocabularyMerge.mergeWordMetadata(b0, local = b, remote = a)
+            assertEquals(onA, onB)
+            assertEquals("note from B", onA.notes)
+            assertEquals("short-lived", onA.definition)
+        }
+        val newer = b.copy(notes = "aaa", notesUpdatedAt = 300L)
+        assertEquals("aaa", VocabularyMerge.mergeWordMetadata(null, a, newer).notes)
+        assertEquals("aaa", VocabularyMerge.mergeWordMetadata(null, newer, a).notes)
+    }
+
+    @Test
+    fun `equal-timestamp sentences and differing locators converge in both arrival orders`() {
+        val a = Occurrence(
+            occurrenceKey = "k1",
+            workId = "w1",
+            bookTitle = "Dune",
+            locationKey = "ch1",
+            locator = """{"href":"a"}""",
+            sentence = "Sentence from A",
+            sentenceEdited = true,
+            sentenceUpdatedAt = 500L,
+            lastSeenAt = 100L,
+            encounters = 1,
+        )
+        val b = a.copy(locator = """{"href":"b"}""", sentence = "Sentence from B")
+        val base = a.copy(sentence = "orig", sentenceEdited = false, sentenceUpdatedAt = 0L)
+        for (b0 in listOf(null, base)) {
+            val onA = VocabularyMerge.mergeOccurrencePair(b0, local = a, remote = b)
+            val onB = VocabularyMerge.mergeOccurrencePair(b0, local = b, remote = a)
+            assertEquals(onA, onB)
+            assertEquals("Sentence from B", onA.sentence)
+            assertEquals("""{"href":"b"}""", onA.locator)
+        }
+        val newer = a.copy(sentence = "aaa", sentenceUpdatedAt = 600L)
+        assertEquals("aaa", VocabularyMerge.mergeOccurrencePair(null, b, newer).sentence)
+        assertEquals("aaa", VocabularyMerge.mergeOccurrencePair(null, newer, b).sentence)
+        assertEquals(a.locator, VocabularyMerge.mergeOccurrencePair(null, a, a.copy(locator = null)).locator)
+    }
+
+    @Test
     fun `mergeOccurrencePair adopts remote-only bookTitle change and converges on concurrent edits`() {
         val base = Occurrence(
             occurrenceKey = "k1",
