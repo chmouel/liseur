@@ -114,7 +114,10 @@ Existing `liseur.db` per-peer tables fall into two shapes:
   store `acked_fingerprint` atomically with the data row. On crash
   recovery, recompute `contentFp` from the committed `liseur.db` row (or
   `"DELETED"` when the row is absent while its sync row remains) and
-  reconcile `drive_record_state` against `acked_fingerprint`.
+  reconcile `drive_record_state` against `acked_fingerprint`. For
+  `annotation`, `acked_fingerprint` alone cannot name the applied wire
+  version (a keep-body resolution leaves it unchanged), so the apply
+  receipt below decides.
 - **Revision-based tables (`evaluation_sync`, `metadata_override_sync`):**
   these tables store `acked_revision` (`Long`), `sent_revision`
   (`Long?`), and `sent_json` (`String?`) rather than an `acked_fp`
@@ -163,11 +166,31 @@ Existing `liseur.db` per-peer tables fall into two shapes:
        mandatory `op: "resolve"` persistence/settlement pre-step if the
        replayed record is a resolution).
 
-For `books` fields without a per-peer ack table in `liseur.db` (series
-overrides and catalog `archived_at`), `drive_record_state` holds
-`published_fp` and `content_fp`; remote applies are idempotent because
-replaying the batch after a crash recomputes `contentFp(book) ==
-contentFp(R.body)` (Agreement).
+**Apply receipt.** `annotation`, `series` and `catalog` have no per-peer
+ack that carries the applied wire version, and a catalog wire body cannot
+be recomputed from the `books` row: `archiveHlc`, each edition's
+availability group and `updatedAt` have no column there. In the same
+`liseur.db` transaction as the data, each remote apply of these domains
+upserts one row in a new table `drive_apply_receipt(peer_id, domain,
+record_key, version_fp, version_op, outcome, hlc, origin_device_id,
+origin_seq, anc_json, res_refs_json, body_json, row_fp, republish)`.
+`body_json` is the body as materialized (the merged body for `catalog`),
+`row_fp` fingerprints the projection of fields the row stores (for
+`catalog`: `title`, `author`, `fileSeriesName`, `fileSeriesIndex`,
+`addedAt`, `archivedAt`), and `republish` marks a merged body that differs
+from `R.body`. The protocol is unreleased, so the table ships with the
+first schema that has Drive and needs no migration. Recovery runs before
+diffing and pulling for every receipt whose `version_fp` is neither `L` nor
+in `anc(L)`: if the row projection still equals `row_fp`, restore
+`drive_record_state` from the receipt (a merged body with `republish = 1`
+becomes a new unpublished local version with the receipt's `version_fp` in
+`anc`); if not, the post-crash edit becomes the new local version with
+`version_fp` in `anc`, so replay is Stale and the edit survives. No receipt
+for `R.fp` means Tx 1 never committed. Tx 1 also verifies that the row
+still has the fingerprint the apply was decided against, so a local edit
+landing in between is never overwritten. The cursor is the last write of
+Tx 2. `evaluation` and `metadata` already satisfy this through `sent_json.vfp`
+and `rev`. `docs/DRIVE_SYNC.md` §3.3 has the exact columns and steps.
 
 ### Conflict rule for mutable records
 
@@ -322,14 +345,25 @@ mergedBaseline, liveReviews)`, while the optional legacy `baseline`
 `VocabularyMerge.mergeBaseline` so pre-event-log schedules converge
 identically. A word `del` is silent when the receiver is untouched; a
 concurrent edit or review wins silently and is republished. Because
-vocabulary reviews are append-only and outside `anc(L)`, a word `del`
-records the causal review boundary as an `observed` vector (the highest
+vocabulary reviews are append-only and, like occurrences, outside the
+word's `anc(L)`, a word `del` records the causal boundary as an `observed` vector (the highest
 delta `seq` its author had applied from each device) and the receiver
-checks for uncovered live local reviews before cascading any delete. A
-review with unknown provenance counts as uncovered, and snapshot records
-carry their original publication `seq` so restored reviews can be checked.
-An uncovered review makes the delete a concurrent review, so add-wins
-keeps the word, keeps its reviews, and republishes. Reading
+checks for uncovered live local reviews and occurrences
+before cascading any delete. A child with unknown provenance, or a local
+occurrence edit not yet published, counts as uncovered, and snapshot
+records carry their original publication `seq` so restored children can
+be checked. An uncovered child makes the delete a concurrent write, so
+add-wins keeps the word with all its reviews and occurrences and
+republishes them. The deleted word body is kept as a baseline in
+`vocabulary_word_sync.acked_base_json` and the `del`'s `observed` vector in
+`drive_record_state.observed_json`, so a review or occurrence that arrives
+after the tombstone and is not covered restores the word and is
+republished; a covered one is ignored; with no baseline (snapshot rebuild)
+the child stays staged until the author republishes the word. Equal
+timestamps in `mergeWordMetadata` and `mergeOccurrencePair` break by value
+(greater `notes`, definition group, `sentence` or `locator`, never the
+remote side) so the merge is commutative and two devices that swap edits
+compute the same body. Reading
 progress reuses `reconcileReadingState`, and `SyncDecision.Conflict`
 goes through the existing position-choice UI. Uploading to a device's own
 stream is delivery, not agreement: it never marks a local position as
@@ -338,7 +372,15 @@ still opens a conflict whether the upload or the pull happens first. Series conf
 grouped by `seriesKey` and resolved per shelf, written as per-book
 `op: "resolve"` records. Metadata override and evaluation conflicts
 prompt per field. `archived_at` auto-resolves to the higher HLC of the archive choice itself
-(`archiveHlc`), not of the whole catalog record.
+(`archiveHlc`), not of the whole catalog record. Each catalog edition
+likewise carries its own `availabilityHlc` over its `driveFileId`,
+`fileName` and `uploadedAt`, minted only when upload or Drive-side removal
+changes them and carried unchanged through every other catalog update. The
+merge takes each edition's availability group from the higher
+`availabilityHlc`, so a newer record that still carries an old
+`driveFileId` cannot resurrect a link another device cleared, and a cleared
+edition stays in `editions[]` as the tombstone. The catalog merge is
+commutative.
 
 ### Synced domains
 
@@ -360,8 +402,11 @@ reading sessions (`remote_session_id`), and work aliases
   `hidden_at` stays local.
 - Catalog `del` is published only by **Delete from synced library**. The
   receiver removes `drive:` rows through `BookRemoval` and keeps
-  annotations. A book with a local file is unlinked from Drive, not
-  removed. A Drive-side EPUB delete only clears `driveFileId`.
+  annotations as hidden history that never recreates the shelf entry. A
+  book with a local file is unlinked from Drive, not removed. A Drive-side
+  EPUB delete only clears that edition's availability group
+  (`driveFileId`, `fileName`, `uploadedAt`) and stamps a new
+  `availabilityHlc`.
 - Annotation delete: the `annotations` row is gone but its
   `annotation_sync` row remains, so a `del` with `anc` is published. Book
   removal is not a delete.
@@ -512,8 +557,8 @@ Delta batch:
 
 A `vocabWord` `del` additionally carries `observed`, a
 `{deviceId: seq}` vector of the delta batches its author had applied; it is excluded from `delFp` and lets
-the receiver detect reviews the deleter never observed before it cascades
-any delete.
+the receiver detect reviews and occurrences the deleter never observed
+before it cascades any delete. Snapshots keep it on the `del` record.
 
 - A batch holds at most 2,000 records and 1 MiB; larger ones split into
   consecutive seqs.
@@ -563,7 +608,8 @@ Each snapshot part carries two sections (`docs/DRIVE_SYNC.md`):
   uncapped `resRefs` (winning resolution fps it causally descends from),
   plus all of its append-only records (`session`, `vocabReview`
   including review `del`s, and `furthest` resets). It never copies other
-  devices' records and never drops `del` records in v1.
+  devices' records and never drops `del` records in v1; a `vocabWord` `del` keeps its `observed`
+  vector.
 - `resolutions`: **all** durable completed resolution facts authored by
   this device (`{d, k, resolutionFp, resolvedFps, outcome, hlc}`),
   stored outside the 64-entry `anc` cap and never pruned in v1.
@@ -601,8 +647,15 @@ surviving delta applies the snapshot, which is idempotent.
    `series` → `evaluation` → `annotation` → `position` / `furthest` →
    `vocab*` → `session`. A book-scoped record (`metadata`, `series`,
    `evaluation`, `annotation`, `position`) whose `workKey` has no local
-   book and no catalog entry yet is deferred: its domain cursor stays put
-   and the record replays once the catalog creates the book. If the
+   book and no catalog state yet is deferred: its domain cursor stays put
+   and the record replays once the catalog creates the book. A catalog
+   tombstone counts as catalog state, so it never defers: after **Delete
+   from synced library** and compaction a snapshot can hold the `del`
+   beside retained annotations with no later catalog `put`. `annotation`
+   records then apply as hidden history under `drive:<workKey>` with no
+   `books` row, and `metadata`, `series`, `evaluation` and `position`
+   records are kept in `drive_record_state` only, so no cursor stalls and
+   the shelf entry never returns. If the
    author prunes those deltas meanwhile, the reader falls back to the
    author's snapshot, which carries the record's latest version.
 5. Among app-created `Liseur` folders, the one with the lowest
@@ -628,7 +681,7 @@ restored device gets its own `deviceId`.
 | `drive_cursor` | `(permission_id, device_id, domain)` | `applied_seq`, `paused_schema_version` |
 | `drive_file` | `(permission_id, file_id)` | `name`, `kind`, `device_id`, `seq`, `sha256`, `size`, `md5`, `trashed`, `created_time`; index `(permission_id, kind, sha256)` |
 | `drive_outbox` | `(permission_id, seq)` | `batch_id`, `payload`, `state` (BUILT / UPLOADED / ACKED), `file_id`, `created_at` |
-| `drive_record_state` | `(permission_id, domain, record_key)` | `version_fp`, `version_op`, `published_fp`, `content_fp`, `last_synced_revision`, `origin_device_id`, `origin_seq`, `ancestors_json`, `res_refs_json`, `last_hlc`, `body_json` |
+| `drive_record_state` | `(permission_id, domain, record_key)` | `version_fp`, `version_op`, `published_fp`, `content_fp`, `last_synced_revision`, `origin_device_id`, `origin_seq`, `ancestors_json`, `res_refs_json`, `last_hlc`, `body_json`, `observed_json` (`vocabWord` `del` only) |
 | `drive_resolution` | `(permission_id, domain, record_key, resolution_fp)` | `resolved_fps_json`, `outcome` (`put` / `delete`), `hlc`, `author_device_id`, `created_at` |
 | `drive_conflict` | `(permission_id, conflict_id)` | `domain`, `record_key`, `book_url`, `kind`, `local_fp`, `remote_fp`, `remote_json`, `remote_device_id`, `remote_hlc`, `state` (OPEN / RESOLVING / RESOLVED), `choice`, `resolution_fp`, `opened_at`, `resolved_at` |
 | `drive_session_ack` | `(permission_id, remote_session_id)` | `batch_seq`, `acked_at` |
@@ -807,7 +860,10 @@ Mutual exclusion invariant: never both `remote_server.id = 1` and a
    **all** catalog entries, including remote-only `drive:<workKey>` rows
    without a local EPUB. Non-custom embedded EPUB covers are extracted
    locally when the EPUB is downloaded.
-3. Vocabulary delete versus concurrent review or edit: add-wins, silently.
+3. Vocabulary delete versus concurrent review, occurrence or edit: add-wins,
+   silently. A review that arrives after the word's tombstone and was not
+   covered by its `observed` vector restores the word from the retained
+   deleted baseline.
 4. Concurrent differing resolutions: higher HLC wins silently by `(hlc,
    fp)` lexicographical order **only** when both current versions are
    themselves competing `op: "resolve"` records (whether keep-vs-keep or
@@ -835,8 +891,10 @@ Mutual exclusion invariant: never both `remote_server.id = 1` and a
 
 - Reconciliation reuses existing per-peer ack tables and domain merge
   logic (`reconcileReadingState`, `VocabularyMerge`, `WorkIdentifiers`)
-  with no `liseur.db` schema change except migration 84→85 for session
-  columns (`remote_session_id` + unique index, `origin_device_id`).
+  with no change to existing `liseur.db` tables except migration 84→85 for
+  session columns (`remote_session_id` + unique index, `origin_device_id`),
+  plus the new `drive_apply_receipt` table for crash recovery. The
+  protocol is unreleased, so no existing Drive data needs migrating.
 - Backup restore no longer duplicates device ids or sessions, because
   Drive state lives outside the backup and session ids derive from
   content, while per-account session delivery lives in
