@@ -8,6 +8,8 @@ import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
@@ -450,6 +452,137 @@ class DriveRestClientTest {
         assertEquals(503, (failure as DriveHttpException).httpCode)
         assertEquals(1, server.requestCount)
         assertTrue(sleepDelays.isEmpty())
+    }
+
+    @Test
+    fun `createAppDataFile sends one POST when a 503 carries Retry-After zero`() = runTest {
+        server.enqueue(
+            MockResponse.Builder()
+                .code(503)
+                .addHeader("Retry-After", "0")
+                .body("""{"error":{"message":"Backend error","errors":[{"reason":"backendError"}]}}""")
+                .build(),
+        )
+        server.enqueue(MockResponse.Builder().code(200).body("""{"id":"dup","name":"f.json"}""").build())
+
+        val failure = runCatching {
+            client.createAppDataFile(
+                accessToken = "tok",
+                name = "f.json",
+                mimeType = "application/json",
+                content = """{"ok":true}""".toByteArray(),
+                appProperties = mapOf("batchId" to "batch-uuid-1"),
+            )
+        }.exceptionOrNull()
+
+        assertTrue(failure is DriveHttpException)
+        assertEquals(503, (failure as DriveHttpException).httpCode)
+        assertEquals(1, server.requestCount)
+    }
+
+    @Test
+    fun `folder create sends one POST when a 503 carries Retry-After zero`() = runTest {
+        server.enqueue(MockResponse.Builder().code(200).body("""{"files":[]}""").build())
+        server.enqueue(
+            MockResponse.Builder()
+                .code(503)
+                .addHeader("Retry-After", "0")
+                .body("""{"error":{"message":"Backend error"}}""")
+                .build(),
+        )
+        server.enqueue(MockResponse.Builder().code(200).body("""{"id":"dup","name":"Liseur"}""").build())
+
+        val failure = runCatching { client.ensureLiseurFolder("tok") }.exceptionOrNull()
+
+        assertTrue(failure is DriveHttpException)
+        assertEquals(2, server.requestCount)
+    }
+
+    @Test
+    fun `resumable chunk fatal quota reasons fail at once instead of probing`() = runTest {
+        for (reason in listOf("quotaExceeded", "dailyLimitExceeded")) {
+            val before = server.requestCount
+            val sessionUrl = server.url("/upload/session/$reason").toString()
+            server.enqueue(MockResponse.Builder().code(200).addHeader("Location", sessionUrl).build())
+            server.enqueue(
+                MockResponse.Builder()
+                    .code(403)
+                    .body("""{"error":{"message":"quota","errors":[{"reason":"$reason"}]}}""")
+                    .build(),
+            )
+
+            val failure = runCatching {
+                client.uploadResumableFile(
+                    accessToken = "tok",
+                    name = "book.epub",
+                    mimeType = "application/epub+zip",
+                    totalBytes = 8L,
+                    parents = listOf("folder-1"),
+                    chunkSizeBytes = 4,
+                    openStream = { ByteArrayInputStream(ByteArray(8)) },
+                )
+            }.exceptionOrNull()
+
+            assertTrue(failure is DriveQuotaException)
+            assertEquals(2, server.requestCount - before)
+            assertTrue(sleepDelays.isEmpty())
+        }
+    }
+
+    @Test
+    fun `resumable chunk rate limit 429 still sleeps and probes before continuing`() = runTest {
+        val sessionUrl = server.url("/upload/session/rate").toString()
+        server.enqueue(MockResponse.Builder().code(200).addHeader("Location", sessionUrl).build())
+        server.enqueue(MockResponse.Builder().code(429).body("""{"error":{"message":"slow down"}}""").build())
+        server.enqueue(MockResponse.Builder().code(308).addHeader("Range", "bytes=0-3").build())
+        server.enqueue(MockResponse.Builder().code(200).body("""{"id":"done","name":"book.epub"}""").build())
+
+        val uploaded = client.uploadResumableFile(
+            accessToken = "tok",
+            name = "book.epub",
+            mimeType = "application/epub+zip",
+            totalBytes = 8L,
+            parents = listOf("folder-1"),
+            chunkSizeBytes = 4,
+            openStream = { ByteArrayInputStream(ByteArray(8)) },
+        )
+
+        assertEquals("done", uploaded.id)
+        assertEquals(1, sleepDelays.size)
+        assertEquals(4, server.requestCount)
+    }
+
+    @Test
+    fun `cancelling a download while the request is in flight closes the response`() {
+        val seen = mutableListOf<okhttp3.Response>()
+        val spying = okhttp3.OkHttpClient.Builder()
+            .addNetworkInterceptor { chain -> chain.proceed(chain.request()).also { seen += it } }
+            .build()
+        val base = server.url("/").toString().trimEnd('/')
+        val spied = DriveRestClient(
+            apiBaseUrl = "$base/drive/v3",
+            uploadBaseUrl = "$base/upload/drive/v3",
+            client = spying,
+        )
+        server.enqueue(
+            MockResponse.Builder()
+                .code(200)
+                .body("0123456789")
+                .headersDelay(500, TimeUnit.MILLISECONDS)
+                .build(),
+        )
+
+        kotlinx.coroutines.runBlocking {
+            val job = launch(kotlinx.coroutines.Dispatchers.Default) {
+                spied.downloadResumable("tok", "f", ByteArrayOutputStream(), startOffset = 0L, onRestartFromZero = {})
+            }
+            server.takeRequest()
+            job.cancelAndJoin()
+        }
+
+        assertEquals(1, seen.size)
+        val failure = runCatching { seen.single().body.source().readByte() }.exceptionOrNull()
+        assertTrue("response body must be closed, got $failure", failure is IllegalStateException)
     }
 
     @Test
