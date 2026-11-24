@@ -314,6 +314,17 @@ internal object DriveConflictEngine {
             )
         }
 
+        // A successor that carried this resolution in its lineage arrived first and is parked in an
+        // open conflict; it outranks R even when R's outcome equals what this device already holds.
+        val incomingWinsItsFps = incomingResolution != null &&
+            winningResolutionFor(allResolutions, decodeFps(incomingResolution.resolvedFpsJson))
+                ?.resolutionFp == incoming.fp
+        val successors = if (isIncomingResolve && incomingWinsItsFps) {
+            remainingOpenConflicts.filter { incoming.fp in remoteLineage(it) }
+        } else {
+            emptyList()
+        }
+
         // --------------------------------------------------------------------
         // CASE 1 — Agreement
         // --------------------------------------------------------------------
@@ -321,7 +332,7 @@ internal object DriveConflictEngine {
         val postCrashReplayAgreement = local.postCrashAckMatchesIncoming &&
             !local.hasPostCrashLocalEdit &&
             !incomingKnownAncestorOrRetired
-        if (incoming.fp == lFp || bothDeletions || postCrashReplayAgreement) {
+        if (incoming.fp == lFp || ((bothDeletions || postCrashReplayAgreement) && successors.isEmpty())) {
             val mergedResRefs = buildSet {
                 addAll(local.resRefs)
                 addAll(incoming.resRefs)
@@ -428,14 +439,6 @@ internal object DriveConflictEngine {
 
             // 2-pre. A successor that carried this resolution in its lineage arrived first and is
             // parked in an open conflict. The successor descends from R, so R's own outcome is older.
-            val incomingWinsItsFps = incomingResolution != null &&
-                winningResolutionFor(allResolutions, decodeFps(incomingResolution.resolvedFpsJson))
-                    ?.resolutionFp == incoming.fp
-            val successors = if (incomingWinsItsFps) {
-                remainingOpenConflicts.filter { incoming.fp in remoteLineage(it) }
-            } else {
-                emptyList()
-            }
             if (successors.isNotEmpty()) {
                 val tips = successors
                     .filter { c -> successors.none { o -> o.remoteFp != c.remoteFp && c.remoteFp in decodeFps(o.remoteAncJson) } }
