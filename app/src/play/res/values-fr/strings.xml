@@ -199,6 +199,7 @@
     </plurals>
     <plurals name="drive_sync_vocabulary_count">
         <item quantity="one">%d mot enregistré</item>
+        <item quantity="many">%d mots enregistrés</item>
         <item quantity="other">%d mots enregistrés</item>
     </plurals>
     <plurals name="drive_sync_pending_uploads_count">

@@ -179,7 +179,7 @@
     <string name="drive_sync_connecting">Připojování ke Google Drive…</string>
     <string name="drive_sync_needs_reconnect_detail">Autorizace Google Drive vypršela nebo byla odvolána. Pro pokračování v synchronizaci se znovu připojte.</string>
     <string name="drive_sync_switch_title">Synchronizovat s %1$s?</string>
-    <string name="drive_sync_switch_body_summary">Liseur bude synchronizovat vaši místní knihovnu s účtem %1$s: %2$s, %3$s, %4$s a %5$s.</string>
+    <string name="drive_sync_switch_body_summary">Liseur synchronizuje vaši místní knihovnu s %1$s: %2$s, %3$s, %4$s a %5$s.</string>
     <string name="drive_sync_switch_body_keep_previous">Váš předchozí účet (%1$s) zůstane v tomto zařízení pozastavený a jeho stav synchronizace zůstane zachován.</string>
     <string name="drive_sync_switch_body_disconnect_server">Váš současný knižní server bude odpojen. Stažené knihy, historie čtení a katalogy jen k procházení zůstanou zachovány.</string>
     <string name="drive_sync_switch_confirm">Synchronizovat s tímto účtem</string>

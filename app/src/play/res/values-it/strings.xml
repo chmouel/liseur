@@ -173,7 +173,7 @@
     <string name="drive_sync_connecting">Connessione a Google Drive…</string>
     <string name="drive_sync_needs_reconnect_detail">L\'autorizzazione di Google Drive è scaduta o è stata revocata. Riconnettiti per riprendere la sincronizzazione.</string>
     <string name="drive_sync_switch_title">Sincronizzare con %1$s?</string>
-    <string name="drive_sync_switch_body_summary">Liseur sincronizzerà la tua libreria locale con %1$s: %2$s, %3$s, %4$s e %5$s.</string>
+    <string name="drive_sync_switch_body_summary">Liseur sincronizzerà la libreria locale con %1$s: %2$s, %3$s, %4$s e %5$s.</string>
     <string name="drive_sync_switch_body_keep_previous">Il tuo account precedente (%1$s) rimarrà in pausa su questo dispositivo mantenendo il proprio stato di sincronizzazione.</string>
     <string name="drive_sync_switch_body_disconnect_server">Il server di libri attuale verrà disconnesso. I libri scaricati, la cronologia di lettura e i cataloghi di sola consultazione verranno conservati.</string>
     <string name="drive_sync_switch_confirm">Sincronizza con questo account</string>
