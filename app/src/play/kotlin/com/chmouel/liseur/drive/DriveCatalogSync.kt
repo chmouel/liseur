@@ -321,7 +321,7 @@ internal class DriveCatalogSync(
             }
             store.withTransaction {
                 for (sha in shasToClear) {
-                    uploads.delete(permissionId, sha)
+                    dropUpload(permissionId, sha)
                 }
                 val current = recordStates.get(permissionId, DriveWireCodec.DOMAIN_CATALOG, canonical)
                 val pendingTrash = current?.takeIf { it.versionOp == DriveRecordState.OP_DEL }
@@ -948,8 +948,8 @@ internal class DriveCatalogSync(
         book: Book,
         requiredSha256: String? = null,
     ): Pair<String, String>? {
-        val workKey = workIdentity.resolveBook(permissionId, book, computeFingerprintIfMissing = false)
-            ?.workId
+        val alias = workIdentity.resolveBook(permissionId, book, computeFingerprintIfMissing = false)
+        val workKey = alias?.workId
             ?.let { workIdentity.canonicalWorkKey(permissionId, it) }
             ?: book.url.takeIf { it.startsWith(DriveWorkIdentity.DRIVE_BOOK_URL_PREFIX) }
                 ?.removePrefix(DriveWorkIdentity.DRIVE_BOOK_URL_PREFIX)
@@ -960,7 +960,8 @@ internal class DriveCatalogSync(
         val body = catalogState?.bodyJson?.let {
             runCatching { DriveWireCodec.decodeCatalogBody(JSONObject(it)) }.getOrNull()
         }
-        val required = requiredSha256?.lowercase(Locale.ROOT)
+        // A removed download keeps its alias, so a later download fetches the same edition.
+        val required = (requiredSha256 ?: alias?.editionSha)?.lowercase(Locale.ROOT)
         val editions = body?.editions.orEmpty().filter { ed ->
             required == null || ed.sha256.equals(required, ignoreCase = true)
         }

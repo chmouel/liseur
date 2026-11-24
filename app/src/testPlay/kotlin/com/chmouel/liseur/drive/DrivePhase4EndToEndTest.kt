@@ -1319,6 +1319,140 @@ class DrivePhase4EndToEndTest {
     }
 
     @Test
+    fun `removing an installed second edition and downloading again fetches the same edition`() = runTest {
+        deviceA.connect()
+        deviceB.connect()
+        val isbn = "9780547928500"
+        // Catalog editions are sorted by SHA-256, so the edition installed first sorts last once
+        // the other one is published: a lookup that ignores the installed SHA would pick the wrong file.
+        val byBytes = listOf("EDITION-A", "EDITION-B").map { it.toByteArray() }
+            .sortedByDescending { BookFingerprints.of(ByteArrayInputStream(it)).sha256 }
+        val installedBytes = byBytes.first()
+        val installedSha = BookFingerprints.of(ByteArrayInputStream(installedBytes)).sha256.lowercase()
+        val installedBook = seedBook(deviceA, "ed-installed.epub", isbn, "Editions", "Author", customBytes = installedBytes)
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        assertEquals(1, deviceA.epubTransfers.queueSelectedBooks(PERM_ID, setOf(installedBook.url)))
+        assertEquals(1, deviceA.epubTransfers.uploadPending().uploadedCount)
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+        val stubB = "drive:isbn:$isbn"
+        assertTrue(deviceB.epubTransfers.downloadBook(stubB) is DriveEpubDownloadOutcome.Downloaded)
+
+        val other = seedBook(deviceA, "ed-other.epub", isbn, "Editions", "Author", customBytes = byBytes.last())
+        assertEquals(1, deviceA.epubTransfers.queueSelectedBooks(PERM_ID, setOf(installedBook.url, other.url)))
+        assertEquals(1, deviceA.epubTransfers.uploadPending().uploadedCount)
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+
+        val installed = deviceB.liseurDb.bookDao().getByUrl(stubB)!!
+        assertTrue(deviceB.driveSync.canDownloadAgain(installed))
+        File(java.net.URI(installed.localUri!!)).delete()
+        BookRemoval(
+            bookDao = deviceB.liseurDb.bookDao(),
+            sessionDao = deviceB.liseurDb.readingSessionDao(),
+            peerStateDao = deviceB.liseurDb.syncPeerStateDao(),
+            identityDao = deviceB.liseurDb.workIdentityDao(),
+            progressDao = deviceB.liseurDb.readingProgressDao(),
+            annotationDao = deviceB.liseurDb.annotationDao(),
+            annotationSyncDao = deviceB.liseurDb.annotationSyncDao(),
+            inTransaction = { work -> deviceB.liseurDb.withTransaction { work() } },
+        ).downloadRemoved(stubB)
+        assertNull(deviceB.liseurDb.workIdentityDao().fingerprint(stubB))
+
+        assertTrue(deviceB.epubTransfers.downloadBook(stubB) is DriveEpubDownloadOutcome.Downloaded)
+        val redownloaded = deviceB.liseurDb.bookDao().getByUrl(stubB)!!
+        assertEquals(
+            installedSha,
+            BookFingerprints.of(File(java.net.URI(redownloaded.localUri!!)).inputStream()).sha256.lowercase(),
+        )
+    }
+
+    @Test
+    fun `an incoming catalog deletion keeps the session of an interrupted upload for cleanup`() = runTest {
+        deviceA.connect()
+        val book = seedBook(deviceA, "remote-del.epub", "9780547928500", "Remote Del", "Author", customBytes = "EPUB-REMOTE-DEL".toByteArray())
+        val sha = deviceA.liseurDb.workIdentityDao().fingerprint(book.url)!!.sha256
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        assertEquals(1, deviceA.epubTransfers.queueSelectedBooks(PERM_ID, setOf(book.url)))
+        driveServer.onUploadResumableFinalPut = { name ->
+            if (name == "Remote Del.epub") throw kotlinx.coroutines.CancellationException("response lost")
+        }
+        try {
+            assertTrue(runCatching { deviceA.epubTransfers.uploadPending() }.exceptionOrNull() is kotlinx.coroutines.CancellationException)
+        } finally {
+            driveServer.onUploadResumableFinalPut = null
+        }
+        assertNotNull(deviceA.driveDb.uploads().get(PERM_ID, sha)!!.sessionUri)
+
+        val key = deviceA.driveDb.recordStates().forDomain(PERM_ID, DriveWireCodec.DOMAIN_CATALOG).single().recordKey
+        val hlc = "0099999999999-0001-dev-b"
+        deviceA.driveSync.catalogSync.applyRemoteRecord(
+            permissionId = PERM_ID,
+            record = DriveWireRecord(
+                d = DriveWireCodec.DOMAIN_CATALOG,
+                k = key,
+                op = DriveRecordState.OP_DEL,
+                hlc = hlc,
+                fp = DriveCanonicalJson.delFp(DriveWireCodec.DOMAIN_CATALOG, key, hlc),
+            ),
+            remoteDeviceId = "dev-b",
+            remoteSeq = 1L,
+        )
+
+        assertEquals(DriveUpload.STATE_CANCELLED, deviceA.driveDb.uploads().get(PERM_ID, sha)!!.state)
+        deviceA.epubTransfers.uploadPending()
+        assertTrue(driveServer.epubFilesSnapshot().single().trashed)
+        assertNull(deviceA.driveDb.uploads().get(PERM_ID, sha))
+    }
+
+    @Test
+    fun `a picker write racing a completed upload keeps the uploaded row`() = runTest {
+        deviceA.connect()
+        val book = seedBook(deviceA, "picker-race.epub", "9780547928500", "Picker Race", "Author", customBytes = "EPUB-PICKER-RACE".toByteArray())
+        val sha = deviceA.liseurDb.workIdentityDao().fingerprint(book.url)!!.sha256
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        assertEquals(1, deviceA.epubTransfers.queueSelectedBooks(PERM_ID, setOf(book.url)))
+        val manager = DriveEpubTransferManager(
+            context = context,
+            database = deviceA.liseurDb,
+            store = deviceA.driveDb,
+            driveApi = driveServer.clientFor("dev-a"),
+            workIdentity = deviceA.driveSync.workIdentity,
+            catalogSync = deviceA.driveSync.catalogSync,
+            fingerprintStore = deviceA.driveSync.fingerprintStore,
+            acquireToken = { SilentTokenResult.Token(accessToken = "token-dev-a", permissionId = PERM_ID) },
+            stagingDirProvider = { deviceA.stagingDir },
+            // The upload finishes after the picker decided to write but before it does.
+            beforeQueueWrite = { deviceA.driveDb.uploads().markUploaded(PERM_ID, sha, "done-file", 5L) },
+        )
+
+        assertEquals(0, manager.queueSelectedBooks(PERM_ID, setOf(book.url)))
+
+        val row = deviceA.driveDb.uploads().get(PERM_ID, sha)!!
+        assertEquals(DriveUpload.STATE_UPLOADED, row.state)
+        assertEquals("done-file", row.fileId)
+        assertNull(row.sessionUri)
+    }
+
+    @Test
+    fun `cleanup clears a cancelled row that never got a session or file`() = runTest {
+        deviceA.connect()
+        val book = seedBook(deviceA, "no-session.epub", "9780547928500", "No Session", "Author", customBytes = "EPUB-NO-SESSION".toByteArray())
+        val sha = deviceA.liseurDb.workIdentityDao().fingerprint(book.url)!!.sha256
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        deviceA.driveDb.uploads().upsert(
+            DriveUpload(
+                permissionId = PERM_ID, sha256 = sha, bookUrl = book.url, sizeBytes = 1L,
+                state = DriveUpload.STATE_CANCELLED, selectedAt = 1L, updatedAt = 1L,
+            ),
+        )
+
+        deviceA.epubTransfers.uploadPending()
+
+        assertNull(deviceA.driveDb.uploads().get(PERM_ID, sha))
+    }
+
+    @Test
     fun `confirming the upload picker drops queued books the reader unchecked`() = runTest {
         deviceA.connect()
         val first = seedBook(deviceA, "first.epub", "9780547928227", "First", "Author", customBytes = "EPUB-FIRST".toByteArray())

@@ -88,6 +88,7 @@ internal class DriveEpubTransferManager(
     private val clock: () -> Long = System::currentTimeMillis,
     private val afterUploadRequest: suspend () -> Unit = {},
     private val beforeUploadStart: suspend () -> Unit = {},
+    private val beforeQueueWrite: suspend () -> Unit = {},
 ) {
     private val books get() = database.bookDao()
     private val identities get() = database.workIdentityDao()
@@ -178,42 +179,43 @@ internal class DriveEpubTransferManager(
             if (alias?.confidence == WorkAlias.REJECTED) {
                 identities.upsert(alias.copy(confidence = WorkAlias.HIGH, confirmed = true, seeded = false))
             }
-            val existing = uploads.get(permissionId, sha)
-            if (existing?.state == DriveUpload.STATE_UPLOADED && !existing.fileId.isNullOrBlank()) {
-                continue
-            }
-            // Re-selecting a cancelled edition never adopts its old session or file, which cleanup
-            // may already be trashing: cleanup finishes first, then turns the row into a fresh upload.
-            if (existing?.state == DriveUpload.STATE_REQUEUE) {
-                queued++
-                continue
-            }
-            if (existing?.state == DriveUpload.STATE_CANCELLED) {
-                if (uploads.transition(permissionId, sha, existing.state, DriveUpload.STATE_REQUEUE, now) > 0) {
-                    queued++
-                    continue
+            beforeQueueWrite()
+            // One transaction: an upload that completes between the read and the write must not be
+            // downgraded to PENDING, nor have its finished session restored.
+            val wasQueued = store.withTransaction {
+                val existing = uploads.get(permissionId, sha)
+                if (existing?.state == DriveUpload.STATE_UPLOADED && !existing.fileId.isNullOrBlank()) {
+                    return@withTransaction false
                 }
-                // Cleanup finished meanwhile and removed the row: queue a fresh upload below.
+                // Re-selecting a cancelled edition never adopts its old session or file, which cleanup
+                // may already be trashing: cleanup finishes first, then turns the row into a fresh upload.
+                if (existing?.state == DriveUpload.STATE_REQUEUE) return@withTransaction true
+                if (existing?.state == DriveUpload.STATE_CANCELLED) {
+                    if (uploads.transition(permissionId, sha, existing.state, DriveUpload.STATE_REQUEUE, now) > 0) {
+                        return@withTransaction true
+                    }
+                }
+                val reuse = existing?.takeIf {
+                    it.state == DriveUpload.STATE_PENDING || it.state == DriveUpload.STATE_UPLOADING ||
+                        it.state == DriveUpload.STATE_FAILED
+                }
+                uploads.upsert(
+                    DriveUpload(
+                        permissionId = permissionId,
+                        sha256 = sha,
+                        bookUrl = book.url,
+                        sizeBytes = fp.size.coerceAtLeast(0L),
+                        state = DriveUpload.STATE_PENDING,
+                        sessionUri = reuse?.sessionUri,
+                        bytesSent = reuse?.bytesSent ?: 0L,
+                        fileId = null,
+                        selectedAt = reuse?.selectedAt ?: now,
+                        updatedAt = now,
+                    ),
+                )
+                true
             }
-            val reuse = uploads.get(permissionId, sha)?.takeIf {
-                it.state == DriveUpload.STATE_PENDING || it.state == DriveUpload.STATE_UPLOADING ||
-                    it.state == DriveUpload.STATE_FAILED
-            }
-            uploads.upsert(
-                DriveUpload(
-                    permissionId = permissionId,
-                    sha256 = sha,
-                    bookUrl = book.url,
-                    sizeBytes = fp.size.coerceAtLeast(0L),
-                    state = DriveUpload.STATE_PENDING,
-                    sessionUri = reuse?.sessionUri,
-                    bytesSent = reuse?.bytesSent ?: 0L,
-                    fileId = null,
-                    selectedAt = reuse?.selectedAt ?: now,
-                    updatedAt = now,
-                ),
-            )
-            queued++
+            if (wasQueued) queued++
         }
         queued
     }
@@ -252,7 +254,7 @@ internal class DriveEpubTransferManager(
             if (upload.state != DriveUpload.STATE_CANCELLED && upload.state != DriveUpload.STATE_REQUEUE) continue
             // A cancelled worker's request may still be running: until it returns, an unfinished
             // session can yet complete, so its obligation stays.
-            if (upload.fileId == null && upload.sessionUri in inFlightSessions) {
+            if (upload.fileId == null && upload.sessionUri?.let { it in inFlightSessions } == true) {
                 clean = false
                 continue
             }
