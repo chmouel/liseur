@@ -582,11 +582,16 @@ internal class DriveCatalogSync(
         }
         val remoteOnlyUrls = mutableListOf<String>()
         val unlinks = mutableListOf<Pair<String, String?>>()
+        val sharedStubs = mutableListOf<Pair<String, String?>>()
         for ((url, target) in targets) {
             val (book, staleWorkId) = target
             identities.fingerprint(url)?.sha256?.lowercase(Locale.ROOT)?.let(shas::add)
-            if (url.startsWith(DriveWorkIdentity.DRIVE_BOOK_URL_PREFIX) && book.localUri == null) {
+            val remoteOnly = url.startsWith(DriveWorkIdentity.DRIVE_BOOK_URL_PREFIX) && book.localUri == null
+            if (remoteOnly && !identities.hasAliasFromOtherPeer(url, peerId)) {
                 remoteOnlyUrls.add(url)
+            } else if (remoteOnly) {
+                // Another account still references this stub: only this account's link goes.
+                sharedStubs.add(url to staleWorkId)
             } else {
                 unlinks.add(url to staleWorkId)
             }
@@ -594,8 +599,12 @@ internal class DriveCatalogSync(
         if (remoteOnlyUrls.isNotEmpty()) {
             removal.deleteByUrls(remoteOnlyUrls)
         }
-        if (unlinks.isNotEmpty()) {
+        if (unlinks.isNotEmpty() || sharedStubs.isNotEmpty()) {
             database.withTransaction {
+                for ((bookUrl, staleWorkId) in sharedStubs) {
+                    if (staleWorkId != null) identities.deleteAliasIfStale(bookUrl, peerId, staleWorkId)
+                    identities.clearAmbiguity(bookUrl, peerId)
+                }
                 for ((bookUrl, staleWorkId) in unlinks) {
                     val alias = identities.alias(bookUrl, peerId)
                     if (alias != null && alias.workId == staleWorkId) {

@@ -509,6 +509,7 @@ internal class DriveMetadataSync(
 
         var appliedRev: Long? = null
         var staleLocal = false
+        var coverInstallFailed = false
         val now = clock()
 
         // Transaction 1 (`liseur.db`): apply override + revision + atomic `metadata_override_sync` ack.
@@ -526,7 +527,10 @@ internal class DriveMetadataSync(
                         is DriveMetadataBody.Cover -> {
                             val file = downloadedCoverFile
                                 ?.let { coverCodec.installForBook(bookUrl, body.coverSha256) }
-                                ?: return@withTransaction
+                            if (file == null) {
+                                coverInstallFailed = true
+                                return@withTransaction
+                            }
                             books.setCoverOverride(bookUrl, file.absolutePath, body.coverSha256)
                         }
                     }
@@ -614,6 +618,8 @@ internal class DriveMetadataSync(
         }
         // Defer: the record replays and reconciles against the reader's newer edit.
         if (staleLocal) return false
+        // Nothing was applied or acknowledged, so the record replays once the install can succeed.
+        if (coverInstallFailed) return false
 
         // Transaction 2 (`drive_sync.db`): commit Step 0 side effects + causal state BEFORE cursor advance.
         store.withTransaction {
