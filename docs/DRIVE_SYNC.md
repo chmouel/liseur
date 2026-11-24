@@ -235,7 +235,8 @@ Record envelope fields:
 | `observed` | `Object<deviceId, seq>` | Only when `d == "vocabWord" && op == "del"` | Vector of the highest delta `seq` the deleting device had applied from each other device when it authored the delete — the causal boundary for the word's reviews and occurrences (§4.9). A value that is not an object decodes to `{}`, which keeps data. Absent otherwise. Excluded from `delFp` (§1.3). Snapshots keep it on the `del` record. |
 | `restore` | `Object` | Only when `d == "vocabWord" && op == "del"` (required there) | `{"fp": <version `fp` of the last live word version>, "hlc": <record hlc of that version>, "body": <that full vocabWord body, §4.9>}`: the parent content a receiver needs to restore the word when a review or occurrence it did not cover arrives later. It is the last live version the deleter held before deleting, so `fp` is `anc[0]`. The record's own `body` stays `null`, so the general `op: "del"` contract is unchanged. Excluded from `delFp`. Snapshots keep it on the `del` record, so a device rebuilt from snapshots has it. A `del` without a valid `restore` is malformed: it is not applied (no cascade, nothing is deleted), it counts as committed for the batch cursor (§3.3), and the receiver logs it. |
 | `seq` | `Long` | Snapshot `vocabOccurrence` / `vocabReview` records only | The author's delta `seq` that first published this version. Readers store it as the record's provenance instead of `snapshot.throughSeq`, so a later `vocabWord` `del` whose `observed` vector covers that seq still counts the record as seen. `throughSeq` only advances cursors. A record with no known provenance counts as unseen. |
-| `revives` | `Object` | Only when `d == "vocabWord" && op == "put"` and the put is a revival (§4.9) | `{"del": <delFp>, "restore": <restore.fp>}`. Required exactly when `fp` is a `reviveFp` (§1.3); a receiver recomputes `reviveFp(revives.del, revives.restore)` and rejects the record as malformed if it differs from `fp`. `anc` is `[revives.del, revives.restore]` followed by the revived version's other ancestry. Excluded from `fp`. |
+| `revives` | `Object` | Only when `d == "vocabWord" && op == "put"` and the put is a revival (§4.9) | `{"del": <delFp>, "restore": <restore.fp>, "delRecord": {...}}`. Required exactly when `fp` is a `reviveFp` (§1.3); a receiver recomputes `reviveFp(revives.del, revives.restore)` and rejects the record as malformed if it differs from `fp`. `delRecord` is the complete originating `del` as its author wrote it: `{"hlc", "anc", "resRefs", "observed", "restore"}` (the `del` fields above, without `d`, `k`, `op`, `body` and `fp`, which are `revives.del`). It lets a receiver that never saw the `del` order it against a later concurrent delete (hlc, ancestry) and judge children against its `observed` vector (§4.9). The record is malformed, and not applied, if `delFp(d, k, delRecord.hlc) != revives.del` or `delRecord.restore.fp != revives.restore`. `anc` is `[revives.del, revives.restore]` followed by the revived version's other ancestry. Excluded from `fp`. Snapshots keep it on the revival record. |
+| `origin` | `Object \| null` | `vocabReview` and `vocabOccurrence` records that re-send a version already published (an add-wins keep or a revival, §4.9) | `{"deviceId": <String>, "seq": <Long>}`: the provenance of the child version itself, copied from the republisher's stored provenance, so the version keeps the same `(deviceId, seq)` on every copy and a review first published as `C:5` still reads `C:5` when X re-sends it in batch `X:9`. It is also set when the republisher is the author (`origin = {X, <first seq>}`). `null` means the republisher never knew the provenance, and the copy counts as unseen. Absent on a first publication, whose provenance is the envelope's `deviceId` and the batch `seq` (the `seq` field for a snapshot record). Excluded from `fp`. Snapshots keep it. |
 
 **One version of a `(d, k)` per batch.** A delta holds at most one record for
 each `(d, k)`, so the authored-record key `(permission_id, domain,
@@ -254,7 +255,8 @@ above split between versions, never inside one batch.
 **Oversized records.** A record is *oversized* when a batch holding only that
 record would exceed 1 MiB, so splitting the queue cannot make it publishable.
 The wire sets no length bound on an annotation `note` (§4.7) and `resRefs` is
-uncapped, so one valid record can get there. Liseur never truncates, drops or
+uncapped on puts, deletes and resolutions alike, so one valid record can get
+there. Liseur never truncates, drops or
 rewrites such a record, and the local row is untouched. The record is
 **withheld**:
 
@@ -270,7 +272,19 @@ rewrites such a record, and the local row is untouched. The record is
 - Peers keep the last version they received. The next version of the same
   `(d, k)` that fits (the reader shortens the note) publishes normally, with
   the withheld versions' fps in its `anc` like any superseded version. A `del`
-  is small, so deleting a withheld record publishes a normal `del`.
+  has `body: null` and a capped `anc`, so it overflows only through its
+  uncapped `resRefs` (or, for `vocabWord`, an unusually large `restore`), and
+  the same rule applies to it. Two causes therefore behave differently:
+  - **Body-only overflow** (a long note): deleting the record, or shortening
+    the note, makes the next version fit, so the `del` publishes as a normal
+    record.
+  - **Ancestry overflow** (`resRefs` alone exceed 1 MiB): `resRefs` is carried
+    forward across every successor, so a shortened body or a `del` inherits
+    the same list and is just as oversized. Each such version is withheld the
+    same way, stays owed, and is reported. The local row, including a local
+    deletion, is unchanged, peers keep the last version they received, and
+    nothing in the reader's reach shortens the list. A withheld `del` never
+    enters `drive_authored_record`, so no snapshot holds it either.
 - A local `resolve` that is oversized is withheld the same way and its
   conflict stays `RESOLVING`. It does not hold back a later version of the
   key whose own record fits: that version publishes alone (the "resolve goes
@@ -357,6 +371,9 @@ against `manifest.snapshot.parts[].sha256` before parsing.
      the snapshot beside the `del` that undid it.
    - `vocabOccurrence` and `vocabReview` records also carry `seq`, their original
      publication seq (Section 2.3), so delete observed vectors still apply to them.
+     A republished child also keeps its `origin` (Section 2.3), and a revival
+     keeps `revives.delRecord`, so a device rebuilt from snapshots judges
+     children and orders deletes exactly as one that read the deltas.
    - Never copies records authored by other devices.
    - **Source: `drive_authored_record`, not `drive_record_state`.**
      `drive_record_state` holds one *current* version per key and is
@@ -478,9 +495,9 @@ snapshot, `R.seq = snapshot.throughSeq`):
    with a matching per-peer ack after crash recovery):** No conflict. Merge
    `anc(L) := cap64(anc(L) ∪ R.anc)` and `res_refs(L) := res_refs(L) ∪
    R.resRefs`. For concurrent `del`s, adopt the higher `(hlc, fp)` as `L`,
-   together with that `del`'s own `restore` and `observed` payloads
-   (`restore_json`, `observed_json`, §4.9): the fingerprint, `restore` and
-   `observed` of `L` always come from one record, and the losing `del`'s
+   together with that `del`'s own `restore`, `observed`, `hlc` and `anc`
+   (`restore_json`, `observed_json`, `del_json`, §4.9): the fingerprint,
+   `restore` and `observed` of `L` always come from one record, and the losing `del`'s
    payloads are discarded, never copied beside the winning `fp`, so every
    delivery order of two distinct deletes yields the same causal boundary.
    For concurrent live puts with equal bodies, adopt the higher `(hlc, fp)`
@@ -588,7 +605,7 @@ Every apply and outbox ACK commits **Transaction 1 (`liseur.db`) first**, then
 | `annotation` (`annotations` + `annotation_sync`) | `annotation_sync.acked_fingerprint = contentFp` (or `"DELETED"` on delete/delete-resolution), plus a `drive_apply_receipt` row (§3.3) in the same Tx 1. | `acked_fingerprint` alone cannot name the applied wire version: a keep-body resolution leaves it unchanged, so an edit made after the crash looks like one made before the resolution. Use the receipt. Receipt `version_fp == R.fp` and row unchanged since the apply (`row_fp` equal) → Agreement (repair `drive_record_state`, advance cursor). Row edited after the apply → post-apply edit rule (§3.3): the edit stays dirty, `R.fp` joins its `anc`, replay is Stale. No receipt for `R.fp` → Tx 1 never committed; apply normally. |
 | `evaluation` (`book_evaluation` + `evaluation_sync`) | Revision-to-fingerprint adapter: `rev = max(row.revision, sync.acked_revision) + 1` is written to `book_evaluation.revision`, `acked_revision` and `sent_revision`, with `sent_json = {"vfp": "<fp>", "cfp": "<contentFp>", "rev": <rev>}`. Every Tx 1 that changes `sent_json.vfp` (remote apply, unchanged-outcome resolution, local resolution, outgoing ACK) strictly raises `acked_revision`. | When `drive_record_state.last_synced_revision < sync.acked_revision` (always true after a Tx 1-only commit, because of the strict raise): if `row.revision == sync.acked_revision`, recompute `contentFp` from committed `book_evaluation` row (or `"DELETED"` if `value == null`), pair with `sent_json.vfp`, and repair `drive_record_state`. If `row.revision > sync.acked_revision`, the post-crash edit becomes a new local version with `sent_json.vfp` first in its `anc`, kept dirty (`row.owed(sync) == true`). Its op follows the row: `value != null` is a put (mint a fresh HLC `h`, `L := putFp(<body built from the row>, h)`, `content_fp := contentFp(<body>)`); `value == null` (the reader cleared the rating or review) is a **delete** (mint `h`, `L := delFp(d, k, h)`, `version_op := "del"`, `body_json := NULL`), and the tombstone is owed. Recovery never builds a put from a null value (invalid, §4.8). |
 | `metadata` (`books` + `metadata_override_revision` + `metadata_override_sync`) | Same revision-to-fingerprint adapter on `metadata_override_sync` (`acked_revision`, `sent_revision`, `sent_json`), with `rev` raised the same way on `metadata_override_revision.revision`, plus `remote_cover_sha256` & `adopted` for `cover`. | Identical to `evaluation`: recompute `contentFp` from committed `books` override columns when `rev.revision == sync.acked_revision`. If the reader edited again before recovery ran, the edit is a new local version with `sent_json.vfp` first in its `anc`: an override still set is a put (fresh HLC, `putFp`); an override the reader reset (`*_override = 0`, §4.3) is a **delete** (`delFp(d, k, h)`, `body_json := NULL`, tombstone owed), never a put rebuilt from the fallback file/catalog value, which would restore the cleared override. |
-| `vocabWord` + `vocabOccurrence` (`vocabulary_*` + `vocabulary_word_sync`) | `vocabulary_word_sync.acked_fingerprint` + `acked_base_json`, plus a `drive_apply_receipt` row (§3.3) in the same Tx 1 for every word version that Tx 1 makes current: a remote apply, or a revival or add-wins keep this device mints (§4.9). | `acked_fingerprint` is `contentFp` of the row and cannot name a revival (`reviveFp`), so word recovery uses the receipt (§3.3), never `contentFp` of the row. After a crash between Tx 1 and Tx 2 of a revival, `L` is restored to `reviveFp` with its `anc` and `revives`, so a replay of the `del`, even after the triggering review is undone, is Stale. A word `del` that reaches Agreement rewrites `restore_json` and `observed_json` from `R` only when `R.fp` is (or becomes) `L`; when `L` is a distinct concurrent `del` that wins on `(hlc, fp)` (§3.1 Step 2), the stored payloads stay and `R`'s are discarded, so `fp`, `restore` and `observed` never come from different deletes. Occurrences are a separate domain; their merge is commutative and idempotent (§4.10), so replay reproduces the same result without a receipt. A word `del` also stores its `restore` and `observed` payloads (`restore_json`, `observed_json`, §4.9). |
+| `vocabWord` + `vocabOccurrence` (`vocabulary_*` + `vocabulary_word_sync`) | `vocabulary_word_sync.acked_fingerprint` + `acked_base_json`, plus a `drive_apply_receipt` row (§3.3) in the same Tx 1 for every word version that Tx 1 makes current: a remote apply, or a revival or add-wins keep this device mints (§4.9). | `acked_fingerprint` is `contentFp` of the row and cannot name a revival (`reviveFp`), so word recovery uses the receipt (§3.3), never `contentFp` of the row. After a crash between Tx 1 and Tx 2 of a revival, `L` is restored to `reviveFp` with its `anc`, `revives` and `del_json`, so a replay of the `del`, even after the triggering review is undone, is Stale. A word `del` that reaches Agreement rewrites `restore_json`, `observed_json` and `del_json` from `R` only when `R.fp` is (or becomes) `L`; when `L` is a distinct concurrent `del` that wins on `(hlc, fp)` (§3.1 Step 2), the stored payloads stay and `R`'s are discarded, so `fp`, `hlc`, `anc`, `restore` and `observed` never come from different deletes. Occurrences are a separate domain; their merge is commutative and idempotent (§4.10), so replay reproduces the same result without a receipt. A word `del` also stores its `restore` and `observed` payloads (`restore_json`, `observed_json`, §4.9). |
 | `vocabReview` (`vocabulary_reviews` + `vocabulary_review_sync`) | `UNIQUE(wordId, syncId)` + `vocabulary_review_sync(peer_id, review_id, acked_deleted)`. | `INSERT OR IGNORE` + idempotent `reconcileSchedule`; replay inserts 0 rows and produces identical SRS state. |
 | `session` (`reading_sessions` + `drive_session_ack`) | `UNIQUE INDEX` on `reading_sessions.remote_session_id`. | Incoming pull uses `INSERT OR IGNORE` — replay after crash inserts 0 rows, so session counts once. Outbound upload tracks per-account delivery in `drive_session_ack`. |
 | `series` / `catalog` (`books`) | `drive_apply_receipt` row written in the same Tx 1 as the `books` writes (§3.3). `drive_record_state` stores `version_fp`, `published_fp`, `content_fp`, `body_json`. | Receipt recovery (§3.3) and local diffing run **before** pulling. The bare `books` row cannot reproduce a catalog wire fp (it has no `archiveHlc`, edition availability or `updatedAt`), so recovery compares a row projection with the receipt and never `contentFp(book)` with `contentFp(R.body)`. Row unchanged since the apply → restore `drive_record_state` from the receipt, advance the cursor on replay. Row edited after the apply → the edit becomes a new local version whose `anc` holds `R.fp`, so replay is Stale and no spurious `series` conflict opens. |
@@ -623,7 +640,7 @@ every local edit and every applied remote version (§3.2).
 | `row_fp` | Fingerprint of the row projection after the apply, or `"DELETED"`. The projection is the set of body fields the domain stores in `liseur.db`: `annotation`, `series` and `vocabWord` use the whole body (minus `editionSha` for annotations); `catalog` uses `title`, `author`, `fileSeriesName`, `fileSeriesIndex`, `addedAt` and `archivedAt` only. |
 | `republish` | `1` when `body_json` differs from `R.body`, so the merged body is owed as a new version. |
 | `local_version` | `1` when this device minted the version in this Tx 1 instead of applying `R`: a `vocabWord` revival or add-wins keep (§4.9), where `version_fp` is the `reviveFp`, or a local conflict resolution (§3.2), where `version_fp` is the `resolveFp`, `version_op` is `"resolve"`, `outcome` and `body_json` are the chosen outcome and body, and `res_refs_json` includes `resolveFp`. `hlc` is the freshly minted HLC (the resolution's own) and `origin_*` are `NULL`. `0` for a remote apply. |
-| `revives_json` | The `revives` envelope of a `vocabWord` revival or keep, else `NULL`. |
+| `revives_json` | The `revives` envelope of a `vocabWord` revival or keep, including `delRecord` (§2.3), else `NULL`. Recovery restores `drive_record_state.del_json` from it. |
 
 **Tx 2 acknowledgement.** The Tx 2 of every record that writes a receipt
 writes `drive_record_state.acked_receipt_id := receipt_id` in the same
@@ -1496,6 +1513,21 @@ with outcome `delete`) when it reaches those records:
     are append-only and an occurrence's edits live in its own domain, so
     neither is part of `anc(L)`, and `anc(L)` alone cannot prove the
     deleter's word version descends from the current children.
+
+    **Provenance belongs to the child version, not to the copy that carried
+    it.** A device that re-sends a child version it already published (an
+    add-wins keep or a revival, below) puts that version's own provenance in
+    `origin` (§2.3), so the first copy and every later copy name the same
+    `(deviceId, seq)`: a review first published as `C:5` is still `C:5` when
+    X re-sends it in batch `X:9`, and the republisher's own batch never
+    stands in for it. A child whose provenance the republisher never knew is
+    re-sent with `origin: null` and stays uncovered. A device keeps the best
+    provenance any copy has shown it: a known provenance replaces an unknown
+    one, and a repeated copy of a held child changes nothing else. Which copy
+    arrives first therefore never decides coverage. Local storage for it is
+    `origin_device_id` / `origin_seq` on the child's `drive_record_state` row
+    (occurrences, and the `vocabReview` key of a review) and on its
+    `vocabulary_staged_review` row once it is non-live.
   - **Child history states.** A review or occurrence of a word is **live**
     (a row in `vocabulary_reviews` / `vocabulary_occurrences`), **staged**
     (parent absent, not yet judged) or **covered** (a delete's `observed`
@@ -1513,25 +1545,46 @@ with outcome `delete`) when it reaches those records:
     already undone is stored as `UNDONE` instead of dropped. Both use the
     put's provenance.
 
-    **Parent existence is decided by evidence, not by live state.** A word
-    survives, or is revived by, a `del` `D` exactly when some child received
-    on this device is uncovered by `D`: a live, `STAGED`, `COVERED` or
-    `UNDONE` review, or a live or held occurrence version. An undo is final
-    for the review but never withdraws it as evidence, so every arrival order
-    of `D`, a review `put` and its undo ends in the same state. `UNDONE`
-    reviews are never attached.
+    **Arbitration is a function of the facts held, never of arrival order,
+    carrier or child label.** For one word the facts are the deletes this
+    device knows and the children it holds with their best-known provenance.
+    A delete is known whether it arrived as a delta record, as a snapshot
+    record, or inside the `revives.delRecord` of a revival put (§2.3), so a
+    device that adopted a revival and never received the `del` still has its
+    `hlc`, `anc`, `observed` and `restore` (stored in `del_json`,
+    `observed_json` and `restore_json`). The delete in force, `D*`, is the
+    highest `(hlc, fp)` among the known deletes that are concurrent with one
+    another (§3.1 Step 2); a delete in the `anc` of a genuine word edit (a put
+    that is not a revival) is Stale and never counts. The word is deleted
+    exactly when every child held is covered by `D*.observed`. It survives,
+    or is revived from `D*.restore`, when some child is uncovered: a live,
+    `STAGED`, `COVERED` or `UNDONE` review, or a live or held occurrence
+    version. An undo is final for the review but never withdraws it as
+    evidence, and `UNDONE` reviews are never attached.
+
+    `STAGED`, `COVERED`, `UNDONE` and the word's live or absent state are
+    outputs of that verdict, never inputs to it. Every new fact, whether a
+    delete in any carrier or any copy of a child (including a repeat that only
+    improves its provenance), recomputes the verdict over all children
+    whatever their current label and relabels them in both directions: a
+    `COVERED` child that the new `D*` does not cover revives the word, and a
+    `STAGED` or live child that it covers becomes `COVERED`. A lower delete
+    changes nothing, because `D*` stays. A revival `put` is not evidence
+    against any delete: it contributes its `delRecord` to the known deletes
+    and its body as the live version.
   - **Delete vs. uncovered child:** before any cascade delete (Tx 1), every
     live local review, every `UNDONE` review and every live local occurrence
     of the word must be covered. If any is uncovered, the delete is a
     concurrent write and **add-wins silently**: keep the word with *all* its
     live children and republish every retained review and occurrence as fresh
-    delta records (same content, new `hlc`). How the kept word is published
+    delta records (same content, new `hlc`, `origin` set to the version's own
+    provenance, §2.3). How the kept word is published
     depends on whether `L ∈ D.anc`.
     - **`L ∈ D.anc`** (the word is unchanged since a version the deleter
       saw): the keep is a revival. Tx 1 writes `restore.body` (already the
       row when `L == restore.fp`) and the receipt (§3.3,
       `local_version = 1`). Tx 2 records `fp = reviveFp(D.fp, restore.fp)`,
-      `revives = {del: D.fp, restore: restore.fp}`,
+      `revives = {del: D.fp, restore: restore.fp, delRecord: <D's envelope>}`,
       `anc = [D.fp, restore.fp] ∪ anc(L)`, `acked_receipt_id := receipt_id` and
       `content_fp := contentFp(restore.body)`, as in **Revive** below.
       Republishing a plain `putFp` put of `restore.body` would leave `L ∈ D.anc`, so a replay of `D`
@@ -1541,19 +1594,20 @@ with outcome `delete`) when it reaches those records:
       the republished `put` keeps a `putFp` put (fresh HLC) of the local body
       with `D.fp` in `anc`. A replay of `D` is then Stale.
     - **`L ∉ D.anc`, `L` is a revival** (`L` carries `revives = {del: D'.fp,
-      restore: …}`, minted here or adopted from a peer) **and `D` is
+      restore: …, delRecord: …}`, minted here or adopted from a peer, or
+      from a snapshot, without ever receiving `D'` itself) **and `D` is
       concurrent with `D'`** (distinct deletes, neither fp in the other's
-      `anc`): the revival is a synthetic version, not a reader edit. It only
-      says that `D'` lost to an uncovered child, so it never counts as
-      independent evidence against `D`. The two deletes are arbitrated as in
-      §3.1 Step 2, by the higher `(hlc, fp)`, and the evidence is judged again
-      against the winner:
+      `anc`, judged from `del_json`): the revival is a synthetic version, not
+      a reader edit. It only says that `D'` lost to an uncovered child, so it
+      never counts as independent evidence against `D`. The two deletes are
+      arbitrated as in §3.1 Step 2, by the higher `(hlc, fp)`, and the
+      evidence is judged again against the winner:
       - `D` is higher: `D` is the delete in force and its `restore_json` and
         `observed_json` replace those of `D'`. Judge every child received
         against `D.observed` as in **Tombstone arrives**. If all are covered,
         the word is deleted with the cascade above (`L := D.fp`, attached
-        reviews back to `COVERED`, occurrences `held = 1`) and the revival is
-        retired. If one is uncovered, the word stays live as a new revival
+        reviews back to `COVERED`, occurrences `held = 1`, `del_json` from
+        `D`) and the revival is retired. If one is uncovered, the word stays live as a new revival
         `reviveFp(D.fp, D.restore.fp)` with `anc = [D.fp, D.restore.fp] ∪
         anc(L)`, republished with the retained children.
       - `D` is lower: `D'` stays the delete in force, `L` stays and `D.fp`
@@ -1561,7 +1615,15 @@ with outcome `delete`) when it reaches those records:
         discarded.
 
       The outcome therefore equals the one reached by receiving `D` and `D'`
-      before the child, whatever the interleaving of `D`, `D'` and the child.
+      before the child, whatever the interleaving of `D`, `D'` and the child,
+      and whether `D'` was seen directly or only through the revival.
+      The mirror case follows the same rule: a revival `put` `R` that reaches
+      a device whose `L` is a `del` `D` is not an edit either. If
+      `R.revives.del == D.fp` it supersedes `D` causally (`D ∈ R.anc`).
+      Otherwise `R.revives.delRecord` is a known delete concurrent with `D`
+      and the higher `(hlc, fp)` is `D*`: when `D` wins and covers every
+      child held, `R` is discarded (`R.fp` joins `anc(L)`), and when any child
+      is uncovered the word is revived from the winner.
       A word edited after the revival is an ordinary `put` (it has no
       `revives`) and follows the genuine-edit rule above.
 
@@ -1590,17 +1652,24 @@ with outcome `delete`) when it reaches those records:
     - Tombstone known, child covered: store it `COVERED` / `held`. The word is
       not restored.
     - Tombstone known, child uncovered: **revive** (below).
+    - Child already held (a repeated copy, such as a republication by another
+      device): insert nothing, but record any better provenance and judge
+      again as under **Tombstone arrives**, so the verdict is the same
+      whichever copy came first.
     - An undone review's `put` is judged the same way: an uncovered one keeps
       or revives the word but is stored `UNDONE`, never attached.
-  - **Tombstone arrives:** after storing `restore_json` and `observed_json`
-    (above), judge the children already held for the word. The check
-    includes `STAGED` children, so a child received before the tombstone is
-    treated the same as one received after it. If the word is live, an
-    uncovered live, staged or `UNDONE` child keeps it (add-wins, published as
-    in **Delete vs. uncovered child**). If the word is absent, every `STAGED`
-    child is re-labelled `COVERED` (an `UNDONE` review keeps its state) or, if
-    any `STAGED` or `UNDONE` child is uncovered, the word is **revived** in
-    the same Tx 1.
+  - **Tombstone arrives:** after storing `restore_json`, `observed_json` and
+    `del_json` (above), when the arriving `del` is, or becomes, `D*`, judge
+    every child already held for the word against `D*.observed`, whether
+    `STAGED`, `COVERED`, `UNDONE` or live. A child received before the
+    tombstone is treated the same as one received after it, and a child that
+    an earlier, lower delete covered is judged again. If the word is live, an
+    uncovered live, staged, covered or `UNDONE` child keeps it (add-wins,
+    published as in **Delete vs. uncovered child**). If the word is absent,
+    every child covered by `D*` is labelled `COVERED` (an `UNDONE` review
+    keeps its state) or, if any `STAGED`, `COVERED` or `UNDONE` child is
+    uncovered, the word is **revived** in the same Tx 1. A lower delete that
+    is not `D*` is discarded and changes no label.
   - **Revive:** one Tx 1 restores the word row from `restore_json.body`,
     then attaches the **eligible child set**: every `STAGED` or `COVERED`
     review and occurrence of the word, plus the arriving child unless it is
@@ -1608,8 +1677,9 @@ with outcome `delete`) when it reaches those records:
     `reconcileSchedule` and sets `acked_fingerprint`. Tx 2
     clears `held` on the attached occurrences, records a new word `put`
     version with `fp = reviveFp(delFp, restore.fp)` (§1.3), body
-    `restore.body`, `revives = {del: delFp, restore: restore.fp}` and `anc =
-    [delFp, restore.fp]`, sets `content_fp := contentFp(restore.body)`, and
+    `restore.body`, `revives = {del: delFp, restore: restore.fp, delRecord:
+    <`D*`'s envelope>}` and `anc = [delFp, restore.fp]`, `del_json` from
+    `delRecord`, sets `content_fp := contentFp(restore.body)`, and
     the device publishes it and the attached children. The distinct `fp`
     means the original `del` is in the revived version's `anc` but the
     revived `fp` is in no `del`'s `anc`, so a replay of that `del` (for
@@ -1618,7 +1688,9 @@ with outcome `delete`) when it reaches those records:
     in Step 4. A later `del` of the revived word has `restore.fp =
     reviveFp` and `anc[0] = reviveFp` as usual. The same set is
     attached whichever order the `del`, covered children and uncovered child
-    arrived in. A word `put` received later that supersedes the tombstone
+    arrived in. A device that adopts a peer's revival `put` instead of
+    minting one stores `restore_json`, `observed_json` and `del_json` from its
+    `revives.delRecord`. A word `put` received later that supersedes the tombstone
     (`del` fp in its `anc`) attaches the same set on the receiver.
   - **Retention for a snapshot-only device:** covered and staged children
     stay reconstructable because their authors' records are never pruned for
@@ -1630,8 +1702,11 @@ with outcome `delete`) when it reaches those records:
     removes another author's child records, and compaction and pruning
     (§2.4) may delete only delta files already covered by a snapshot that
     contains them. A device rebuilt from snapshots therefore receives the
-    `del` with `restore` and `observed`, and every child with its `seq`, and
-    reaches the same state in any order.
+    `del` with `restore` and `observed`, and every child with its `seq` (or
+    `origin`), and reaches the same state in any order. A device that
+    receives a revival without the `del` it retired still holds that `del`
+    in `revives.delRecord`, which a snapshot keeps (§2.4), so compaction
+    never removes the delete an arbitration needs.
   - A `del` with no valid `restore` was never applied (§2.3), so the word
     and its children are still present locally and there is nothing to
     restore.
@@ -1750,7 +1825,9 @@ with outcome `delete`) when it reaches those records:
     reviews are stored `COVERED`, uncovered ones restore the word. Staged
     reviews are
     never dropped, and a re-sent review (revival republish) is insert-if-absent
-    by `syncId`, except when that `syncId` was undone.
+    by `syncId`, except when that `syncId` was undone. A re-sent copy still
+    replaces unknown provenance with its known `origin` and triggers a fresh
+    judgement against the delete in force (§4.9).
   - `op: "del"` (undo review): **final tombstone**. Deletes the matching
     `vocabulary_reviews` row, moves the review (live, `STAGED` or `COVERED`) to
     `vocabulary_staged_review` as `UNDONE` with its put's provenance, sets
@@ -2061,7 +2138,7 @@ order and must end in the same state.
 | C9 | Catalog merge applied (new edition, `archiveHlc`) then crash before Tx 2. Variant (a) no edit, (b) the reader unarchives before restart. | (a) `drive_record_state.body_json` is restored from the receipt including `archiveHlc` and every `availabilityHlc`, with no republish unless `republish = 1`. (b) The unarchive becomes a new version with `R.fp` in `anc` and a new `archiveHlc`; no edition or identifier is lost. |
 | C10 | A local edit lands between the apply decision and Tx 1. | The apply aborts, re-decides against the edited row, and the edit is never overwritten. |
 | C11 | Crash before Tx 1, no receipt for `R.fp`. | Replay processes `R` from scratch with no receipt-based repair. |
-| C12 | Apply a catalog record `R` fully (Tx 1 and Tx 2). Then make 65 or more local catalog versions, including new upload and clear availability groups, keeping the `books`-backed fields unchanged. Restart. Variant: a local `vocabWord` revival (or a local annotation resolution) commits Tx 1 and Tx 2, the reader then edits the word (annotation) and edits it back to the revival's (resolution's) body, and the device restarts before publishing. | `R.fp` is no longer in `anc(L)`, but `receipt_id == acked_receipt_id`, so no recovery runs and the newer availability groups are kept. A crash between Tx 1 and Tx 2 of a later apply still recovers, because its `receipt_id` differs. In the variant `receipt_id == acked_receipt_id`, so no recovery runs: `L` stays the newer version with `reviveFp` (`resolveFp`) in its `anc`, and the old `reviveFp` (`resolveFp`) is not restored over it. A crash before the Tx 2 of the revival or resolution still recovers it from the receipt (C16, C27). |
+| C12 | Apply a catalog record `R` fully (Tx 1 and Tx 2). Then make 65 or more local catalog versions, including new upload and clear availability groups, keeping the `books`-backed fields unchanged. Restart. Variant: a local `vocabWord` revival (or a local annotation resolution) commits Tx 1 and Tx 2, the reader then edits the word (annotation) and edits it back to the revival's (resolution's) body, and the device restarts before publishing. Variant (revision-based, resolution during upload): an `evaluation` (and separately a metadata `title` override) batch for revision 5 is uploading when the reader resolves a conflict locally, so Tx 1 commits revision 6 with `sent_json.vfp = resolveFp`. The ACK for the revision-5 batch then arrives, and the process crashes before the Tx 2 of the ACK or of the resolution. Repeat with the crash before the ACK. | `R.fp` is no longer in `anc(L)`, but `receipt_id == acked_receipt_id`, so no recovery runs and the newer availability groups are kept. A crash between Tx 1 and Tx 2 of a later apply still recovers, because its `receipt_id` differs. In the variant `receipt_id == acked_receipt_id`, so no recovery runs: `L` stays the newer version with `reviveFp` (`resolveFp`) in its `anc`, and the old `reviveFp` (`resolveFp`) is not restored over it. A crash before the Tx 2 of the revival or resolution still recovers it from the receipt (C16, C27). In the revision-based variant the ACK's `target_revision` (5) is not above `acked_revision` (6), so Tx 1 leaves `acked_revision`, `sent_revision` and `sent_json` at the resolution's values, and the ACK only marks the revision-5 `drive_outbox` row `ACKED`; `published_fp` does not move to the older fp. Recovery finds `row.revision == acked_revision`, pairs `sent_json.vfp = resolveFp` with the recomputed `contentFp`, and the stored `resolve` is still owed and published. The revision-5 version is never restored, and a post-crash edit still keeps `resolveFp` in its `anc`. |
 | C13 | Device A runs with a default locale whose `%d` emits non-ASCII digits (for example `ar-EG`). A creates an HLC, a delta file name and a snapshot file name. | All three contain only ASCII digits, and equal byte-for-byte the output under `Locale.ROOT`. B orders A's HLC against its own by plain string comparison; a hand-built HLC with non-ASCII digits is rejected as invalid. |
 | C14 | C8 with the reader **deleting** the annotation (not editing it) before restart. Variants: incoming `R` is a `put`; incoming `R` is a keep-body `resolve`. | Recovery sees projection `DELETED` against a live `row_fp`, mints a fresh HLC `h` and builds `L = delFp(d, k, h)` with `R.fp` (receipt `version_fp`) in `anc`. Replay of `R` is Stale, the annotation stays deleted, the `del` (`body: null`) is published, and the cursor advances after Tx 2. |
 | C15 | C9 (b) variants: (a) the reader unarchives and a post-crash edition upload happens; (b) the reader only changes `title` after the crash. | (a) `archiveHlc` is minted once for the unarchive and every other edition, `availabilityHlc` and identifier is unchanged. (b) the receipt's `archiveHlc` is kept unchanged; no new `archiveHlc` is minted. |
@@ -2074,9 +2151,9 @@ order and must end in the same state.
 | C22 | A uploads edition X of K (`liseurKind=epub`), and B caches it in `drive_file` as `epub`. The reader then deletes the EPUB in the Drive UI, so B's change feed returns `removed = true` with no `file`. Repeat with `trashed = true` and full metadata. | Both variants route as EPUB changes. The device that sees the change publishes a catalog `put` clearing X's `driveFileId`, `fileName` and `uploadedAt` with a new `availabilityHlc`. No catalog `del` is published, and history is kept. |
 | C23 | Migrate a version-84 database that holds liseur-sync `vocabulary_staged_review` rows to 85. | The rows survive with `state = 'STAGED'` and `NULL` `origin_device_id` / `origin_seq`. liseur-sync staging and attach behave as before. `drive_apply_receipt` exists and is empty. `reading_sessions` has the new columns and the unique index. |
 | C24 | Note N is at version X (`updatedAt = t0`). A edits N to Y, then edits it back to X's exact body while A's wall clock has returned to `t0` (the HLC still advances), then B, which holds Y, pulls. Repeat with B pulling after each step, and with the three records delivered as X, Y, X' and as Y, X', X (a replayed older record) to a fresh device. Run for an `annotation` note, a `vocabWord` note and an `evaluation` review. Variant: A and B independently make the same edit from X, each minting its own `putFp`. | X' has the same body and `contentFp` as X but a different `putFp`, with `anc` holding Y's and X's `fp`. B and the fresh device end on X' in every order, and a replayed Y or X is Stale (`R.fp ∈ anc(X')`), so the revert is never silently replaced by Y. No device finds X and Y mutual ancestors. In the variant the two puts meet in Agreement by content, both end on the higher `(hlc, fp)` with the other `fp` in `anc`, and no conflict opens. The golden suite pins `putFp` for one body at two HLCs (§1.3). |
-| C25 | Two devices A and B delete word W concurrently, giving distinct deletes `D1` and `D2`, with `D1 > D2` on `(hlc, fp)`. `D1.observed = {C: 5}`, `D2.observed = {C: 4}`, and each has its own `restore`. Device X receives `D1` then `D2`, and a second device Y `D2` then `D1`. C's review `r` (`C:5`) arrives later on both. Repeat with `D1.observed = {C: 4}` and `D2.observed = {C: 5}`. Then run the interleavings in which `r` arrives between the deletes: `D2` → `r` → `D1` and `D1` → `r` → `D2` (the revival minted from the first delete is then met by the second), and the same on a device that adopts a peer's revival `put` before the second delete arrives. | In both orders `L = D1.fp` with `D1`'s `restore_json` and `observed_json`, and the losing delete's payloads are discarded. In the first run `r` is covered on X and Y: W stays deleted and `r` is `COVERED`. In the second run `r` is uncovered on X and Y: W is revived from `D1`'s `restore` on both. The answer never depends on delivery order. In the interleavings the first delete's revival is not an independent edit: the winning delete `D1` is judged against `r` again. With `D1.observed = {C: 5}`, `D2` → `r` → `D1` ends with W deleted, `r` `COVERED` and `L = D1.fp`, exactly as `D1` → `D2` → `r`. With `D1.observed = {C: 4}`, every interleaving ends with W live and `L = reviveFp(D1.fp, D1.restore.fp)` with `D1`'s `restore.body`, and a lower `D2` arriving after a revival from `D1` is Stale. |
+| C25 | Two devices A and B delete word W concurrently, giving distinct deletes `D1` and `D2`, with `D1 > D2` on `(hlc, fp)`. `D1.observed = {C: 5}`, `D2.observed = {C: 4}`, and each has its own `restore`. Device X receives `D1` then `D2`, and a second device Y `D2` then `D1`. C's review `r` (`C:5`) arrives later on both. Repeat with `D1.observed = {C: 4}` and `D2.observed = {C: 5}`. Then run the interleavings in which `r` arrives between the deletes: `D2` → `r` → `D1` and `D1` → `r` → `D2` (the revival minted from the first delete is then met by the second), and the same on a device that adopts a peer's revival `put` before the second delete arrives. Copy-order variant (`D1.observed = {C: 5}`, `D2.observed = {C: 4}`): replica X holds only `D2` and `r`, so it revives W from `D2` and republishes `r` in batch `X:9` with `origin = {C, 5}`. A fresh device receives X's copy of `r`, C's own copy, X's revival and `D1` in every order, including X's copy first with no delete known. Snapshot-only variant: the fresh device reads only X's compacted snapshot (the revival with `revives.delRecord` for `D2`, and `r` with its `origin`), and `D1` arrives later or never; repeat with `D1.observed = {C: 4}`. Label variant: `D2` → `r` → `D1` with `D1.observed = {C: 4}`, which stores `r` `COVERED` before `D1` arrives, then the same with `r` `STAGED` (before any delete) and `UNDONE`. | In both orders `L = D1.fp` with `D1`'s `restore_json` and `observed_json`, and the losing delete's payloads are discarded. In the first run `r` is covered on X and Y: W stays deleted and `r` is `COVERED`. In the second run `r` is uncovered on X and Y: W is revived from `D1`'s `restore` on both. The answer never depends on delivery order. In the interleavings the first delete's revival is not an independent edit: the winning delete `D1` is judged against `r` again. With `D1.observed = {C: 5}`, `D2` → `r` → `D1` ends with W deleted, `r` `COVERED` and `L = D1.fp`, exactly as `D1` → `D2` → `r`. With `D1.observed = {C: 4}`, every interleaving ends with W live and `L = reviveFp(D1.fp, D1.restore.fp)` with `D1`'s `restore.body`, and a lower `D2` arriving after a revival from `D1` is Stale. In the copy-order variant every order ends with W deleted, `L = D1.fp` and `r` `COVERED` with provenance `C:5`: X's copy read first is `STAGED` at `C:5`, never `X:9`, and C's copy is a repeat that changes nothing. In the snapshot-only variant the device holds `D2` from `delRecord` (`del_json`, `observed_json`, `restore_json`) without ever having received it. `D1` is ordered against it by `(hlc, fp)` and covers `r`, so W ends deleted with `r` `COVERED` and `L = D1.fp`, the same as on a device that read every delta. With `D1.observed = {C: 4}` W stays live as `reviveFp(D1.fp, D1.restore.fp)`. In the label variant `r` is uncovered by `D1` in all three states, so `D2`'s earlier verdict is replaced: W is revived from `D1`'s `restore` with `r` attached (`COVERED` or `STAGED`) or kept as `UNDONE` evidence and never attached, exactly as when `D1` is received first. |
 | C26 | C holds B's 80% peak for edition E at `seq = 10`. A resets the work with `floors = {B: 10}`. After pulling the reset, B reads to 30% and publishes a peak at `seq = 11`. C receives the `seq = 11` peak before A's reset, then repeat with the reset first. Variant: the `seq = 10` peak is replayed after the reset. | In both orders C ends with exactly one peak for B and E, 30% at `seq = 11`, and `maxFloor[B] = 10`. In the first order `observe` does not make the 30% peak visible, but it is kept as a newer candidate and re-materialized when the reset deletes `seq = 10`. The replayed `seq = 10` peak is dropped. A `seq = 11` peak that is 80% (higher than the `seq = 10` row) replaces it, leaving no candidate chain. |
 | C27 | The reader resolves an annotation `EDIT_EDIT` locally. Tx 1 commits the choice and its `local_version` receipt, then the process crashes before the `op: "resolve"` batch is frozen. After restart, before recovery runs, the reader edits the annotation (variants: the reader deletes it). Repeat for `outcome: "delete"`, for a metadata `title` override, and with a crash before Tx 1. | Recovery finds the receipt with `version_fp = resolveFp` and a changed row (for the metadata override, the raised `acked_revision` with `sent_json.vfp = resolveFp`), and never re-applies the stored choice, so the edit (or deletion) is kept. It becomes a descendant with `resolveFp` in its `anc` and `res_refs`. The stored `resolve` record is frozen in its own batch ahead of the edit's batch, the conflict closes as `RESOLVED`, and a peer applying both in order ends on the edit. Without an edit the version is `resolveFp` and is published. With a crash before Tx 1 (no receipt), the choice is applied from `resolution_json`. |
 | C28 | A rating (and separately a `review`, and a metadata `title` override) is applied remotely: Tx 1 commits and the process crashes before Tx 2. After restart, before recovery runs, the reader clears the rating or resets the override. Variant: the reader clears the field, then sets it again before recovery. | Recovery sees `row.revision > acked_revision` with `value == null` (or `title_override = 0`) and mints `delFp(d, k, h)` with `sent_json.vfp` first in `anc`; `body_json` is `NULL` and the tombstone is owed. Replay of `R` is Stale, a `del` is published, and the override is not restored from fallback metadata. A put with a null value is never built. In the variant the final value is a put with a fresh `putFp` and `sent_json.vfp` in `anc`. |
 | C29 | A and B agree at 40% with `finishedOverride = "automatic"` and `ReadingStatus.READING`. A sets an explicit `reading` choice without moving, and B pulls. Then A clears it back to `automatic` without moving, and B pulls. Variants: the same for `paused`; B has set its own different choice before pulling; a fresh device with no baseline pulls A's record. | The position and status are equal, so `reconcileReadingState` returns `InSync`, but the choice is reconciled separately: B adopts `reading`, then `automatic`, raises `status_revision`, and sets `agreed_status_choice` and `acked_status_revision` only after applying it. B never acknowledges a status revision it did not apply. In the variant where B changed its own choice, the choices conflict and `persistPendingStatus` raises one prompt, with the baseline unchanged. The fresh device adopts A's choice (clean local side) without a prompt. |
-| C30 | An annotation note of about 1.5 MiB (variant: a record whose `resRefs` alone exceed 1 MiB) is edited next to 50 other dirty records, in the same and in other domains, then synced. Variants: the reader shortens the note; the reader deletes the annotation; a local conflict resolution keeps the oversized body. | The 50 records publish in ordinary batches and no cursor stalls. The oversized record is neither truncated nor dropped and the local row is unchanged. No `seq` is allocated for it, `published_fp` keeps its old value, and the run reports it as withheld. Peers keep the last version they received. The shortened note publishes normally with the withheld `fp` in `anc`, and the deletion publishes a normal `del`. A snapshot never holds the withheld version. The oversized resolution stays `RESOLVING`, and a later edit that fits publishes alone and moves the conflict to `RESOLVED` locally. |
+| C30 | An annotation note of about 1.5 MiB is edited next to 50 other dirty records, in the same and in other domains, then synced. Variants: the reader shortens the note; the reader deletes the annotation; a local conflict resolution keeps the oversized body. Ancestry variant: a record whose `resRefs` alone exceed 1 MiB, then the reader shortens its body, and separately deletes it. | The 50 records publish in ordinary batches and no cursor stalls. The oversized record is neither truncated nor dropped and the local row is unchanged. No `seq` is allocated for it, `published_fp` keeps its old value, and the run reports it as withheld. Peers keep the last version they received. The shortened note publishes normally with the withheld `fp` in `anc`, and the deletion of the 1.5 MiB note publishes a normal `del`, because the overflow was body-only. A snapshot never holds the withheld version. In the ancestry variant the shortened body and the `del` inherit the same `resRefs`, so both are oversized too: each is withheld without a `seq`, stays owed and is reported, the local row (including the deletion) is unchanged, peers keep the last version they received, and the 50 other records still publish. The oversized resolution stays `RESOLVING`, and a later edit that fits publishes alone and moves the conflict to `RESOLVED` locally. |
