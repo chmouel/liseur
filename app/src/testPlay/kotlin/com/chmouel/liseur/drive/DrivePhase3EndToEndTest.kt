@@ -771,6 +771,54 @@ class DrivePhase3EndToEndTest {
         assertEquals(0.20, deviceA.liseurDb.readingProgressDao().get(book.url)!!.peakProgression!!, 0.0001)
     }
 
+    private suspend fun forgetAtPeakThenCrashBeforeMarkerCleanup(sha: String, book: Book) {
+        deviceA.connect()
+        deviceB.connect()
+        deviceA.addBook(book, sha)
+        deviceA.read(book.url, 0.80, 1_000L)
+        deviceA.changeEngine.sync()
+        deviceB.changeEngine.sync()
+
+        val driveSqlite = deviceA.driveDb.openHelper.writableDatabase
+        driveSqlite.execSQL(
+            "CREATE TRIGGER crash_cleanup BEFORE DELETE ON drive_record_state " +
+                "WHEN OLD.domain = '_furthest_reset_pending' " +
+                "BEGIN SELECT RAISE(ABORT, 'crash'); END",
+        )
+        val failure = runCatching { deviceA.forget(book.url) }.exceptionOrNull()
+        driveSqlite.execSQL("DROP TRIGGER crash_cleanup")
+        assertNotNull(failure)
+        assertEquals(1, deviceA.driveDb.recordStates().forDomain(PERM_ID, "_furthest_reset_pending").size)
+    }
+
+    @Test
+    fun `replaying a forget after the reader advanced keeps the new peak and its sync`() = runTest {
+        val sha = "e".repeat(64)
+        val book = peakBook("replay-forward")
+        forgetAtPeakThenCrashBeforeMarkerCleanup(sha, book)
+
+        deviceA.read(book.url, 0.95, 3_000L)
+        deviceA.changeEngine.sync()
+        deviceB.changeEngine.sync()
+
+        assertEquals(0.95, deviceA.liseurDb.readingProgressDao().get(book.url)!!.peakProgression!!, 0.0001)
+        assertEquals(0, deviceA.driveDb.recordStates().forDomain(PERM_ID, "_furthest_reset_pending").size)
+        assertTrue(deviceB.observed("sha:$sha").any { it.origin == "dev-a" && it.progression == 0.95 })
+    }
+
+    @Test
+    fun `replaying a forget after the reader moved back does not reset the peak`() = runTest {
+        val sha = "f".repeat(64)
+        val book = peakBook("replay-back")
+        forgetAtPeakThenCrashBeforeMarkerCleanup(sha, book)
+
+        deviceA.read(book.url, 0.50, 3_000L)
+        deviceA.changeEngine.sync()
+
+        assertEquals(0.80, deviceA.liseurDb.readingProgressDao().get(book.url)!!.peakProgression!!, 0.0001)
+        assertEquals(0, deviceA.driveDb.recordStates().forDomain(PERM_ID, "_furthest_reset_pending").size)
+    }
+
     @Test
     fun `a forgotten work resets every local edition and a later low-revision peak on another edition still publishes`() = runTest {
         deviceA.connect()
