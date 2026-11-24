@@ -507,7 +507,7 @@ internal class DriveEpubTransferManager(
 
         val localUri = Uri.fromFile(targetFile).toString()
         val downloadedAt = clock()
-        val modifiedAt = targetFile.lastModified()
+        val modifiedAt = targetFile.lastModified().takeIf { it > 0 }
         bookRemoval.downloadArrived(book.url, localUri, downloadedAt, modifiedAt)
         identities.upsert(
             BookFingerprintRow(
