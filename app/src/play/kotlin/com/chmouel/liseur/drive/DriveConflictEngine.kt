@@ -391,16 +391,33 @@ internal object DriveConflictEngine {
             )
         }
 
+        // Winning resolution that the incoming `resRefs` prove it descends from and that retired L.
+        val incomingResRefSet = incoming.resRefs.toSet()
+        val bridgingResolution = if (incomingResRefSet.isNotEmpty()) {
+            allResolutions.firstOrNull { res ->
+                if (res.resolutionFp !in incomingResRefSet) return@firstOrNull false
+                val resFps = decodeFps(res.resolvedFpsJson)
+                if (lFp !in resFps) return@firstOrNull false
+                winningResolutionFor(allResolutions, resFps)?.resolutionFp == res.resolutionFp
+            }
+        } else {
+            null
+        }
+
         // --------------------------------------------------------------------
         // CASE 2 — Incoming `op: "resolve"`
         // --------------------------------------------------------------------
         if (isIncomingResolve) {
             // 2a. Already superseded in local ancestry -> Stale (Step 0 side effects still persist).
-            if (incoming.fp in local.ancestors) {
+            if (incomingKnownAncestorOrRetired) {
+                val provenDescent = incoming.fp in local.ancestors
                 return ReconciliationResult(
                     reconciliationCase = ReconciliationCase.RESOLVE_STALE,
                     dataAction = ReconciliationDataAction.NoDataChange,
-                    updatedRecordState = stateKeepingLocal(extraResRefs = incoming.resRefs),
+                    updatedRecordState = stateKeepingLocal(
+                        extraResRefs = if (provenDescent) incoming.resRefs else emptyList(),
+                        includeCandidateRefs = provenDescent,
+                    ),
                     resolutionsToPersist = resolutionsToPersist,
                     conflictsToSettle = settlements,
                 )
@@ -410,14 +427,15 @@ internal object DriveConflictEngine {
 
             // 2b. Competing offline resolutions: STRICTLY restricted to when BOTH
             // current local L (`version_op == "resolve"`) AND incoming R (`op == "resolve"`)
-            // are competing resolutions with overlapping `resolvedFps` and neither in the other's `anc`.
+            // are competing resolutions with equal `resolvedFps` sets and neither in the other's `anc`.
             // Subsequent local edits (`version_op != "resolve"`) MUST NOT enter this branch.
             if (local.versionOp == DriveRecordState.OP_RESOLVE && local.localRowMatchesContentFp) {
                 val localRes = allResolutions.find { it.resolutionFp == lFp }
                 if (localRes != null) {
                     val localResolvedSet = decodeFps(localRes.resolvedFpsJson)
-                    val overlaps = localResolvedSet.any { it in incomingResolvedSet }
-                    if (overlaps && lFp !in incoming.anc && incoming.fp !in local.ancestors) {
+                    val sameResolvedSet = localResolvedSet == incomingResolvedSet
+
+                    if (sameResolvedSet && lFp !in incoming.anc && incoming.fp !in local.ancestors) {
                         val incomingWins = compareHlcFp(
                             incoming.hlc,
                             incoming.fp,
@@ -497,6 +515,23 @@ internal object DriveConflictEngine {
                 )
             }
 
+            // 2d'. Proven resolution descent: R's resRefs carry the winning resolution that retired L.
+            if (bridgingResolution != null) {
+                val mergedResRefs = local.resRefs + incoming.resRefs + step0ResRefsToAdd +
+                    bridgingResolution.resolutionFp + incoming.fp
+                return ReconciliationResult(
+                    reconciliationCase = ReconciliationCase.RESOLVE_APPLIED,
+                    dataAction = applyActionForIncoming(),
+                    updatedRecordState = stateApplyingIncoming(
+                        newOp = DriveRecordState.OP_RESOLVE,
+                        ancList = listOf(lFp) + local.ancestors + incoming.anc,
+                        resRefsList = mergedResRefs,
+                    ),
+                    resolutionsToPersist = resolutionsToPersist,
+                    conflictsToSettle = settlements,
+                )
+            }
+
             // 2e. Otherwise: local has an independent or subsequent edit (e.g., `fNew`) not covered
             // by `R.resolvedFps` -> open conflict preserving both.
             return openConflictResult(
@@ -549,17 +584,6 @@ internal object DriveConflictEngine {
 
         // Branch B: Resolution-bridged supersession (requires winning res with L in res.resolvedFps
         // AND explicit causal proof `res.resolutionFp in R.resRefs` — NEVER `R.hlc >= res.hlc`).
-        val incomingResRefSet = incoming.resRefs.toSet()
-        val bridgingResolution = if (incomingResRefSet.isNotEmpty()) {
-            allResolutions.firstOrNull { res ->
-                if (res.resolutionFp !in incomingResRefSet) return@firstOrNull false
-                val resFps = decodeFps(res.resolvedFpsJson)
-                if (lFp !in resFps) return@firstOrNull false
-                winningResolutionFor(allResolutions, resFps)?.resolutionFp == res.resolutionFp
-            }
-        } else {
-            null
-        }
         if (bridgingResolution != null) {
             val mergedResRefs = local.resRefs + incoming.resRefs + step0ResRefsToAdd + bridgingResolution.resolutionFp
             return ReconciliationResult(
