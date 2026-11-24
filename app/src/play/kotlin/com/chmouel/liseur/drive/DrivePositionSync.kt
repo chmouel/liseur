@@ -300,9 +300,8 @@ internal class DrivePositionSync(
         val workKey = workIdentity.canonicalWorkKey(permissionId, alias.workId)
         val observed = furthestDao.forWork(drivePeerId, workKey)
         val editions = localEditions(permissionId, drivePeerId, workKey)
-        val templates = editions.mapNotNull { edition ->
-            peakTemplate(workKey, devId, edition.alias.bookUrl, edition.alias.editionSha, edition.progress)
-                ?.let { edition.progress.peakRevision!! to it }
+        val templates = peakWinners(workKey, devId, editions).map { (edition, template) ->
+            edition.progress.peakRevision!! to template
         }
 
         val floors = linkedMapOf<String, Long>()
@@ -369,7 +368,7 @@ internal class DrivePositionSync(
                     bodyJson = JSONObject().put(
                         PENDING_REVISIONS,
                         JSONObject().apply {
-                            for (edition in editions) put(edition.alias.bookUrl, edition.progress.localRevision)
+                            for (edition in editions) put(edition.bookUrl, edition.progress.localRevision)
                         },
                     ).toString(),
                 ),
@@ -426,27 +425,39 @@ internal class DrivePositionSync(
         val localFloor = floors[localDeviceId]
         val covered = mutableListOf<Triple<String, String?, Long>>()
         if (localFloor != null) {
-            for (edition in localEditions(permissionId, drivePeerId, workKey)) {
-                val peakRev = edition.progress.peakRevision ?: continue
-                if (guardRevisions != null &&
-                    guardRevisions[edition.alias.bookUrl] != edition.progress.localRevision
-                ) {
-                    continue
-                }
-                val template = peakTemplate(workKey, localDeviceId, edition.alias.bookUrl, edition.alias.editionSha, edition.progress) ?: continue
+            val eligible = localEditions(permissionId, drivePeerId, workKey).filter { edition ->
+                edition.progress.peakRevision != null &&
+                    (guardRevisions == null ||
+                        guardRevisions[edition.bookUrl] == edition.progress.localRevision)
+            }
+            for ((winner, template) in peakWinners(workKey, localDeviceId, eligible)) {
                 val existing = recordStates.get(
                     permissionId,
                     DriveWireCodec.DOMAIN_FURTHEST,
                     peakRecordKey(workKey, template.editionSha, localDeviceId),
                 )
-                val seq = boundPeakSeq(existing, peakRev, template) ?: continue
-                if (seq <= localFloor) covered.add(Triple(edition.alias.bookUrl, edition.alias.editionSha, peakRev))
+                val seq = boundPeakSeq(existing, winner.progress.peakRevision!!, template) ?: continue
+                if (seq > localFloor) continue
+                // A forget captured these revisions, so every same-edition peak it saw is at or
+                // below the bound winner; a remote reset only covers the peak it can name.
+                val members = if (guardRevisions != null) {
+                    eligible.filter { peakEdition(it) == template.editionSha }
+                } else {
+                    listOf(winner)
+                }
+                for (member in members) {
+                    covered.add(Triple(member.bookUrl, member.editionSha, member.progress.peakRevision!!))
+                }
             }
         }
+        // Peaks retained above a floor were skipped by `observe` when a higher one from the
+        // same origin and edition arrived first, so rebuild them once the reset drops the rest.
+        val retained = retainedRemotePeaks(permissionId, workKey, localDeviceId, floors)
         database.withTransaction {
             for ((origin, floor) in floors) {
                 furthestDao.deleteUpToForOrigin(drivePeerId, workKey, origin, floor)
             }
+            for (peak in retained) observePeak(drivePeerId, workKey, peak)
             for ((bookUrl, editionSha, peakRev) in covered) {
                 val current = progressDao.get(bookUrl)
                 if (current?.peakRevision == peakRev &&
@@ -459,7 +470,65 @@ internal class DrivePositionSync(
         }
     }
 
-    private class LocalEdition(val alias: WorkAlias, val progress: ReadingProgress)
+    private suspend fun retainedRemotePeaks(
+        permissionId: String,
+        workKey: String,
+        localDeviceId: String,
+        floors: Map<String, Long>,
+    ): List<DriveFurthestBody.Peak> {
+        val peaks = recordStates.forDomain(permissionId, DriveWireCodec.DOMAIN_FURTHEST)
+            .filter { it.recordKey.startsWith(PEAK_KEY_PREFIX) }
+            .mapNotNull { decodePeak(it.bodyJson) }
+            .filter { it.deviceId != localDeviceId && workIdentity.canonicalWorkKey(permissionId, it.workKey) == workKey }
+        return peaks.filter { peak ->
+            val floor = maxOf(floors[peak.deviceId] ?: 0L, getPersistedFloor(permissionId, workKey, peak.deviceId))
+            peak.seq > floor
+        }
+    }
+
+    private suspend fun observePeak(drivePeerId: String, workKey: String, body: DriveFurthestBody.Peak) {
+        val payload = DriveCanonicalJson.encode(
+            mapOf(
+                "locatorJson" to body.locatorJson,
+                "coverage" to body.coverage,
+                "peakAt" to body.peakAt,
+            ),
+        )
+        furthestDao.observe(
+            FurthestPosition(
+                peerId = drivePeerId,
+                workId = workKey,
+                edition = body.editionSha,
+                origin = body.deviceId,
+                progression = body.progression,
+                seq = body.seq,
+                payload = payload,
+            ),
+        )
+    }
+
+    private suspend fun peakEdition(edition: LocalEdition): String? =
+        peakTemplate("", "", edition.bookUrl, edition.editionSha, edition.progress)?.editionSha
+
+    /**
+     * One local book speaks for each edition of a work: the wire holds a single peak per
+     * `(work, edition, device)`, so the furthest peak wins, with ties broken by the latest
+     * `peakAt` and then the URL to keep the choice stable across runs.
+     */
+    private suspend fun peakWinners(
+        workKey: String,
+        deviceId: String,
+        editions: List<LocalEdition>,
+    ): List<Pair<LocalEdition, DriveFurthestBody.Peak>> = editions
+        .mapNotNull { edition ->
+            peakTemplate(workKey, deviceId, edition.bookUrl, edition.editionSha, edition.progress)
+                ?.let { edition to it }
+        }
+        .groupBy { it.second.editionSha }
+        .values
+        .map { group -> group.maxWith(PEAK_WINNER_ORDER) }
+
+    private class LocalEdition(val bookUrl: String, val editionSha: String?, val progress: ReadingProgress)
 
     private suspend fun localEditions(
         permissionId: String,
@@ -467,7 +536,7 @@ internal class DrivePositionSync(
         workKey: String,
     ): List<LocalEdition> = identities.aliasesFor(drivePeerId)
         .filter { it.usable && workIdentity.canonicalWorkKey(permissionId, it.workId) == workKey }
-        .mapNotNull { alias -> progressDao.get(alias.bookUrl)?.let { LocalEdition(alias, it) } }
+        .mapNotNull { alias -> progressDao.get(alias.bookUrl)?.let { LocalEdition(alias.bookUrl, alias.editionSha, it) } }
 
     override suspend fun refreshUnresolved() = Unit
 
@@ -614,7 +683,13 @@ internal class DrivePositionSync(
             }
         }
 
-        for (entry in local) {
+        val peakSpeakers = resolved.groupBy { it.workKey }
+            .flatMap { (workKey, group) ->
+                val editions = group.map { LocalEdition(it.book.url, it.aliasEditionSha, it.progress) }
+                peakWinners(workKey, deviceId, editions).map { (edition, _) -> edition.bookUrl }
+            }
+            .toSet()
+        for (entry in local.filter { it.book.url in peakSpeakers }) {
             collectPeak(permissionId, deviceId, drivePeerId, entry, nextHlc, records, peakAcks)
         }
 
@@ -1053,24 +1128,10 @@ internal class DrivePositionSync(
                 val floor = getPersistedFloor(permissionId, canonicalWorkKey, body.deviceId)
                 if (body.seq <= floor) return
 
-                val payload = DriveCanonicalJson.encode(
-                    mapOf(
-                        "locatorJson" to body.locatorJson,
-                        "coverage" to body.coverage,
-                        "peakAt" to body.peakAt,
-                    ),
-                )
-                furthestDao.observe(
-                    FurthestPosition(
-                        peerId = drivePeerId,
-                        workId = canonicalWorkKey,
-                        edition = body.editionSha,
-                        origin = body.deviceId,
-                        progression = body.progression,
-                        seq = body.seq,
-                        payload = payload,
-                    ),
-                )
+                observePeak(drivePeerId, canonicalWorkKey, body)
+                // Batches can arrive out of order; the retained record must stay the highest seq.
+                val retained = decodePeak(recordStates.get(permissionId, DriveWireCodec.DOMAIN_FURTHEST, record.k)?.bodyJson)
+                if (retained != null && retained.seq > body.seq) return
                 store.withTransaction {
                     recordStates.upsert(
                         DriveRecordState(
@@ -1527,6 +1588,12 @@ internal class DrivePositionSync(
             { it.progress.updatedAt },
             { it.book.url },
         )
+
+        private val PEAK_WINNER_ORDER: Comparator<Pair<LocalEdition, DriveFurthestBody.Peak>> =
+            compareBy<Pair<LocalEdition, DriveFurthestBody.Peak>>(
+                { it.second.progression },
+                { it.second.peakAt },
+            ).thenComparator { a, b -> b.first.bookUrl.compareTo(a.first.bookUrl) }
 
         fun positionRecordKey(workKey: String, deviceId: String): String = "$workKey/$deviceId"
         fun peakRecordKey(workKey: String, editionSha: String, deviceId: String): String =

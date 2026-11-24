@@ -20,6 +20,7 @@ import com.chmouel.liseur.data.remote.RemoteAccountRepository
 import com.chmouel.liseur.data.remote.ResolveOutcome
 import com.chmouel.liseur.data.remote.SyncFailure
 import com.chmouel.liseur.data.remote.SyncOutcome
+import com.chmouel.liseur.domain.BookFingerprint
 import com.chmouel.liseur.domain.BookFingerprints
 import com.chmouel.liseur.domain.FinishedOverride
 import com.chmouel.liseur.domain.Identifier
@@ -39,6 +40,7 @@ import java.io.OutputStream
 import java.util.concurrent.atomic.AtomicInteger
 import javax.crypto.KeyGenerator
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
@@ -816,7 +818,10 @@ class DrivePhase3EndToEndTest {
         assertEquals(0.20, deviceA.liseurDb.readingProgressDao().get(book.url)!!.peakProgression!!, 0.0001)
         assertEquals(0, deviceA.driveDb.recordStates().forDomain(PERM_ID, "_furthest_reset_pending").size)
         deviceB.changeEngine.sync()
-        assertTrue(deviceB.observed("sha:$sha").isEmpty())
+        // The reset drops the forgotten 80% peak; the post-reset peak (seq above the floor) stays.
+        val after = deviceB.observed("sha:$sha").single()
+        assertEquals(0.20, after.progression, 0.0001)
+        assertTrue(after.seq > deviceB.positionSync.getPersistedFloor(PERM_ID, "sha:$sha", "dev-a"))
 
         // A completed replay must not run again: turning further back leaves the new peak alone.
         deviceA.read(book.url, 0.10, 3_000L)
@@ -990,6 +995,165 @@ class DrivePhase3EndToEndTest {
         deviceA.changeEngine.sync()
         deviceB.changeEngine.sync()
         assertEquals(0.90, deviceB.observed("sha:$shaY").single().progression, 0.0001)
+    }
+
+    private fun remotePeak(workKey: String, sha: String, origin: String, seq: Long, progression: Double) =
+        DriveWireCodec.putRecord(
+            DriveWireCodec.DOMAIN_FURTHEST,
+            DrivePositionSync.peakRecordKey(workKey, sha, origin),
+            "0017450000000-%04d-$origin".format(seq),
+            DriveWireCodec.encodeFurthestBody(
+                DriveFurthestBody.Peak(
+                    workKey = workKey, editionSha = sha, deviceId = origin, seq = seq,
+                    progression = progression, locatorJson = """{"href":"s$seq.xhtml"}""",
+                    coverage = null, peakAt = 1_000L + seq,
+                ),
+            ),
+        )
+
+    private fun remoteReset(workKey: String, resetId: String, floors: Map<String, Long>) =
+        DriveWireCodec.putRecord(
+            DriveWireCodec.DOMAIN_FURTHEST,
+            DrivePositionSync.resetRecordKey(workKey, resetId),
+            "0017450009999-0001-dev-c",
+            DriveWireCodec.encodeFurthestBody(DriveFurthestBody.Reset(workKey, resetId, floors, resetAt = 9_000L)),
+        )
+
+    private suspend fun DeviceHarness.applyFurthest(record: DriveWireRecord, origin: String) =
+        positionSync.applyRemoteFurthest(PERM_ID, deviceId, record, origin, remoteSeq = 1L)
+
+    @Test
+    fun `a newer lower peak survives a reset that covers the higher peak whatever the delivery order`() = runTest {
+        deviceB.connect()
+        val sha = "6".repeat(64)
+        val workKey = "sha:$sha"
+        val high = remotePeak(workKey, sha, "dev-a", seq = 10L, progression = 0.80)
+        val low = remotePeak(workKey, sha, "dev-a", seq = 11L, progression = 0.30)
+        val reset = remoteReset(workKey, "r1", mapOf("dev-a" to 10L))
+
+        deviceB.applyFurthest(high, "dev-a")
+        deviceB.applyFurthest(low, "dev-a")
+        assertEquals(0.80, deviceB.observed(workKey).single().progression, 0.0001)
+        deviceB.applyFurthest(reset, "dev-c")
+        val afterInOrder = deviceB.observed(workKey).single()
+        assertEquals(0.30, afterInOrder.progression, 0.0001)
+        assertEquals(11L, afterInOrder.seq)
+
+        // A reset that also covers the lower peak removes it.
+        deviceB.applyFurthest(remoteReset(workKey, "r2", mapOf("dev-a" to 11L)), "dev-c")
+        assertTrue(deviceB.observed(workKey).isEmpty())
+
+        // Out of order: the lower peak lands first, then the older higher one, then the reset.
+        val sha2 = "7".repeat(64)
+        val workKey2 = "sha:$sha2"
+        deviceB.applyFurthest(remotePeak(workKey2, sha2, "dev-a", seq = 11L, progression = 0.30), "dev-a")
+        deviceB.applyFurthest(remotePeak(workKey2, sha2, "dev-a", seq = 10L, progression = 0.80), "dev-a")
+        assertEquals(0.80, deviceB.observed(workKey2).single().progression, 0.0001)
+        deviceB.applyFurthest(remoteReset(workKey2, "r3", mapOf("dev-a" to 10L)), "dev-c")
+        val afterReordered = deviceB.observed(workKey2).single()
+        assertEquals(0.30, afterReordered.progression, 0.0001)
+        assertEquals(11L, afterReordered.seq)
+
+        // A reset seen first still lets the newer lower peak through and drops the covered one.
+        val sha3 = "8".repeat(64)
+        val workKey3 = "sha:$sha3"
+        deviceB.applyFurthest(remoteReset(workKey3, "r4", mapOf("dev-a" to 10L)), "dev-c")
+        deviceB.applyFurthest(remotePeak(workKey3, sha3, "dev-a", seq = 10L, progression = 0.80), "dev-a")
+        deviceB.applyFurthest(remotePeak(workKey3, sha3, "dev-a", seq = 11L, progression = 0.30), "dev-a")
+        assertEquals(0.30, deviceB.observed(workKey3).single().progression, 0.0001)
+    }
+
+    @Test
+    fun `two local books of one edition publish one deterministic peak and a forget resets both`() = runTest {
+        deviceA.connect()
+        deviceB.connect()
+        val sha = "9".repeat(64)
+        val first = peakBook("dup-a")
+        val second = peakBook("dup-b")
+        deviceA.addBook(first, sha)
+        deviceA.addBook(second, sha)
+        deviceA.read(first.url, 0.80, 1_000L)
+        deviceA.read(first.url, 0.20, 2_000L)
+        deviceA.read(second.url, 0.50, 3_000L)
+
+        val published = deviceA.collectPeaks().records.filter { it.d == DriveWireCodec.DOMAIN_FURTHEST }
+        val peak = DriveWireCodec.decodeFurthestBody(requireNotNull(published.single().body)) as DriveFurthestBody.Peak
+        assertEquals(0.80, peak.progression, 0.0001)
+        assertEquals(
+            published.single().peakSeq(),
+            deviceA.collectPeaks().records.single { it.d == DriveWireCodec.DOMAIN_FURTHEST }.peakSeq(),
+        )
+
+        deviceA.changeEngine.sync()
+        deviceB.changeEngine.sync()
+        assertEquals(0.80, deviceB.observed("sha:$sha").single().progression, 0.0001)
+
+        assertEquals(ResolveOutcome.Done, deviceA.forget(second.url))
+        assertEquals(0.20, deviceA.liseurDb.readingProgressDao().get(first.url)!!.peakProgression!!, 0.0001)
+        assertEquals(0.50, deviceA.liseurDb.readingProgressDao().get(second.url)!!.peakProgression!!, 0.0001)
+
+        deviceA.changeEngine.sync()
+        deviceB.changeEngine.sync()
+        val republished = deviceB.observed("sha:$sha").single()
+        assertEquals(0.50, republished.progression, 0.0001)
+        assertTrue(republished.seq > deviceA.positionSync.getPersistedFloor(PERM_ID, "sha:$sha", "dev-a"))
+        assertTrue(deviceA.collectPeaks().records.none { it.d == DriveWireCodec.DOMAIN_FURTHEST && it.k.startsWith("peak/") })
+    }
+
+    private suspend fun DeviceHarness.seedDownloadable(): Pair<String, BookFingerprint> {
+        val bytes = "DEACTIVATION-RACE-EPUB-BYTES-1234567890".toByteArray()
+        val fp = BookFingerprints.of(ByteArrayInputStream(bytes))
+        val fileId = driveServer.seedEpubFile("race.epub", bytes, fp.sha256, "sha:${fp.sha256}")
+        val body = DriveCatalogBody(
+            workKey = "sha:${fp.sha256}", title = "Race Book", author = "Author", identifiers = emptyList(),
+            editions = listOf(DriveCatalogEdition(fp.sha256, fp.size, fileId, "race.epub", 100L)),
+            fileSeriesName = null, fileSeriesIndex = null, addedAt = 100L, archivedAt = null, updatedAt = 100L,
+        )
+        catalogSync.applyRemoteRecord(
+            PERM_ID,
+            DriveWireCodec.putRecord(DriveWireCodec.DOMAIN_CATALOG, body.workKey, "0017450000000-0001-dev-a", DriveWireCodec.encodeCatalogBody(body)),
+            "dev-a",
+            1L,
+        )
+        return "drive:sha:${fp.sha256}" to fp
+    }
+
+    @Test
+    fun `deactivating drains an in-flight EPUB download before returning`() = runTest {
+        deviceB.connect()
+        val (stubUrl, fp) = deviceB.seedDownloadable()
+        val entered = CompletableDeferred<Unit>()
+        driveServer.onDownloadEntered = entered
+        driveServer.downloadGate = CompletableDeferred()
+        val download = async { deviceB.driveSync.epubTransfers.downloadBook(stubUrl) }
+        entered.await()
+
+        deviceB.driveSync.deactivate()
+
+        assertTrue("deactivate must not return while the download is still running", download.isCompleted)
+        assertTrue(download.isCancelled)
+        val installed = DriveEpubTransferManager.downloadTargetFile(File(context.filesDir, "books"), stubUrl, fp.sha256)
+        assertFalse(installed.exists())
+        assertFalse(deviceB.liseurDb.bookDao().getByUrl(stubUrl)!!.downloadState == DownloadState.DOWNLOADED)
+    }
+
+    @Test
+    fun `a verified download is not installed once the account stopped being active`() = runTest {
+        deviceB.connect()
+        val (stubUrl, fp) = deviceB.seedDownloadable()
+        val entered = CompletableDeferred<Unit>()
+        val gate = CompletableDeferred<Unit>()
+        driveServer.onDownloadEntered = entered
+        driveServer.downloadGate = gate
+        driveServer.downloadGateIgnoresCancellation = true
+        val download = async { deviceB.epubTransfers.downloadBook(stubUrl) }
+        entered.await()
+        deviceB.driveDb.accounts().pauseAllActive()
+        gate.complete(Unit)
+
+        assertTrue(download.await() is DriveEpubDownloadOutcome.RetryableFailure)
+        assertFalse(DriveEpubTransferManager.downloadTargetFile(deviceB.booksDir, stubUrl, fp.sha256).exists())
+        assertEquals(DownloadState.QUEUED, deviceB.liseurDb.bookDao().getByUrl(stubUrl)!!.downloadState)
     }
 
     @Test
@@ -1934,6 +2098,9 @@ class DrivePhase3EndToEndTest {
         var apiDelayMs: Long = 0L
         var onApiEntered: CompletableDeferred<Unit>? = null
         var apiGate: CompletableDeferred<Unit>? = null
+        var onDownloadEntered: CompletableDeferred<Unit>? = null
+        var downloadGate: CompletableDeferred<Unit>? = null
+        var downloadGateIgnoresCancellation = false
         var nextApiException: DriveApiException? = null
         var failNextResumableUploadAfterBytes: Pair<Long, Exception>? = null
         var lastResumedUploadSessionUri: String? = null
@@ -2180,6 +2347,10 @@ class DrivePhase3EndToEndTest {
             onRestartFromZero: () -> Unit, onProgress: (Long) -> Unit,
         ): DriveDownloadResult {
             checkAuth()
+            onDownloadEntered?.complete(Unit)
+            downloadGate?.let { gate ->
+                if (downloadGateIgnoresCancellation) withContext(NonCancellable) { gate.await() } else gate.await()
+            }
             lastDownloadStartOffset = startOffset
             val bytes = (driveFiles[fileId] ?: appDataFiles[fileId])?.second
                 ?: throw DriveNotFoundException("Not found: $fileId", fileId)
