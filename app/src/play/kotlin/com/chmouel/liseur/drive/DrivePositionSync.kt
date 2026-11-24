@@ -296,53 +296,56 @@ internal class DrivePositionSync(
 
         val devId = localDeviceId()
         val now = clock()
-        val workKey = workIdentity.canonicalWorkKey(account.permissionId, alias.workId)
+        val permissionId = account.permissionId
+        val workKey = workIdentity.canonicalWorkKey(permissionId, alias.workId)
         val observed = furthestDao.forWork(drivePeerId, workKey)
-        val stored = progressDao.get(bookUrl)
+        val editions = localEditions(permissionId, drivePeerId, workKey)
+        val templates = editions.mapNotNull { edition ->
+            peakTemplate(workKey, devId, edition.alias.bookUrl, edition.alias.editionSha, edition.progress)
+                ?.let { edition.progress.peakRevision!! to it }
+        }
 
         val floors = linkedMapOf<String, Long>()
         for (row in observed) {
             val origin = row.origin.ifBlank { devId }
-            val current = floors[origin] ?: 0L
-            floors[origin] = maxOf(current, row.seq)
-        }
-        stored?.peakRevision?.let { rev ->
-            val current = floors[devId] ?: 0L
-            floors[devId] = maxOf(current, rev)
-        }
-        if (floors.isEmpty() && uptoSeq > 0L) {
-            floors[devId] = uptoSeq
+            floors[origin] = maxOf(floors[origin] ?: 0L, row.seq)
         }
 
         val resetId = UUID.randomUUID().toString().lowercase(Locale.ROOT)
         val resetKey = resetRecordKey(workKey, resetId)
-        val body = DriveFurthestBody.Reset(
-            workKey = workKey,
-            resetId = resetId,
-            floors = floors.toSortedMap(),
-            resetAt = now,
-        )
-        val bodyMap = DriveWireCodec.encodeFurthestBody(body)
-        val fp = DriveCanonicalJson.contentFp(bodyMap)
-        val hlc = nextHlc(account.permissionId)
+        val hlc = nextHlc(permissionId)
 
-        // Transaction 1 (`liseur.db`): drop observations <= floor and reset local peak immediately.
-        database.withTransaction {
-            for ((origin, floor) in floors) {
-                furthestDao.deleteUpToForOrigin(drivePeerId, workKey, origin, floor)
-            }
-            progressDao.resetPeak(bookUrl, alias.editionSha)
-            furthestDao.deleteDelivery(drivePeerId, bookUrl, workKey)
-        }
-
-        // Transaction 2 (`drive_sync.db`): persist durable floors and queue reset for delta publish.
+        // Persist the reset, its floors and a replay marker in `drive_sync.db` before any local
+        // data is cleared, so a stop at any later point is completed by [reapplyPendingResets].
+        // Every local edition's peak is bound first: the local floor is the highest sequence
+        // this device has allocated, so all of them fall under it.
         store.withTransaction {
+            for ((peakRev, template) in templates) {
+                val peakKey = peakRecordKey(workKey, template.editionSha, devId)
+                bindPeak(
+                    permissionId, peakKey, peakRev, template,
+                    getPersistedFloor(permissionId, workKey, devId),
+                ) { hlc }
+            }
+            val allocated = peakSeqHighWater(permissionId)
+            if (allocated > 0L) floors[devId] = maxOf(floors[devId] ?: 0L, allocated)
+            if (floors.isEmpty() && uptoSeq > 0L) {
+                floors[devId] = uptoSeq
+            }
+            val body = DriveFurthestBody.Reset(
+                workKey = workKey,
+                resetId = resetId,
+                floors = floors.toSortedMap(),
+                resetAt = now,
+            )
+            val bodyMap = DriveWireCodec.encodeFurthestBody(body)
+            val fp = DriveCanonicalJson.contentFp(bodyMap)
             for ((origin, floor) in floors) {
-                raisePersistedFloor(account.permissionId, workKey, origin, floor, hlc)
+                raisePersistedFloor(permissionId, workKey, origin, floor, hlc)
             }
             recordStates.upsert(
                 DriveRecordState(
-                    permissionId = account.permissionId,
+                    permissionId = permissionId,
                     domain = DriveWireCodec.DOMAIN_FURTHEST,
                     recordKey = resetKey,
                     versionFp = fp,
@@ -355,9 +358,91 @@ internal class DrivePositionSync(
                     bodyJson = DriveCanonicalJson.encode(bodyMap),
                 ),
             )
+            recordStates.upsert(
+                DriveRecordState(
+                    permissionId = permissionId,
+                    domain = RESET_PENDING_DOMAIN,
+                    recordKey = resetKey,
+                    versionFp = fp,
+                    versionOp = DriveRecordState.OP_PUT,
+                    lastHlc = hlc,
+                ),
+            )
         }
+
+        reapplyPendingResets(permissionId, devId)
         return ResolveOutcome.Done
     }
+
+    /** Completes the local effects of forgets whose reset was persisted but not yet applied. */
+    suspend fun reapplyPendingResets(permissionId: String, localDeviceId: String) {
+        for (marker in recordStates.forDomain(permissionId, RESET_PENDING_DOMAIN)) {
+            val reset = recordStates.get(permissionId, DriveWireCodec.DOMAIN_FURTHEST, marker.recordKey)
+                ?.bodyJson
+                ?.let { runCatching { DriveWireCodec.decodeFurthestBody(JSONObject(it)) }.getOrNull() }
+                as? DriveFurthestBody.Reset
+            if (reset != null) {
+                applyFloorsLocally(
+                    permissionId,
+                    workIdentity.canonicalWorkKey(permissionId, reset.workKey),
+                    reset.floors,
+                    localDeviceId,
+                )
+            }
+            store.withTransaction {
+                recordStates.delete(permissionId, RESET_PENDING_DOMAIN, marker.recordKey)
+            }
+        }
+    }
+
+    /**
+     * Drops observations at or below each origin's floor and resets every local edition whose
+     * bound peak sequence is covered by this device's floor.
+     */
+    private suspend fun applyFloorsLocally(
+        permissionId: String,
+        workKey: String,
+        floors: Map<String, Long>,
+        localDeviceId: String,
+    ) {
+        val drivePeerId = DriveLibrarySync.accountPeerId(permissionId)
+        val localFloor = floors[localDeviceId]
+        val covered = mutableListOf<Triple<String, String?, Long>>()
+        if (localFloor != null) {
+            for (edition in localEditions(permissionId, drivePeerId, workKey)) {
+                val peakRev = edition.progress.peakRevision ?: continue
+                val template = peakTemplate(workKey, localDeviceId, edition.alias.bookUrl, edition.alias.editionSha, edition.progress) ?: continue
+                val existing = recordStates.get(
+                    permissionId,
+                    DriveWireCodec.DOMAIN_FURTHEST,
+                    peakRecordKey(workKey, template.editionSha, localDeviceId),
+                )
+                val seq = boundPeakSeq(existing, peakRev, template) ?: continue
+                if (seq <= localFloor) covered.add(Triple(edition.alias.bookUrl, edition.alias.editionSha, peakRev))
+            }
+        }
+        database.withTransaction {
+            for ((origin, floor) in floors) {
+                furthestDao.deleteUpToForOrigin(drivePeerId, workKey, origin, floor)
+            }
+            for ((bookUrl, editionSha, peakRev) in covered) {
+                if (progressDao.get(bookUrl)?.peakRevision == peakRev) {
+                    progressDao.resetPeak(bookUrl, editionSha)
+                    furthestDao.deleteDelivery(drivePeerId, bookUrl, workKey)
+                }
+            }
+        }
+    }
+
+    private class LocalEdition(val alias: WorkAlias, val progress: ReadingProgress)
+
+    private suspend fun localEditions(
+        permissionId: String,
+        drivePeerId: String,
+        workKey: String,
+    ): List<LocalEdition> = identities.aliasesFor(drivePeerId)
+        .filter { it.usable && workIdentity.canonicalWorkKey(permissionId, it.workId) == workKey }
+        .mapNotNull { alias -> progressDao.get(alias.bookUrl)?.let { LocalEdition(alias, it) } }
 
     override suspend fun refreshUnresolved() = Unit
 
@@ -505,81 +590,7 @@ internal class DrivePositionSync(
         }
 
         for (entry in local) {
-            val book = entry.book
-            val workKey = entry.workKey
-            val progress = entry.progress
-
-            // Furthest peak outbound
-            val peakProg = progress.peakProgression
-            val peakRev = progress.peakRevision
-            val peakAt = progress.peakAt
-            if (peakProg != null && peakRev != null && peakAt != null && peakProg in 0.0..1.0) {
-                val delivered = furthestDao.delivered(drivePeerId, book.url, workKey)
-                val alreadyAcked = delivered?.acknowledged == true && delivered.revision >= peakRev
-                val floor = getPersistedFloor(permissionId, workKey, deviceId)
-                if (!alreadyAcked && peakRev > floor) {
-                    val peakEdition = (progress.peakEdition
-                        ?: identities.fingerprint(book.url)?.sha256
-                        ?: entry.aliasEditionSha
-                        ?: "").lowercase(Locale.ROOT)
-                    val peakKey = peakRecordKey(workKey, peakEdition, deviceId)
-                    val body = DriveFurthestBody.Peak(
-                        workKey = workKey,
-                        editionSha = peakEdition,
-                        deviceId = deviceId,
-                        seq = peakRev,
-                        progression = peakProg,
-                        locatorJson = DriveCanonicalJson.canonicalizeJsonString(
-                            progress.peakLocator?.ifBlank { ReadingProgress.EMPTY_LOCATOR }
-                                ?: ReadingProgress.EMPTY_LOCATOR,
-                        ),
-                        coverage = progress.peakCoverage,
-                        peakAt = peakAt,
-                    )
-                    val bodyMap = DriveWireCodec.encodeFurthestBody(body)
-                    val fp = DriveCanonicalJson.contentFp(bodyMap)
-                    val existing = recordStates.get(permissionId, DriveWireCodec.DOMAIN_FURTHEST, peakKey)
-                    if (existing == null || existing.publishedFp != fp) {
-                        val hlc = nextHlc()
-                        val anc = buildList {
-                            existing?.versionFp?.takeIf { it != fp }?.let(::add)
-                            addAll(DriveWorkIdentity.decodeStringArray(existing?.ancestorsJson))
-                        }.distinct().take(DriveWireCodec.MAX_ANCESTORS)
-                        val record = DriveWireCodec.putRecord(
-                            domain = DriveWireCodec.DOMAIN_FURTHEST,
-                            key = peakKey,
-                            hlc = hlc,
-                            bodyMap = bodyMap,
-                            ancestors = anc,
-                        )
-                        recordStates.upsert(
-                            DriveRecordState(
-                                permissionId = permissionId,
-                                domain = DriveWireCodec.DOMAIN_FURTHEST,
-                                recordKey = peakKey,
-                                versionFp = fp,
-                                versionOp = DriveRecordState.OP_PUT,
-                                publishedFp = existing?.publishedFp,
-                                contentFp = fp,
-                                ancestorsJson = DriveCanonicalJson.encode(anc),
-                                resRefsJson = "[]",
-                                lastHlc = hlc,
-                                bodyJson = DriveCanonicalJson.encode(bodyMap),
-                            ),
-                        )
-                        records.add(record)
-                        peakAcks.add(
-                            DrivePeakAckMeta(
-                                bookUrl = book.url,
-                                workKey = workKey,
-                                peakRevision = peakRev,
-                                recordKey = peakKey,
-                                recordFp = fp,
-                            ),
-                        )
-                    }
-                }
-            }
+            collectPeak(permissionId, deviceId, drivePeerId, entry, nextHlc, records, peakAcks)
         }
 
         // Unpublished furthest resets (append-only).
@@ -603,6 +614,164 @@ internal class DrivePositionSync(
 
         return OutboundBundle(records = records, positionAcks = posAcks, peakAcks = peakAcks)
     }
+
+    private suspend fun peakTemplate(
+        workKey: String,
+        deviceId: String,
+        bookUrl: String,
+        aliasEditionSha: String?,
+        progress: ReadingProgress,
+    ): DriveFurthestBody.Peak? {
+        val progression = progress.peakProgression
+        val peakAt = progress.peakAt
+        if (progress.peakRevision == null || progression == null || peakAt == null || progression !in 0.0..1.0) {
+            return null
+        }
+        val edition = (progress.peakEdition
+            ?: identities.fingerprint(bookUrl)?.sha256
+            ?: aliasEditionSha
+            ?: "").lowercase(Locale.ROOT)
+        return DriveFurthestBody.Peak(
+            workKey = workKey,
+            editionSha = edition,
+            deviceId = deviceId,
+            seq = 0L,
+            progression = progression,
+            locatorJson = DriveCanonicalJson.canonicalizeJsonString(
+                progress.peakLocator?.ifBlank { ReadingProgress.EMPTY_LOCATOR }
+                    ?: ReadingProgress.EMPTY_LOCATOR,
+            ),
+            coverage = progress.peakCoverage,
+            peakAt = peakAt,
+        )
+    }
+
+    private suspend fun collectPeak(
+        permissionId: String,
+        deviceId: String,
+        drivePeerId: String,
+        entry: LocalPosition,
+        nextHlc: suspend () -> String,
+        records: MutableList<DriveWireRecord>,
+        peakAcks: MutableList<DrivePeakAckMeta>,
+    ) {
+        val workKey = entry.workKey
+        val peakRev = entry.progress.peakRevision ?: return
+        val template = peakTemplate(workKey, deviceId, entry.book.url, entry.aliasEditionSha, entry.progress)
+            ?: return
+        val delivered = furthestDao.delivered(drivePeerId, entry.book.url, workKey)
+        if (delivered?.acknowledged == true && delivered.revision >= peakRev) return
+
+        val peakKey = peakRecordKey(workKey, template.editionSha, deviceId)
+        // Allocation and binding commit together so a retry re-sends the same sequence.
+        val bound = store.withTransaction {
+            val floor = getPersistedFloor(permissionId, workKey, deviceId)
+            bindPeak(permissionId, peakKey, peakRev, template, floor, nextHlc)
+                .takeIf { it.body.seq > floor && it.state.publishedFp != it.state.versionFp }
+        } ?: return
+        records.add(
+            DriveWireCodec.putRecord(
+                domain = DriveWireCodec.DOMAIN_FURTHEST,
+                key = peakKey,
+                hlc = bound.state.lastHlc,
+                bodyMap = DriveWireCodec.encodeFurthestBody(bound.body),
+                ancestors = DriveWorkIdentity.decodeStringArray(bound.state.ancestorsJson),
+            ),
+        )
+        peakAcks.add(
+            DrivePeakAckMeta(
+                bookUrl = entry.book.url,
+                workKey = workKey,
+                peakRevision = peakRev,
+                recordKey = peakKey,
+                recordFp = bound.state.versionFp,
+            ),
+        )
+    }
+
+    private fun decodePeak(bodyJson: String?): DriveFurthestBody.Peak? =
+        bodyJson?.let { runCatching { DriveWireCodec.decodeFurthestBody(JSONObject(it)) }.getOrNull() }
+            as? DriveFurthestBody.Peak
+
+    private class BoundPeak(val state: DriveRecordState, val body: DriveFurthestBody.Peak)
+
+    /** The wire sequence bound to this exact local peak, or null if none was allocated yet. */
+    private fun boundPeakSeq(
+        existing: DriveRecordState?,
+        peakRev: Long,
+        template: DriveFurthestBody.Peak,
+    ): Long? {
+        if (existing == null || existing.versionOp != DriveRecordState.OP_PUT ||
+            existing.lastSyncedRevision != peakRev
+        ) {
+            return null
+        }
+        val seq = decodePeak(existing.bodyJson)?.seq?.takeIf { it > 0L } ?: return null
+        val fp = DriveCanonicalJson.contentFp(
+            DriveWireCodec.encodeFurthestBody(template.copy(seq = seq)),
+        )
+        return seq.takeIf { fp == existing.versionFp }
+    }
+
+    /**
+     * Binds a local peak to a device-wide wire sequence, allocating one above [floor] and the
+     * counter when this peak has none. Per-book revisions never act as wire sequences: they
+     * restart for every book, while floors apply to the whole work. Call inside a store transaction.
+     */
+    private suspend fun bindPeak(
+        permissionId: String,
+        peakKey: String,
+        peakRev: Long,
+        template: DriveFurthestBody.Peak,
+        floor: Long,
+        hlc: suspend () -> String,
+    ): BoundPeak {
+        val existing = recordStates.get(permissionId, DriveWireCodec.DOMAIN_FURTHEST, peakKey)
+        val boundSeq = boundPeakSeq(existing, peakRev, template)
+        if (boundSeq != null) {
+            return BoundPeak(requireNotNull(existing), template.copy(seq = boundSeq))
+        }
+        val allocatedAt = hlc()
+        val seq = maxOf(peakSeqHighWater(permissionId), floor) + 1L
+        recordStates.upsert(
+            DriveRecordState(
+                permissionId = permissionId,
+                domain = PEAK_SEQ_DOMAIN,
+                recordKey = PEAK_SEQ_KEY,
+                versionFp = seq.toString(),
+                versionOp = DriveRecordState.OP_PUT,
+                publishedFp = seq.toString(),
+                lastSyncedRevision = seq,
+                lastHlc = allocatedAt,
+            ),
+        )
+        val body = template.copy(seq = seq)
+        val bodyMap = DriveWireCodec.encodeFurthestBody(body)
+        val fp = DriveCanonicalJson.contentFp(bodyMap)
+        val anc = buildList {
+            existing?.versionFp?.takeIf { it != fp }?.let(::add)
+            addAll(DriveWorkIdentity.decodeStringArray(existing?.ancestorsJson))
+        }.distinct().take(DriveWireCodec.MAX_ANCESTORS)
+        val state = DriveRecordState(
+            permissionId = permissionId,
+            domain = DriveWireCodec.DOMAIN_FURTHEST,
+            recordKey = peakKey,
+            versionFp = fp,
+            versionOp = DriveRecordState.OP_PUT,
+            publishedFp = existing?.publishedFp,
+            contentFp = fp,
+            lastSyncedRevision = peakRev,
+            ancestorsJson = DriveCanonicalJson.encode(anc),
+            resRefsJson = "[]",
+            lastHlc = allocatedAt,
+            bodyJson = DriveCanonicalJson.encode(bodyMap),
+        )
+        recordStates.upsert(state)
+        return BoundPeak(state, body)
+    }
+
+    private suspend fun peakSeqHighWater(permissionId: String): Long =
+        recordStates.get(permissionId, PEAK_SEQ_DOMAIN, PEAK_SEQ_KEY)?.lastSyncedRevision ?: 0L
 
     /** Commits delivery ACKs to `liseur.db` first, then marks `published_fp` in `drive_sync.db`. */
     suspend fun acknowledgePublished(
@@ -828,29 +997,8 @@ internal class DrivePositionSync(
 
         when (body) {
             is DriveFurthestBody.Reset -> {
-                // Transaction 1 (`liseur.db`): delete observations <= floor per origin & reset local peak if covered.
-                database.withTransaction {
-                    for ((origin, floor) in body.floors) {
-                        furthestDao.deleteUpToForOrigin(drivePeerId, canonicalWorkKey, origin, floor)
-                    }
-                    val localFloor = body.floors[localDeviceId]
-                    if (localFloor != null) {
-                        val aliases = identities.aliasesFor(drivePeerId).filter { alias ->
-                            alias.usable && workIdentity.canonicalWorkKey(permissionId, alias.workId) == canonicalWorkKey
-                        }
-                        for (alias in aliases) {
-                            val stored = progressDao.get(alias.bookUrl) ?: continue
-                            val delivery = furthestDao.delivered(drivePeerId, alias.bookUrl, canonicalWorkKey)
-                            val localPeakRev = stored.peakRevision
-                            val covered = localPeakRev == null ||
-                                (localPeakRev <= localFloor && (delivery == null || delivery.acknowledged))
-                            if (covered) {
-                                progressDao.resetPeak(alias.bookUrl, alias.editionSha)
-                                furthestDao.deleteDelivery(drivePeerId, alias.bookUrl, canonicalWorkKey)
-                            }
-                        }
-                    }
-                }
+                // Transaction 1 (`liseur.db`): delete observations <= floor per origin & reset local peaks it covers.
+                applyFloorsLocally(permissionId, canonicalWorkKey, body.floors, localDeviceId)
                 // Transaction 2 (`drive_sync.db`): persist durable floors & reset record forever.
                 store.withTransaction {
                     for ((origin, floor) in body.floors) {
@@ -1343,6 +1491,9 @@ internal class DrivePositionSync(
         const val PEAK_KEY_PREFIX = "peak/"
         const val RESET_KEY_PREFIX = "reset/"
         private const val FLOOR_STATE_DOMAIN = "_furthest_floor"
+        private const val PEAK_SEQ_DOMAIN = "_furthest_peak_seq"
+        private const val PEAK_SEQ_KEY = "self"
+        private const val RESET_PENDING_DOMAIN = "_furthest_reset_pending"
 
         /** Latest reading wins a shared `(workKey, deviceId)` slot; the URL keeps the choice stable. */
         private val POSITION_WINNER_ORDER: Comparator<LocalPosition> = compareBy<LocalPosition>(

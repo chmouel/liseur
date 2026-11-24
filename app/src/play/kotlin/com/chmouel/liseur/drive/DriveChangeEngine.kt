@@ -201,6 +201,9 @@ internal class DriveChangeEngine(
         // BEFORE applying incoming remote catalog/position records.
         workIdentity.resolveAllLocalBooks(permissionId)
 
+        // Finish forgets interrupted after their reset was persisted, before pulls can restore the peak.
+        positionSync.reapplyPendingResets(permissionId, localDeviceId)
+
         // 1. Pull remote state (bootstrap or incremental changes.list).
         val appliedDeltas = if (account.startPageToken.isNullOrBlank() || forceManifestRescan) {
             bootstrapPull(permissionId, localDeviceId, accessToken)

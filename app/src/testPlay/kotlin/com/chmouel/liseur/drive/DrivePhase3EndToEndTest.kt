@@ -695,6 +695,202 @@ class DrivePhase3EndToEndTest {
         assertTrue(deviceA.positionSync.getPersistedFloor(PERM_ID, "sha:$sha", "dev-a") >= 1L)
     }
 
+    private fun peakBook(name: String, isbn: String? = null) = Book(
+        url = "file:///$name.epub", title = "The Hobbit", author = "J.R.R. Tolkien",
+        coverPath = null, source = null, addedAt = 100L, lastOpenedAt = null,
+        localUri = "file:///$name.epub", downloadState = DownloadState.DOWNLOADED,
+        fileTitle = "The Hobbit", fileAuthor = "J.R.R. Tolkien", fileMetadataChecked = true,
+        workId = isbn?.let { "urn:isbn:$it" },
+    )
+
+    private suspend fun DeviceHarness.addBook(book: Book, sha: String) {
+        liseurDb.bookDao().upsert(book)
+        liseurDb.workIdentityDao().upsert(BookFingerprintRow(book.url, sha, "md5-$sha", 10L, sha.hashCode().toLong(), 1L))
+    }
+
+    private suspend fun DeviceHarness.read(bookUrl: String, progression: Double, at: Long) {
+        liseurDb.readingProgressDao().recordLocal(
+            bookUrl = bookUrl, locatorJson = """{"href":"p$at.xhtml"}""", progression = progression,
+            readingSecondsPerPosition = null, readingPaceSamples = null, readingPaceElapsedMs = null,
+            readingPaceEvidence = null, status = "Reading", updatedAt = at,
+        )
+    }
+
+    private suspend fun DeviceHarness.forget(bookUrl: String): ResolveOutcome {
+        val ready = positionSync.previewKnownBook(bookUrl) as com.chmouel.liseur.data.remote.PreviewOutcome.Ready
+        return positionSync.forgetFurthestPosition(bookUrl, ready.preview.furthest!!, uptoSeq = 0L)
+    }
+
+    private suspend fun DeviceHarness.observed(workKey: String) =
+        liseurDb.furthestPositionDao().forWork(DriveLibrarySync.accountPeerId(PERM_ID), workKey)
+
+    private fun DriveWireRecord.peakSeq(): Long =
+        (DriveWireCodec.decodeFurthestBody(requireNotNull(body)) as DriveFurthestBody.Peak).seq
+
+    private suspend fun DeviceHarness.collectPeaks(): DrivePositionSync.OutboundBundle {
+        var n = 0
+        return positionSync.collectDirtyRecords(PERM_ID, deviceId) { "0000000${n++}-0000-$deviceId" }
+    }
+
+    @Test
+    fun `forgetting persists its reset before local cleanup and the next sync completes an interrupted forget`() = runTest {
+        deviceA.connect()
+        deviceB.connect()
+        val sha = "d".repeat(64)
+        val book = peakBook("crash")
+        deviceA.addBook(book, sha)
+        deviceA.read(book.url, 0.80, 1_000L)
+        deviceA.read(book.url, 0.20, 2_000L)
+        deviceA.changeEngine.sync()
+        deviceB.changeEngine.sync()
+        assertEquals(1, deviceB.observed("sha:$sha").size)
+
+        val sqlite = deviceA.liseurDb.openHelper.writableDatabase
+        sqlite.execSQL(
+            "CREATE TRIGGER crash_reset BEFORE UPDATE OF peak_progression ON reading_progress " +
+                "BEGIN SELECT RAISE(ABORT, 'crash'); END",
+        )
+        val failure = runCatching { deviceA.forget(book.url) }.exceptionOrNull()
+        sqlite.execSQL("DROP TRIGGER crash_reset")
+        assertNotNull(failure)
+
+        // The reset and its floor are durable while the local peak is still the forgotten one.
+        assertEquals(0.80, deviceA.liseurDb.readingProgressDao().get(book.url)!!.peakProgression!!, 0.0001)
+        assertTrue(deviceA.positionSync.getPersistedFloor(PERM_ID, "sha:$sha", "dev-a") >= 1L)
+        assertEquals(1, deviceA.driveDb.recordStates().forDomain(PERM_ID, "_furthest_reset_pending").size)
+
+        deviceA.changeEngine.sync()
+        assertEquals(0.20, deviceA.liseurDb.readingProgressDao().get(book.url)!!.peakProgression!!, 0.0001)
+        assertEquals(0, deviceA.driveDb.recordStates().forDomain(PERM_ID, "_furthest_reset_pending").size)
+        deviceB.changeEngine.sync()
+        assertTrue(deviceB.observed("sha:$sha").isEmpty())
+
+        // A completed replay must not run again: turning further back leaves the new peak alone.
+        deviceA.read(book.url, 0.10, 3_000L)
+        deviceA.changeEngine.sync()
+        assertEquals(0.20, deviceA.liseurDb.readingProgressDao().get(book.url)!!.peakProgression!!, 0.0001)
+    }
+
+    @Test
+    fun `a forgotten work resets every local edition and a later low-revision peak on another edition still publishes`() = runTest {
+        deviceA.connect()
+        deviceB.connect()
+        val isbn = "9780547928227"
+        val older = peakBook("older", isbn)
+        val newer = peakBook("newer", isbn)
+        val other = peakBook("unrelated")
+        val shaOlder = "1".repeat(64)
+        val shaNewer = "2".repeat(64)
+        val shaOther = "3".repeat(64)
+        deviceA.addBook(older, shaOlder)
+        deviceA.addBook(newer, shaNewer)
+        deviceA.addBook(other, shaOther)
+        for (i in 1..10) deviceA.read(older.url, i / 100.0, 1_000L + i)
+        deviceA.read(newer.url, 0.30, 5_000L)
+        deviceA.read(other.url, 0.60, 6_000L)
+        assertEquals(10L, deviceA.liseurDb.readingProgressDao().get(older.url)!!.peakRevision)
+
+        deviceA.changeEngine.sync()
+        deviceB.changeEngine.sync()
+        val before = deviceB.observed("isbn:$isbn")
+        assertEquals(2, before.size)
+        assertTrue("wire seq must not be the per-book revision", before.all { it.seq < 10L })
+        val otherSeq = deviceB.observed("sha:$shaOther").single().seq
+        val otherPeakRevision = deviceA.liseurDb.readingProgressDao().get(other.url)!!.peakRevision
+
+        assertEquals(ResolveOutcome.Done, deviceA.forget(older.url))
+
+        val newerAfter = deviceA.liseurDb.readingProgressDao().get(newer.url)!!
+        assertEquals(newerAfter.totalProgression, newerAfter.peakProgression)
+        val olderAfter = deviceA.liseurDb.readingProgressDao().get(older.url)!!
+        assertEquals(olderAfter.totalProgression, olderAfter.peakProgression)
+        assertEquals(otherPeakRevision, deviceA.liseurDb.readingProgressDao().get(other.url)!!.peakRevision)
+        assertEquals(0L, deviceA.positionSync.getPersistedFloor(PERM_ID, "sha:$shaOther", "dev-a"))
+        assertEquals(0L, deviceA.positionSync.getPersistedFloor("other-account", "isbn:$isbn", "dev-a"))
+
+        deviceA.changeEngine.sync()
+        deviceB.changeEngine.sync()
+        assertTrue(deviceB.observed("isbn:$isbn").isEmpty())
+        assertEquals(otherSeq, deviceB.observed("sha:$shaOther").single().seq)
+
+        // Revision 2 on the other edition is far below the forgotten edition's revision 10.
+        deviceA.read(newer.url, 0.90, 7_000L)
+        assertEquals(2L, deviceA.liseurDb.readingProgressDao().get(newer.url)!!.peakRevision)
+        deviceA.changeEngine.sync()
+        deviceB.changeEngine.sync()
+        val republished = deviceB.observed("isbn:$isbn").single()
+        assertEquals(shaNewer, republished.edition)
+        assertEquals(0.90, republished.progression, 0.0001)
+        assertTrue(republished.seq > before.maxOf { it.seq })
+        assertTrue(republished.seq > otherSeq)
+    }
+
+    @Test
+    fun `a peak keeps its wire seq across retries and a reimported book gets a higher one`() = runTest {
+        deviceA.connect()
+        deviceB.connect()
+        val sha = "e".repeat(64)
+        val book = peakBook("reimport")
+        deviceA.addBook(book, sha)
+        deviceA.read(book.url, 0.50, 1_000L)
+        deviceA.changeEngine.sync()
+
+        deviceA.read(book.url, 0.55, 2_000L)
+        val first = deviceA.collectPeaks().records.single { it.d == DriveWireCodec.DOMAIN_FURTHEST }
+        val retry = deviceA.collectPeaks().records.single { it.d == DriveWireCodec.DOMAIN_FURTHEST }
+        assertEquals(first.peakSeq(), retry.peakSeq())
+        assertEquals(first.fp, retry.fp)
+        assertEquals(first.hlc, retry.hlc)
+        assertEquals(deviceB.also { it.changeEngine.sync() }.observed("sha:$sha").single().seq + 1L, first.peakSeq())
+
+        deviceA.liseurDb.readingProgressDao().forget(book.url)
+        deviceA.liseurDb.bookDao().deleteByUrls(listOf(book.url))
+        assertNull(deviceA.liseurDb.readingProgressDao().get(book.url))
+        deviceA.addBook(book, sha)
+        deviceA.read(book.url, 0.70, 3_000L)
+        assertEquals(1L, deviceA.liseurDb.readingProgressDao().get(book.url)!!.peakRevision)
+
+        val reimported = deviceA.collectPeaks().records.single { it.d == DriveWireCodec.DOMAIN_FURTHEST }
+        assertTrue(reimported.peakSeq() > first.peakSeq())
+        assertEquals(reimported.peakSeq(), deviceA.collectPeaks().records.single { it.d == DriveWireCodec.DOMAIN_FURTHEST }.peakSeq())
+        deviceA.changeEngine.sync()
+        deviceB.changeEngine.sync()
+        val seen = deviceB.observed("sha:$sha").single()
+        assertEquals(0.70, seen.progression, 0.0001)
+        assertEquals(reimported.peakSeq(), seen.seq)
+    }
+
+    @Test
+    fun `a remote reset leaves another work's peak and its publishing untouched`() = runTest {
+        deviceA.connect()
+        deviceB.connect()
+        val shaX = "4".repeat(64)
+        val shaY = "5".repeat(64)
+        val x = peakBook("x")
+        val y = peakBook("y")
+        deviceA.addBook(x, shaX)
+        deviceA.addBook(y, shaY)
+        deviceA.read(x.url, 0.80, 1_000L)
+        deviceA.read(x.url, 0.20, 2_000L)
+        deviceA.read(y.url, 0.60, 3_000L)
+        deviceA.changeEngine.sync()
+        deviceB.changeEngine.sync()
+
+        assertEquals(ResolveOutcome.Done, deviceB.forget("drive:sha:$shaX"))
+        deviceB.changeEngine.sync()
+        deviceA.changeEngine.sync()
+
+        assertEquals(0.20, deviceA.liseurDb.readingProgressDao().get(x.url)!!.peakProgression!!, 0.0001)
+        assertEquals(0.60, deviceA.liseurDb.readingProgressDao().get(y.url)!!.peakProgression!!, 0.0001)
+        assertEquals(0L, deviceA.positionSync.getPersistedFloor(PERM_ID, "sha:$shaY", "dev-a"))
+        assertEquals(0.60, deviceB.observed("sha:$shaY").single().progression, 0.0001)
+
+        deviceA.read(y.url, 0.90, 4_000L)
+        deviceA.changeEngine.sync()
+        deviceB.changeEngine.sync()
+        assertEquals(0.90, deviceB.observed("sha:$shaY").single().progression, 0.0001)
+    }
+
     @Test
     fun `resumable download verifies SHA-256 before moving into place and resumes partial downloads`() = runTest {
         deviceA.connect()
