@@ -881,6 +881,96 @@ class DrivePhase5EndToEndTest {
     }
 
     @Test
+    fun `applying a remote occurrence keeps ids of unchanged local occurrences`() = runTest {
+        deviceA.connect(PERM_A, "a@example.com")
+        deviceB.connect(PERM_A, "a@example.com")
+        val now = 1_745_600_000_000L
+        VocabularyRepository(deviceA.liseurDb).collect(VocabularyLookup("aurore", "fr", null), "dawn", "en", now)!!
+        val wordA = deviceA.liseurDb.vocabularyDao().findWord("aurore", "fr")!!
+        fun occ(wordId: Long, loc: String) = VocabularyOccurrence(
+            wordId = wordId,
+            bookUrl = "file:///aurora.epub",
+            bookTitle = "L'Aurore",
+            locationKey = loc,
+            locator = null,
+            sentence = "phrase $loc",
+            lastSeenAt = now,
+        )
+        deviceA.liseurDb.vocabularyDao().insertOccurrence(occ(wordA.id, "ch01#p1"))
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+        val wordB = deviceB.liseurDb.vocabularyDao().findWord("aurore", "fr")!!
+        val before = deviceB.liseurDb.vocabularyDao().occurrencesList(wordB.id).single()
+
+        deviceA.liseurDb.vocabularyDao().insertOccurrence(occ(wordA.id, "ch02#p1"))
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+
+        val after = deviceB.liseurDb.vocabularyDao().occurrencesList(wordB.id)
+        assertEquals(2, after.size)
+        assertEquals(before.id, after.single { it.locationKey == "ch01#p1" }.id)
+    }
+
+    @Test
+    fun `coalescing duplicate word rows keeps ids of the survivor's occurrences`() = runTest {
+        deviceA.connect(PERM_A, "a@example.com")
+        val addedAt = 1_745_900_000_000L
+        val dao = deviceA.liseurDb.vocabularyDao()
+        fun word(owner: String) = VocabularyWord(
+            word = "clarté", normalized = "clarté", language = "fr", definition = "clarity",
+            translationLanguage = "en", notes = "", addedAt = addedAt, dueAt = addedAt, ownerAccount = owner,
+        )
+        val primaryId = dao.insertWord(word(""))
+        val dupId = dao.insertWord(word("liseursync|https://old.example|acct-1"))
+        fun occ(wordId: Long, loc: String) = VocabularyOccurrence(
+            wordId = wordId, bookUrl = "file:///b.epub", bookTitle = "B", locationKey = loc,
+            locator = null, sentence = "s $loc", lastSeenAt = addedAt,
+        )
+        dao.insertOccurrence(occ(primaryId, "ch01#p1"))
+        dao.insertOccurrence(occ(dupId, "ch02#p1"))
+        val before = dao.occurrencesList(primaryId).single()
+
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+
+        val survivor = dao.findAllWordsByKey("clarté", "fr").single()
+        val after = dao.occurrencesList(survivor.id)
+        assertEquals(2, after.size)
+        assertEquals(before.id, after.single { it.locationKey == "ch01#p1" }.id)
+    }
+
+    @Test
+    fun `provisional to canonical key upgrade keeps newer committed occurrence edits`() = runTest {
+        deviceA.connect(PERM_A, "a@example.com")
+        val now = 1_745_600_000_000L
+        val dao = deviceA.liseurDb.vocabularyDao()
+        VocabularyRepository(deviceA.liseurDb).collect(VocabularyLookup("aurore", "fr", null), "dawn", "en", now)!!
+        val wordId = dao.findWord("aurore", "fr")!!.id
+        val rowId = dao.insertOccurrence(
+            VocabularyOccurrence(
+                wordId = wordId, bookUrl = "file:///a.epub", bookTitle = "A", locationKey = "ch01#p1",
+                locator = null, sentence = "old", lastSeenAt = now,
+            ),
+        )
+        val stale = dao.occurrenceById(rowId)!!
+        dao.updateOccurrence(
+            stale.copy(sentence = "newer", sentenceEdited = true, sentenceUpdatedAt = now + 5, encounters = 3),
+        )
+
+        val upgraded = deviceA.driveSync.vocabularySync.upgradeOccurrenceKeyIfNeeded(stale, "work-1")!!
+
+        assertEquals("newer", upgraded.sentence)
+        assertEquals(3, upgraded.encounters)
+        val stored = dao.occurrenceById(rowId)!!
+        assertEquals("newer", stored.sentence)
+        assertEquals(3, stored.encounters)
+        assertEquals("work-1", stored.workId)
+
+        dao.deleteOccurrence(rowId)
+        assertNull(deviceA.driveSync.vocabularySync.upgradeOccurrenceKeyIfNeeded(stored.copy(workId = null), "work-1"))
+        assertNull(dao.occurrenceById(rowId))
+    }
+
+    @Test
     fun `sessions arriving before their catalog entry are deferred and applied once catalog arrives`() = runTest {
         val isolatedServer = Phase5FakeDriveServer()
         // Note device ID ordering: "dev-b-reader" sorts lexicographically BEFORE "dev-z-catalog".
