@@ -514,6 +514,7 @@ with every local edit.
 
 | Column | Meaning |
 |---|---|
+| `receipt_id` | UUIDv4 generated in the Tx 1 that writes the row, unique per apply. A replay after a crash reuses the id already stored for `R.fp`. |
 | `peer_id`, `domain`, `record_key` | Primary key. One row per record; the next apply of the same record overwrites it. Local publishes never touch it. |
 | `version_fp`, `version_op`, `outcome` | `R.fp`, `R.op`, and `R.outcome` (`NULL` unless `R.op == "resolve"`). |
 | `hlc`, `origin_device_id`, `origin_seq` | `R.hlc`, `R.deviceId`, and `R.seq` (`throughSeq` for a snapshot record). |
@@ -522,10 +523,18 @@ with every local edit.
 | `row_fp` | Fingerprint of the row projection after the apply, or `"DELETED"`. The projection is the set of body fields the domain stores in `liseur.db`: `annotation` and `series` use the whole body (minus `editionSha` for annotations); `catalog` uses `title`, `author`, `fileSeriesName`, `fileSeriesIndex`, `addedAt` and `archivedAt` only. |
 | `republish` | `1` when `body_json` differs from `R.body`, so the merged body is owed as a new version. |
 
+**Tx 2 acknowledgement.** The Tx 2 of every remote apply writes
+`drive_record_state.acked_receipt_id := receipt_id` in the same
+transaction as the rest of the record's state. Local publishes, local
+versions and `anc` truncation never change it; only the next remote apply
+or a recovery repair does. It is a watermark, not ancestry, so it survives
+any number of later local versions and the 64-entry `anc` cap.
+
 **Recovery** runs before local diffing and before any pull. For every
-receipt whose `version_fp` is neither `L` nor in `anc(L)` of the matching
-`drive_record_state` row (a missing row counts as `none`), Tx 2 did not
-commit. Recompute the row projection and compare it with `row_fp`:
+receipt whose `receipt_id` differs from `acked_receipt_id` of the matching
+`drive_record_state` row (a missing row counts as `NULL`), Tx 2 did not
+commit. A receipt whose id matches is never re-applied, however old. Each
+repair below sets `acked_receipt_id := receipt_id` in its own Tx 2. Recompute the row projection and compare it with `row_fp`:
 
 - **Unchanged since the apply:** set `L := version_fp`, `version_op`,
   `anc`, `res_refs`, `origin_*` and `body_json` from the receipt, and
@@ -557,12 +566,15 @@ without loss:
    per-peer ack, and the receipt.
 3. Tx 2 (`drive_sync.db`) is one transaction: `drive_resolution`,
    `drive_conflict` settlements, `drive_record_state` (including
-   `res_refs_json`, `body_json`, `observed_json`, `restore_json`, `held`), and `drive_cursor` last.
+   `res_refs_json`, `body_json`, `observed_json`, `restore_json`, `held`,
+   `acked_receipt_id`), and `drive_cursor` last.
    The cursor never moves before every Tx 2 effect of that record is
    committed.
-4. Cascade deletes (a vocabulary word and its children) delete the child
-   rows in Tx 1 and their `drive_record_state` rows in Tx 2, and the
-   `restore` payload (§4.9) is written in Tx 1 with the delete.
+4. A word delete that cascades moves its covered children to non-live
+   history instead of discarding them (§4.9): reviews become `COVERED`
+   rows in Tx 1, occurrences keep their `drive_record_state` row with
+   `held = 1` in Tx 2. The `restore` payload (§4.9) is written in Tx 1 with
+   the delete.
 
 ---
 
@@ -1236,16 +1248,29 @@ with outcome `delete`) when it reaches those records:
     are append-only and an occurrence's edits live in its own domain, so
     neither is part of `anc(L)`, and `anc(L)` alone cannot prove the
     deleter's word version descends from the current children.
+  - **Child history states.** A review or occurrence of a word is in one of
+    three states: **live** (a row in `vocabulary_reviews` /
+    `vocabulary_occurrences`), **staged** (parent absent, not yet judged) or
+    **covered** (a delete's `observed` vector covers it, so it is non-live
+    history). Staged and covered children are never shown, counted,
+    searched or fed to `reconcileSchedule`, and nothing in the UI changes
+    while the delete is in force. Reviews are kept in
+    `vocabulary_staged_review`, which gains `state` (`STAGED` / `COVERED`),
+    `origin_device_id`, `origin_seq` and the full review fields. Occurrences
+    are kept as `drive_record_state` versions with `held = 1` (version,
+    `body_json`, `origin_*`). A review whose `vocabulary_review_sync.acked_deleted`
+    is set (final undo) is never stored in either state and is removed from
+    both when the undo arrives.
   - **Delete vs. uncovered child:** before any cascade delete (Tx 1), every
     live local review and every live local occurrence of the word must be
     covered. If any is uncovered, the delete is a concurrent write and
-    **add-wins silently**: keep the word with *all* its reviews and
-    occurrences (covered ones too), then republish a `put` carrying the `del`
-    fp in `anc` plus every retained review and occurrence as fresh delta
-    records (same content, new `hlc`). A device that already cascaded can
-    restore them: a re-sent review is insert-if-absent by `syncId`, and a
-    re-sent occurrence is Unseen there because the cascade removed its
-    `drive_record_state` (§3.3).
+    **add-wins silently**: keep the word with *all* its children, then
+    republish a `put` carrying the `del` fp in `anc` plus every retained
+    review and occurrence as fresh delta records (same content, new `hlc`).
+    If all are covered, the cascade does not discard them: Tx 1 moves each
+    live review to `vocabulary_staged_review` as `COVERED`, and Tx 2 marks
+    each occurrence's `drive_record_state` `held = 1`, so covered children
+    stay recoverable.
   - **Restore payload:** every `vocabWord` `del` carries `restore`
     (`{fp, hlc, body}`, §2.3), the last live word body the deleter held, and
     `observed`. The deleter fills it from its word row in the same Tx 1 that
@@ -1258,21 +1283,44 @@ with outcome `delete`) when it reaches those records:
     so every device holds the same parent baseline. The payload is
     replicated through deltas and snapshots like any other record field, so a
     device that reconstructs only from snapshots has it.
-  - **Late child after the tombstone:** a review or occurrence `put` (delta
-    or snapshot) whose word is a tombstone is checked against
-    `observed_json` with the same coverage rule.
-    - Covered: ignored, because the delete already accounted for it. The word
-      is not restored.
-    - Uncovered: add-wins. Tx 1 restores the word row from
-      `restore_json.body`, inserts the child, re-runs `reconcileSchedule` and
-      sets `acked_fingerprint`; Tx 2 records a new word `put` version
-      `contentFp(restore.body)` with `anc = [delFp, restore.fp]` and the
-      device publishes it. Nothing is staged and nothing is dropped. Both
-      delivery orders (child before `del`, `del` before child) and a device
-      rebuilt only from snapshots end with the same word and children.
-    - A `del` with no valid `restore` was never applied (§2.3), so the word
-      and its children are still present locally and there is nothing to
-      restore.
+  - **Child arrives:** the same coverage test against the tombstone's
+    `observed_json` applies on every arrival path (delta or snapshot).
+    - Word live: attach as normal.
+    - Word absent, no tombstone known: store the child `STAGED` / `held`.
+    - Tombstone known, child covered: store it `COVERED` / `held`. The word is
+      not restored.
+    - Tombstone known, child uncovered: **revive** (below).
+  - **Tombstone arrives:** after storing `restore_json` and `observed_json`
+    (above), judge the children already held for the word. The check
+    includes `STAGED` children, so a child received before the tombstone is
+    treated the same as one received after it. If the word is live, an
+    uncovered live or staged child keeps it (add-wins, republish). If the word
+    is absent, every `STAGED` child is re-labelled `COVERED` or, if any is
+    uncovered, the word is **revived** in the same Tx 1.
+  - **Revive:** one Tx 1 restores the word row from `restore_json.body`,
+    then attaches the **eligible child set**: every `STAGED` or `COVERED`
+    review and occurrence of the word that is not undone, plus the arriving
+    child. It re-runs `reconcileSchedule` and sets `acked_fingerprint`. Tx 2
+    clears `held` on the attached occurrences, records a new word `put`
+    version `contentFp(restore.body)` with `anc = [delFp, restore.fp]`, and
+    the device publishes it and the attached children. The same set is
+    attached whichever order the `del`, covered children and uncovered child
+    arrived in. A word `put` received later that supersedes the tombstone
+    (`del` fp in its `anc`) attaches the same set on the receiver.
+  - **Retention for a snapshot-only device:** covered and staged children
+    stay reconstructable because their authors' records are never pruned for
+    being covered. Snapshots build `records` from `drive_record_state`, not
+    from live rows, so a child that is hidden locally still appears in its
+    author's snapshot: every review `put` and review `del` in full, and the
+    author's latest occurrence record with its `seq`. A word `del` never
+    removes another author's child records, and compaction and pruning
+    (§2.4) may delete only delta files already covered by a snapshot that
+    contains them. A device rebuilt from snapshots therefore receives the
+    `del` with `restore` and `observed`, and every child with its `seq`, and
+    reaches the same state in any order.
+  - A `del` with no valid `restore` was never applied (§2.3), so the word
+    and its children are still present locally and there is nothing to
+    restore.
   - `del` vs. concurrent edit of the word: **add-wins silently**, keeping the
     local word and children, and republishing a fresh `put` with the `del` fp
     in `anc`.
@@ -1325,7 +1373,7 @@ with outcome `delete`) when it reaches those records:
   `Int` (`≥ 1`).
 - **Merge / Delete rule:** Automatic merge via
   `VocabularyMerge.mergeOccurrencePair` and provisional/canonical deduplication
-  via `VocabularyMerge.mergeOccurrences`. Deleted by cascade when parent
+  via `VocabularyMerge.mergeOccurrences`. Hidden as non-live history (§4.9) when parent
   `vocabWord` is deleted, but only when the delete's `observed` vector covers
   the occurrence's current version (§4.9); an uncovered local occurrence edit
   keeps the word and the occurrence.
@@ -1381,7 +1429,8 @@ with outcome `delete`) when it reaches those records:
   - Append-only set deduplicated by `syncId`. Replaying a review `put` is a
     no-op and can never advance the schedule twice.
   - Reviews arriving before their parent `vocabWord` are staged in
-    `vocabulary_staged_review` and attached when the word arrives. A review
+    `vocabulary_staged_review` (`state = STAGED`) and attached when the word
+    arrives. A review
     whose parent is a tombstone follows the late-child rule (§4.9): covered
     reviews are ignored, uncovered ones restore the word. Staged reviews are
     never dropped, and a re-sent review (revival republish) is insert-if-absent
@@ -1396,7 +1445,7 @@ with outcome `delete`) when it reaches those records:
     `dueAt`, `firstReview` (derived), `syncId`.
   - `vocabulary_review_sync`: `peer_id = drive:<permissionId>`, `review_id =
     syncId`, `local_review_id`, `language`, `normalized`, `acked_deleted`.
-  - `vocabulary_staged_review`: staging for out-of-order arrivals.
+  - `vocabulary_staged_review`: non-live review history (`state` `STAGED` or `COVERED`, with `origin_device_id`, `origin_seq` and the review fields), §4.9.
 
 ---
 
@@ -1674,7 +1723,9 @@ order and must end in the same state.
 | C2 | Continue C1: B uploads X again at `h12` as `F2`. | `F2`/`h12` wins everywhere. A stale body carrying `F1`/`h5` or `h10` never changes it. |
 | C3 | A deletes word W with `observed = {B: 8}`. B authored review `r` in batch `B:9`. Both orders. | `r` uncovered: the word and `r` survive on both devices; the republished `put` has the `del` fp in `anc`. With `observed = {B: 9}` the delete wins and `r` is gone on both. |
 | C4 | A deletes W with `observed = {B: 11}`. B edits an occurrence sentence of W and publishes it in batch `B:12`. | Uncovered: W and the edited occurrence survive on both devices. With `observed = {B: 12}` they are covered and deleted. An unpublished local edit, or provenance missing, also keeps W. |
-| C5 | A fresh device has only A's snapshot, which holds A's `del` of W (with `observed = {B: 8}` and `restore`), and B's snapshot, which holds review `r` (`seq = 9`). Apply the `del` first, then `r`. Repeat with `r` first. | The device creates the `DELETED` sync row from `restore`, then on `r` (uncovered) restores W from `restore.body`, inserts `r`, and publishes a `put` with `anc = [delFp, restore.fp]`. Nothing is staged. Same result in both orders. With `observed = {B: 9}`, or an occurrence covered the same way, W is not restored and `r` is ignored. A `del` without `restore` is not applied and deletes nothing. |
+| C5 | A fresh device has only A's snapshot, which holds A's `del` of W (with `observed = {B: 8}` and `restore`), and B's snapshot, which holds review `r` (`seq = 9`). Apply the `del` first, then `r`. Repeat with `r` first. | The device creates the `DELETED` sync row from `restore`, then on `r` (uncovered) restores W from `restore.body`, inserts `r`, and publishes a `put` with `anc = [delFp, restore.fp]`. Same result in both orders. With `observed = {B: 9}`, or an occurrence covered the same way, W is not restored and `r` is ignored. A `del` without `restore` is not applied and deletes nothing. |
+| C5b | A fresh device first ingests B's snapshot (review `r1` at `seq = 8`, concurrent `r2` at `seq = 9`, no word), then A's snapshot with the `del` (`observed = {B: 8}`, `restore`). Repeat with A's snapshot first, and with the order `del`, `r1`, `r2` and `del`, `r2`, `r1`. | In every order W is restored from `restore.body` with both `r1` and `r2` attached and the schedule derived from both; a published `put` has `anc = [delFp, restore.fp]`. If only `r1` exists, W stays deleted, `r1` is `COVERED`, and nothing is visible. An undone `r1` is never reattached. |
+| C5c | Same as C5b but both snapshots are compacted and the deltas pruned. | Identical result: the covered `r1` is still present in B's snapshot. |
 | C6 | A and B edit `notes`, then separately the definition group, an occurrence sentence and an occurrence locator, with equal timestamps and different values, then exchange them. Run merge with arguments swapped, with a provisional and a canonical occurrence in both iteration orders. | Merged canonical bodies and fps are byte-identical in every order. Neither device republishes a differing body: they meet in Agreement. |
 | C7 | A snapshot holds a catalog `del` for K, annotation puts and a `del` for K, and `evaluation`, `series`, `metadata` and `position` records for K. Apply on a fresh device. | The annotations exist under `drive:<K>` with no `books` row and no shelf entry. The other four are `held` in `drive_record_state` with body, op and lineage, and no cursor stalls. A later annotation edit applies. |
 | C7b | Continue C7: the reader later restores K (a `books` row for `drive:<K>` appears). A newer `evaluation` for K also arrives while it is held. | On the next run the held records are applied through §3.1 and `held` clears; the newer `evaluation` replaced the held one before that, losing nothing. Before the restore, no `books` row exists and K is not on the shelf. A concurrent held `evaluation` conflict stays hidden until the book exists. |
@@ -1682,3 +1733,4 @@ order and must end in the same state.
 | C9 | Catalog merge applied (new edition, `archiveHlc`) then crash before Tx 2. Variant (a) no edit, (b) the reader unarchives before restart. | (a) `drive_record_state.body_json` is restored from the receipt including `archiveHlc` and every `availabilityHlc`, with no republish unless `republish = 1`. (b) The unarchive becomes a new version with `R.fp` in `anc` and a new `archiveHlc`; no edition or identifier is lost. |
 | C10 | A local edit lands between the apply decision and Tx 1. | The apply aborts, re-decides against the edited row, and the edit is never overwritten. |
 | C11 | Crash before Tx 1, no receipt for `R.fp`. | Replay processes `R` from scratch with no receipt-based repair. |
+| C12 | Apply a catalog record `R` fully (Tx 1 and Tx 2). Then make 65 or more local catalog versions, including new upload and clear availability groups, keeping the `books`-backed fields unchanged. Restart. | `R.fp` is no longer in `anc(L)`, but `receipt_id == acked_receipt_id`, so no recovery runs and the newer availability groups are kept. A crash between Tx 1 and Tx 2 of a later apply still recovers, because its `receipt_id` differs. |
