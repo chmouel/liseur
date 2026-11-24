@@ -67,6 +67,7 @@ import com.chmouel.liseur.ui.settings.RowDivider
 import com.chmouel.liseur.ui.settings.SettingsGroup
 import com.chmouel.liseur.ui.settings.search.SettingsFocus
 import com.chmouel.liseur.ui.settings.search.settingsAnchor
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 /** Short status shown on the Settings > Book server row when Google Drive is linked. */
@@ -266,6 +267,7 @@ internal fun DriveSettingsSection(controller: DriveAccountController) {
         DriveConflictsDialog(
             groups = state.unresolvedConflictGroups,
             resolving = state.resolvingConflict,
+            errorMessage = state.errorMessage,
             onResolve = { group, choice ->
                 scope.launch { controller.resolveConflictGroup(group, choice) }
             },
@@ -737,6 +739,7 @@ private fun DriveUploadFilesDialog(
 private fun DriveConflictsDialog(
     groups: List<DriveConflictUiGroup>,
     resolving: Boolean,
+    errorMessage: String?,
     onResolve: (DriveConflictUiGroup, DriveConflictChoice) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -750,6 +753,13 @@ private fun DriveConflictsDialog(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                if (errorMessage != null) {
+                    Text(
+                        text = errorMessage,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
                 LazyColumn(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     modifier = Modifier
@@ -905,7 +915,14 @@ internal fun DriveBookManageAction(
                         confirmVisible = false
                         deleteFailed = false
                         scope.launch {
-                            if (controller.deleteFromSyncedLibrary(book)) {
+                            val deleted = try {
+                                controller.deleteFromSyncedLibrary(book)
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (_: Exception) {
+                                false
+                            }
+                            if (deleted) {
                                 onDone()
                             } else {
                                 deleteFailed = true
