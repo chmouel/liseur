@@ -302,6 +302,79 @@ class DriveWorkIdentityTest {
     }
 
     @Test
+    fun `confirming a merge promotes only the confirmed book and leaves other aliases of the losing key unchanged`() = runTest {
+        val perm = "perm-1"
+        val peerId = DriveLibrarySync.accountPeerId(perm)
+        val dao = liseurDb.workIdentityDao()
+        dao.upsert(WorkAlias("file:///a.epub", peerId, "sha:ccc", WorkAlias.HIGH, confirmed = false, resolvedAt = 1L))
+        dao.upsert(WorkAlias("file:///guess.epub", peerId, "sha:ccc", WorkAlias.LOW, confirmed = false, resolvedAt = 1L))
+        dao.upsert(WorkAlias("file:///no.epub", peerId, "sha:ccc", WorkAlias.REJECTED, confirmed = false, resolvedAt = 1L))
+
+        val canonical = identity.confirmMerge(perm, "file:///a.epub", "sha:ccc", "isbn:bbb", "0017450000000-0001-dev-a")
+
+        assertEquals("isbn:bbb", canonical)
+        val confirmed = requireNotNull(dao.alias("file:///a.epub", peerId))
+        assertEquals("isbn:bbb", confirmed.workId)
+        assertEquals(WorkAlias.HIGH, confirmed.confidence)
+        assertTrue(confirmed.confirmed)
+        val guess = requireNotNull(dao.alias("file:///guess.epub", peerId))
+        assertEquals("isbn:bbb", guess.workId)
+        assertEquals(WorkAlias.LOW, guess.confidence)
+        assertFalse(guess.confirmed)
+        val rejected = requireNotNull(dao.alias("file:///no.epub", peerId))
+        assertEquals("isbn:bbb", rejected.workId)
+        assertEquals(WorkAlias.REJECTED, rejected.confidence)
+        assertFalse(rejected.confirmed)
+    }
+
+    @Test
+    fun `a user-confirmed low-confidence alias supplies the local key but a rejected one does not`() = runTest {
+        val perm = "perm-1"
+        val peerId = DriveLibrarySync.accountPeerId(perm)
+        val dao = liseurDb.workIdentityDao()
+        val pinned = localBook("file:///pinned.epub", "The Hobbit", "J. R. R. Tolkien")
+        val refused = localBook("file:///refused.epub", "The Hobbit", "J. R. R. Tolkien")
+        liseurDb.bookDao().upsert(pinned)
+        liseurDb.bookDao().upsert(refused)
+        dao.upsert(WorkAlias(pinned.url, peerId, "sha:ccc", WorkAlias.LOW, confirmed = true, resolvedAt = 1L))
+        dao.upsert(WorkAlias(refused.url, peerId, "sha:ddd", WorkAlias.REJECTED, confirmed = true, resolvedAt = 1L))
+
+        assertTrue(identity.detectAmbiguousTitleAuthorMatch(perm, "isbn:bbb", "The Hobbit", "J. R. R. Tolkien"))
+
+        val pending = identity.pendingMatches(perm)
+        val pinnedMatch = pending.single { it.bookUrl == pinned.url && it.candidateWorkKey == "isbn:bbb" }
+        assertEquals("sha:ccc", pinnedMatch.localWorkKey)
+        assertTrue(pending.none { it.bookUrl == refused.url })
+    }
+
+    @Test
+    fun `a rejection still suppresses the pair after either endpoint is merged into another key`() = runTest {
+        val perm = "perm-1"
+        identity.rejectMerge(perm, "file:///x.epub", "isbn:bbb", "sha:ccc", "0017450000000-0001-dev-a")
+        assertTrue(identity.isRejectedPair(perm, "isbn:bbb", "sha:ccc"))
+
+        val merge = DriveWireCodec.putRecord(
+            domain = DriveWireCodec.DOMAIN_WORK_ALIAS,
+            key = "merge:isbn:bbb",
+            hlc = "0017450000000-0002-dev-b",
+            bodyMap = DriveWireCodec.encodeWorkAliasBody(DriveWorkAliasBody.Merge("isbn:bbb", "dc:aaa", 100L)),
+        )
+        identity.applyRemoteRecord(perm, merge, "dev-b", 1L)
+
+        assertTrue(identity.isRejectedPair(perm, "dc:aaa", "sha:ccc"))
+        assertFalse(identity.isRejectedPair(perm, "dc:aaa", "sha:other"))
+        // A merge that makes the endpoints equal supersedes the rejection.
+        val joined = DriveWireCodec.putRecord(
+            domain = DriveWireCodec.DOMAIN_WORK_ALIAS,
+            key = "merge:sha:ccc",
+            hlc = "0017450000000-0003-dev-b",
+            bodyMap = DriveWireCodec.encodeWorkAliasBody(DriveWorkAliasBody.Merge("sha:ccc", "dc:aaa", 101L)),
+        )
+        identity.applyRemoteRecord(perm, joined, "dev-b", 2L)
+        assertFalse(identity.isRejectedPair(perm, "dc:aaa", "sha:ccc"))
+    }
+
+    @Test
     fun `concurrent merges of one source to different targets also link the targets`() = runTest {
         val perm = "perm-1"
         val peerId = DriveLibrarySync.accountPeerId(perm)
