@@ -322,7 +322,9 @@ internal class DriveCatalogSync(
                     uploads.delete(permissionId, sha)
                 }
                 val current = recordStates.get(permissionId, DriveWireCodec.DOMAIN_CATALOG, canonical)
-                val pendingTrash = current?.takeIf { it.versionOp == DriveRecordState.OP_DEL }?.bodyJson
+                val pendingTrash = current?.takeIf { it.versionOp == DriveRecordState.OP_DEL }
+                    ?.bodyJson
+                    ?.let { TombstonePayload.parse(it).copy(cleanupPending = false).encode() }
                 val anc = (listOfNotNull(existing?.versionFp) +
                     DriveWorkIdentity.decodeStringArray(existing?.ancestorsJson) + record.anc)
                     .distinct()
@@ -674,11 +676,12 @@ internal class DriveCatalogSync(
             existingState?.versionFp?.let(::add)
             addAll(DriveWorkIdentity.decodeStringArray(existingState?.ancestorsJson))
         }.distinct().take(DriveWireCodec.MAX_ANCESTORS)
-        val pendingTrashPayload = if (fileIdsToTrash.isNotEmpty()) {
-            DriveCanonicalJson.encode(mapOf("pendingTrashFileIds" to fileIdsToTrash.distinct().sorted()))
-        } else {
-            null
-        }
+        val tombstonePayload = TombstonePayload(
+            pendingTrashFileIds = fileIdsToTrash.distinct().sorted(),
+            cleanupPending = true,
+            cleanupBookUrl = book.url,
+            cleanupWorkId = alias?.workId,
+        )
 
         // Persist tombstone & pending trash IDs FIRST so a crash or cancellation while trashing
         // remote files never leaves the EPUB gone without recording the catalog deletion.
@@ -708,13 +711,14 @@ internal class DriveCatalogSync(
                         ancestorsJson = DriveCanonicalJson.encode(anc),
                         resRefsJson = existingState?.resRefsJson ?: "[]",
                         lastHlc = hlc,
-                        bodyJson = pendingTrashPayload,
+                        bodyJson = tombstonePayload.encode(),
                     ),
                 )
             }
 
             // Every local copy of the work is cleaned, not only the selected edition.
             removeLocalWorkCopies(permissionId, peerId, canonicalKey, selected = book to alias?.workId)
+            clearCleanupPending(permissionId, canonicalKey)
         }
 
         // Best-effort trash immediately after the tombstone is durable; any remaining IDs
@@ -733,13 +737,10 @@ internal class DriveCatalogSync(
     ) {
         for (state in recordStates.forDomain(permissionId, DriveWireCodec.DOMAIN_CATALOG)) {
             if (state.versionOp != DriveRecordState.OP_DEL) continue
-            val raw = state.bodyJson ?: continue
-            val obj = runCatching { JSONObject(raw) }.getOrNull() ?: continue
-            val arr = obj.optJSONArray("pendingTrashFileIds") ?: continue
+            val payload = state.bodyJson?.let(TombstonePayload::parse) ?: continue
+            if (payload.pendingTrashFileIds.isEmpty()) continue
             val remaining = mutableListOf<String>()
-            for (i in 0 until arr.length()) {
-                val fid = arr.optString(i).trim()
-                if (fid.isEmpty()) continue
+            for (fid in payload.pendingTrashFileIds) {
                 val trashed = try {
                     driveApi.trashFile(accessToken, fid)
                     true
@@ -752,14 +753,45 @@ internal class DriveCatalogSync(
                 }
                 if (!trashed) remaining.add(fid)
             }
-            val nextBody = if (remaining.isEmpty()) {
-                null
-            } else {
-                DriveCanonicalJson.encode(mapOf("pendingTrashFileIds" to remaining.distinct().sorted()))
+            // Re-read so a cleanup flag cleared while the network call ran is not restored.
+            val latest = recordStates.get(permissionId, DriveWireCodec.DOMAIN_CATALOG, state.recordKey) ?: continue
+            if (latest.versionOp != DriveRecordState.OP_DEL) continue
+            val latestPayload = latest.bodyJson?.let(TombstonePayload::parse) ?: continue
+            val nextBody = latestPayload.copy(pendingTrashFileIds = remaining.distinct().sorted()).encode()
+            if (nextBody != latest.bodyJson) {
+                recordStates.upsert(latest.copy(bodyJson = nextBody))
             }
-            if (nextBody != state.bodyJson) {
-                recordStates.upsert(state.copy(bodyJson = nextBody))
+        }
+    }
+
+    /**
+     * Finishes local cleanup for catalog tombstones written by [deleteFromSyncedLibrary] whose
+     * process died before the cleanup completed. Runs before any alias resolution so a surviving
+     * book is not re-linked to a deleted work. Idempotent: the durable flag clears only after cleanup.
+     */
+    suspend fun recoverPendingCleanups(permissionId: String) {
+        val peerId = DriveLibrarySync.accountPeerId(permissionId)
+        for (state in recordStates.forDomain(permissionId, DriveWireCodec.DOMAIN_CATALOG)) {
+            if (state.versionOp != DriveRecordState.OP_DEL) continue
+            val payload = state.bodyJson?.let(TombstonePayload::parse) ?: continue
+            if (!payload.cleanupPending) continue
+            val selected = payload.cleanupBookUrl
+                ?.let { books.getByUrl(it) }
+                ?.let { it to payload.cleanupWorkId }
+            withContext(NonCancellable) {
+                removeLocalWorkCopies(permissionId, peerId, state.recordKey, selected)
+                clearCleanupPending(permissionId, state.recordKey)
             }
+        }
+    }
+
+    private suspend fun clearCleanupPending(permissionId: String, canonicalKey: String) {
+        store.withTransaction {
+            val current = recordStates.get(permissionId, DriveWireCodec.DOMAIN_CATALOG, canonicalKey) ?: return@withTransaction
+            if (current.versionOp != DriveRecordState.OP_DEL) return@withTransaction
+            val payload = current.bodyJson?.let(TombstonePayload::parse) ?: return@withTransaction
+            if (!payload.cleanupPending) return@withTransaction
+            recordStates.upsert(current.copy(bodyJson = payload.copy(cleanupPending = false).encode()))
         }
     }
 
@@ -982,3 +1014,40 @@ private fun Book.withCatalogBaseline(catalog: DriveCatalogBody): Book = copy(
     seriesName = if (seriesOverridden) seriesName else catalog.fileSeriesName,
     seriesIndex = if (seriesOverridden || indexOverridden) seriesIndex else catalog.fileSeriesIndex,
 )
+
+/** Durable `catalog` tombstone side-state kept in `drive_record_state.bodyJson`. */
+private data class TombstonePayload(
+    val pendingTrashFileIds: List<String> = emptyList(),
+    val cleanupPending: Boolean = false,
+    val cleanupBookUrl: String? = null,
+    val cleanupWorkId: String? = null,
+) {
+    fun encode(): String? {
+        val fields = linkedMapOf<String, Any?>()
+        if (pendingTrashFileIds.isNotEmpty()) fields["pendingTrashFileIds"] = pendingTrashFileIds
+        if (cleanupPending) {
+            fields["cleanupPending"] = true
+            cleanupBookUrl?.let { fields["cleanupBookUrl"] = it }
+            cleanupWorkId?.let { fields["cleanupWorkId"] = it }
+        }
+        return if (fields.isEmpty()) null else DriveCanonicalJson.encode(fields)
+    }
+
+    companion object {
+        fun parse(raw: String): TombstonePayload {
+            val obj = runCatching { JSONObject(raw) }.getOrNull() ?: return TombstonePayload()
+            val arr = obj.optJSONArray("pendingTrashFileIds")
+            val ids = buildList {
+                if (arr != null) {
+                    for (i in 0 until arr.length()) arr.optString(i).trim().takeIf { it.isNotEmpty() }?.let(::add)
+                }
+            }
+            return TombstonePayload(
+                pendingTrashFileIds = ids,
+                cleanupPending = obj.optBoolean("cleanupPending", false),
+                cleanupBookUrl = obj.optString("cleanupBookUrl").takeIf { it.isNotEmpty() },
+                cleanupWorkId = obj.optString("cleanupWorkId").takeIf { it.isNotEmpty() },
+            )
+        }
+    }
+}

@@ -243,6 +243,9 @@ internal class DriveChangeEngine(
         }
         val localDeviceId = ensureDeviceId()
 
+        // Finish any local cleanup a crash interrupted after a durable catalog tombstone.
+        catalogSync.recoverPendingCleanups(permissionId)
+
         // Ensure local books with fingerprints & metadata have deterministic Drive aliases
         // BEFORE applying incoming remote catalog/position records.
         workIdentity.resolveAllLocalBooks(permissionId)
@@ -765,10 +768,8 @@ internal class DriveChangeEngine(
         observeRemoteHlc(permissionId, record.hlc)
         // A malformed record is dropped, not deferred: replaying it would never make it valid.
         if (!DriveWireCodec.bodyMatchesKey(record)) return true
-        val carriesBody = record.op == DriveRecordState.OP_PUT ||
-            record.op == DriveRecordState.OP_RESOLVE && record.outcome == DriveResolution.OUTCOME_PUT
-        if (record.d in CATALOG_GATED_DOMAINS && carriesBody) {
-            val workKey = record.body?.optString("workKey")?.trim().orEmpty()
+        if (record.d in CATALOG_GATED_DOMAINS) {
+            val workKey = gatedWorkKey(record)
             if (workKey.isNotEmpty() && workIdentity.awaitsCatalogEntry(permissionId, workKey)) {
                 return false
             }
@@ -838,6 +839,21 @@ internal class DriveChangeEngine(
             // Unimplemented domains (Phase 5 vocab/sessions) are paused before dispatch so cursors never advance.
             else -> true
         }
+    }
+
+    /**
+     * Work key a catalog-gated record applies to. Bodyless deletions of keyed domains carry it
+     * in the record key, so a reset cannot be acknowledged before the book exists.
+     */
+    private fun gatedWorkKey(record: DriveWireRecord): String {
+        val carriesBody = record.op == DriveRecordState.OP_PUT ||
+            record.op == DriveRecordState.OP_RESOLVE && record.outcome == DriveResolution.OUTCOME_PUT
+        if (carriesBody) return record.body?.optString("workKey")?.trim().orEmpty()
+        return when (record.d) {
+            DriveWireCodec.DOMAIN_SERIES -> record.k
+            DriveWireCodec.DOMAIN_METADATA, DriveWireCodec.DOMAIN_EVALUATION -> record.k.substringBeforeLast('/', "")
+            else -> ""
+        }.trim()
     }
 
     private suspend fun recoverResolvingConflicts(
