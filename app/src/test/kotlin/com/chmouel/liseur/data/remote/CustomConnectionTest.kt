@@ -4,6 +4,7 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.chmouel.liseur.data.calibre.CredentialCipher
 import com.chmouel.liseur.data.db.Book
+import com.chmouel.liseur.data.db.DownloadState
 import com.chmouel.liseur.data.db.KosyncPeer
 import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.data.db.RemoteServer
@@ -235,8 +236,9 @@ class CustomConnectionTest {
     fun `a starter shelf becomes the saved Gutenberg catalog`() = runTest {
         starterShelf()
         db.bookDao().upsert(book("custom:read", remoteUuid = "read", localUri = "file:///books/read.epub"))
-        db.bookDao().upsert(book("custom:unread", remoteUuid = "unread"))
+        db.bookDao().upsert(book("custom:unread", remoteUuid = "unread", downloadState = DownloadState.REMOTE))
         db.bookDao().upsert(book("file:///books/mine.epub", localUri = "file:///books/mine.epub"))
+        db.bookDao().upsert(book("file:///books/watched.epub", remoteUuid = "watched", downloadState = DownloadState.DOWNLOADED))
 
         assertTrue(account.retireStarterShelf())
 
@@ -246,6 +248,7 @@ class CustomConnectionTest {
         assertEquals(browse.id, db.bookDao().getByUrl("custom:read")?.browseServerId)
         assertNull(db.bookDao().getByUrl("custom:unread"))
         assertNull(db.bookDao().getByUrl("file:///books/mine.epub")?.browseServerId)
+        assertEquals(browse.id, db.bookDao().getByUrl("file:///books/watched.epub")?.browseServerId)
     }
 
     @Test
@@ -327,7 +330,12 @@ class CustomConnectionTest {
         shelfLimit = shelfLimit,
     )
 
-    private fun book(url: String, remoteUuid: String? = null, localUri: String? = null) = Book(
+    private fun book(
+        url: String,
+        remoteUuid: String? = null,
+        localUri: String? = null,
+        downloadState: DownloadState = DownloadState.DOWNLOADED,
+    ) = Book(
         url = url,
         title = url,
         author = null,
@@ -337,6 +345,7 @@ class CustomConnectionTest {
         lastOpenedAt = null,
         remoteUuid = remoteUuid,
         localUri = localUri,
+        downloadState = downloadState,
     )
 
     @Test

@@ -272,7 +272,7 @@ class RemoteAccountMutualExclusionTest {
 
         // Uploaded watched-folder book: readable through its url, no localUri, no history.
         db.bookDao().upsert(
-            mainStub("sync:uploaded-watched").copy(downloadState = DownloadState.DOWNLOADED),
+            mainStub("file:///watched/uploaded.epub").copy(downloadState = DownloadState.DOWNLOADED),
         )
 
         // Genuinely untouched undownloaded main-server preview stub -> must be deleted.
@@ -430,7 +430,7 @@ class RemoteAccountMutualExclusionTest {
 
         // Untouched preview stub deleted; a DOWNLOADED row with no localUri stays, unlinked.
         assertNull(db.bookDao().getByUrl("sync:untouched"))
-        val uploaded = requireNotNull(db.bookDao().getByUrl("sync:uploaded-watched"))
+        val uploaded = requireNotNull(db.bookDao().getByUrl("file:///watched/uploaded.epub"))
         assertNull(uploaded.remoteUuid)
         assertNull(uploaded.localUri)
         assertEquals(DownloadState.DOWNLOADED, uploaded.downloadState)
