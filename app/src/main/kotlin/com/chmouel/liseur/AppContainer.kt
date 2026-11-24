@@ -18,6 +18,7 @@ import com.chmouel.liseur.data.komga.KomgaFileSource
 import com.chmouel.liseur.data.komga.KomgaSyncRepository
 import com.chmouel.liseur.data.kosync.KosyncAccountRepository
 import com.chmouel.liseur.data.kosync.KosyncPositionSync
+import com.chmouel.liseur.data.kosync.KosyncProgressPointer
 import com.chmouel.liseur.data.library.AnnotationBackupRepository
 import com.chmouel.liseur.data.library.BookExportRepository
 import com.chmouel.liseur.data.library.BookFingerprintStore
@@ -794,6 +795,7 @@ class AppContainer(
             device = { deviceIdentity.current() },
             finishedState = finishedState,
             connectedServer = { database.remoteServerDao().get() },
+            pointers = KosyncProgressPointer(database.bookDao()),
             reporting = syncReporting,
             networkAvailability = networkAvailability,
             inTransaction = { work -> database.withTransaction { work() } },

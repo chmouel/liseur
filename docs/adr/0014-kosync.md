@@ -84,15 +84,29 @@ per candidate. It checks every candidate, deliberately, because a
 position that exists only on the server can be found no other way, and
 stops early when the server stops answering.
 
-**Percentage-only fidelity.** The protocol's `progress` field is an
-engine-specific position (a CRe xpointer, a page number) that means
-nothing to Readium. On the way out it carries the percentage as a bare
-string, the shape KOReader itself accepts for engines without an
-xpointer, and the one liseur-sync answers with (verified against its
-kosync adapter and tests). A pull therefore lands at roughly the right
-page, exactly as calibre-web's Kobo sync does, and
-`SyncPreview.exactPositionAgreement` stays null. Timestamps on the wire
-are unix seconds, from stored state rather than the clock.
+**Positions, exactly when they can be.** The protocol's `progress` field is
+an engine-specific position that means nothing to Readium. On the way out
+it carries a CRe XPath when Liseur holds an exact anchor for the place —
+`/body/DocFragment[3]/body/div[1]/p[4]/text()[1].17`, the form a
+KOReader-engine reader opens — and the percentage as a bare string
+otherwise, which is what liseur-sync answers with and every peer
+understands. The XPath is derived in the app from the book's own file, by
+the rules of liseur-sync
+[ADR-0059](https://github.com/chmouel/liseur-sync/blob/main/docs/adr/0059-deriving-a-position-across-protocols.md):
+one `DocFragment` per spine itemref (`linear="no"` counted), text runs
+split the way CrossPoint splits them, indexes always spelled out, and one
+occurrence of the quote in its block. A decline — a progression-only
+locator, another edition, an ambiguous quote, a `content://` book, a
+chapter past the parser's limits, a text run long enough that CREngine
+would split it — leaves the percentage exactly as it was, and never
+fails the push. CREngine drops an ASCII whitespace character that follows
+another one before counting, so an offset with such a pair before it in
+its text node is written as the start of that node instead, landing at
+or before the word rather than past it. Nothing is stored: the XPath is derived per push and never
+read back, so a pull still lands at roughly the right page, exactly as
+calibre-web's Kobo sync does, and `SyncPreview.exactPositionAgreement`
+stays null. Timestamps on the wire are unix seconds, from stored state
+rather than the clock.
 
 **Only the derived key is stored.** The password is hashed to the MD5
 auth key the moment it is typed; the key is sealed with

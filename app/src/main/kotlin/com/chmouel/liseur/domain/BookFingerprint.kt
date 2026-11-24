@@ -1,6 +1,8 @@
 package com.chmouel.liseur.domain
 
+import java.io.File
 import java.io.InputStream
+import java.io.RandomAccessFile
 import java.security.MessageDigest
 
 /**
@@ -72,6 +74,26 @@ object BookFingerprints {
             partialMd5 = hex(sampled.digest()),
             size = position,
         )
+    }
+
+    /**
+     * KOReader's partial MD5 of an openable file, read at its sample
+     * offsets rather than streamed end to end.
+     */
+    fun partialMd5(file: File): String {
+        val digest = MessageDigest.getInstance("MD5")
+        RandomAccessFile(file, "r").use { handle ->
+            val length = handle.length()
+            val buffer = ByteArray(SAMPLE_SIZE.toInt())
+            for (offset in SAMPLE_OFFSETS) {
+                if (offset >= length) break
+                val count = minOf(SAMPLE_SIZE, length - offset).toInt()
+                handle.seek(offset)
+                handle.readFully(buffer, 0, count)
+                digest.update(buffer, 0, count)
+            }
+        }
+        return hex(digest.digest())
     }
 
     /**

@@ -36,6 +36,7 @@ import com.chmouel.liseur.domain.SyncDecision
 import com.chmouel.liseur.domain.needsReconciling
 import com.chmouel.liseur.domain.readingStatusFor
 import com.chmouel.liseur.domain.reconcileReadingState
+import kotlinx.coroutines.CancellationException
 
 /** What one book's reconciliation did, and why it stopped if it did. */
 private data class BookOutcome(
@@ -44,6 +45,15 @@ private data class BookOutcome(
     /** Set when the server said nothing at all — the cue to stop the run. */
     val unreachable: SyncFailure? = null,
 )
+
+/**
+ * The exact place a push can name a book by, when one can be derived
+ * from [locatorJson]: a CRe XPath for [document], or null for the
+ * percentage.
+ */
+fun interface KosyncPointerSource {
+    suspend fun pointer(book: Book, document: String, locatorJson: String?): String?
+}
 
 /**
  * Keeps reading positions in step with a kosync server (issue #95).
@@ -60,9 +70,10 @@ private data class BookOutcome(
  *
  * kosync names a book by KOReader's partial MD5 of the file, so only a
  * book whose bytes are on this device can be spoken about, and the same
- * book downloaded from somewhere else is a different document. Positions
- * travel as a percentage; there is no locator to carry, so a pull lands
- * at roughly the right page the way calibre-web's does.
+ * book downloaded from somewhere else is a different document. The
+ * percentage says how far through a book the reader is; when the stored
+ * row carries an exact anchor, [KosyncProgressPointer] derives the CRe
+ * XPath KOReader opens instead of landing at the nearest page.
  *
  * There is no feed and no cursor: each run asks about each candidate
  * outright. The candidates are the catalog server's downloaded books,
@@ -97,6 +108,7 @@ class KosyncPositionSync(
      */
     private val connectedServer: suspend () -> RemoteServer?,
     private val client: KosyncClient = KosyncClient(),
+    private val pointers: KosyncPointerSource = KosyncPointerSource { _, _, _ -> null },
     private val reporting: SyncReporting = SyncReporting(),
     private val networkAvailability: NetworkAvailability = NetworkAvailability { true },
     private val now: () -> Long = System::currentTimeMillis,
@@ -549,12 +561,17 @@ class KosyncPositionSync(
             is SyncDecision.Push -> {
                 val revision = stored?.localRevision ?: return BookOutcome()
                 val progression = decision.state.progression ?: return BookOutcome()
+                // Settled before the account recheck: deriving is a read of
+                // this device's own file and has no bearing on whose account
+                // the push belongs to.
+                val progress = exactPointer(book, document, stored.locatorJson)
                 if (!sameAccount(account)) return BookOutcome()
                 val sent = client.putProgress(
                     rootUrl = account.baseUrl,
                     credentials = account.credentials,
                     document = document,
                     percentage = progression,
+                    progress = progress,
                     device = identity.name,
                     deviceId = identity.id,
                     // From the stored row, never from the clock, so a
@@ -589,6 +606,24 @@ class KosyncPositionSync(
             }
         }
     }
+
+    /**
+     * The exact place to upload, or null to upload the percentage.
+     *
+     * A derivation is a convenience riding along with the push, so nothing
+     * it does may cost the reader their sync: every failure is swallowed
+     * here as well as inside the converter, and only cancellation, which is
+     * the run being called off, is let through.
+     */
+    private suspend fun exactPointer(book: Book, document: String, locatorJson: String?): String? =
+        try {
+            pointers.pointer(book, document, locatorJson)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (e: Exception) {
+            Log.i(TAG, "Uploading a percentage: no exact position for this book", e)
+            null
+        }
 
     /**
      * Writes only while [account] is still the paired partner, in one

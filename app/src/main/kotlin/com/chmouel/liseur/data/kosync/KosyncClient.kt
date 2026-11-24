@@ -51,12 +51,13 @@ data class KosyncProgress(
  * The root differs per server, so the stored URL is the mount root and
  * the endpoints are appended here.
  *
- * Positions travel as a percentage plus KOReader's own `progress`
- * string. This client reads and writes only the percentage: `progress`
- * is an engine-specific position (a CRe xpointer, a page number) that
- * means nothing to Readium, so on the way out it carries the percentage
- * as a bare string — the shape KOReader itself accepts for engines
- * without an xpointer, and the one liseur-sync answers with.
+ * Positions travel as a percentage plus KOReader's own `progress` string.
+ * This client reads only the percentage: `progress` is an engine-specific
+ * position (a CRe xpointer, a page number) that means nothing to Readium.
+ * On the way out it carries a CRe XPath derived from the stored exact
+ * anchor when there is one — the form KOReader needs to land on the right
+ * passage — and the percentage as a bare string otherwise, which is what
+ * liseur-sync answers with and every peer understands.
  *
  * Blocking I/O moves to [Dispatchers.IO] here, not in callers: the
  * suspend signature is a promise that the thread is safe.
@@ -157,6 +158,11 @@ class KosyncClient(
         credentials: KosyncCredentials,
         document: String,
         percentage: Double,
+        /**
+         * Where the reader is, for KOReader's engine: a CRe XPath when one
+         * was derived, and null for the percentage as a bare string.
+         */
+        progress: String?,
         device: String,
         deviceId: String,
         /** From stored state, in epoch milliseconds; the wire wants seconds. */
@@ -168,10 +174,10 @@ class KosyncClient(
             val body = JSONObject()
                 .put("document", document)
                 // The percentage said twice: once as the number the
-                // protocol reads, once as the string KOReader shows a
-                // reader whose engine has no anchor of its own.
+                // protocol reads, once as the string a peer whose engine
+                // has no anchor of its own can use.
                 .put("percentage", clamped)
-                .put("progress", clamped.toString())
+                .put("progress", progress ?: clamped.toString())
                 .put("device", device)
                 .put("device_id", deviceId)
                 .put("timestamp", timestampMs / 1000)

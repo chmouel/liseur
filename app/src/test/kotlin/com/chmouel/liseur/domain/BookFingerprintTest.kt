@@ -1,6 +1,7 @@
 package com.chmouel.liseur.domain
 
 import java.io.ByteArrayInputStream
+import java.io.File
 import java.security.MessageDigest
 import kotlin.random.Random
 import org.junit.Assert.assertEquals
@@ -79,6 +80,22 @@ class BookFingerprintTest {
 
         assertEquals(seeking(bytes(10)), short.partialMd5)
         assertEquals(10L, short.size)
+    }
+
+    @Test
+    fun `seeking a file matches streaming it`() {
+        for (size in listOf(0, 100, 1024, 2048, 5000, 70_000, 200_000)) {
+            val file = File.createTempFile("fingerprint", ".bin").apply {
+                writeBytes(bytes(size))
+                deleteOnExit()
+            }
+
+            assertEquals(
+                "at $size bytes",
+                BookFingerprints.of(ByteArrayInputStream(file.readBytes())).partialMd5,
+                BookFingerprints.partialMd5(file),
+            )
+        }
     }
 
     /**
