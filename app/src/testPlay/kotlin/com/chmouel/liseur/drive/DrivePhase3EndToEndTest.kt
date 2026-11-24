@@ -710,6 +710,10 @@ class DrivePhase3EndToEndTest {
         // Arriving bytes invalidate what was derived from the previous file, then store the verified fingerprint.
         assertFalse(deviceB.liseurDb.bookDao().getByUrl(stubUrl)!!.fileMetadataChecked)
         assertEquals(fp.sha256, deviceB.liseurDb.workIdentityDao().fingerprint(stubUrl)?.sha256)
+        assertEquals(
+            deviceB.liseurDb.bookDao().getByUrl(stubUrl)!!.fileModifiedAt,
+            deviceB.liseurDb.workIdentityDao().fingerprint(stubUrl)?.fileModifiedAt,
+        )
     }
 
     @Test
