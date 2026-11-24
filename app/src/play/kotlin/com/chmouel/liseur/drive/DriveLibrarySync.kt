@@ -11,6 +11,7 @@ import com.chmouel.liseur.data.remote.PeerPositionSync
 import com.chmouel.liseur.data.remote.PreviewOutcome
 import com.chmouel.liseur.data.remote.RemoteAccountRepository
 import com.chmouel.liseur.data.remote.ResolveOutcome
+import com.chmouel.liseur.data.remote.ServerKind
 import com.chmouel.liseur.data.remote.SyncIdentity
 import com.chmouel.liseur.data.remote.SyncOutcome
 import com.chmouel.liseur.data.remote.SyncPreview
@@ -221,20 +222,27 @@ internal class DriveLibrarySync(
      * @param confirmedDisconnectServer `false` when the reader has not been asked
      *   about a main server: activation then fails with
      *   [MainServerConnectedException] rather than disconnecting one.
+     * @param confirmedServer the connection the reader agreed to disconnect; a
+     *   different one fails the same way, so consent never carries over to a replacement.
      */
     suspend fun activateAccount(
         permissionId: String,
         email: String,
         now: Long = System.currentTimeMillis(),
         confirmedDisconnectServer: Boolean = true,
+        confirmedServer: ServerConnectionStamp? = null,
     ): DriveAccount {
         require(permissionId.isNotBlank()) { "Drive permissionId must not be blank" }
         return switchCoordinator.withSwitchLock {
             // Rechecked under the switch lock: the caller's own consent check happened
             // outside it, so a server connected while the reader was confirming must not
             // be disconnected without asking again.
-            if (!confirmedDisconnectServer && remoteAccount.current() != null) {
-                throw MainServerConnectedException()
+            val connected = remoteAccount.current()
+            if (connected != null) {
+                val stamp = ServerConnectionStamp(connected)
+                if (!confirmedDisconnectServer || (confirmedServer != null && confirmedServer != stamp)) {
+                    throw MainServerConnectedException(stamp)
+                }
             }
             // Open and initialise drive_sync.db before retiring the server, so a
             // storage failure here leaves the existing connection untouched.
@@ -447,5 +455,17 @@ internal class DriveLibrarySync(
 }
 
 /** Raised when Drive activation would disconnect a sync server the reader was not asked about. */
-internal class MainServerConnectedException :
+internal class MainServerConnectedException(val server: ServerConnectionStamp) :
     IllegalStateException("A sync server connected while Google Drive activation was pending")
+
+/** Identifies one main-server connection, so consent to disconnect it cannot cover a replacement. */
+data class ServerConnectionStamp(
+    val kind: ServerKind,
+    val baseUrl: String,
+    val accountId: String?,
+    val addedAt: Long,
+    val orbitEpoch: Long,
+) {
+    constructor(server: RemoteServer) :
+        this(server.kind, server.baseUrl, server.accountId, server.addedAt, server.orbitEpoch)
+}

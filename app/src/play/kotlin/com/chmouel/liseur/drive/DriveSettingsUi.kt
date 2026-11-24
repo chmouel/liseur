@@ -30,6 +30,7 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -37,12 +38,14 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
 import com.chmouel.liseur.providers.PlaySettingsEntries
+import com.chmouel.liseur.reader.chrome.findActivity
 import com.chmouel.liseur.ui.BusyIndicator
 import com.chmouel.liseur.ui.settings.ConnectionRow
 import com.chmouel.liseur.ui.settings.RowDivider
@@ -188,6 +191,13 @@ internal fun DriveSettingsSection(controller: DriveAccountController) {
     ) { result ->
         scope.launch {
             controller.onAuthorizationActivityResult(result.resultCode, result.data)
+        }
+    }
+
+    val activity = LocalContext.current.findActivity()
+    DisposableEffect(controller) {
+        onDispose {
+            if (activity?.isChangingConfigurations != true) controller.abandonAuthorization()
         }
     }
 
@@ -382,6 +392,12 @@ private fun DriveAccountSwitchDialog(
         confirmation.localSummary.readingSessionsCount,
     )
 
+    val vocabularyLabel = pluralStringResource(
+        R.plurals.drive_sync_vocabulary_count,
+        confirmation.localSummary.vocabularyWordsCount,
+        confirmation.localSummary.vocabularyWordsCount,
+    )
+
     AlertDialog(
         onDismissRequest = { if (!busy) onCancel() },
         title = { Text(stringResource(R.string.drive_sync_switch_title, confirmation.targetEmail)) },
@@ -394,6 +410,7 @@ private fun DriveAccountSwitchDialog(
                         booksLabel,
                         notesLabel,
                         sessionsLabel,
+                        vocabularyLabel,
                     ),
                 )
                 if (confirmation.isAccountSwitch && confirmation.previousAccount != null) {

@@ -13,6 +13,7 @@ import com.chmouel.liseur.data.db.BookAnnotation
 import com.chmouel.liseur.data.db.DownloadState
 import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.data.db.ReadingSession
+import com.chmouel.liseur.vocabulary.VocabularyWord
 import com.chmouel.liseur.data.library.BookRemoval
 import com.chmouel.liseur.data.remote.RemoteAccountRepository
 import com.chmouel.liseur.data.remote.RemoteCredentials
@@ -35,6 +36,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -486,6 +488,109 @@ class DriveAccountControllerTest {
         assertFalse(connected.busy)
         assertEquals("perm-A", connected.account?.permissionId)
         assertEquals(DriveAccount.STATE_ACTIVE, connected.account?.state)
+    }
+
+    @Test
+    fun `consent to disconnect one server does not cover a server that replaced it`() = runTest {
+        assertTrue(remoteAccount.connectLiseurSync("https://sync.example", "reader", "pw") is SetupResult.Success)
+        fakeAuth.nextAuthorize = DriveAuthResult.Authorized("tok-a")
+        fakeApi.aboutByToken["tok-a"] = DriveUserAbout("perm-A", "alice@example.com")
+        controller.beginConnect()
+        val shown = requireNotNull(controller.uiState.first().pendingConfirmation)
+        assertTrue(shown.mainServerConnected)
+
+        val serverA = requireNotNull(remoteAccount.current())
+        liseurDb.remoteServerDao().upsert(serverA.copy(baseUrl = "https://replacement.example"))
+
+        controller.confirmPendingSwitch()
+
+        assertEquals("https://replacement.example", remoteAccount.current()?.baseUrl)
+        assertTrue(driveDb.accounts().all().isEmpty())
+        val reprompt = requireNotNull(controller.uiState.first().pendingConfirmation)
+        assertTrue(reprompt.mainServerConnected)
+        assertNotEquals(shown.confirmedServer, reprompt.confirmedServer)
+
+        controller.confirmPendingSwitch()
+        assertNull(remoteAccount.current())
+        assertEquals(DriveAccount.STATE_ACTIVE, driveDb.accounts().get("perm-A")?.state)
+    }
+
+    @Test
+    fun `saved vocabulary alone requires local data confirmation and counts only unowned words`() = runTest {
+        fun word(text: String, owner: String) = VocabularyWord(
+            word = text,
+            normalized = text,
+            language = "en",
+            definition = null,
+            translationLanguage = null,
+            addedAt = 1L,
+            dueAt = 1L,
+            ownerAccount = owner,
+        )
+        liseurDb.vocabularyDao().insertWord(word("alpha", ""))
+        liseurDb.vocabularyDao().insertWord(word("beta", "other-account"))
+        fakeAuth.nextAuthorize = DriveAuthResult.Authorized("tok-a")
+        fakeApi.aboutByToken["tok-a"] = DriveUserAbout("perm-A", "alice@example.com")
+
+        controller.beginConnect()
+
+        val confirmation = requireNotNull(controller.uiState.first().pendingConfirmation)
+        assertEquals(
+            LocalLibrarySummary(booksCount = 0, notesCount = 0, readingSessionsCount = 0, vocabularyWordsCount = 1),
+            confirmation.localSummary,
+        )
+        assertTrue(driveDb.accounts().all().isEmpty())
+    }
+
+    @Test
+    fun `confirmation count leaves out undownloaded previews that disconnecting the server removes`() = runTest {
+        assertTrue(remoteAccount.connectLiseurSync("https://sync.example", "reader", "pw") is SetupResult.Success)
+        seedLocalLibrary(books = 1, notes = 0, sessions = 0)
+        liseurDb.bookDao().upsert(
+            Book(
+                url = "remote://untouched",
+                title = "Preview",
+                author = "A",
+                coverPath = null,
+                source = null,
+                addedAt = 5L,
+                lastOpenedAt = null,
+                remoteUuid = "uuid-1",
+            ),
+        )
+        fakeAuth.nextAuthorize = DriveAuthResult.Authorized("tok-a")
+        fakeApi.aboutByToken["tok-a"] = DriveUserAbout("perm-A", "alice@example.com")
+
+        controller.beginConnect()
+
+        assertEquals(1, requireNotNull(controller.uiState.first().pendingConfirmation).localSummary.booksCount)
+    }
+
+    @Test
+    fun `abandoned authorization frees the controller and ignores a late result`() = runTest {
+        val pendingIntent = PendingIntent.getActivity(
+            context,
+            0,
+            Intent("com.chmouel.liseur.TEST_DRIVE_AUTH"),
+            PendingIntent.FLAG_IMMUTABLE,
+        )
+        fakeAuth.nextAuthorize = DriveAuthResult.NeedsResolution(pendingIntent)
+        controller.beginConnect()
+        assertTrue(controller.uiState.first().busy)
+
+        controller.abandonAuthorization()
+        assertFalse(controller.uiState.first().busy)
+
+        fakeAuth.nextParsedResult = DriveAuthResult.Authorized("tok-late")
+        fakeApi.aboutByToken["tok-late"] = DriveUserAbout("perm-A", "alice@example.com")
+        controller.onAuthorizationActivityResult(Activity.RESULT_OK, Intent())
+        assertNull(controller.uiState.first().account)
+        assertTrue(driveDb.accounts().all().isEmpty())
+
+        fakeAuth.nextAuthorize = DriveAuthResult.Authorized("tok-a")
+        fakeApi.aboutByToken["tok-a"] = DriveUserAbout("perm-A", "alice@example.com")
+        controller.beginConnect()
+        assertEquals("perm-A", controller.uiState.first().account?.permissionId)
     }
 
     @Test
