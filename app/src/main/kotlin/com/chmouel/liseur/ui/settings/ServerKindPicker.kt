@@ -97,6 +97,9 @@ internal fun ServerKindSheet(
     onPick: (ServerKind) -> Unit,
     onDismiss: () -> Unit,
     showSync: Boolean = true,
+    extraSelected: Boolean = false,
+    extraFirstOption: (@Composable (selected: Boolean, onPick: () -> Unit) -> Unit)? = null,
+    onPickExtra: (() -> Unit)? = null,
 ) {
     LiseurModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -113,10 +116,14 @@ internal fun ServerKindSheet(
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.padding(start = 24.dp, end = 24.dp, bottom = 8.dp),
             )
+            if (extraFirstOption != null && onPickExtra != null) {
+                extraFirstOption(extraSelected, onPickExtra)
+            }
             ServerKind.entries.forEach { kind ->
+                val isSelected = !extraSelected && kind == selected
                 ListItem(
                     modifier = Modifier.selectable(
-                        selected = kind == selected,
+                        selected = isSelected,
                         role = Role.RadioButton,
                         onClick = { onPick(kind) },
                     ),
@@ -128,7 +135,7 @@ internal fun ServerKindSheet(
                         // Null, not a second handler: the row already
                         // carries the click, and giving the button one
                         // too makes TalkBack read two targets.
-                        RadioButton(selected = kind == selected, onClick = null)
+                        RadioButton(selected = isSelected, onClick = null)
                     },
                 )
             }

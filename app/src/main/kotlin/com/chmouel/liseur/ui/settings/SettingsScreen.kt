@@ -123,6 +123,8 @@ fun SettingsScreen(
     intelligenceRows: @Composable () -> Unit = {},
     /** Rows a build flavor adds to Library, after the book servers. */
     flavorLibraryRows: @Composable () -> Unit = {},
+    /** Optional flavor-backed Book server summary when no RemoteServer is connected. */
+    librarySyncSummary: String? = null,
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val folders by libraryFolders.collectAsStateWithLifecycle(emptyList())
@@ -330,7 +332,7 @@ fun SettingsScreen(
                             } else {
                                 stringResource(R.string.server_connected, it.baseUrl, user)
                             }
-                        } ?: stringResource(R.string.settings_account_detail),
+                        } ?: librarySyncSummary ?: stringResource(R.string.settings_account_detail),
                         onClick = onOpenAccount,
                         modifier = Modifier.settingsAnchor(SettingsEntries.ServerAccount),
                     )

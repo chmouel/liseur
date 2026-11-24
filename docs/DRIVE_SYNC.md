@@ -88,8 +88,8 @@ different `putFp` and one `contentFp`.
 
 ### 2.1 File Inventory & `appProperties`
 
-Every `appProperties` key and value is strictly `≤ 124` UTF-8 bytes (Google
-Drive v3 limit).
+Every `appProperties` entry is strictly `≤ 124` UTF-8 bytes for its key and
+value combined (Google Drive v3 limit).
 
 | File Name | Space | Writer | Mutability | `appProperties` |
 |---|---|---|---|---|

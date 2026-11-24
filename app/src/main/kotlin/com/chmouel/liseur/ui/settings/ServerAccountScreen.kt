@@ -95,7 +95,9 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.chmouel.liseur.R
+import com.chmouel.liseur.sync.LibrarySyncBackend
 import com.chmouel.liseur.data.calibre.BulkBatch
 import com.chmouel.liseur.data.calibre.BulkDownloadEstimate
 import com.chmouel.liseur.data.calibre.limitedTo
@@ -157,6 +159,7 @@ fun ServerAccountScreen(
     onRefreshLocalNetworkAccess: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    librarySync: LibrarySyncBackend = LibrarySyncBackend.None,
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val localNetwork = rememberLocalNetworkPrompt(
@@ -165,6 +168,18 @@ fun ServerAccountScreen(
         onLaunched = onLocalNetworkRequestLaunched,
         onResult = onLocalNetworkResult,
     )
+    val driveActive by librarySync.active.collectAsStateWithLifecycle(false)
+    var driveSelected by rememberSaveable(librarySync.supportsBookServerOption) {
+        mutableStateOf(librarySync.supportsBookServerOption && state.server == null)
+    }
+    var pickingDriveKind by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(state.server, driveActive) {
+        if (state.server != null) {
+            driveSelected = false
+        } else if (driveActive && librarySync.supportsBookServerOption) {
+            driveSelected = true
+        }
+    }
     LifecycleResumeEffect(Unit) {
         onRefreshLocalNetworkAccess()
         onPauseOrDispose { }
@@ -199,7 +214,36 @@ fun ServerAccountScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 val server = state.server
-                if (server == null || state.editingAddress) {
+                val showingDrive = server == null &&
+                    !state.editingAddress &&
+                    librarySync.supportsBookServerOption &&
+                    driveSelected
+                if (showingDrive) {
+                    librarySync.BookServerSelectedRow(
+                        enabled = true,
+                        onClick = { pickingDriveKind = true },
+                    )
+                    if (pickingDriveKind) {
+                        ServerKindSheet(
+                            selected = state.kind,
+                            onPick = {
+                                onKindChange(it)
+                                driveSelected = false
+                                pickingDriveKind = false
+                            },
+                            onDismiss = { pickingDriveKind = false },
+                            extraSelected = true,
+                            extraFirstOption = { sel, pick ->
+                                librarySync.BookServerPickerRow(selected = sel, onPick = pick)
+                            },
+                            onPickExtra = {
+                                driveSelected = true
+                                pickingDriveKind = false
+                            },
+                        )
+                    }
+                    librarySync.SettingsSection()
+                } else if (server == null || state.editingAddress) {
                     if (server == null && state.lostToRestore) {
                         Notice(
                             text = stringResource(R.string.server_lost_to_restore),
@@ -228,6 +272,16 @@ fun ServerAccountScreen(
                         onConnect = onConnect,
                         prompt = localNetwork,
                         addressOnly = state.editingAddress,
+                        extraFirstOption = if (librarySync.supportsBookServerOption && !state.editingAddress) {
+                            { sel, pick -> librarySync.BookServerPickerRow(selected = sel, onPick = pick) }
+                        } else {
+                            null
+                        },
+                        onPickExtra = if (librarySync.supportsBookServerOption && !state.editingAddress) {
+                            { driveSelected = true }
+                        } else {
+                            null
+                        },
                     )
                     if (state.editingAddress) {
                         TextButton(
@@ -325,26 +379,30 @@ fun ServerAccountScreen(
                         prompt = localNetwork,
                     )
                 }
-                val secretNote = when (server?.kind ?: state.kind) {
-                    ServerKind.CALIBRE -> R.string.server_password_storage_note
-                    ServerKind.KOMGA -> R.string.server_api_key_storage_note
-                    ServerKind.LISEUR_SYNC -> R.string.server_token_storage_note
-                    ServerKind.BOOKORBIT -> R.string.server_bookorbit_storage_note
-                    // With no catalog connected there is no catalog
-                    // password to account for, and the form is not on
-                    // screen to offer one either.
-                    ServerKind.CUSTOM -> if (server != null && server.catalogUrl == null) {
-                        R.string.server_custom_kosync_storage_note
-                    } else {
-                        R.string.server_custom_storage_note
+                if (!showingDrive) {
+                    val secretNote = when (server?.kind ?: state.kind) {
+                        ServerKind.CALIBRE -> R.string.server_password_storage_note
+                        ServerKind.KOMGA -> R.string.server_api_key_storage_note
+                        ServerKind.LISEUR_SYNC -> R.string.server_token_storage_note
+                        ServerKind.BOOKORBIT -> R.string.server_bookorbit_storage_note
+                        // With no catalog connected there is no catalog
+                        // password to account for, and the form is not on
+                        // screen to offer one either.
+                        ServerKind.CUSTOM -> if (server != null && server.catalogUrl == null) {
+                            R.string.server_custom_kosync_storage_note
+                        } else {
+                            R.string.server_custom_storage_note
+                        }
                     }
+                    Text(
+                        stringResource(secretNote),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = 24.dp),
+                    )
+                } else {
+                    Spacer(Modifier.padding(bottom = 16.dp))
                 }
-                Text(
-                    stringResource(secretNote),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(bottom = 24.dp),
-                )
             }
         }
     }
@@ -650,6 +708,8 @@ private fun ConnectForm(
      * same three fields twice offered to mirror or to contradict it.
      */
     addressOnly: Boolean = false,
+    extraFirstOption: (@Composable (selected: Boolean, onPick: () -> Unit) -> Unit)? = null,
+    onPickExtra: (() -> Unit)? = null,
 ) {
     var picking by rememberSaveable { mutableStateOf(false) }
     val uriHandler = LocalUriHandler.current
@@ -683,6 +743,14 @@ private fun ConnectForm(
                 picking = false
             },
             onDismiss = { picking = false },
+            extraSelected = false,
+            extraFirstOption = extraFirstOption,
+            onPickExtra = onPickExtra?.let { pick ->
+                {
+                    picking = false
+                    pick()
+                }
+            },
         )
     }
     val custom = state.kind == ServerKind.CUSTOM

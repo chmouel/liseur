@@ -21,6 +21,16 @@ interface DriveAccountDao {
     @Query("SELECT * FROM drive_account WHERE state = 'ACTIVE' LIMIT 1")
     fun observeActive(): Flow<DriveAccount?>
 
+    @Query(
+        "SELECT * FROM drive_account ORDER BY " +
+            "CASE state WHEN 'ACTIVE' THEN 0 WHEN 'NEEDS_RECONNECT' THEN 1 ELSE 2 END, " +
+            "connected_at DESC LIMIT 1",
+    )
+    fun observePrimary(): Flow<DriveAccount?>
+
+    @Query("SELECT * FROM drive_account ORDER BY connected_at DESC")
+    fun observeAll(): Flow<List<DriveAccount>>
+
     @Query("SELECT * FROM drive_account WHERE state = 'ACTIVE' LIMIT 1")
     suspend fun active(): DriveAccount?
 
@@ -304,6 +314,12 @@ interface DriveUploadDao {
 
     @Query("SELECT * FROM drive_upload WHERE permission_id = :permissionId ORDER BY selected_at ASC, sha256 ASC")
     fun observeForAccount(permissionId: String): Flow<List<DriveUpload>>
+
+    @Query(
+        "SELECT COUNT(*) FROM drive_upload WHERE permission_id = :permissionId " +
+            "AND state IN ('PENDING', 'UPLOADING', 'FAILED')",
+    )
+    fun observePendingCount(permissionId: String): Flow<Int>
 
     @Query(
         "SELECT * FROM drive_upload WHERE permission_id = :permissionId AND state IN ('PENDING', 'UPLOADING', 'FAILED') " +
