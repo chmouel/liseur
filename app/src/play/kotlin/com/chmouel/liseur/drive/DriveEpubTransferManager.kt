@@ -87,6 +87,7 @@ internal class DriveEpubTransferManager(
     private val stagingDirProvider: () -> File = { defaultStagingDir(context) },
     private val clock: () -> Long = System::currentTimeMillis,
     private val afterUploadRequest: suspend () -> Unit = {},
+    private val beforeUploadStart: suspend () -> Unit = {},
 ) {
     private val books get() = database.bookDao()
     private val identities get() = database.workIdentityDao()
@@ -405,13 +406,7 @@ internal class DriveEpubTransferManager(
             }
             val book = books.getByUrl(queuedBeforeStage.bookUrl)
             if (book == null || book.openableUrl == null) {
-                if (currentQueuedUpload(permissionId, sha, item.bookUrl) != null) {
-                    uploads.updateState(
-                        permissionId = permissionId,
-                        sha256 = sha,
-                        state = DriveUpload.STATE_FAILED,
-                        updatedAt = clock(),
-                    )
+                if (markFailedIfSelected(permissionId, sha, item.bookUrl)) {
                     failedCount++
                 } else {
                     discardStaged(permissionId, sha)
@@ -427,8 +422,7 @@ internal class DriveEpubTransferManager(
                 null
             }
             if (currentFingerprint == null) {
-                uploads.updateState(permissionId, sha, DriveUpload.STATE_FAILED, clock())
-                failedCount++
+                if (markFailedIfSelected(permissionId, sha, item.bookUrl)) failedCount++
                 anyRetryable = true
                 continue
             }
@@ -439,9 +433,10 @@ internal class DriveEpubTransferManager(
                     BookFingerprintRow(book.url, newSha, currentFingerprint.partialMd5, currentFingerprint.size, book.fileModifiedAt, clock()),
                 )
                 if (!saved) {
-                    uploads.updateState(permissionId, sha, DriveUpload.STATE_FAILED, clock())
+                    markFailedIfSelected(permissionId, sha, item.bookUrl)
                 } else {
                     store.withTransaction {
+                        if (currentQueuedUpload(permissionId, sha, item.bookUrl) == null || !isActive(permissionId)) return@withTransaction
                         val replacement = uploads.get(permissionId, newSha)
                         uploads.delete(permissionId, sha)
                         if (replacement == null) {
@@ -458,21 +453,17 @@ internal class DriveEpubTransferManager(
             // Deduplicate if an identical non-trashed EPUB already exists in any Liseur/ folder.
             val existingRemote = driveFiles.byKindAndSha256(permissionId, DriveFile.KIND_EPUB, sha).firstOrNull()
             if (existingRemote != null) {
-                uploads.markUploaded(permissionId, sha, existingRemote.fileId, clock())
-                uploadedCount++
+                if (uploads.markUploadedIfSelected(permissionId, sha, existingRemote.fileId, clock()) > 0) {
+                    uploadedCount++
+                }
+                discardStaged(permissionId, sha)
                 continue
             }
 
             val staged = when (val staging = stageUpload(permissionId, sha, book)) {
                 is StagingResult.Staged -> staging.file
                 StagingResult.Unreadable -> {
-                    if (currentQueuedUpload(permissionId, sha, item.bookUrl) != null) {
-                        uploads.updateState(
-                            permissionId = permissionId,
-                            sha256 = sha,
-                            state = DriveUpload.STATE_FAILED,
-                            updatedAt = clock(),
-                        )
+                    if (markFailedIfSelected(permissionId, sha, item.bookUrl)) {
                         failedCount++
                         anyRetryable = true
                     } else {
@@ -483,8 +474,7 @@ internal class DriveEpubTransferManager(
                 StagingResult.Changed -> {
                     // The file at this book's location is no longer the one the reader chose,
                     // so the selection and any resumable session for it are dropped.
-                    if (currentQueuedUpload(permissionId, sha, item.bookUrl) != null) {
-                        uploads.delete(permissionId, sha)
+                    if (uploads.deleteIfSelected(permissionId, sha, item.bookUrl) > 0) {
                         failedCount++
                     }
                     discardStaged(permissionId, sha)
@@ -498,13 +488,7 @@ internal class DriveEpubTransferManager(
                 continue
             }
             if (!staged.isFile) {
-                if (currentQueuedUpload(permissionId, sha, item.bookUrl) != null) {
-                    uploads.updateState(
-                        permissionId = permissionId,
-                        sha256 = sha,
-                        state = DriveUpload.STATE_FAILED,
-                        updatedAt = clock(),
-                    )
+                if (markFailedIfSelected(permissionId, sha, item.bookUrl)) {
                     failedCount++
                     anyRetryable = true
                 } else {
@@ -517,12 +501,12 @@ internal class DriveEpubTransferManager(
             val workKey = alias?.workId?.let { workIdentity.canonicalWorkKey(permissionId, it) } ?: "sha:$sha"
             val fileName = DriveCatalogSync.sanitizeEpubFileName(book.stableTitle ?: book.title)
 
-            uploads.updateState(
-                permissionId = permissionId,
-                sha256 = sha,
-                state = DriveUpload.STATE_UPLOADING,
-                updatedAt = clock(),
-            )
+            beforeUploadStart()
+            // A deselection since the checks above keeps its CANCELLED/REQUEUE row; do not start.
+            if (uploads.updateState(permissionId, sha, DriveUpload.STATE_UPLOADING, clock()) == 0) {
+                discardStaged(permissionId, sha)
+                continue
+            }
 
             var activeSession: String? = null
             // A resumed session can complete while its request runs: cleanup must not race it.
@@ -636,26 +620,14 @@ internal class DriveEpubTransferManager(
                 throw e
             } catch (e: DriveQuotaException) {
                 // Preserve latest persisted resumable sessionUri and bytesSent across retries.
-                if (currentQueuedUpload(permissionId, sha, item.bookUrl) != null) {
-                    uploads.updateState(
-                        permissionId = permissionId,
-                        sha256 = sha,
-                        state = DriveUpload.STATE_FAILED,
-                        updatedAt = clock(),
-                    )
+                if (markFailedIfSelected(permissionId, sha, item.bookUrl)) {
                 } else {
                     discardStaged(permissionId, sha)
                 }
                 throw e
             } catch (e: Exception) {
                 // Preserve latest persisted resumable sessionUri and bytesSent across retries.
-                if (currentQueuedUpload(permissionId, sha, item.bookUrl) != null) {
-                    uploads.updateState(
-                        permissionId = permissionId,
-                        sha256 = sha,
-                        state = DriveUpload.STATE_FAILED,
-                        updatedAt = clock(),
-                    )
+                if (markFailedIfSelected(permissionId, sha, item.bookUrl)) {
                     failedCount++
                     anyRetryable = true
                 } else {
@@ -694,6 +666,10 @@ internal class DriveEpubTransferManager(
         it.bookUrl == bookUrl &&
             (it.state == DriveUpload.STATE_PENDING || it.state == DriveUpload.STATE_UPLOADING || it.state == DriveUpload.STATE_FAILED)
     }
+
+    private suspend fun markFailedIfSelected(permissionId: String, sha: String, bookUrl: String): Boolean =
+        currentQueuedUpload(permissionId, sha, bookUrl) != null &&
+            uploads.updateState(permissionId, sha, DriveUpload.STATE_FAILED, clock()) > 0
 
     private class UploadDeselectedException : Exception()
 

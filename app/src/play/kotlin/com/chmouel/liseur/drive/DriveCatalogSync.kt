@@ -720,10 +720,6 @@ internal class DriveCatalogSync(
         }
         alias?.editionSha?.lowercase(Locale.ROOT)?.let(shasToRemove::add)
         identities.fingerprint(book.url)?.sha256?.lowercase(Locale.ROOT)?.let(shasToRemove::add)
-        for (sha in shasToRemove) {
-            uploads.get(permissionId, sha)?.fileId?.takeIf { it.isNotBlank() }?.let(fileIdsToTrash::add)
-            driveFiles.byKindAndSha256(permissionId, DriveFile.KIND_EPUB, sha).forEach { fileIdsToTrash.add(it.fileId) }
-        }
 
         val hlc = nextHlc()
         val delFp = DriveCanonicalJson.delFp(DriveWireCodec.DOMAIN_CATALOG, canonicalKey, hlc)
@@ -731,12 +727,6 @@ internal class DriveCatalogSync(
             existingState?.versionFp?.let(::add)
             addAll(DriveWorkIdentity.decodeStringArray(existingState?.ancestorsJson))
         }.distinct().take(DriveWireCodec.MAX_ANCESTORS)
-        val tombstonePayload = TombstonePayload(
-            pendingTrashFileIds = fileIdsToTrash.distinct().sorted(),
-            cleanupPending = true,
-            cleanupBookUrl = book.url,
-            cleanupWorkId = alias?.workId,
-        )
 
         // Persist tombstone & pending trash IDs FIRST so a crash or cancellation while trashing
         // remote files never leaves the EPUB gone without recording the catalog deletion.
@@ -744,6 +734,19 @@ internal class DriveCatalogSync(
         // write must not leave the deletion half-applied, and nothing here touches the network.
         withContext(NonCancellable) {
             store.withTransaction {
+                // Read in the same transaction that drops the rows, so an upload that completed
+                // since the catalog read above still has its file trashed.
+                for (sha in shasToRemove) {
+                    uploads.get(permissionId, sha)?.fileId?.takeIf { it.isNotBlank() }?.let(fileIdsToTrash::add)
+                    driveFiles.byKindAndSha256(permissionId, DriveFile.KIND_EPUB, sha)
+                        .forEach { fileIdsToTrash.add(it.fileId) }
+                }
+                val tombstonePayload = TombstonePayload(
+                    pendingTrashFileIds = fileIdsToTrash.distinct().sorted(),
+                    cleanupPending = true,
+                    cleanupBookUrl = book.url,
+                    cleanupWorkId = alias?.workId,
+                )
                 for (fid in fileIdsToTrash) {
                     if (driveFiles.get(permissionId, fid) != null) {
                         driveFiles.setTrashed(permissionId, fid, true)
