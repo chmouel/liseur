@@ -488,7 +488,8 @@ internal class DriveCatalogSync(
                         confidence = WorkAlias.HIGH,
                         confirmed = true,
                         seeded = false,
-                        editionSha = primaryEdition?.sha256,
+                        // File-less until a download pins the installed edition.
+                        editionSha = null,
                         resolvedAt = now,
                     ),
                 )
@@ -498,7 +499,7 @@ internal class DriveCatalogSync(
                     val existingAlias = identities.alias(url, peerId)
                     if (existingAlias == null) {
                         val localSha = identities.fingerprint(url)?.sha256?.lowercase(Locale.ROOT)
-                            ?: primaryEdition?.sha256
+                            ?: primaryEdition?.sha256?.takeUnless { isFilelessUnownedRow(book) }
                         identities.upsert(
                             WorkAlias(
                                 bookUrl = url,

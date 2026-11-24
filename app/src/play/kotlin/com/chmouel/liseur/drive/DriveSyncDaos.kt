@@ -386,8 +386,19 @@ interface DriveUploadDao {
     )
     suspend fun deleteIfIdle(permissionId: String, sha256: String, state: String): Int
 
-    @Query("DELETE FROM drive_upload WHERE permission_id = :permissionId AND sha256 = :sha256 AND state = 'CANCELLED'")
-    suspend fun deleteIfCancelled(permissionId: String, sha256: String): Int
+    /** Drops a cancelled row only while it still holds the observed session and file. */
+    @Query(
+        "DELETE FROM drive_upload WHERE permission_id = :permissionId AND sha256 = :sha256 " +
+            "AND state = 'CANCELLED' AND session_uri IS :sessionUri AND file_id IS :fileId",
+    )
+    suspend fun deleteIfCancelled(permissionId: String, sha256: String, sessionUri: String?, fileId: String?): Int
+
+    /** Keeps a file recovered from a completed session on its own cleanup row, whatever the state. */
+    @Query(
+        "UPDATE drive_upload SET file_id = :fileId WHERE permission_id = :permissionId AND sha256 = :sha256 " +
+            "AND state IN ('CANCELLED', 'REQUEUE') AND session_uri IS :sessionUri AND file_id IS NULL",
+    )
+    suspend fun recordRecoveredFile(permissionId: String, sha256: String, sessionUri: String?, fileId: String): Int
 
     /** Re-selects a cancelled row through [bookUrl], keeping its session and file for cleanup. */
     @Query(
@@ -403,12 +414,13 @@ interface DriveUploadDao {
     )
     suspend fun retainRequeueSource(permissionId: String, sha256: String, bookUrl: String, sizeBytes: Long, now: Long): Int
 
-    /** Turns a cleaned-up REQUEUE row into a fresh upload, only if it is still REQUEUE. */
+    /** Turns a cleaned-up REQUEUE row into a fresh upload, only if it still holds the observed session and file. */
     @Query(
         "UPDATE drive_upload SET state = 'PENDING', session_uri = NULL, bytes_sent = 0, file_id = NULL, " +
-            "updated_at = :now WHERE permission_id = :permissionId AND sha256 = :sha256 AND state = 'REQUEUE'",
+            "updated_at = :now WHERE permission_id = :permissionId AND sha256 = :sha256 AND state = 'REQUEUE' " +
+            "AND session_uri IS :sessionUri AND file_id IS :fileId",
     )
-    suspend fun requeueAfterCleanup(permissionId: String, sha256: String, now: Long): Int
+    suspend fun requeueAfterCleanup(permissionId: String, sha256: String, sessionUri: String?, fileId: String?, now: Long): Int
 
     /** Queue entries plus cancelled uploads whose Drive copy still has to be cleaned up. */
     @Query(
