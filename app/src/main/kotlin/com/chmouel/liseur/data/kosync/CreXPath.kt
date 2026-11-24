@@ -261,13 +261,15 @@ internal object CreXPath {
      * Whether KOReader counts the same number of code points before the
      * offset as CrossPoint does. CREngine keeps a single leading space and
      * every Unicode space, and drops an ASCII whitespace character only when
-     * it follows another one in the same run.
+     * it follows another one in the same run. A tab is never trusted:
+     * preformatted text expands it to several spaces.
      */
     private fun collapseInvariant(text: String, offset: Int): Boolean {
         val end = text.offsetByCodePoints(0, offset)
         var space = false
         for (i in 0 until end) {
-            val ascii = text[i] == ' ' || text[i] == '\t' || text[i] == '\r' || text[i] == '\n'
+            if (text[i] == '\t') return false
+            val ascii = text[i] == ' ' || text[i] == '\r' || text[i] == '\n'
             if (ascii && space) return false
             space = ascii
         }
