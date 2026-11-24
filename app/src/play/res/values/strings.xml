@@ -186,6 +186,7 @@
     <string name="drive_sync_switch_body_disconnect_server">Your current book server will be disconnected. Downloaded books, reading history, and browse-only catalogs will be kept.</string>
     <string name="drive_sync_switch_confirm">Sync with this account</string>
     <string name="drive_sync_switch_cancel">Cancel</string>
+    <string name="drive_sync_use_instead">Use Google Drive instead</string>
     <plurals name="drive_sync_books_count">
         <item quantity="one">%d book</item>
         <item quantity="other">%d books</item>
