@@ -768,6 +768,7 @@ private fun LiseurApp(
                             flavorLibraryRows = {
                                 context.container.readingTracker.SettingsEntry(onOpen = { openPage(Route.Services) })
                             },
+                            librarySyncSummary = context.container.librarySync.connectedSummary(),
                             intelligenceRows = {
                                 Column(Modifier.settingsAnchor(SettingsEntries.Translation)) {
                                     context.container.translate.SettingsEntry(onClick = { openPage(Route.Translation) })
@@ -851,7 +852,9 @@ private fun LiseurApp(
                                     context.container.serverConnections,
                                     context.container.serviceAccounts,
                                     leave,
-                                    trackers = { context.container.readingTracker.Rows() },
+                                    trackers = {
+                                        context.container.readingTracker.Rows()
+                                    },
                                 )
                             },
                         )
@@ -862,7 +865,9 @@ private fun LiseurApp(
                             connections = context.container.serverConnections,
                             accounts = context.container.serviceAccounts,
                             onBack = back,
-                            trackers = { context.container.readingTracker.Rows() },
+                            trackers = {
+                                context.container.readingTracker.Rows()
+                            },
                         )
                     }
 
@@ -1123,10 +1128,12 @@ private fun ServerAccountRoute(
     onBack: () -> Unit,
     viewModel: ServerAccountViewModel = viewModel(factory = ServerAccountViewModel.Factory),
 ) {
+    val context = LocalContext.current
     val state by viewModel.state.collectAsStateWithLifecycle()
 
     ServerAccountScreen(
         state = state,
+        librarySync = context.container.librarySync,
         onKindChange = viewModel::setKind,
         onUrlChange = viewModel::setUrl,
         onUsernameChange = viewModel::setUsername,

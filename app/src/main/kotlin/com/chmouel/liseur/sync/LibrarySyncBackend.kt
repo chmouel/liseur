@@ -31,9 +31,28 @@ interface LibrarySyncBackend {
      */
     val positionPeer: PeerPositionSync?
 
-    /** Optional flavor-provided entry in sync settings. */
+    /** Whether this backend appears first in the Book server type picker. */
+    val supportsBookServerOption: Boolean get() = false
+
+    /** Short connected-account summary shown on the Settings > Book server row when active. */
+    @Composable
+    fun connectedSummary(): String? = null
+
+    /** Optional flavor-provided entry in Settings > Library. */
     @Composable
     fun SettingsEntry(onOpen: () -> Unit) = Unit
+
+    /** Optional flavor-provided section inside Book server settings. */
+    @Composable
+    fun SettingsSection() = Unit
+
+    /** Server-type selector card shown when this backend is selected in Book server settings. */
+    @Composable
+    fun BookServerSelectedRow(enabled: Boolean, onClick: () -> Unit) = Unit
+
+    /** First option row rendered in the Book server type picker sheet. */
+    @Composable
+    fun BookServerPickerRow(selected: Boolean, onPick: () -> Unit) = Unit
 
     /** No-op backend for builds without an external library-sync provider. */
     object None : LibrarySyncBackend {
