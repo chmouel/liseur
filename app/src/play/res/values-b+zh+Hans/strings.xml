@@ -171,7 +171,7 @@
     <string name="drive_sync_connecting">正在连接 Google Drive…</string>
     <string name="drive_sync_needs_reconnect_detail">Google Drive 授权已过期或已撤销。请重新连接以恢复同步。</string>
     <string name="drive_sync_switch_title">与 %1$s 同步？</string>
-    <string name="drive_sync_switch_body_summary">Liseur 将把本地书库与 %1$s 同步：%2$s、%3$s、%4$s 和 %5$s。</string>
+    <string name="drive_sync_switch_body_summary">Liseur 将把你的本地书库与 %1$s 同步：%2$s、%3$s、%4$s 和 %5$s。</string>
     <string name="drive_sync_switch_body_keep_previous">你之前的账号（%1$s）将在此设备上保持暂停状态，并保留其同步进度。</string>
     <string name="drive_sync_switch_body_disconnect_server">当前的书库服务器将断开连接。已下载的书籍、阅读历史和仅浏览目录将会保留。</string>
     <string name="drive_sync_switch_confirm">与此账号同步</string>
@@ -193,7 +193,7 @@
         <item quantity="other">%d 次阅读记录</item>
     </plurals>
     <plurals name="drive_sync_vocabulary_count">
-        <item quantity="other">%d 个已保存生词</item>
+        <item quantity="other">%d 个已保存的单词</item>
     </plurals>
     <plurals name="drive_sync_pending_uploads_count">
         <item quantity="other">%d 项待上传</item>

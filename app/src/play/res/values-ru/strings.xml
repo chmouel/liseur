@@ -177,7 +177,7 @@
     <string name="drive_sync_connecting">Подключение к Google Drive…</string>
     <string name="drive_sync_needs_reconnect_detail">Авторизация Google Drive истекла или была отозвана. Переподключитесь, чтобы возобновить синхронизацию.</string>
     <string name="drive_sync_switch_title">Синхронизировать с %1$s?</string>
-    <string name="drive_sync_switch_body_summary">Liseur будет синхронизировать локальную библиотеку с %1$s: %2$s, %3$s, %4$s и %5$s.</string>
+    <string name="drive_sync_switch_body_summary">Liseur синхронизирует вашу локальную библиотеку с %1$s: %2$s, %3$s, %4$s и %5$s.</string>
     <string name="drive_sync_switch_body_keep_previous">Предыдущий аккаунт (%1$s) останется приостановленным на этом устройстве, а его прогресс синхронизации сохранится.</string>
     <string name="drive_sync_switch_body_disconnect_server">Текущий книжный сервер будет отключён. Скачанные книги, история чтения и каталоги только для просмотра сохранятся.</string>
     <string name="drive_sync_switch_confirm">Синхронизировать с этим аккаунтом</string>
@@ -211,7 +211,7 @@
         <item quantity="one">%d сохранённое слово</item>
         <item quantity="few">%d сохранённых слова</item>
         <item quantity="many">%d сохранённых слов</item>
-        <item quantity="other">%d сохранённых слова</item>
+        <item quantity="other">%d сохранённого слова</item>
     </plurals>
     <plurals name="drive_sync_pending_uploads_count">
         <item quantity="one">%d загрузка ожидает</item>
