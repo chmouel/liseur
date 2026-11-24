@@ -304,7 +304,7 @@ data class BookOrbitEpubPackage(
         private fun Char.isAsciiLetter(): Boolean =
             this in 'a'..'z' || this in 'A'..'Z'
 
-        private fun decodeXmlBytes(bytes: ByteArray): String {
+        internal fun decodeXmlBytes(bytes: ByteArray): String {
             val (charset, offset) = when {
                 bytes.size >= 3 &&
                     bytes[0] == 0xEF.toByte() &&

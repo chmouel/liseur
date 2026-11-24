@@ -340,6 +340,20 @@ class CreXPathTest {
     }
 
     @Test
+    fun `a long UTF-16 run declines in either byte order`() {
+        fun p(repeats: Int) = "\uFEFF<?xml version=\"1.0\" encoding=\"UTF-16\"?>" +
+            "<html><body><p>" + "\u4e3cword ".repeat(repeats) + "needle</p></body></html>"
+        val anchor = ViewportTextAnchor("body > p:nth-of-type(1)", "word ", "needle", "")
+        for (charset in listOf(Charsets.UTF_16LE, Charsets.UTF_16BE)) {
+            assertEquals(
+                "/body/DocFragment[1]/body/p[1]/text()[1].60",
+                CreXPath.forAnchor(p(10).toByteArray(charset), 1, anchor),
+            )
+            assertNull(CreXPath.forAnchor(p(1500).toByteArray(charset), 1, anchor))
+        }
+    }
+
+    @Test
     fun `a CDATA section long enough to split declines even with a less-than sign inside`() {
         fun p(repeats: Int) = "<html><body><p><![CDATA[" + "word < ".repeat(repeats) + "]]>needle</p></body></html>"
         assertXpath("/body/DocFragment[1]/body/p[1]/text()[2].0", p(100), "body > p:nth-of-type(1)", "< ", "needle")
