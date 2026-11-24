@@ -506,6 +506,9 @@ snapshot, `R.seq = snapshot.throughSeq`):
    `restore` and `observed` of `L` always come from one record, and the losing `del`'s
    payloads are discarded, never copied beside the winning `fp`, so every
    delivery order of two distinct deletes yields the same causal boundary.
+   A `del` `fp` embeds its authoring `hlc`, so it is immutable, and
+   `last_hlc := max(last_hlc, R.hlc)` in every case, so the next minted
+   version cannot reuse a clock the adopted record already used.
    For concurrent live puts with equal bodies, adopt the higher `(hlc, fp)`
    as `L` the same way (the row is unchanged) and keep the other `fp` in
    `anc(L)`; `published_fp := R.fp` only when `R` is adopted, because a

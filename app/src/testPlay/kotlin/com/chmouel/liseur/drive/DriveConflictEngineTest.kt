@@ -1004,6 +1004,80 @@ class DriveConflictEngineTest {
     }
 
     @Test
+    fun `concurrent plain deletes converge on the immutable fingerprint and never regress lastHlc`() {
+        val f0 = putFp("v0")
+        val hlcA = "0017450000100-0001-dev-a"
+        val hlcB = "0017450000200-0001-dev-b"
+        val advanced = "0017450000900-0001-dev-z"
+        val fpA = DriveCanonicalJson.delFp(domain, key, hlcA)
+        val fpB = DriveCanonicalJson.delFp(domain, key, hlcB)
+        val winner = maxOf(fpA, fpB)
+
+        fun delRecord(hlc: String, fp: String) = DriveWireRecord(
+            d = domain,
+            k = key,
+            op = DriveRecordState.OP_DEL,
+            hlc = hlc,
+            fp = fp,
+            anc = listOf(f0),
+            resRefs = emptyList(),
+            body = null,
+        )
+
+        fun localDelete(fp: String, lastHlc: String) = LocalRecordView(
+            versionFp = fp,
+            versionOp = DriveRecordState.OP_DEL,
+            isLivePut = false,
+            publishedFp = fp,
+            ancestors = listOf(f0),
+            lastHlc = lastHlc,
+        )
+
+        fun view(state: DriveRecordState) = LocalRecordView(
+            versionFp = state.versionFp,
+            versionOp = state.versionOp,
+            isLivePut = false,
+            publishedFp = state.publishedFp,
+            ancestors = DriveWorkIdentity.decodeStringArray(state.ancestorsJson),
+            resRefs = DriveWorkIdentity.decodeStringArray(state.resRefsJson),
+            lastHlc = state.lastHlc,
+        )
+
+        // A's mutable clock moved to 900 via an unrelated conflict; B's delete is at 200.
+        val onA = reconcile(localDelete(fpA, advanced), emptyList(), delRecord(hlcB, fpB), null)
+        val onB = reconcile(localDelete(fpB, hlcB), emptyList(), delRecord(hlcA, fpA), null)
+
+        assertEquals(ReconciliationCase.AGREEMENT, onA.reconciliationCase)
+        assertEquals(ReconciliationCase.AGREEMENT, onB.reconciliationCase)
+        assertEquals(winner, onA.updatedRecordState!!.versionFp)
+        assertEquals(winner, onB.updatedRecordState!!.versionFp)
+        assertEquals(advanced, onA.updatedRecordState!!.lastHlc)
+        assertEquals(hlcB, onB.updatedRecordState!!.lastHlc)
+
+        // Reverse order: B first holds a high clock, A's delete arrives later.
+        val onBHigh = reconcile(localDelete(fpB, advanced), emptyList(), delRecord(hlcA, fpA), null)
+        assertEquals(winner, onBHigh.updatedRecordState!!.versionFp)
+        assertEquals(advanced, onBHigh.updatedRecordState!!.lastHlc)
+
+        // A concurrent edit after convergence still conflicts on both devices.
+        val edit = DriveWireRecord(
+            d = domain,
+            k = key,
+            op = DriveRecordState.OP_PUT,
+            hlc = "0017450001000-0001-dev-c",
+            fp = putFp("late-edit"),
+            anc = listOf(f0),
+            resRefs = emptyList(),
+            body = putBody("late-edit"),
+        )
+        for (state in listOf(onA.updatedRecordState!!, onB.updatedRecordState!!, onBHigh.updatedRecordState!!)) {
+            val result = reconcile(view(state), emptyList(), edit, putFp("late-edit"))
+            assertEquals(ReconciliationCase.CONFLICT_DELETE_EDIT, result.reconciliationCase)
+            assertEquals(true, result.updatedRecordState!!.lastHlc >= state.lastHlc)
+        }
+    }
+
+    @Test
     fun `causal supersession ignores conflicts already settled by Step 0`() {
         val fOld = putFp("old")
         val fA = putFp("edit-A")
