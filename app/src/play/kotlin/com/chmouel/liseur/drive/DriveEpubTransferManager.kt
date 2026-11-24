@@ -189,9 +189,14 @@ internal class DriveEpubTransferManager(
                 }
                 // Re-selecting a cancelled edition never adopts its old session or file, which cleanup
                 // may already be trashing: cleanup finishes first, then turns the row into a fresh upload.
-                if (existing?.state == DriveUpload.STATE_REQUEUE) return@withTransaction true
+                // The fresh upload reads the copy selected now, which may be another library row of
+                // the same bytes; the old session and file stay on the row for cleanup.
+                if (existing?.state == DriveUpload.STATE_REQUEUE) {
+                    uploads.retainRequeueSource(permissionId, sha, book.url, fp.size.coerceAtLeast(0L), now)
+                    return@withTransaction true
+                }
                 if (existing?.state == DriveUpload.STATE_CANCELLED) {
-                    if (uploads.transition(permissionId, sha, existing.state, DriveUpload.STATE_REQUEUE, now) > 0) {
+                    if (uploads.requeueWithSource(permissionId, sha, book.url, fp.size.coerceAtLeast(0L), now) > 0) {
                         return@withTransaction true
                     }
                 }
@@ -254,7 +259,7 @@ internal class DriveEpubTransferManager(
             if (upload.state != DriveUpload.STATE_CANCELLED && upload.state != DriveUpload.STATE_REQUEUE) continue
             // A cancelled worker's request may still be running: until it returns, an unfinished
             // session can yet complete, so its obligation stays.
-            if (upload.fileId == null && upload.sessionUri?.let { it in inFlightSessions } == true) {
+            if (upload.fileId == null && upload.sessionUri?.let { isSessionInFlight(it) } == true) {
                 clean = false
                 continue
             }
@@ -397,6 +402,8 @@ internal class DriveEpubTransferManager(
         var uploadedCount = 0
         var failedCount = 0
         var anyRetryable = false
+        // Uploads in this batch do not change the catalog, so one scan serves every reusable-file check.
+        var advertisedByBatch: Map<String, Set<String>>? = null
 
         for (item in pending) {
             if (!isActive(permissionId)) break
@@ -452,9 +459,15 @@ internal class DriveEpubTransferManager(
                 continue
             }
 
-            val advertised = catalogSync.advertisedEpubFileIds(permissionId)[sha].orEmpty()
-            val existingRemote = driveFiles.byKindAndSha256(permissionId, DriveFile.KIND_EPUB, sha)
-                .firstOrNull { it.fileId in advertised }
+            // Reuse an identical EPUB only when a live catalog edition advertises that file.
+            val indexed = driveFiles.byKindAndSha256(permissionId, DriveFile.KIND_EPUB, sha)
+            val existingRemote = if (indexed.isEmpty()) {
+                null
+            } else {
+                val advertised = (advertisedByBatch ?: catalogSync.advertisedEpubFileIds(permissionId)
+                    .also { advertisedByBatch = it })[sha].orEmpty()
+                indexed.firstOrNull { it.fileId in advertised }
+            }
             if (existingRemote != null) {
                 if (uploads.markUploadedIfSelected(permissionId, sha, existingRemote.fileId, clock()) > 0) {
                     uploadedCount++
@@ -515,7 +528,7 @@ internal class DriveEpubTransferManager(
             // A resumed session can complete while its request runs: cleanup must not race it.
             val resumedSession = queuedBeforeUpload.sessionUri
             try {
-                resumedSession?.let(inFlightSessions::add)
+                resumedSession?.let(::holdSession)
                 val remoteFile = run {
                     driveApi.uploadResumableFile(
                         accessToken = accessToken,
@@ -527,9 +540,9 @@ internal class DriveEpubTransferManager(
                         existingSessionUri = queuedBeforeUpload.sessionUri,
                         openStream = { FileInputStream(staged) },
                         onSessionUri = { sessionUri ->
-                            activeSession?.let(inFlightSessions::remove)
+                            activeSession?.let(::releaseSession)
                             activeSession = sessionUri
-                            inFlightSessions.add(sessionUri)
+                            holdSession(sessionUri)
                             val latest = currentQueuedUpload(permissionId, sha, item.bookUrl)
                                 ?: throw UploadDeselectedException()
                             val bytes = if (latest.sessionUri == sessionUri) latest.bytesSent else 0L
@@ -575,8 +588,8 @@ internal class DriveEpubTransferManager(
                             DriveUpload(
                                 permissionId = permissionId,
                                 sha256 = sha,
-                                bookUrl = item.bookUrl,
-                                sizeBytes = totalBytes,
+                                bookUrl = if (requeued) existing!!.bookUrl else item.bookUrl,
+                                sizeBytes = if (requeued) existing!!.sizeBytes else totalBytes,
                                 state = if (requeued) DriveUpload.STATE_REQUEUE else DriveUpload.STATE_CANCELLED,
                                 fileId = remoteFile.id,
                                 selectedAt = clock(),
@@ -639,8 +652,8 @@ internal class DriveEpubTransferManager(
             } finally {
                 // Held past local finalization: until the completion is recorded or handed to
                 // cleanup, cleanup must not trash the file and requeue the row under it.
-                activeSession?.let(inFlightSessions::remove)
-                resumedSession?.let(inFlightSessions::remove)
+                activeSession?.let(::releaseSession)
+                resumedSession?.let(::releaseSession)
             }
         }
 
@@ -905,7 +918,18 @@ internal class DriveEpubTransferManager(
 
     companion object {
         /** Upload sessions whose HTTP request is still running in this process. */
-        private val inFlightSessions: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+        private val inFlightSessions = java.util.concurrent.ConcurrentHashMap<String, Int>()
+
+        /** Counts holders, so a replaced worker's release cannot unprotect its replacement. */
+        internal fun holdSession(session: String) {
+            inFlightSessions.merge(session, 1, Int::plus)
+        }
+
+        internal fun releaseSession(session: String) {
+            inFlightSessions.computeIfPresent(session) { _, holders -> if (holders > 1) holders - 1 else null }
+        }
+
+        internal fun isSessionInFlight(session: String): Boolean = inFlightSessions.containsKey(session)
 
         const val EPUB_MIME_TYPE = "application/epub+zip"
         private const val STAGING_DIR_NAME = "drive_upload_staging"
