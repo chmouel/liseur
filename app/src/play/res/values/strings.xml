@@ -161,4 +161,49 @@
     <string name="hardcover_conflict_review_too_long">This Hardcover review is too long to bring into Liseur.</string>
     <string name="hardcover_conflict_stale">Liseur\'s value changed meanwhile. Check it and choose again.</string>
     <string name="hardcover_review_public_note">Public. Also published as your Hardcover review.</string>
+    <string name="drive_sync_title" translatable="false">Google Drive</string>
+    <string name="drive_sync_settings_summary">Sync your library, notes, and reading progress with Google Drive</string>
+    <string name="drive_sync_intro">Keep your catalog, notes, vocabulary, reading sessions, and reading progress in sync across devices using your Google Drive app data. Selected EPUB files are stored in a Liseur folder in Drive.</string>
+    <string name="drive_sync_status_active">Active</string>
+    <string name="drive_sync_status_paused">Paused</string>
+    <string name="drive_sync_status_needs_reconnect">Reconnect needed</string>
+    <string name="drive_sync_account_summary">%1$s · %2$s</string>
+    <string name="drive_sync_status_label">Status</string>
+    <string name="drive_sync_last_sync_label">Last synced</string>
+    <string name="drive_sync_last_sync_never">Never</string>
+    <string name="drive_sync_pending_uploads_label">Pending EPUB uploads</string>
+    <string name="drive_sync_conflicts_label">Unresolved conflicts</string>
+    <string name="drive_sync_none">None</string>
+    <string name="drive_sync_connect">Connect Google Drive</string>
+    <string name="drive_sync_reconnect">Reconnect</string>
+    <string name="drive_sync_disconnect">Disconnect</string>
+    <string name="drive_sync_switch_account">Switch account</string>
+    <string name="drive_sync_connecting">Connecting to Google Drive…</string>
+    <string name="drive_sync_needs_reconnect_detail">Google Drive authorization expired or was revoked. Reconnect to resume syncing.</string>
+    <string name="drive_sync_switch_title">Sync with %1$s?</string>
+    <string name="drive_sync_switch_body_summary">Liseur will sync your local library with %1$s: %2$s, %3$s, and %4$s.</string>
+    <string name="drive_sync_switch_body_keep_previous">Your previous account (%1$s) will stay paused on this device with its sync progress preserved.</string>
+    <string name="drive_sync_switch_body_disconnect_server">Your current book server will be disconnected. Downloaded books, reading history, and browse-only catalogs will be kept.</string>
+    <string name="drive_sync_switch_confirm">Sync with this account</string>
+    <string name="drive_sync_switch_cancel">Cancel</string>
+    <plurals name="drive_sync_books_count">
+        <item quantity="one">%d book</item>
+        <item quantity="other">%d books</item>
+    </plurals>
+    <plurals name="drive_sync_notes_count">
+        <item quantity="one">%d note</item>
+        <item quantity="other">%d notes</item>
+    </plurals>
+    <plurals name="drive_sync_sessions_count">
+        <item quantity="one">%d reading session</item>
+        <item quantity="other">%d reading sessions</item>
+    </plurals>
+    <plurals name="drive_sync_pending_uploads_count">
+        <item quantity="one">%d upload pending</item>
+        <item quantity="other">%d uploads pending</item>
+    </plurals>
+    <plurals name="drive_sync_conflicts_count">
+        <item quantity="one">%d unresolved conflict</item>
+        <item quantity="other">%d unresolved conflicts</item>
+    </plurals>
 </resources>

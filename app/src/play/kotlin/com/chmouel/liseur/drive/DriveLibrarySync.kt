@@ -1,6 +1,7 @@
 package com.chmouel.liseur.drive
 
 import android.content.Context
+import androidx.compose.runtime.Composable
 import androidx.room.withTransaction
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.LiseurDatabase
@@ -54,6 +55,9 @@ internal class DriveLibrarySync(
     private val onResumeActive: () -> Unit = {},
     private val deviceIdGenerator: () -> String = { UUID.randomUUID().toString().lowercase(Locale.ROOT) },
     private val openStore: (() -> DriveSyncDatabase)? = null,
+    authClient: DriveAuthClient? = null,
+    driveApi: DriveRemoteApi? = null,
+    private val clock: () -> Long = System::currentTimeMillis,
 ) : LibrarySyncBackend {
 
     private val appContext = context.applicationContext
@@ -70,12 +74,33 @@ internal class DriveLibrarySync(
     internal val store: DriveSyncDatabase
         get() = storeLazy.value
 
-    private fun hasStore(): Boolean = storeLazy.isInitialized() || openStore != null || storeFile.exists()
+    internal val authClient: DriveAuthClient by lazy {
+        authClient ?: PlayServicesDriveAuthClient(appContext)
+    }
 
-    @OptIn(ExperimentalCoroutinesApi::class)
-    override val active: Flow<Boolean> = storeOpened
+    internal val driveApi: DriveRemoteApi by lazy {
+        driveApi ?: DriveRestClient()
+    }
+
+    internal val accountController: DriveAccountController by lazy {
+        DriveAccountController(
+            database = database,
+            remoteAccount = remoteAccount,
+            driveSync = this,
+            authClient = this.authClient,
+            driveApi = this.driveApi,
+            clock = clock,
+        )
+    }
+
+    internal fun hasStore(): Boolean = storeLazy.isInitialized() || openStore != null || storeFile.exists()
+
+    internal val storeAvailable: Flow<Boolean> = storeOpened
         .map { opened -> opened || storeFile.exists() }
         .distinctUntilChanged()
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    override val active: Flow<Boolean> = storeAvailable
         .flatMapLatest { exists ->
             if (exists) store.accounts().observeActive().map { it != null } else flowOf(false)
         }
@@ -103,6 +128,79 @@ internal class DriveLibrarySync(
 
     override val positionPeer: PeerPositionSync = DrivePositionPeer()
 
+    override val supportsBookServerOption: Boolean = true
+
+    @Composable
+    override fun connectedSummary(): String? = driveConnectedSummary(controller = accountController)
+
+    @Composable
+    override fun SettingsEntry(onOpen: () -> Unit) {
+        DriveSettingsEntry(controller = accountController, onOpen = onOpen)
+    }
+
+    @Composable
+    override fun SettingsSection() {
+        DriveSettingsSection(controller = accountController)
+    }
+
+    @Composable
+    override fun BookServerSelectedRow(enabled: Boolean, onClick: () -> Unit) {
+        DriveBookServerSelectedRow(enabled = enabled, onClick = onClick)
+    }
+
+    @Composable
+    override fun BookServerPickerRow(selected: Boolean, onPick: () -> Unit) {
+        DriveBookServerPickerRow(selected = selected, onPick = onPick)
+    }
+
+    /** Stops background workers and transitions [permissionId] to `NEEDS_RECONNECT` while preserving all state. */
+    internal suspend fun markNeedsReconnect(permissionId: String, reason: String) {
+        stopWorkers()
+        if (!hasStore()) return
+        store.withTransaction {
+            store.accounts().setState(permissionId, DriveAccount.STATE_NEEDS_RECONNECT)
+            store.accounts().recordError(permissionId, reason)
+        }
+    }
+
+    /**
+     * [markNeedsReconnect] for an account that must still be the active one, checked
+     * under the switch lock so a concurrent server connect or account switch wins.
+     */
+    internal suspend fun markNeedsReconnectIfActive(permissionId: String, reason: String): Boolean {
+        if (!hasStore()) return false
+        return switchCoordinator.withSwitchLock {
+            if (store.accounts().active()?.permissionId != permissionId) return@withSwitchLock false
+            markNeedsReconnect(permissionId, reason)
+            true
+        }
+    }
+
+    /**
+     * Restores a previously saved account state after cancelling a pending switch,
+     * while upholding the mutual exclusion invariant with any connected main server.
+     */
+    internal suspend fun restoreAccountState(permissionId: String, state: String) {
+        if (!hasStore()) return
+        val restoredActive = switchCoordinator.withSwitchLock {
+            if (state == DriveAccount.STATE_ACTIVE && remoteAccount.current() != null) {
+                return@withSwitchLock false
+            }
+            store.withTransaction {
+                if (state == DriveAccount.STATE_ACTIVE) {
+                    store.accounts().pauseAllActive()
+                }
+                store.accounts().setState(permissionId, state)
+            }
+            state == DriveAccount.STATE_ACTIVE
+        }
+        if (restoredActive) onResumeActive()
+    }
+
+    internal fun notifyActivated() {
+        onResumeActive()
+    }
+
     /**
      * Activates Google Drive for [permissionId] while upholding the mutual
      * exclusion invariant (never both `remote_server.id = 1` and an `ACTIVE`
@@ -114,14 +212,25 @@ internal class DriveLibrarySync(
      * series / shelf state are kept and seeded with Drive `work_alias` rows
      * before server peer cleanup. Any previously active Drive account is
      * transitioned to `PAUSED` with all of its state preserved intact.
+     *
+     * @param confirmedDisconnectServer `false` when the reader has not been asked
+     *   about a main server: activation then fails with
+     *   [MainServerConnectedException] rather than disconnecting one.
      */
     suspend fun activateAccount(
         permissionId: String,
         email: String,
         now: Long = System.currentTimeMillis(),
+        confirmedDisconnectServer: Boolean = true,
     ): DriveAccount {
         require(permissionId.isNotBlank()) { "Drive permissionId must not be blank" }
         return switchCoordinator.withSwitchLock {
+            // Rechecked under the switch lock: the caller's own consent check happened
+            // outside it, so a server connected while the reader was confirming must not
+            // be disconnected without asking again.
+            if (!confirmedDisconnectServer && remoteAccount.current() != null) {
+                throw MainServerConnectedException()
+            }
             // Open and initialise drive_sync.db before retiring the server, so a
             // storage failure here leaves the existing connection untouched.
             val db = store
@@ -138,6 +247,7 @@ internal class DriveLibrarySync(
                 val updated = existing?.copy(
                     email = email,
                     state = DriveAccount.STATE_ACTIVE,
+                    connectedAt = now,
                     lastError = null,
                 ) ?: DriveAccount(
                     permissionId = permissionId,
@@ -330,3 +440,7 @@ internal class DriveLibrarySync(
         private const val HEX_CHARS = "0123456789abcdef"
     }
 }
+
+/** Raised when Drive activation would disconnect a sync server the reader was not asked about. */
+internal class MainServerConnectedException :
+    IllegalStateException("A sync server connected while Google Drive activation was pending")

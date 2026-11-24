@@ -677,7 +677,7 @@ Flat files in `appDataFolder`:
 | `cover-<sha256 of webp bytes>.webp` | any device | content-addressed |
 
 Every file has `appProperties` `liseur=1`, `kind=manifest|delta|snapshot|cover`
-and `schemaVersion=1` (each key and value ≤ 124 bytes). Device files add
+and `schemaVersion=1` (each key plus its value ≤ 124 bytes). Device files add
 `deviceId`, deltas add `seq` and `batchId`, covers add `sha256`. EPUBs in
 the `Liseur/` folder carry `liseurKind=epub`, `sha256` and `workKey`.
 
