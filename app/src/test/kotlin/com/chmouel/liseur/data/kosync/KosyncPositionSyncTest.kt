@@ -22,6 +22,8 @@ import com.chmouel.liseur.data.remote.SyncFailure
 import com.chmouel.liseur.data.remote.SyncOutcome
 import java.io.File
 import java.net.InetAddress
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 import javax.crypto.KeyGenerator
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
@@ -201,7 +203,7 @@ class KosyncPositionSyncTest {
         client.authorize(root, credentials)
         client.register(root, "ada", "pw")
         client.getProgress(root, credentials, document)
-        client.putProgress(root, credentials, document, 0.4, "Test Phone", "dev-1", NOW)
+        client.putProgress(root, credentials, document, 0.4, null, "Test Phone", "dev-1", NOW)
 
         val sent = requests()
         assertEquals(4, sent.size)
@@ -328,6 +330,78 @@ class KosyncPositionSyncTest {
         assertEquals("dev-1", sent.getString("device_id"))
         // Settled at the revision that was compared.
         assertEquals(1L, db.syncPeerStateDao().get(BOOK, peerKey())?.ackedRevision)
+    }
+
+    @Test
+    fun `an exact place is pushed as the CRe XPath KOReader opens`() = runTest {
+        pair()
+        db.bookDao().upsert(book())
+        record(progression = 0.4)
+        server.enqueue(json("{}"))
+        server.enqueue(json("""{"document":"x"}"""))
+
+        val pointers = KosyncPointerSource { _, _, _ -> XPATH }
+        assertEquals(SyncOutcome.Success, sync(pointers = pointers).syncAll(null))
+
+        val sent = JSONObject(requests().last().body!!.utf8())
+        assertEquals(XPATH, sent.getString("progress"))
+        assertEquals(0.4, sent.getDouble("percentage"), 0.0)
+    }
+
+    @Test
+    fun `a book with no exact place keeps the percentage`() = runTest {
+        pair()
+        db.bookDao().upsert(book())
+        record(progression = 0.4)
+        server.enqueue(json("{}"))
+        server.enqueue(json("""{"document":"x"}"""))
+
+        assertEquals(SyncOutcome.Success, sync().syncAll(null))
+
+        assertEquals("0.4", JSONObject(requests().last().body!!.utf8()).getString("progress"))
+    }
+
+    /**
+     * Deriving a place is a convenience riding along with the push: a
+     * converter that throws must cost the reader nothing.
+     */
+    @Test
+    fun `a conversion that fails still pushes the percentage`() = runTest {
+        pair()
+        db.bookDao().upsert(book())
+        record(progression = 0.4)
+        server.enqueue(json("{}"))
+        server.enqueue(json("""{"document":"x"}"""))
+
+        val pointers = KosyncPointerSource { _, _, _ -> throw IllegalStateException("boom") }
+
+        assertEquals(SyncOutcome.Success, sync(pointers = pointers).syncAll(null))
+        assertEquals("0.4", JSONObject(requests().last().body!!.utf8()).getString("progress"))
+    }
+
+    /**
+     * The converter the app wires up, against a real archive: the anchor
+     * stored by the reader becomes the place KOReader opens, and the
+     * `linear="no"` cover still takes DocFragment[1].
+     */
+    @Test
+    fun `the wired converter derives the place from the stored anchor`() = runTest {
+        val epub = epub()
+        try {
+            pair()
+            db.bookDao().upsert(book(localUri = epub.toURI().toString()))
+            record(progression = 0.4, locator = EXACT_LOCATOR)
+            server.enqueue(json("{}"))
+            server.enqueue(json("""{"document":"x"}"""))
+
+            val pointers = KosyncProgressPointer(db.bookDao())
+            assertEquals(SyncOutcome.Success, sync(pointers = pointers).syncAll(null))
+
+            val sent = JSONObject(requests().last().body!!.utf8())
+            assertEquals(XPATH, sent.getString("progress"))
+        } finally {
+            epub.delete()
+        }
     }
 
     @Test
@@ -956,6 +1030,7 @@ class KosyncPositionSyncTest {
         online: Boolean = true,
         connectedKind: ServerKind? = ServerKind.CUSTOM,
         catalogUrl: String? = "https://books.example",
+        pointers: KosyncPointerSource = KosyncPointerSource { _, _, _ -> null },
         inTransaction: suspend (suspend () -> Unit) -> Unit = { work -> db.withTransaction { work() } },
     ): KosyncPositionSync {
         val context = ApplicationProvider.getApplicationContext<android.app.Application>()
@@ -988,6 +1063,7 @@ class KosyncPositionSyncTest {
                 }
             },
             networkAvailability = { online },
+            pointers = pointers,
             now = { NOW },
             inTransaction = inTransaction,
         )
@@ -1026,10 +1102,10 @@ class KosyncPositionSyncTest {
         return https to KosyncClient(RemoteHttp(ok))
     }
 
-    private suspend fun record(progression: Double) {
+    private suspend fun record(progression: Double, locator: String = LOCATOR) {
         db.readingProgressDao().recordLocal(
             bookUrl = BOOK,
-            locatorJson = LOCATOR,
+            locatorJson = locator,
             progression = progression,
             readingSpeed = null,
             status = "Reading",
@@ -1054,6 +1130,40 @@ class KosyncPositionSyncTest {
         remoteUuid = remoteUuid,
     )
 
+    /**
+     * A small EPUB, laid out the way a catalog hands one over: the OPF in a
+     * subdirectory, a `linear="no"` cover ahead of the chapter, and a file
+     * name with a space in it.
+     */
+    private fun epub(): File {
+        val file = File.createTempFile("kosync", ".epub")
+        ZipOutputStream(file.outputStream()).use { zip ->
+            fun put(name: String, body: String) {
+                zip.putNextEntry(ZipEntry(name))
+                zip.write(body.toByteArray())
+                zip.closeEntry()
+            }
+            put("mimetype", "application/epub+zip")
+            put(
+                "META-INF/container.xml",
+                """<?xml version="1.0"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OPS/book.opf" media-type="application/oebps-package+xml"/></rootfiles></container>""",
+            )
+            put(
+                "OPS/book.opf",
+                """<?xml version="1.0"?><package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="id"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="id">x</dc:identifier><dc:title>Book</dc:title><dc:language>en</dc:language></metadata><manifest><item id="cover" href="cover.xhtml" media-type="application/xhtml+xml"/><item id="c1" href="Text/chapter%201.xhtml" media-type="application/xhtml+xml"/></manifest><spine><itemref idref="cover" linear="no"/><itemref idref="c1"/></spine></package>""",
+            )
+            put(
+                "OPS/cover.xhtml",
+                """<html xmlns="http://www.w3.org/1999/xhtml"><body><p>Cover</p></body></html>""",
+            )
+            put(
+                "OPS/Text/chapter 1.xhtml",
+                """<html xmlns="http://www.w3.org/1999/xhtml"><body><p>Call me Ishmael.</p></body></html>""",
+            )
+        }
+        return file
+    }
+
     private fun progress(percentage: Double) = json(
         """{"document":"d","progress":"$percentage","percentage":$percentage,
             "device":"other","device_id":"dev-2","timestamp":${NOW / 1000}}
@@ -1073,5 +1183,7 @@ class KosyncPositionSyncTest {
         const val NOW = 1_700_000_000_000L
         const val BOOK = "calibre://books.example/12"
         const val LOCATOR = """{"href":"/c1.xhtml"}"""
+        const val XPATH = "/body/DocFragment[2]/body/p[1]/text()[1].8"
+        const val EXACT_LOCATOR = """{"href":"OPS/Text/chapter%201.xhtml","type":"application/xhtml+xml","locations":{"liseurAnchor":1,"cssSelector":"body > p:nth-of-type(1)","totalProgression":0.4},"text":{"before":"Call me ","highlight":"Ishmael."}}"""
     }
 }

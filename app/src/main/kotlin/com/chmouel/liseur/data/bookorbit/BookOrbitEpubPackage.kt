@@ -494,7 +494,7 @@ data class BookOrbitEpubPackage(
         private const val OCF_NAMESPACE = "urn:oasis:names:tc:opendocument:xmlns:container"
         private const val OPF_NAMESPACE = "http://www.idpf.org/2007/opf"
         private const val OPF_MEDIA_TYPE = "application/oebps-package+xml"
-        private const val MAX_XML_BYTES = 4 * 1024 * 1024
+        internal const val MAX_XML_BYTES = 4 * 1024 * 1024
     }
 
     class ParseException(message: String) : IllegalArgumentException(message)

@@ -11,7 +11,7 @@ side.
 | Catalog browse | Implemented        | Implemented       | Implemented        | Implemented        | Implemented              |
 | Search         | Implemented        | Implemented       | Client only        | Implemented        | Local only               |
 | File download  | Implemented        | Implemented       | Implemented        | Implemented        | Implemented              |
-| Position sync  | Implemented (full) | Implemented (%)   | Implemented (CFI)  | Implemented (full) | Implemented (%, kosync) |
+| Position sync  | Implemented (full) | Implemented (%)   | Implemented (CFI)  | Implemented (full) | Implemented (kosync, exact when anchored) |
 | Book upload    | Not possible       | Not feasible      | Not implemented    | Implemented        | Not possible             |
 | Book delete    | Not possible       | Implemented       | Not implemented    | Implemented        | Not possible             |
 | Series claims  | N/A                | N/A               | N/A                | Implemented        | N/A                      |
@@ -166,7 +166,7 @@ a previous server.
 | Catalog browse | Any Atom/OPDS 1.x feed | `OpdsCatalogClient` | Starts at the root and walks navigation entries breadth-first, following each `next` chain. Bounded by a visited set, a depth limit of 4 and a budget of 400 requests; a walk stopped by a bound reports `complete = false` and prunes nothing |
 | Search | OpenSearch description document, advertised per server | Returns nothing | The description is not at a path that can be guessed and every server fills it in differently. Liseur's library search is local and covers the whole catalog, which is walked into the database anyway |
 | File download | The entry's acquisition link | `OpdsFileSource` | Only DRM-free EPUB (`application/epub+zip`, `application/x-kobo-epub+zip`, or a link that states no type). `buy`, `borrow`, `sample` and `subscribe` are not downloads. An entry with no usable format is listed without a download rather than dropped |
-| Position sync | None. OPDS carries no reading state | `KosyncPositionSync`, paired on the same screen | Percentages only, matched by file hash. With no OPDS address, the pairing covers the books already on the device instead of a catalog's |
+| Position sync | None. OPDS carries no reading state | `KosyncPositionSync`, paired on the same screen | A CRe XPath derived from the stored exact anchor, else the percentage, matched by file hash. With no OPDS address, the pairing covers the books already on the device instead of a catalog's |
 | Series metadata | calibre-style `SERIES: Name [n]` in the entry's content block, where a server writes it | Parsed opportunistically | No standard field exists |
 | Book upload / delete | Not part of OPDS 1.x | Not implemented | |
 
@@ -239,7 +239,7 @@ per-server capability detection.
 | Komga | Exact position in chapter | Full Readium locator, with position snapping |
 | calibre-web | Page-level at best | Percentage (`totalProgression`) via the Kobo protocol |
 | liseur-sync | Exact position in chapter, in the same file | Full Readium locator via the op log |
-| Any kosync server | Page-level at best | Same partner: it speaks the generic protocol, so a stock kosync server pairs the same way |
+| Any kosync server | Exact when Liseur holds an anchor for the same file, page-level otherwise | A CRe XPath (`progress`) derived from the exact anchor, else the percentage. Same partner: it speaks the generic protocol, so a stock kosync server pairs the same way |
 
 Every sync goes through the shared `reconcileReadingState` merge
 logic in `domain/ReadingStateMerge.kt`.
