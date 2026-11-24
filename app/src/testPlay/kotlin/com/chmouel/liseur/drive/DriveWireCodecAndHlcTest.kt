@@ -207,7 +207,7 @@ class DriveWireCodecAndHlcTest {
         )
         val posRecord = DriveWireCodec.putRecord(
             domain = DriveWireCodec.DOMAIN_POSITION,
-            key = "${catalogBody.workKey}/dev-a",
+            key = DrivePositionSync.positionRecordKey(catalogBody.workKey, "dev-a"),
             hlc = "0017450000000-0002-dev-a",
             bodyMap = DriveWireCodec.encodePositionBody(posBody),
         )
@@ -219,7 +219,7 @@ class DriveWireCodecAndHlcTest {
         )
         val resetRecord = DriveWireCodec.putRecord(
             domain = DriveWireCodec.DOMAIN_FURTHEST,
-            key = "reset/${catalogBody.workKey}/reset-1",
+            key = DrivePositionSync.resetRecordKey(catalogBody.workKey, "reset-1"),
             hlc = "0017450000000-0003-dev-a",
             bodyMap = DriveWireCodec.encodeFurthestBody(resetBody),
         )
@@ -265,5 +265,29 @@ class DriveWireCodecAndHlcTest {
             (unimplementedCheck as DriveSchemaCheck.UnsupportedDomains).unsupported,
         )
         assertNotNull(DriveWireCodec.deltaAppProperties("dev-a", 1L, "batch-1"))
+
+        val ackMeta = DriveOutboxAckMetadata(
+            positionAcks = listOf(
+                DrivePositionAckMeta(
+                    bookUrl = "file:///book.epub",
+                    localRevision = 4L,
+                    statusRevision = 2L,
+                    progression = 0.42,
+                    status = "Reading",
+                    recordKey = "isbn:9780547928227/dev-a",
+                    recordFp = "a".repeat(64),
+                ),
+            ),
+            peakAcks = listOf(
+                DrivePeakAckMeta(
+                    bookUrl = "file:///book.epub",
+                    workKey = "isbn:9780547928227",
+                    peakRevision = 3L,
+                    recordKey = "peak/isbn:9780547928227/sha/dev-a",
+                    recordFp = "b".repeat(64),
+                ),
+            ),
+        )
+        assertEquals(ackMeta, DriveWireCodec.decodeOutboxAckMetadata(DriveWireCodec.encodeOutboxAckMetadata(ackMeta)))
     }
 }

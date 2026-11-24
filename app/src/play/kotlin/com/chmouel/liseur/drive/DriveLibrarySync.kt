@@ -4,18 +4,16 @@ import android.content.Context
 import androidx.compose.runtime.Composable
 import androidx.room.withTransaction
 import com.chmouel.liseur.data.db.Book
+import com.chmouel.liseur.data.db.DownloadState
 import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.data.db.RemoteServer
 import com.chmouel.liseur.data.db.WorkAlias
+import com.chmouel.liseur.data.library.BookFingerprintStore
+import com.chmouel.liseur.data.library.FinishedState
 import com.chmouel.liseur.data.remote.PeerPositionSync
-import com.chmouel.liseur.data.remote.PreviewOutcome
 import com.chmouel.liseur.data.remote.RemoteAccountRepository
-import com.chmouel.liseur.data.remote.ResolveOutcome
 import com.chmouel.liseur.data.remote.ServerKind
-import com.chmouel.liseur.data.remote.SyncIdentity
-import com.chmouel.liseur.data.remote.SyncOutcome
-import com.chmouel.liseur.data.remote.SyncPreview
-import com.chmouel.liseur.data.remote.SyncSnapshot
+import com.chmouel.liseur.domain.FOREGROUND_SYNC_FRESH_FOR_MS
 import com.chmouel.liseur.domain.MetadataSource
 import com.chmouel.liseur.domain.USELESS_IDENTIFIERS
 import com.chmouel.liseur.domain.WorkIdentifiers
@@ -29,6 +27,7 @@ import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -37,6 +36,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Play-only Google Drive [LibrarySyncBackend] implementation (ADR-0078).
@@ -54,6 +54,9 @@ internal class DriveLibrarySync(
     private val beforeServerDisconnect: suspend () -> Unit = {},
     private val stopWorkers: () -> Unit = {},
     private val onResumeActive: () -> Unit = {},
+    private val scheduleEpubUploadsWork: (allowMetered: Boolean) -> Unit = {},
+    private val enqueueEpubDownloadWork: (bookUrl: String, allowMetered: Boolean) -> UUID? = { _, _ -> null },
+    private val cancelEpubDownloadWork: (bookUrl: String) -> Unit = {},
     private val deviceIdGenerator: () -> String = { UUID.randomUUID().toString().lowercase(Locale.ROOT) },
     private val openStore: (() -> DriveSyncDatabase)? = null,
     authClient: DriveAuthClient? = null,
@@ -94,6 +97,86 @@ internal class DriveLibrarySync(
         )
     }
 
+    internal val fingerprintStore: BookFingerprintStore by lazy {
+        BookFingerprintStore(appContext, database.workIdentityDao(), clock)
+    }
+
+    private val finishedState: FinishedState by lazy {
+        FinishedState(
+            bookDao = database.bookDao(),
+            progressDao = database.readingProgressDao(),
+            inTransaction = { work -> database.withTransaction { work() } },
+            now = clock,
+        )
+    }
+
+    internal val workIdentity: DriveWorkIdentity by lazy {
+        DriveWorkIdentity(
+            database = database,
+            store = store,
+            fingerprintStore = fingerprintStore,
+            clock = clock,
+        )
+    }
+
+    internal val catalogSync: DriveCatalogSync by lazy {
+        DriveCatalogSync(
+            database = database,
+            store = store,
+            workIdentity = workIdentity,
+            clock = clock,
+        )
+    }
+
+    internal val positionSync: DrivePositionSync by lazy {
+        DrivePositionSync(
+            database = database,
+            storeProvider = { store },
+            workIdentityProvider = { workIdentity },
+            finishedState = finishedState,
+            runSync = { bookUrl -> changeEngine.sync(bookUrlFilter = bookUrl).outcome },
+            isActive = ::isActive,
+            activeAccount = { if (hasStore()) store.accounts().active() else null },
+            localDeviceId = { ensureInstall().deviceId },
+            nextHlc = { permissionId -> changeEngine.nextHlc(permissionId) },
+            clock = clock,
+        )
+    }
+
+    private val changeEngineLazy = lazy {
+        DriveChangeEngine(
+            store = store,
+            driveApi = this.driveApi,
+            workIdentity = workIdentity,
+            catalogSync = catalogSync,
+            positionSync = positionSync,
+            acquireToken = { stale -> accountController.acquireSilentAccessToken(stale) },
+            ensureDeviceId = { ensureInstall().deviceId },
+            onNeedsReconnect = { permissionId, reason -> markNeedsReconnectIfActive(permissionId, reason) },
+            clock = clock,
+        )
+    }
+
+    internal val changeEngine: DriveChangeEngine by changeEngineLazy
+
+    internal val epubTransfers: DriveEpubTransferManager by lazy {
+        DriveEpubTransferManager(
+            context = appContext,
+            database = database,
+            store = store,
+            driveApi = this.driveApi,
+            workIdentity = workIdentity,
+            catalogSync = catalogSync,
+            fingerprintStore = fingerprintStore,
+            acquireToken = { stale -> accountController.acquireSilentAccessToken(stale) },
+            onCatalogAvailabilityChanged = {
+                changeEngine.sync()
+            },
+            onNeedsReconnect = { permissionId, reason -> markNeedsReconnectIfActive(permissionId, reason) },
+            clock = clock,
+        )
+    }
+
     internal fun hasStore(): Boolean = storeLazy.isInitialized() || openStore != null || storeFile.exists()
 
     internal val storeAvailable: Flow<Boolean> = storeOpened
@@ -113,12 +196,16 @@ internal class DriveLibrarySync(
     }
 
     override suspend fun deactivate() {
+        if (hasStore()) {
+            store.withTransaction {
+                store.accounts().pauseAllActive()
+                // An intentional disconnect must not look like an abandoned switch at startup.
+                store.accounts().clearPendingSwitches()
+            }
+        }
         stopWorkers()
-        if (!hasStore()) return
-        store.withTransaction {
-            store.accounts().pauseAllActive()
-            // An intentional disconnect must not look like an abandoned switch at startup.
-            store.accounts().clearPendingSwitches()
+        if (changeEngineLazy.isInitialized()) {
+            changeEngine.cancelAndDrain()
         }
     }
 
@@ -126,8 +213,13 @@ internal class DriveLibrarySync(
         if (!hasStore()) return
         scope.launch {
             runCatching {
-                val recovered = recoverAbandonedSwitches()
-                if (!recovered && store.accounts().active() != null) onResumeActive()
+                if (!recoverAbandonedSwitches()) {
+                    val active = store.accounts().active() ?: return@runCatching
+                    onResumeActive()
+                    if (store.uploads().pendingForAccount(active.permissionId).isNotEmpty()) {
+                        scheduleEpubUploadsWork(active.meteredTransfers)
+                    }
+                }
             }
         }
     }
@@ -148,12 +240,39 @@ internal class DriveLibrarySync(
         return restored
     }
 
-    override val positionPeer: PeerPositionSync = DrivePositionPeer()
+    override suspend fun shouldSyncOnForeground(now: Long): Boolean {
+        if (!hasStore()) return false
+        val active = store.accounts().active() ?: return false
+        val last = active.lastSuccessAt ?: return true
+        if (last > now) return true
+        return now - last >= FOREGROUND_SYNC_FRESH_FOR_MS
+    }
 
-    // Hidden until a Drive sync pipeline exists: activation today only records
-    // account state, so an option offered here would promise a library sync
-    // nothing performs.
-    override val supportsBookServerOption: Boolean = false
+    override fun ownsBook(book: Book): Boolean =
+        book.url.startsWith(DriveWorkIdentity.DRIVE_BOOK_URL_PREFIX) ||
+            DriveCatalogSync.fileIdFromHref(book.downloadHref) != null
+
+    override suspend fun enqueueDownload(book: Book): UUID? {
+        if (!ownsBook(book)) return null
+        if (!hasStore()) return null
+        val active = store.accounts().active() ?: return null
+        database.bookDao().setDownloadState(book.url, DownloadState.QUEUED, null)
+        return enqueueEpubDownloadWork(book.url, active.meteredTransfers)
+    }
+
+    override suspend fun cancelDownload(book: Book) {
+        if (!ownsBook(book)) return
+        cancelEpubDownloadWork(book.url)
+    }
+
+    internal fun triggerEpubUploads(allowMetered: Boolean) {
+        scheduleEpubUploadsWork(allowMetered)
+    }
+
+    override val positionPeer: PeerPositionSync
+        get() = positionSync
+
+    override val supportsBookServerOption: Boolean = true
 
     @Composable
     override fun connectedSummary(): String? = driveConnectedSummary(controller = accountController)
@@ -185,12 +304,17 @@ internal class DriveLibrarySync(
 
     /** Stops background workers and transitions [permissionId] to `NEEDS_RECONNECT` while preserving all state. */
     internal suspend fun markNeedsReconnect(permissionId: String, reason: String) {
-        stopWorkers()
-        if (!hasStore()) return
-        store.withTransaction {
-            store.accounts().setState(permissionId, DriveAccount.STATE_NEEDS_RECONNECT)
-            store.accounts().recordError(permissionId, reason)
+        // Persist before stopping workers: a worker calling this would otherwise cancel
+        // itself first and leave the account looking healthy, retrying the same 401 forever.
+        withContext(NonCancellable) {
+            if (hasStore()) {
+                store.withTransaction {
+                    store.accounts().setState(permissionId, DriveAccount.STATE_NEEDS_RECONNECT)
+                    store.accounts().recordError(permissionId, reason)
+                }
+            }
         }
+        stopWorkers()
     }
 
     /**
@@ -379,40 +503,6 @@ internal class DriveLibrarySync(
                 ),
             )
         }
-    }
-
-    /**
-     * Play-only position-sync peer attached after kosync in
-     * `CompositePositionSync`. Answers `NotApplicable` / `NotSynced` while
-     * inactive (and until Phase 3 wires Drive position reconciliation).
-     */
-    private class DrivePositionPeer : PeerPositionSync {
-        override val peerId: String get() = PEER_ID
-
-        override suspend fun dialledAddress(): String? = null
-
-        override suspend fun syncAll(snapshot: SyncSnapshot?): SyncOutcome = SyncOutcome.NotApplicable
-
-        override suspend fun syncBook(bookUrl: String): SyncOutcome = SyncOutcome.NotApplicable
-
-        override suspend fun canSync(bookUrl: String): Boolean = false
-
-        override suspend fun previewBook(bookUrl: String): PreviewOutcome = PreviewOutcome.NotSynced
-
-        override suspend fun preservedConflict(bookUrl: String, peerId: String?): SyncPreview? = null
-
-        override suspend fun takeRemotePosition(
-            bookUrl: String,
-            atRevision: Long,
-            peerId: String?,
-            expectedAccountKey: String?,
-        ): ResolveOutcome = if (expectedAccountKey != null) ResolveOutcome.Superseded else ResolveOutcome.Done
-
-        override suspend fun keepLocalPosition(bookUrl: String, peerId: String?): ResolveOutcome = ResolveOutcome.Done
-
-        override suspend fun refreshUnresolved() = Unit
-
-        override suspend fun identity(): SyncIdentity? = null
     }
 
     companion object {

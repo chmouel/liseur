@@ -132,6 +132,7 @@ data class DriveOutbox(
     val state: String,
     @ColumnInfo(name = "file_id") val fileId: String? = null,
     @ColumnInfo(name = "created_at") val createdAt: Long,
+    @ColumnInfo(name = "ack_metadata_json") val ackMetadataJson: String? = null,
 ) {
     companion object {
         const val STATE_BUILT = "BUILT"

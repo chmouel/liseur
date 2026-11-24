@@ -83,6 +83,13 @@ abstract class FurthestPositionDao {
     @Query("DELETE FROM furthest_position WHERE peer_id = :peer AND work_id = :work AND seq <= :floor")
     abstract suspend fun deleteUpTo(peer: String, work: String, floor: Long)
 
+    /** Drops what was seen from a specific origin at or below a forgotten floor. */
+    @Query(
+        "DELETE FROM furthest_position WHERE peer_id = :peer AND work_id = :work " +
+            "AND origin = :origin AND seq <= :floor",
+    )
+    abstract suspend fun deleteUpToForOrigin(peer: String, work: String, origin: String, floor: Long)
+
     @Query("DELETE FROM peak_delivery WHERE peer_id = :peer AND book_url = :book AND work_id = :work")
     abstract suspend fun deleteDelivery(peer: String, book: String, work: String)
 

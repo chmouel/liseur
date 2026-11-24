@@ -130,6 +130,12 @@ interface DriveCursorDao {
     )
     suspend fun pausedForAccount(permissionId: String): List<DriveCursor>
 
+    @Query(
+        "SELECT * FROM drive_cursor WHERE permission_id = :permissionId AND paused_schema_version IS NOT NULL " +
+            "ORDER BY device_id, domain",
+    )
+    fun observePausedForAccount(permissionId: String): Flow<List<DriveCursor>>
+
     @Upsert
     suspend fun upsert(cursor: DriveCursor)
 }
@@ -359,11 +365,28 @@ interface DriveUploadDao {
     )
 
     @Query(
+        "UPDATE drive_upload SET state = :state, updated_at = :updatedAt " +
+            "WHERE permission_id = :permissionId AND sha256 = :sha256",
+    )
+    suspend fun updateState(
+        permissionId: String,
+        sha256: String,
+        state: String,
+        updatedAt: Long,
+    )
+
+    @Query(
         "UPDATE drive_upload SET state = 'UPLOADED', file_id = :fileId, session_uri = NULL, " +
             "bytes_sent = size_bytes, updated_at = :updatedAt " +
             "WHERE permission_id = :permissionId AND sha256 = :sha256",
     )
     suspend fun markUploaded(permissionId: String, sha256: String, fileId: String, updatedAt: Long)
+
+    @Query(
+        "DELETE FROM drive_upload WHERE permission_id = :permissionId " +
+            "AND state = 'UPLOADED' AND file_id = :fileId",
+    )
+    suspend fun deleteUploadedByFileId(permissionId: String, fileId: String)
 
     @Query("DELETE FROM drive_upload WHERE permission_id = :permissionId AND sha256 = :sha256")
     suspend fun delete(permissionId: String, sha256: String)

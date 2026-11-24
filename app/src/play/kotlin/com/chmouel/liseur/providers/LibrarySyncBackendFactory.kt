@@ -4,6 +4,7 @@ import android.content.Context
 import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.data.remote.RemoteAccountRepository
 import com.chmouel.liseur.drive.DriveLibrarySync
+import com.chmouel.liseur.drive.DriveSyncWorkers
 import com.chmouel.liseur.sync.LibrarySyncBackend
 import com.chmouel.liseur.sync.LibrarySyncSwitchCoordinator
 
@@ -15,11 +16,28 @@ object LibrarySyncBackendFactory {
         remoteAccount: RemoteAccountRepository,
         switchCoordinator: LibrarySyncSwitchCoordinator = LibrarySyncSwitchCoordinator(),
         beforeServerDisconnect: suspend () -> Unit = {},
-    ): LibrarySyncBackend = DriveLibrarySync(
-        context = context.applicationContext,
-        database = database,
-        remoteAccount = remoteAccount,
-        switchCoordinator = switchCoordinator,
-        beforeServerDisconnect = beforeServerDisconnect,
-    )
+    ): LibrarySyncBackend {
+        val appContext = context.applicationContext
+        return DriveLibrarySync(
+            context = appContext,
+            database = database,
+            remoteAccount = remoteAccount,
+            switchCoordinator = switchCoordinator,
+            beforeServerDisconnect = beforeServerDisconnect,
+            stopWorkers = { DriveSyncWorkers.cancelAll(appContext) },
+            onResumeActive = {
+                DriveSyncWorkers.schedulePeriodicStateSync(appContext)
+                DriveSyncWorkers.enqueueStateSync(appContext)
+            },
+            scheduleEpubUploadsWork = { allowMetered ->
+                DriveSyncWorkers.enqueueEpubUploads(appContext, allowMetered = allowMetered)
+            },
+            enqueueEpubDownloadWork = { bookUrl, allowMetered ->
+                DriveSyncWorkers.enqueueEpubDownload(appContext, bookUrl = bookUrl, allowMetered = allowMetered)
+            },
+            cancelEpubDownloadWork = { bookUrl ->
+                DriveSyncWorkers.cancelEpubDownload(appContext, bookUrl = bookUrl)
+            },
+        )
+    }
 }
