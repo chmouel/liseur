@@ -389,6 +389,20 @@ interface DriveUploadDao {
     @Query("DELETE FROM drive_upload WHERE permission_id = :permissionId AND sha256 = :sha256 AND state = 'CANCELLED'")
     suspend fun deleteIfCancelled(permissionId: String, sha256: String): Int
 
+    /** Re-selects a cancelled row through [bookUrl], keeping its session and file for cleanup. */
+    @Query(
+        "UPDATE drive_upload SET state = 'REQUEUE', book_url = :bookUrl, size_bytes = :sizeBytes, " +
+            "updated_at = :now WHERE permission_id = :permissionId AND sha256 = :sha256 AND state = 'CANCELLED'",
+    )
+    suspend fun requeueWithSource(permissionId: String, sha256: String, bookUrl: String, sizeBytes: Long, now: Long): Int
+
+    /** Points a still-REQUEUE row at the copy selected last. */
+    @Query(
+        "UPDATE drive_upload SET book_url = :bookUrl, size_bytes = :sizeBytes, updated_at = :now " +
+            "WHERE permission_id = :permissionId AND sha256 = :sha256 AND state = 'REQUEUE'",
+    )
+    suspend fun retainRequeueSource(permissionId: String, sha256: String, bookUrl: String, sizeBytes: Long, now: Long): Int
+
     /** Turns a cleaned-up REQUEUE row into a fresh upload, only if it is still REQUEUE. */
     @Query(
         "UPDATE drive_upload SET state = 'PENDING', session_uri = NULL, bytes_sent = 0, file_id = NULL, " +

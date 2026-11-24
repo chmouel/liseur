@@ -1966,6 +1966,55 @@ class DrivePhase4EndToEndTest {
     }
 
     @Test
+    fun `re-selecting identical bytes through another book keeps the new source for the fresh upload`() = runTest {
+        deviceA.connect()
+        val bytes = "EPUB-SAME-BYTES".toByteArray()
+        val bookA = seedBook(deviceA, "source-a.epub", "9780547928401", "Source A", "Author", customBytes = bytes)
+        val bookB = seedBook(deviceA, "source-b.epub", "9780547928418", "Source B", "Author", customBytes = bytes)
+        val sha = deviceA.liseurDb.workIdentityDao().fingerprint(bookA.url)!!.sha256
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        assertEquals(1, deviceA.epubTransfers.queueSelectedBooks(PERM_ID, setOf(bookA.url)))
+        driveServer.onUploadResumableFinalPut = { name ->
+            if (name == "Source A.epub") deviceA.epubTransfers.queueSelectedBooks(PERM_ID, emptySet())
+        }
+        driveServer.failNextTrashes = 2
+        try {
+            deviceA.epubTransfers.uploadPending()
+        } finally {
+            driveServer.onUploadResumableFinalPut = null
+        }
+        val oldFileId = deviceA.driveDb.uploads().get(PERM_ID, sha)!!.fileId!!
+
+        assertEquals(1, deviceA.epubTransfers.queueSelectedBooks(PERM_ID, setOf(bookB.url)))
+        val requeued = deviceA.driveDb.uploads().get(PERM_ID, sha)!!
+        assertEquals(DriveUpload.STATE_REQUEUE, requeued.state)
+        assertEquals(bookB.url, requeued.bookUrl)
+        assertEquals(oldFileId, requeued.fileId)
+
+        File(java.net.URI(bookA.url)).delete()
+        val summary = deviceA.epubTransfers.uploadPending()
+
+        assertEquals(1, summary.uploadedCount)
+        val uploaded = deviceA.driveDb.uploads().get(PERM_ID, sha)!!
+        assertEquals(DriveUpload.STATE_UPLOADED, uploaded.state)
+        assertEquals(bookB.url, uploaded.bookUrl)
+        assertTrue(driveServer.epubFilesSnapshot().single { it.id == oldFileId }.trashed)
+    }
+
+    @Test
+    fun `an in-flight upload session stays protected until every worker holding it has released`() {
+        val session = "https://upload.example/session-${System.nanoTime()}"
+        DriveEpubTransferManager.holdSession(session)
+        DriveEpubTransferManager.holdSession(session)
+        DriveEpubTransferManager.releaseSession(session)
+        assertTrue(DriveEpubTransferManager.isSessionInFlight(session))
+        DriveEpubTransferManager.releaseSession(session)
+        assertFalse(DriveEpubTransferManager.isSessionInFlight(session))
+        DriveEpubTransferManager.releaseSession(session)
+        assertFalse(DriveEpubTransferManager.isSessionInFlight(session))
+    }
+
+    @Test
     fun `deselecting again while cleanup runs is not undone by that cleanup`() = runTest {
         deviceA.connect()
         val book = seedBook(deviceA, "deselect-again.epub", "9780547928326", "Deselect Again", "Author", customBytes = "EPUB-DESELECT-AGAIN".toByteArray())
