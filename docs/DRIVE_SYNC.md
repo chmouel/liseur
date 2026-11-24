@@ -209,7 +209,8 @@ Record envelope fields:
 | `anc` | `Array<String>` | Always | Superseded version fps, newest first, deduplicated, capped at **64** entries (`[]` for append-only domains and new records). |
 | `resRefs` | `Array<String>` | Always | Sorted, deduplicated, **uncapped** list of winning resolution fps (`resolveFp`) from which this record causally descends, carried forward across every successor edit, delete, or resolution outside the 64-entry `anc` cap (`[]` for append-only domains and records with no prior resolution in their ancestry; excluded from `contentFp`). |
 | `body` | `Object \| null` | Always | Domain payload object for `op == "put"` and `op == "resolve" && outcome == "put"`; strictly `null` for `op == "del"` and `op == "resolve" && outcome == "delete"`. |
-| `observed` | `Array<String>` | Only when `d == "vocabWord" && op == "del"` | Sorted, deduplicated `vocabReview.syncId` list the deleting device had observed when it authored the delete — the causal review boundary (§4.9). Absent otherwise. Excluded from `delFp` (§1.3). |
+| `observed` | `Object<deviceId, seq>` | Only when `d == "vocabWord" && op == "del"` | Vector of the highest delta `seq` the deleting device had applied from each other device when it authored the delete — the causal review boundary (§4.9). A value that is not an object decodes to `{}`, which keeps data. Absent otherwise. Excluded from `delFp` (§1.3). |
+| `seq` | `Long` | Snapshot `vocabOccurrence` / `vocabReview` records only | The author's delta `seq` that first published this version. Readers store it as the record's provenance instead of `snapshot.throughSeq`, so a later `vocabWord` `del` whose `observed` vector covers that seq still counts the record as seen. `throughSeq` only advances cursors. A record with no known provenance counts as unseen. |
 
 ### 2.4 Snapshot-Part Envelope (`kind: "snapshot"`)
 
@@ -265,6 +266,8 @@ against `manifest.snapshot.parts[].sha256` before parsing.
      are never dropped in v1.
    - For append-only domains (`session`, `vocabReview` including review `del`s,
      `furthest` resets): all authored records in full.
+   - `vocabOccurrence` and `vocabReview` records also carry `seq`, their original
+     publication seq (Section 2.3), so delete observed vectors still apply to them.
    - Never copies records authored by other devices.
 2. **`resolutions` section (uncapped):** Holds **every** durable completed
    resolution fact `{d, k, resolutionFp, resolvedFps, outcome, hlc}` authored by
@@ -426,8 +429,10 @@ snapshot, `R.seq = snapshot.throughSeq`):
      that provably descends from the winning resolution supersedes an `L` that
      resolution retired, so it must not open a spurious conflict.
    - Else: local has an independent or subsequent edit (such as `fNew`) not
-     covered by `R.resolvedFps`; open a conflict (`EDIT_EDIT` if `R.outcome ==
-     "put"`, `DELETE_EDIT` if `R.outcome == "delete"`) preserving both.
+     covered by `R.resolvedFps`; classify the local version's effective
+     outcome (`put` or `del`) against `R.outcome`: both `put` opens
+     `EDIT_EDIT`, exactly one `put` opens `DELETE_EDIT`, and both delete is
+     agreement, so no conflict opens. Open conflicts preserve both versions.
 4. **Causal supersession (fast-forward silently):** Triggered if ANY of:
    - No `OPEN` conflict exists on `(d, k)` and `L` is not retired in
      `drive_resolution`, AND (`L ∈ R.anc` OR `L` was applied unmodified from
@@ -558,6 +563,7 @@ records, so a receiver never waits on a catalog record that was not sent.
     "fileSeriesIndex": 1,
     "addedAt": 1745000000000,
     "archivedAt": null,
+    "archiveHlc": null,
     "updatedAt": 1745000000000
   }
   ```
@@ -579,12 +585,17 @@ records, so a receiver never waits on a catalog record that was not sent.
   - `fileSeriesIndex`: `Double?` (`books.file_series_index`)
   - `addedAt`: `Long` (epoch ms; `minOf` on merge)
   - `archivedAt`: `Long?` (epoch ms; `null` = on shelf; non-null = archived)
+  - `archiveHlc`: `String?` (HLC of the archive or unarchive choice that set
+    `archivedAt`, minted only when the publishing device's archive state
+    changes; `null` until the first such choice)
   - `updatedAt`: `Long` (epoch ms)
 - **Merge / Conflict rule:**
   - Automatic merge (no prompt): `editions` union by `sha256` (preferring latest
     HLC's `driveFileId` per `sha256` so Drive-side EPUB deletion clears
-    `driveFileId`); `identifiers` union; `addedAt = minOf`; `archivedAt` takes
-    the higher HLC.
+    `driveFileId`); `identifiers` union; `addedAt = minOf`; `archivedAt` comes
+    from the body with the higher `archiveHlc` (the record HLC only when
+    neither has one), so a newer record that merely carries an old archive
+    state, such as an edition upload, never overrides a later archive choice.
   - **`hidden_at` is excluded** (local-only).
 - **`del` semantics:**
   - Published **only** by explicit **Delete from synced library** (never by
@@ -769,6 +780,16 @@ records, so a receiver never waits on a catalog record that was not sent.
       existing position-choice UI resolves the conflict on next book open.
   - Intentional backward moves are preserved because `sync_peer_state.agreed_*`
     tracks the last agreed baseline.
+  - **Delivery is not agreement.** `sync_peer_state.acked_revision` records
+    that a local change reached this device's own Drive stream. It is not
+    evidence that any other device saw that change, so it must not make a
+    local change look reconciled before a pull from another device. A local
+    change counts as clean only against the agreed baseline (`agreed_*`)
+    established with the pulled device, so concurrent positions on two
+    devices open `Conflict` whether the local upload or the pull happens
+    first. A fresh device rebuilding state from several streams reaches the
+    same outcome in either stream enumeration order. Required tests: upload
+    before pull, and fresh-device reconstruction in both enumeration orders.
 - **`del` semantics:** Not used ("Mark unread" is a `put` with
   `finishedOverride = "unread"` and non-null `unreadResetAt`).
 - **Room mapping (`liseur.db`):**
@@ -805,8 +826,13 @@ records, so a receiver never waits on a catalog record that was not sent.
     "peakAt": 1745000000000
   }
   ```
-  - `seq`: `Long` (strictly monotonic per authoring `deviceId`, using the
-    delta batch `seq` or `peak_revision`).
+  - `seq`: `Long` (strictly increasing per account and authoring `deviceId`
+    across every work and edition). It comes from a per-device counter kept in
+    the local-only `_furthest_peak_seq` record state, never from a book's
+    `peak_revision`, which restarts per book and so cannot order peaks against
+    work-wide floors. A peak is bound to its allocated `seq` in the same
+    transaction that allocates it, so retries re-send the same `seq`; the
+    binding is dropped when the book's peak changes.
   - Merge rule: ignore if `seq <= maxFloor[workKey][deviceId]`; otherwise apply
     via `FurthestPositionDao.observe` (keeps max `progression` per
     `(peer_id, work_id, edition, origin = deviceId)`).
@@ -831,6 +857,17 @@ records, so a receiver never waits on a catalog record that was not sent.
     floor)`), and persist `maxFloor[workKey][originDeviceId]` in `drive_sync.db`
     so late-arriving peaks with `seq <= floorSeq` are ignored. Resets are
     retained forever in snapshots.
+  - Forgetting applies to the whole work, not one edition. The reset record
+    and its floors (the authoring device's floor is its highest allocated
+    `seq`) are persisted in `drive_sync.db` first. Local effects follow: delete
+    the covered `furthest_position` rows, reset the local `reading_progress`
+    peak of every local edition of the work whose bound `seq` is at or below
+    its device floor, and clear that edition's `peak_delivery`. Resetting the
+    local peak is required: otherwise a book that was at 80% and is now at 20%
+    could not record a new peak at 30%, because capture needs a strict
+    increase. A peak that is unsent or newer than the floor is preserved. An
+    interrupted forget is completed on the next sync by replaying the persisted
+    reset before pulling.
 - **`del` semantics:** Not used.
 - **Room mapping (`liseur.db`):**
   - `furthest_position`: `peer_id = drive:<permissionId>`, `work_id = workKey`,
@@ -1013,18 +1050,22 @@ records, so a receiver never waits on a catalog record that was not sent.
     `vocabulary_word_sync.acked_fingerprint = "DELETED"` — but only when the
     causal review boundary proves no live review is uncovered (next bullet).
   - **Causal review boundary (`observed` vector):** a `vocabWord` `del` records
-    the sorted, deduplicated `syncId` list of every review the deleting device
-    had observed (`observed`, §2.3) alongside `anc`. Because reviews are
-    append-only and `vocabulary_review_sync` is not part of `anc`, `anc(L)`
-    alone cannot prove the deleter's word version descends from the current
-    review set. Before any cascade delete of `vocabulary_reviews` (or their
-    `vocabulary_occurrences`), the receiver computes the live local reviews for
-    the word and requires every one of them to be covered (`syncId ∈ R.observed`,
-    with legacy reviews first normalized to §4.11's deterministic review IDs
-    before `observed` is built or checked, or a review restored from a snapshot part whose provenance `seq` the deleting
-    device had already applied — §2.3). If any live review is uncovered, the delete is a concurrent
-    review: **add-wins silently** — keep the word and its reviews, and
-    republish a fresh `put` carrying the `del` fp in `anc`.
+    the highest delta `seq` the deleting device had applied from each other
+    device (`observed`, §2.3) alongside `anc`. A review `put` authored in delta
+    batch `(deviceId, seq)` is covered when `observed[deviceId] >= seq`, or when
+    `deviceId` is the deleter itself and `seq` is at or before the delete's own
+    batch. Because reviews are append-only and `vocabulary_review_sync` is not
+    part of `anc`, `anc(L)` alone cannot prove the deleter's word version
+    descends from the current review set. Before any cascade delete of
+    `vocabulary_reviews` (or their `vocabulary_occurrences`), the receiver
+    requires every live local review of the word to be covered by the vector.
+    A review with no recorded `(deviceId, seq)` provenance counts as
+    uncovered, as does a review restored from a snapshot part unless that
+    part's record carries a `seq` (§2.3) the vector covers. If any live review
+    is uncovered, the delete is a concurrent review: **add-wins silently** —
+    keep the word and its reviews, and republish a fresh `put` carrying the
+    `del` fp in `anc`. The boundary guards reviews only; the v1 spec makes no
+    separate guarantee for a concurrent edit of an occurrence.
   - `del` vs. concurrent edit or concurrent live review: **add-wins silently** —
     keep the local word and live reviews, and republish a fresh `put` with the
     `del` fp in `anc`.
@@ -1212,7 +1253,7 @@ closes.
 | `metadata` + Custom Covers | A overrides title, author, description, and sets custom cover → B applies all 4 overrides, including displaying the custom cover on a `REMOTE` catalog entry with no local EPUB. | Both A and B edit `title` offline and upload before pulling → both open per-field `EDIT_EDIT`, reader resolves on A, B closes conflict and converges. | A resets `author` override while B untouched → silent reset on B; A resets while B edits → `DELETE_EDIT` prompt (**Keep** / **Delete**). | Cover > 1200 px / > 512 KiB scales down via WebP ladder; uncompressable cover refused gracefully; crash between `liseur.db` and `drive_sync.db` recovers via `MetadataOverrideSync` revision-to-fp adapter. |
 | `series` | A drags 5-book shelf into custom order → B displays identical 1…5 order. | A and B reorder the same 5-book shelf offline → grouped into **one** shelf conflict by `seriesKey`; resolving emits per-book `op:"resolve"` and converges all 5 books. | A clears series order while B untouched → B reverts to file/catalog series; concurrent clear + reorder → `DELETE_EDIT` shelf prompt. | Book explicitly filed under "no series" (`seriesOverridden=true, userSeriesName=null`) stays un-shelved on B despite file metadata. |
 | `position` | A reads to 42%, B pulls exact locator (matching edition) and opens at exact passage. | A reads forward to 60%, B reads to 55% offline → `SyncDecision.Conflict` persists in `sync_peer_state` and triggers existing position-choice UI; intentional backward reread on A from agreed 50% → 20% pulls cleanly onto untouched B. | "Mark unread" on A emits `finishedOverride="unread"` + `unreadResetAt`, resetting untouched B and outranking stale `Finished`. | Different editions of same work apply `totalProgression` without corrupting local `locatorJson`; skewed device clocks cannot overwrite deliberate rereads. |
-| `furthest` | A reads to 80%, turns back to 20% → B sees 80% peak in `furthest_position`. | Both A and B record peaks on different editions → both peaks retained per `(edition, origin=deviceId)`. | A triggers furthest reset (`floors:{devA:14, devB:9}`) → deletes peaks `≤ floor` on B; late peak from B with `seq ≤ 9` is dropped; new peak from B with `seq = 10` survives. | Replaying a reset snapshot is idempotent; `FurthestPositionCaptureTest` passes with Drive peer. |
+| `furthest` | A reads to 80%, turns back to 20% → B sees 80% peak in `furthest_position`. | Both A and B record peaks on different editions → both peaks retained per `(edition, origin=deviceId)`. | A triggers furthest reset (`floors:{devA:14, devB:9}`) → deletes peaks `≤ floor` on B; late peak from B with `seq ≤ 9` is dropped; new peak from B with `seq = 10` survives. After forgetting on A while reading at 20% (peak was 80%), A's local peak is cleared and a new 30% peak is captured and published. | Replaying a reset snapshot is idempotent; `FurthestPositionCaptureTest` passes with Drive peer. |
 | `annotation` | A creates highlight, passage note, book note, and bookmark → B receives all 4 with identical IDs, anchors, tints, and microsecond/millisecond timestamps. | Simultaneous-upload `EDIT_EDIT` on same note → both preserved, reader chooses on A, `op:"resolve"(outcome:"put")` closes conflict on B; `position` (page number) and `editionSha` never cause false conflicts. | Stale untouched B receives A's `del` → silent delete; concurrent delete on A + edit on B → `DELETE_EDIT` (**Keep edited note** / **Delete note**); choosing **Delete note** emits `op:"resolve"(outcome:"delete")` and closes conflict on both devices. | Book removal via `BookRemoval.forget` emits zero annotation tombstones; delete → keep-via-resolution → delete again produces a distinct `delFp` that is not ignored as stale. |
 | `evaluation` | A sets 4.5-star rating (`"9"`) and review → B displays identical rating and review. | Both A and B edit `review` offline and upload → per-field `EDIT_EDIT`; resolving propagates via `op:"resolve"`. | Clearing rating on A emits `op:"del"` and clears untouched B; concurrent clear + edit prompts `DELETE_EDIT`. | Crash between `book_evaluation`/`evaluation_sync` commit and `drive_sync.db` commit recovers via revision-to-fp adapter (both unedited and followed by immediate local edit). |
 | `vocabWord` + `vocabOccurrence` | A collects word with definition, notes, legacy `baseline`, and book sentence → B receives word, occurrence, and identical derived SRS schedule. | Concurrent edits to definition/notes/sentence merge automatically via `VocabularyMerge.mergeWordMetadata` / `mergeOccurrencePair`; provisional + canonical occurrences deduplicate. | Word `del` on untouched B deletes silently; word `del` concurrent with edit or live review on B → add-wins silently and republishes. | Words with retired `liseur-sync` `ownerAccount != ''` publish and merge by `(language, normalized)`; `baseline` merges via `mergeBaseline` so pre-event-log schedules match exactly. |
