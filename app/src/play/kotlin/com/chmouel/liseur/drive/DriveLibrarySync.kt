@@ -336,17 +336,18 @@ internal class DriveLibrarySync(
     override suspend fun deleteFromSyncedLibrary(book: Book): Boolean {
         if (book.browseServerId != null || !hasStore()) return false
         val active = store.accounts().active() ?: return false
-        val token = when (val t = accountController.acquireSilentAccessToken()) {
-            is SilentTokenResult.Token -> t.accessToken
-            else -> null
+        // Same lock order as resolveConflicts. Remote trashing is left to the sync below,
+        // so no network call runs while the locks are held.
+        val deleted = changeEngine.withSyncLock {
+            switchCoordinator.withSwitchLock {
+                if (store.accounts().active()?.permissionId != active.permissionId) return@withSwitchLock false
+                catalogSync.deleteFromSyncedLibrary(
+                    permissionId = active.permissionId,
+                    book = book,
+                    nextHlc = { changeEngine.nextHlc(active.permissionId) },
+                )
+            }
         }
-        val deleted = catalogSync.deleteFromSyncedLibrary(
-            permissionId = active.permissionId,
-            book = book,
-            nextHlc = { changeEngine.nextHlc(active.permissionId) },
-            driveApi = driveApi,
-            accessToken = token,
-        )
         if (deleted) {
             runCatching { changeEngine.sync() }
         }

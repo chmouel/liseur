@@ -531,6 +531,16 @@ class DrivePhase4EndToEndTest {
         assertNotNull(remoteBook1B.userCoverPath)
         assertTrue(File(remoteBook1B.userCoverPath!!).isFile)
         assertEquals(remoteBook1B.userCoverSha256, remoteBook2B.userCoverSha256)
+        // Each book owns its cover file, so resetting one never deletes the other's image.
+        assertNotEquals(remoteBook1B.userCoverPath, remoteBook2B.userCoverPath)
+        BookMetadataOverrideRepository(
+            bookDao = deviceB.liseurDb.bookDao(),
+            overrideDao = deviceB.liseurDb.bookMetadataOverrideDao(),
+            coversDir = deviceB.coversDir,
+            inTransaction = { work -> deviceB.liseurDb.withTransaction { work() } },
+            encodeCoverJpeg = { it },
+        ).resetCover(stub1B)
+        assertTrue(File(deviceB.liseurDb.bookDao().getByUrl(stub2B)!!.userCoverPath!!).isFile)
 
         // Verify WebP quality ladder (85 -> 75 -> 65 -> 55 -> 45) & refusal when > 512 KiB.
         val attemptedQualities = mutableListOf<Int>()
@@ -1021,6 +1031,22 @@ class DrivePhase4EndToEndTest {
         } finally {
             deviceC.close()
         }
+    }
+
+    @Test
+    fun `delete from synced library unlinks every local edition of the work and keeps local files`() = runTest {
+        deviceA.connect()
+        val first = seedBook(deviceA, "ed1.epub", "9780345391803", "Hitchhiker", "Douglas Adams", customBytes = "ED-ONE".toByteArray())
+        val second = seedBook(deviceA, "ed2.epub", "9780345391803", "Hitchhiker", "Douglas Adams", customBytes = "ED-TWO".toByteArray())
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        val peer = DriveLibrarySync.accountPeerId(PERM_ID)
+        assertNotNull(deviceA.liseurDb.workIdentityDao().alias(second.url, peer))
+
+        assertTrue(deviceA.driveSync.deleteFromSyncedLibrary(first))
+
+        assertNull(deviceA.liseurDb.workIdentityDao().alias(second.url, peer))
+        assertNotNull(deviceA.liseurDb.bookDao().getByUrl(second.url))
+        assertNotNull(deviceA.liseurDb.bookDao().getByUrl(first.url))
     }
 
     @Test

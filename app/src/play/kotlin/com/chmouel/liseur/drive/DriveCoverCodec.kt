@@ -5,6 +5,7 @@ import android.graphics.BitmapFactory
 import android.os.Build
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.security.MessageDigest
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -200,6 +201,29 @@ internal class DriveCoverCodec(
     /** Keeps [encoded] as this device's content-addressed copy, so a later publish can upload it. */
     fun storeLocal(encoded: DriveCoverEncodeResult.Encoded): File? =
         saveLocalCoverFile(encoded.sha256.lowercase(Locale.ROOT), encoded.webpBytes)
+
+    /**
+     * Copies the shared cache file for [sha256] to a file owned by [bookUrl], so a cover reset
+     * or replacement on one book never deletes the image another book still displays.
+     */
+    fun installForBook(bookUrl: String, sha256: String): File? {
+        val source = localCoverFile(sha256).takeIf { it.isFile } ?: return null
+        val bookHash = MessageDigest.getInstance("SHA-1").digest(bookUrl.toByteArray())
+            .joinToString("") { "%02x".format(it) }.take(16)
+        val target = File(coversDir, "drive-book-$bookHash-${sha256.trim().lowercase(Locale.ROOT).take(12)}.webp")
+        val tmp = File(coversDir, "${target.name}.tmp")
+        return try {
+            source.copyTo(tmp, overwrite = true)
+            if (!tmp.renameTo(target)) {
+                tmp.copyTo(target, overwrite = true)
+                tmp.delete()
+            }
+            target
+        } catch (_: Exception) {
+            tmp.delete()
+            null
+        }
+    }
 
     fun localCoverFile(sha256: String): File =
         File(coversDir, "drive-cover-${sha256.trim().lowercase(Locale.ROOT)}.webp")
