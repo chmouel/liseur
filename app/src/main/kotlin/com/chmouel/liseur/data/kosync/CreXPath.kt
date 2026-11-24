@@ -29,9 +29,30 @@ internal object CreXPath {
     // entities inline, which is exactly how CrossPoint splits a text run, and its
     // DTD and entity hardening is the one that gets reviewed.
     fun forAnchor(xhtml: ByteArray, fragment: Int, anchor: ViewportTextAnchor): String? = try {
-        chapter(BookOrbitEpubPackage.parseSpineXhtml(xhtml))?.let { derive(it, fragment, anchor) }
+        if (longestSourceRun(xhtml) >= ENGINE_TEXT_SPLIT) {
+            null
+        } else {
+            chapter(BookOrbitEpubPackage.parseSpineXhtml(xhtml))?.let { derive(it, fragment, anchor) }
+        }
     } catch (_: Exception) {
         null
+    }
+
+    /**
+     * An upper bound on the source length of any text node: text runs from
+     * one piece of markup to the next, and every piece starts with `<`. Bytes
+     * are never fewer than the characters they encode.
+     */
+    private fun longestSourceRun(xhtml: ByteArray): Int {
+        var longest = 0
+        var start = 0
+        for (i in xhtml.indices) {
+            if (xhtml[i] == '<'.code.toByte()) {
+                longest = maxOf(longest, i - start)
+                start = i
+            }
+        }
+        return maxOf(longest, xhtml.size - start)
     }
 
     /** One text node as CrossPoint counts them: the character data between two pieces of markup. */
@@ -152,12 +173,8 @@ internal object CreXPath {
 
         // KOReader may drop a whitespace-only text node before this one, which
         // would move its text() index. No sibling of the kind, no ambiguity.
-        // CREngine also cuts a source text node of 8192 or more characters into
-        // several, which moves both indexes and offsets; the source length is not
-        // visible after entity expansion, so any long run up to this one declines.
         for (item in run.parent.content) {
             val sibling = item.run ?: continue
-            if (sibling.text.length >= ENGINE_SPLIT_GUARD) return null
             if (sibling === run) break
             if (!sibling.hidden && sibling.blank) return null
         }
@@ -322,7 +339,7 @@ internal object CreXPath {
     private const val MAX_DEPTH = 200
     private const val MAX_STEPS = 64
 
-    // Half of CREngine's 8192-character split, as margin for the entities that
-    // made the source longer than the text.
-    private const val ENGINE_SPLIT_GUARD = 4096
+    // CREngine cuts a source text node of this many characters or more into
+    // several, before expanding entities, which moves text() indexes and offsets.
+    private const val ENGINE_TEXT_SPLIT = 8192
 }

@@ -327,9 +327,16 @@ class CreXPathTest {
     @Test
     fun `a run CREngine would split declines`() {
         fun p(words: Int) = "<html><body><p>" + "word ".repeat(words) + "end<br/>tail</p></body></html>"
-        assertXpath("/body/DocFragment[1]/body/p[1]/text()[1].4000", p(800), "body > p:nth-of-type(1)", " ", "end")
-        assertNull(xpath(p(820), "body > p:nth-of-type(1)", " ", "end"))
-        assertNull(xpath(p(820), "body > p:nth-of-type(1)", "end", "tail"))
+        assertXpath("/body/DocFragment[1]/body/p[1]/text()[1].8000", p(1600), "body > p:nth-of-type(1)", " ", "end")
+        assertNull(xpath(p(1640), "body > p:nth-of-type(1)", " ", "end"))
+        assertNull(xpath(p(1640), "body > p:nth-of-type(1)", "end", "tail"))
+    }
+
+    @Test
+    fun `a run whose entities make the source long enough to split declines`() {
+        // 3,200 characters of text, 9,600 of source.
+        val xhtml = "<html><body><p>" + "&#65; ".repeat(1600) + "end<br/>tail</p></body></html>"
+        assertNull(xpath(xhtml, "body > p:nth-of-type(1)", "end", "tail"))
     }
 
     @Test
