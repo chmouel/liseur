@@ -516,7 +516,7 @@ internal object DriveConflictEngine {
             }
 
             // 2d'. Proven resolution descent: R's resRefs carry the winning resolution that retired L.
-            if (bridgingResolution != null) {
+            if (bridgingResolution != null && local.localRowMatchesContentFp) {
                 val mergedResRefs = local.resRefs + incoming.resRefs + step0ResRefsToAdd +
                     bridgingResolution.resolutionFp + incoming.fp
                 return ReconciliationResult(
