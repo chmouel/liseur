@@ -159,7 +159,7 @@ internal class DriveLibrarySync(
 
     internal val changeEngine: DriveChangeEngine by changeEngineLazy
 
-    internal val epubTransfers: DriveEpubTransferManager by lazy {
+    private val epubTransfersLazy = lazy {
         DriveEpubTransferManager(
             context = appContext,
             database = database,
@@ -176,6 +176,8 @@ internal class DriveLibrarySync(
             clock = clock,
         )
     }
+
+    internal val epubTransfers: DriveEpubTransferManager by epubTransfersLazy
 
     internal fun hasStore(): Boolean = storeLazy.isInitialized() || openStore != null || storeFile.exists()
 
@@ -206,6 +208,9 @@ internal class DriveLibrarySync(
         stopWorkers()
         if (changeEngineLazy.isInitialized()) {
             changeEngine.cancelAndDrain()
+        }
+        if (epubTransfersLazy.isInitialized()) {
+            epubTransfers.cancelAndDrain()
         }
     }
 
