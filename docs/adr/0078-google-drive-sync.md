@@ -58,12 +58,15 @@ so nothing relies on Drive compare-and-swap. Drive v3 has no conditional
 content update, which rules out a shared `library.json`.
 
 Ordering uses a hybrid logical clock (HLC),
-`"%013d-%04x-%s".format(wallMs, counter, deviceId)`, compared
-lexicographically, persisted in `drive_account`; on receipt
+`String.format(Locale.ROOT, "%013d-%04x-%s", wallMs, counter, deviceId)`,
+compared lexicographically, persisted in `drive_account`; on receipt
 `local = max(local, seen)`. The `counter` field is fixed width: on overflow
 (`0xffff -> 0x10000`) the clock advances logical `wallMs` by 1 and resets
 `counter` to 0 instead of widening the field, so lexicographic ordering stays
-monotonic.
+monotonic. Every number in a wire string (the HLC, the `%010d` / `%03d`
+file-name parts, numeric `appProperties`) is formatted with `Locale.ROOT`, so
+only ASCII digits appear; the default locale's `%d` can emit digit sets that
+sort differently, and readers reject an HLC or file name with other digits.
 
 Identifiers:
 
@@ -188,7 +191,13 @@ re-applied: if the row projection still equals `row_fp`, restore
 `drive_record_state` from the receipt (a merged body with `republish = 1`
 becomes a new unpublished local version with the receipt's `version_fp` in
 `anc`); if not, the post-crash edit becomes the new local version with
-`version_fp` in `anc`, so replay is Stale and the edit survives. No receipt
+`version_fp` in `anc`, so replay is Stale and the edit survives. For
+`catalog` only the row-backed fields are replaced, and `archiveHlc` is
+minted fresh only if `archivedAt` changed, so unrelated editions and
+availability groups survive. If the reader deleted an `annotation` or
+`series` row instead, there is nothing to put: recovery mints a fresh HLC
+and records a dirty `del` with the receipt's `version_fp` in `anc`, so
+replay is Stale and the delete is published. No receipt
 for `R.fp` means Tx 1 never committed. Tx 1 also verifies that the row
 still has the fingerprint the apply was decided against, so a local edit
 landing in between is never overwritten. The cursor is the last write of
@@ -364,14 +373,21 @@ delete holds, and children that arrive before the parent are `STAGED` the
 same way. The `del`'s `restore` body is kept in
 `vocabulary_word_sync.acked_base_json` and `drive_record_state.restore_json`,
 and its `observed` vector in `drive_record_state.observed_json`, so a review or occurrence that arrives
-after the tombstone and is not covered restores the word and is
+after the tombstone and is not covered restores the word as a **revival**:
+a wire `put` with body `restore.body`, `anc = [delFp, restore.fp]`, an
+envelope `revives = {del, restore}` and `fp = reviveFp(delFp, restore.fp)`,
+a hash distinct from `restore.fp` (`content_fp` stays
+`contentFp(restore.body)`). Because the original `del`'s `anc` holds
+`restore.fp` but no `del` holds `reviveFp`, a late replay of that `del`
+is Stale and cannot delete the revived word again. The revival is
 republished along with the same eligible set of retained children
 (`STAGED` and `COVERED`, minus undone reviews) whichever order the `del`,
 covered children and uncovered child arrived in; a tombstone that arrives
 after a staged uncovered child and finds the parent absent restores the word
 the same way, from the incoming `restore`. Snapshots build `records` from
-`drive_record_state`, so every author's child records survive compaction
-and a snapshot-only device reconstructs the set. The restore payload travels in the
+`drive_authored_record`, so every author's child records survive compaction,
+adoption of another device's update and a review undo, and a snapshot-only
+device reconstructs the set. The restore payload travels in the
 `del` record itself, so a device that rebuilt from snapshots restores the
 word the same way. Equal
 timestamps in `mergeWordMetadata` and `mergeOccurrencePair` break by value
@@ -622,8 +638,10 @@ collection in v1.
 A device compacts at 20 deltas since its last snapshot or 2 MiB of them.
 Each snapshot part carries two sections (`docs/DRIVE_SYNC.md`):
 
-- `records`: for every `(d, k)` the device authored, its latest record
-  (`put`, `del`, or `resolve`) with its `anc` (up to 64 entries) and
+- `records`: built from `drive_authored_record` (below), not from
+  `drive_record_state`, which holds one current version per key and is
+  overwritten by adoption and undo. For every `(d, k)` the device authored,
+  its latest record (`put`, `del`, or `resolve`) with its `anc` (up to 64 entries) and
   uncapped `resRefs` (winning resolution fps it causally descends from),
   plus all of its append-only records (`session`, `vocabReview`
   including review `del`s, and `furthest` resets). It never copies other
@@ -706,11 +724,23 @@ restored device gets its own `deviceId`.
 | `drive_cursor` | `(permission_id, device_id, domain)` | `applied_seq`, `paused_schema_version` |
 | `drive_file` | `(permission_id, file_id)` | `name`, `kind`, `device_id`, `seq`, `sha256`, `size`, `md5`, `trashed`, `created_time`; index `(permission_id, kind, sha256)` |
 | `drive_outbox` | `(permission_id, seq)` | `batch_id`, `payload`, `state` (BUILT / UPLOADED / ACKED), `file_id`, `created_at` |
+| `drive_authored_record` | `(permission_id, domain, record_key, seq)` | `op`, `hlc`, `fp`, `anc_json`, `res_refs_json`, `body_json`, `observed_json`, `restore_json`, `revives_json`, `first_seq` (original publication seq, for `vocabOccurrence` / `vocabReview`) |
 | `drive_record_state` | `(permission_id, domain, record_key)` | `version_fp`, `version_op`, `published_fp`, `content_fp`, `last_synced_revision`, `origin_device_id`, `origin_seq`, `ancestors_json`, `res_refs_json`, `last_hlc`, `body_json`, `observed_json` and `restore_json` (`vocabWord` `del` only), `held` (version recorded but not applied to `liseur.db`: book tombstoned, or `vocabOccurrence` child of an absent or tombstoned word), `acked_receipt_id` |
 | `drive_resolution` | `(permission_id, domain, record_key, resolution_fp)` | `resolved_fps_json`, `outcome` (`put` / `delete`), `hlc`, `author_device_id`, `created_at` |
 | `drive_conflict` | `(permission_id, conflict_id)` | `domain`, `record_key`, `book_url`, `kind`, `local_fp`, `remote_fp`, `remote_json`, `remote_device_id`, `remote_hlc`, `state` (OPEN / RESOLVING / RESOLVED), `choice`, `resolution_fp`, `opened_at`, `resolved_at` |
 | `drive_session_ack` | `(permission_id, remote_session_id)` | `batch_seq`, `acked_at` |
 | `drive_upload` | `(permission_id, sha256)` | `book_url`, `size_bytes`, `state`, `session_uri`, `bytes_sent`, `file_id`, `selected_at`, `updated_at` |
+
+`drive_authored_record` holds the records this device authored, one row
+per record per batch. Its rows are inserted in the same `drive_sync.db`
+transaction that allocates `seq` and inserts the `drive_outbox` row, so
+provenance and sequence are atomic. Adopting a remote version never touches
+it. A snapshot with `throughSeq = T` takes, per key, the row with the
+greatest `seq ≤ T` (every row with `seq ≤ T` for `session`, `vocabReview`
+and `furthest` resets); superseded mutable rows are deleted when the manifest
+naming that snapshot commits, append-only rows and `del` heads never, and
+deltas are pruned only after such a snapshot. The schema is unreleased, so
+`version = 1` gains the table with no migration.
 
 Batch receipts are `drive_outbox` for own uploads, `drive_session_ack`
 for per-account session delivery, and `drive_cursor` for other devices;
