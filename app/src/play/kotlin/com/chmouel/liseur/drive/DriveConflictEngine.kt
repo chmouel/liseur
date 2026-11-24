@@ -343,10 +343,10 @@ internal object DriveConflictEngine {
                 bothDeletions -> {
                     if (local.versionOp == DriveRecordState.OP_RESOLVE) {
                         Triple(lFp, local.versionOp, maxOf(local.lastHlc, incoming.hlc))
-                    } else if (compareHlcFp(incoming.hlc, incoming.fp, local.lastHlc, lFp) > 0) {
-                        Triple(incoming.fp, incoming.op, incoming.hlc)
+                    } else if (incoming.fp > lFp) {
+                        Triple(incoming.fp, incoming.op, maxOf(local.lastHlc, incoming.hlc))
                     } else {
-                        Triple(lFp, local.versionOp, local.lastHlc)
+                        Triple(lFp, local.versionOp, maxOf(local.lastHlc, incoming.hlc))
                     }
                 }
                 else -> Triple(incoming.fp, incoming.op, maxOf(local.lastHlc, incoming.hlc))
