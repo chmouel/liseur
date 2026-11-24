@@ -1074,4 +1074,149 @@ class DriveConflictEngineTest {
         assertEquals(1, result.conflictsToSettle.size)
         assertEquals(fIncoming, result.updatedRecordState!!.versionFp)
     }
+
+    private fun resolution(outcome: String, resolvedFps: List<String>, hlc: String, body: JSONObject?): DriveResolution {
+        val sorted = resolvedFps.sorted()
+        return DriveResolution(
+            permissionId = permId,
+            domain = domain,
+            recordKey = key,
+            resolutionFp = DriveCanonicalJson.resolveFp(outcome, sorted, hlc, body),
+            resolvedFpsJson = DriveCanonicalJson.encode(sorted),
+            outcome = outcome,
+            hlc = hlc,
+            authorDeviceId = "dev-a",
+            createdAt = 3_000L,
+        )
+    }
+
+    private fun resolveRecord(res: DriveResolution, body: JSONObject?, resRefs: List<String>) = DriveWireRecord(
+        d = domain,
+        k = key,
+        op = DriveRecordState.OP_RESOLVE,
+        hlc = res.hlc,
+        fp = res.resolutionFp,
+        anc = emptyList(),
+        resRefs = resRefs,
+        body = body,
+        outcome = res.outcome,
+        resolvedFps = DriveWorkIdentity.decodeStringArray(res.resolvedFpsJson),
+    )
+
+    private fun reconcile(
+        local: LocalRecordView,
+        resolutions: List<DriveResolution>,
+        incoming: DriveWireRecord,
+        incomingContentFp: String?,
+    ) = DriveConflictEngine.reconcileIncoming(
+        permissionId = permId,
+        domain = domain,
+        recordKey = key,
+        bookUrl = bookUrl,
+        local = local,
+        existingResolutions = resolutions,
+        unsettledConflicts = emptyList(),
+        incoming = incoming,
+        incomingContentFp = incomingContentFp,
+        remoteDeviceId = "dev-b",
+        remoteSeq = 9L,
+        now = 5_000L,
+    )
+
+    @Test
+    fun `partially overlapping resolution sets open a conflict instead of silently discarding the uncovered edit`() {
+        val fA = putFp("edit-A")
+        val fB = putFp("edit-B")
+        val fC = putFp("edit-C")
+        val localRes = resolution(DriveResolution.OUTCOME_PUT, listOf(fA, fB), "0017450000300-0001-dev-a", putBody("edit-B"))
+        val incomingRes = resolution(DriveResolution.OUTCOME_DELETE, listOf(fA, fC), "0017450000400-0001-dev-b", null)
+        val local = LocalRecordView(
+            versionFp = localRes.resolutionFp,
+            versionOp = DriveRecordState.OP_RESOLVE,
+            isLivePut = true,
+            publishedFp = localRes.resolutionFp,
+            contentFp = fB,
+            ancestors = listOf(fA, fB),
+            resRefs = listOf(localRes.resolutionFp),
+            lastHlc = localRes.hlc,
+            bodyJson = putBody("edit-B").toString(),
+        )
+        val result = reconcile(
+            local,
+            listOf(localRes),
+            resolveRecord(incomingRes, null, listOf(incomingRes.resolutionFp)),
+            null,
+        )
+        assertNotNull(result.conflictToOpen)
+        assertEquals(ReconciliationDataAction.NoDataChange, result.dataAction)
+        assertEquals(localRes.resolutionFp, result.updatedRecordState!!.versionFp)
+    }
+
+    @Test
+    fun `replayed resolution retired by a durable successor is stale even after ancestry compaction`() {
+        val fA = putFp("edit-A")
+        val fB = putFp("edit-B")
+        val fNew = putFp("newer")
+        val old = resolution(DriveResolution.OUTCOME_PUT, listOf(fA, fB), "0017450000300-0001-dev-a", putBody("edit-A"))
+        val successor = resolution(DriveResolution.OUTCOME_PUT, listOf(old.resolutionFp, putFp("other")), "0017450000500-0001-dev-a", putBody("newer"))
+        val local = LocalRecordView(
+            versionFp = fNew,
+            versionOp = DriveRecordState.OP_PUT,
+            isLivePut = true,
+            publishedFp = fNew,
+            contentFp = fNew,
+            lastHlc = "0017450000600-0001-dev-a",
+            bodyJson = putBody("newer").toString(),
+        )
+        val result = reconcile(
+            local,
+            listOf(successor),
+            resolveRecord(old, putBody("edit-A"), listOf(old.resolutionFp, "unproven-ref")),
+            putFp("edit-A"),
+        )
+        assertEquals(ReconciliationCase.RESOLVE_STALE, result.reconciliationCase)
+        assertNull(result.conflictToOpen)
+        assertEquals(fNew, result.updatedRecordState!!.versionFp)
+        val refs = DriveWorkIdentity.decodeStringArray(result.updatedRecordState!!.resRefsJson)
+        assertTrue("unproven-ref" !in refs)
+        assertTrue(old.resolutionFp !in refs)
+    }
+
+    @Test
+    fun `successor resolve bridges a compacted local version only through a proven resRef`() {
+        val fA = putFp("edit-A")
+        val fB = putFp("edit-B")
+        val res1 = resolution(DriveResolution.OUTCOME_PUT, listOf(fA, fB), "0017450000300-0001-dev-a", putBody("edit-A"))
+        val res2 = resolution(DriveResolution.OUTCOME_PUT, listOf(putFp("x"), putFp("y")), "0017450000700-0001-dev-b", putBody("final"))
+        val local = LocalRecordView(
+            versionFp = fB,
+            versionOp = DriveRecordState.OP_PUT,
+            isLivePut = true,
+            publishedFp = fB,
+            contentFp = fB,
+            lastHlc = "0017450000200-0001-dev-a",
+            bodyJson = putBody("edit-B").toString(),
+        )
+        val bridged = reconcile(
+            local,
+            listOf(res1),
+            resolveRecord(res2, putBody("final"), listOf(res1.resolutionFp, res2.resolutionFp)),
+            putFp("final"),
+        )
+        assertEquals(ReconciliationCase.RESOLVE_APPLIED, bridged.reconciliationCase)
+        assertNull(bridged.conflictToOpen)
+        assertEquals(res2.resolutionFp, bridged.updatedRecordState!!.versionFp)
+        assertTrue(
+            res1.resolutionFp in DriveWorkIdentity.decodeStringArray(bridged.updatedRecordState!!.resRefsJson),
+        )
+
+        val unproven = reconcile(
+            local,
+            listOf(res1),
+            resolveRecord(res2, putBody("final"), listOf(res2.resolutionFp)),
+            putFp("final"),
+        )
+        assertNotNull(unproven.conflictToOpen)
+        assertEquals(fB, unproven.updatedRecordState!!.versionFp)
+    }
 }
