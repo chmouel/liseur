@@ -2,7 +2,11 @@
   "formatVersion": 1,
   "database": {
     "version": 2,
+<<<<<<< HEAD
     "identityHash": "f946b41747ff6615dddd6313a48fc932",
+=======
+    "identityHash": "99b24a9fdc819da3edf072ed11d330ca",
+>>>>>>> db6665658 (fix(drive): lock downloads per book, match unfingerprinted books, migrate outbox schema)
     "entities": [
       {
         "tableName": "drive_install",
@@ -36,7 +40,11 @@
       },
       {
         "tableName": "drive_account",
+<<<<<<< HEAD
         "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`permission_id` TEXT NOT NULL, `email` TEXT NOT NULL, `state` TEXT NOT NULL, `connected_at` INTEGER NOT NULL, `last_success_at` INTEGER, `last_error` TEXT, `folder_id` TEXT, `start_page_token` TEXT, `next_seq` INTEGER NOT NULL DEFAULT 1, `manifest_file_id` TEXT, `snapshot_through_seq` INTEGER NOT NULL DEFAULT 0, `deltas_since_snapshot` INTEGER NOT NULL DEFAULT 0, `hlc_wall_ms` INTEGER NOT NULL DEFAULT 0, `hlc_counter` INTEGER NOT NULL DEFAULT 0, `metered_transfers` INTEGER NOT NULL DEFAULT 0, `pending_switch_previous_state` TEXT, PRIMARY KEY(`permission_id`))",
+=======
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`permission_id` TEXT NOT NULL, `email` TEXT NOT NULL, `state` TEXT NOT NULL, `connected_at` INTEGER NOT NULL, `last_success_at` INTEGER, `last_error` TEXT, `folder_id` TEXT, `start_page_token` TEXT, `next_seq` INTEGER NOT NULL DEFAULT 1, `manifest_file_id` TEXT, `snapshot_through_seq` INTEGER NOT NULL DEFAULT 0, `deltas_since_snapshot` INTEGER NOT NULL DEFAULT 0, `hlc_wall_ms` INTEGER NOT NULL DEFAULT 0, `hlc_counter` INTEGER NOT NULL DEFAULT 0, `metered_transfers` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`permission_id`))",
+>>>>>>> db6665658 (fix(drive): lock downloads per book, match unfingerprinted books, migrate outbox schema)
         "fields": [
           {
             "fieldPath": "permissionId",
@@ -128,11 +136,14 @@
             "affinity": "INTEGER",
             "notNull": true,
             "defaultValue": "0"
+<<<<<<< HEAD
           },
           {
             "fieldPath": "pendingSwitchPreviousState",
             "columnName": "pending_switch_previous_state",
             "affinity": "TEXT"
+=======
+>>>>>>> db6665658 (fix(drive): lock downloads per book, match unfingerprinted books, migrate outbox schema)
           }
         ],
         "primaryKey": {
@@ -332,7 +343,11 @@
       },
       {
         "tableName": "drive_outbox",
+<<<<<<< HEAD
         "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`permission_id` TEXT NOT NULL, `seq` INTEGER NOT NULL, `batch_id` TEXT NOT NULL, `payload` TEXT NOT NULL, `state` TEXT NOT NULL, `file_id` TEXT, `created_at` INTEGER NOT NULL, PRIMARY KEY(`permission_id`, `seq`))",
+=======
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`permission_id` TEXT NOT NULL, `seq` INTEGER NOT NULL, `batch_id` TEXT NOT NULL, `payload` TEXT NOT NULL, `state` TEXT NOT NULL, `file_id` TEXT, `created_at` INTEGER NOT NULL, `ack_metadata_json` TEXT, PRIMARY KEY(`permission_id`, `seq`))",
+>>>>>>> db6665658 (fix(drive): lock downloads per book, match unfingerprinted books, migrate outbox schema)
         "fields": [
           {
             "fieldPath": "permissionId",
@@ -374,6 +389,14 @@
             "columnName": "created_at",
             "affinity": "INTEGER",
             "notNull": true
+<<<<<<< HEAD
+=======
+          },
+          {
+            "fieldPath": "ackMetadataJson",
+            "columnName": "ack_metadata_json",
+            "affinity": "TEXT"
+>>>>>>> db6665658 (fix(drive): lock downloads per book, match unfingerprinted books, migrate outbox schema)
           }
         ],
         "primaryKey": {
@@ -786,7 +809,11 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+<<<<<<< HEAD
       "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'f946b41747ff6615dddd6313a48fc932')"
+=======
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '99b24a9fdc819da3edf072ed11d330ca')"
+>>>>>>> db6665658 (fix(drive): lock downloads per book, match unfingerprinted books, migrate outbox schema)
     ]
   }
 }
