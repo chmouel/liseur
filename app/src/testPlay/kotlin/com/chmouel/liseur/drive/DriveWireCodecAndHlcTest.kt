@@ -75,6 +75,46 @@ class DriveWireCodecAndHlcTest {
     }
 
     @Test
+    fun `chunking reports an oversized record and still batches the rest`() {
+        fun record(key: String, title: String) = DriveWireCodec.putRecord(
+            domain = "catalog",
+            key = key,
+            hlc = "0017450000000-0001-dev-a",
+            bodyMap = mapOf("title" to title),
+        )
+        val small = record("a", "small")
+        val huge = record("b", "x".repeat(DriveWireCodec.MAX_BATCH_BYTES))
+        val result = DriveWireCodec.chunkRecordsForBatches(listOf(small, huge, record("c", "tiny")))
+
+        assertEquals(listOf(huge), result.oversized)
+        assertEquals(listOf(listOf("a", "c")), result.chunks.map { chunk -> chunk.map { it.k } })
+    }
+
+    @Test
+    fun `DriveHlc keeps a fixed width wall field and fails at the representable limit`() {
+        val max = DriveHlc(DriveHlc.MAX_WALL_MS, DriveHlc.MAX_COUNTER, "dev-a")
+        assertEquals("9999999999999-ffff-dev-a", max.format())
+        assertTrue(DriveHlc(DriveHlc.MAX_WALL_MS - 1, DriveHlc.MAX_COUNTER, "dev-a") < max)
+        assertEquals(max, DriveHlc.parse(max.format()))
+        assertNull(DriveHlc.parse("10000000000000-0000-dev-a"))
+        assertTrue(runCatching { DriveHlc(DriveHlc.MAX_WALL_MS + 1, 0, "dev-a") }.exceptionOrNull() is IllegalArgumentException)
+
+        val last = DriveHlc.next(DriveHlc.MAX_WALL_MS, DriveHlc.MAX_COUNTER - 1, nowMs = 0L, deviceId = "dev-a")
+        assertEquals(DriveHlc.MAX_COUNTER, last.counter)
+        assertTrue(
+            runCatching { DriveHlc.next(DriveHlc.MAX_WALL_MS, DriveHlc.MAX_COUNTER, nowMs = 0L, deviceId = "dev-a") }
+                .exceptionOrNull() is IllegalStateException,
+        )
+        assertTrue(
+            runCatching { DriveHlc.observe(0L, 0, max, nowMs = 0L, localDeviceId = "dev-b") }
+                .exceptionOrNull() is IllegalStateException,
+        )
+        val rolled = DriveHlc.next(DriveHlc.MAX_WALL_MS - 1, DriveHlc.MAX_COUNTER, nowMs = 0L, deviceId = "dev-a")
+        assertEquals(DriveHlc.MAX_WALL_MS, rolled.wallMs)
+        assertTrue(DriveHlc(DriveHlc.MAX_WALL_MS - 1, DriveHlc.MAX_COUNTER, "dev-a").format() < rolled.format())
+    }
+
+    @Test
     fun `DriveHlc maintains strict monotonic order under clock regression and merges remote clocks`() {
         val h1 = DriveHlc.next(currentWallMs = 1_700_000_000_000L, currentCounter = 0, nowMs = 1_700_000_000_000L, deviceId = "dev-a")
         val h2 = DriveHlc.next(h1.wallMs, h1.counter, nowMs = 1_600_000_000_000L, deviceId = "dev-a")

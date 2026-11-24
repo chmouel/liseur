@@ -472,6 +472,29 @@ class DriveWorkIdentityTest {
     }
 
     @Test
+    fun `a losing concurrent merge leaves the stored winner body and fingerprint intact`() = runTest {
+        val perm = "perm-1"
+        fun merge(to: String, hlc: String, updatedAt: Long) = DriveWireCodec.putRecord(
+            domain = DriveWireCodec.DOMAIN_WORK_ALIAS,
+            key = "merge:sha:ccc",
+            hlc = hlc,
+            bodyMap = DriveWireCodec.encodeWorkAliasBody(DriveWorkAliasBody.Merge("sha:ccc", to, updatedAt)),
+        )
+        val toA = merge("dc:aaa", "0017450000000-0002-dev-b", 100L)
+        val toB = merge("isbn:bbb", "0017450000000-0003-dev-c", 101L)
+        identity.applyRemoteRecord(perm, toA, "dev-b", 1L) { "0017450000001-0000-dev-a" }
+        identity.applyRemoteRecord(perm, toB, "dev-c", 1L) { "0017450000002-0000-dev-a" }
+
+        val state = requireNotNull(driveDb.recordStates().get(perm, DriveWireCodec.DOMAIN_WORK_ALIAS, "merge:sha:ccc"))
+        assertEquals(toA.fp, state.versionFp)
+        assertEquals(toA.fp, state.publishedFp)
+        assertEquals("dev-b", state.originDeviceId)
+        assertEquals(DriveCanonicalJson.contentFp(org.json.JSONObject(state.bodyJson!!)), state.versionFp)
+        assertEquals(toA.body.toString(), state.bodyJson)
+        assertEquals("dc:aaa", identity.canonicalWorkKey(perm, "isbn:bbb"))
+    }
+
+    @Test
     fun `a concurrent merge never replaces an existing target edge`() = runTest {
         val perm = "perm-1"
         fun merge(from: String, to: String, hlc: String) = DriveWireCodec.putRecord(
