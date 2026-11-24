@@ -1181,6 +1181,92 @@ class DrivePhase4EndToEndTest {
     }
 
     @Test
+    fun `work-wide delete trashes an unpublished edition whose upload completes before cleanup`() = runTest {
+        deviceA.connect()
+        val first = seedBook(deviceA, "race-a.epub", "9780345391803", "Hitchhiker", "Douglas Adams", customBytes = "RACE-A".toByteArray())
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        assertEquals(1, deviceA.epubTransfers.queueSelectedBooks(PERM_ID, setOf(first.url)))
+        assertEquals(1, deviceA.epubTransfers.uploadPending().uploadedCount)
+        val second = seedBook(deviceA, "race-b.epub", "9780345391803", "Hitchhiker", "Douglas Adams", customBytes = "RACE-B".toByteArray())
+        deviceA.driveSync.workIdentity.resolveBook(PERM_ID, second, computeFingerprintIfMissing = true)
+        val secondSha = deviceA.liseurDb.workIdentityDao().fingerprint(second.url)!!.sha256
+        assertEquals(1, deviceA.epubTransfers.queueSelectedBooks(PERM_ID, setOf(first.url, second.url)))
+
+        // The IDs were collected before nextHlc(); B's upload finishes in that window.
+        var completedInWindow = 0
+        assertTrue(
+            deviceA.driveSync.catalogSync.deleteFromSyncedLibrary(
+                permissionId = PERM_ID,
+                book = first,
+                nextHlc = {
+                    completedInWindow = deviceA.epubTransfers.uploadPending().uploadedCount
+                    deviceA.changeEngine.nextHlc(PERM_ID)
+                },
+                driveApi = driveServer.clientFor("dev-a"),
+                accessToken = "token-dev-a",
+            ),
+        )
+
+        assertEquals(1, completedInWindow)
+        assertTrue(driveServer.epubFilesSnapshot().all { it.trashed })
+        assertEquals(2, driveServer.epubFilesSnapshot().size)
+        assertNull(deviceA.driveDb.uploads().get(PERM_ID, secondSha))
+    }
+
+    @Test
+    fun `a worker paused before starting cannot revive a deleted upload with a completed session`() = runTest {
+        deviceA.connect()
+        val book = seedBook(deviceA, "revive.epub", "9780547928500", "Revive Race", "Author", customBytes = "EPUB-REVIVE".toByteArray())
+        val sha = deviceA.liseurDb.workIdentityDao().fingerprint(book.url)!!.sha256
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        assertEquals(1, deviceA.epubTransfers.queueSelectedBooks(PERM_ID, setOf(book.url)))
+
+        // The first worker dies right after the final PUT completed the resumable session.
+        driveServer.onUploadResumableFinalPut = { name ->
+            if (name == "Revive Race.epub") throw kotlinx.coroutines.CancellationException("worker replaced")
+        }
+        try {
+            assertTrue(runCatching { deviceA.epubTransfers.uploadPending() }.exceptionOrNull() is kotlinx.coroutines.CancellationException)
+        } finally {
+            driveServer.onUploadResumableFinalPut = null
+        }
+        val interrupted = deviceA.driveDb.uploads().get(PERM_ID, sha)!!
+        assertEquals(DriveUpload.STATE_UPLOADING, interrupted.state)
+        assertNotNull(interrupted.sessionUri)
+
+        var deleted = false
+        var rowAtPause: DriveUpload? = null
+        val manager = DriveEpubTransferManager(
+            context = context,
+            database = deviceA.liseurDb,
+            store = deviceA.driveDb,
+            driveApi = driveServer.clientFor("dev-a"),
+            workIdentity = deviceA.driveSync.workIdentity,
+            catalogSync = deviceA.driveSync.catalogSync,
+            fingerprintStore = deviceA.driveSync.fingerprintStore,
+            acquireToken = { SilentTokenResult.Token(accessToken = "token-dev-a", permissionId = PERM_ID) },
+            stagingDirProvider = { deviceA.stagingDir },
+            // All selected/staging checks have passed; the deletion lands before the state write.
+            beforeUploadStart = {
+                if (!deleted) {
+                    deleted = true
+                    assertTrue(deviceA.driveSync.deleteFromSyncedLibrary(book))
+                    rowAtPause = deviceA.driveDb.uploads().get(PERM_ID, sha)
+                }
+            },
+        )
+
+        val summary = manager.uploadPending()
+
+        assertTrue(deleted)
+        assertEquals(DriveUpload.STATE_CANCELLED, rowAtPause!!.state)
+        assertEquals(0, summary.uploadedCount)
+        assertEquals(0, summary.failedCount)
+        assertTrue(driveServer.epubFilesSnapshot().single().trashed)
+        assertNull(deviceA.driveDb.uploads().get(PERM_ID, sha))
+    }
+
+    @Test
     fun `deleting a downloaded Drive book keeps its file and history and the copy is no longer redownloadable`() = runTest {
         deviceA.connect()
         deviceB.connect()
