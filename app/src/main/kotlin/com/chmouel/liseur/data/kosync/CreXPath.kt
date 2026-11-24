@@ -29,7 +29,7 @@ internal object CreXPath {
     // entities inline, which is exactly how CrossPoint splits a text run, and its
     // DTD and entity hardening is the one that gets reviewed.
     fun forAnchor(xhtml: ByteArray, fragment: Int, anchor: ViewportTextAnchor): String? = try {
-        if (longestSourceRun(xhtml) >= ENGINE_TEXT_SPLIT) {
+        if (longestSourceRun(BookOrbitEpubPackage.decodeXmlBytes(xhtml)) >= ENGINE_TEXT_SPLIT) {
             null
         } else {
             chapter(BookOrbitEpubPackage.parseSpineXhtml(xhtml))?.let { derive(it, fragment, anchor) }
@@ -41,41 +41,30 @@ internal object CreXPath {
     /**
      * An upper bound on the source length of any text node: text runs from
      * one piece of markup to the next, and every piece starts with `<`. A
-     * CDATA section is measured whole, since a `<` inside it is text. Bytes
-     * are never fewer than the characters they encode.
+     * CDATA section counts as text joined to its neighbours, since a `<`
+     * inside it is text. UTF-16 units are never fewer than the characters
+     * they encode.
      */
-    private fun longestSourceRun(xhtml: ByteArray): Int {
+    private fun longestSourceRun(source: String): Int {
         var longest = 0
         var start = 0
-        var i = 0
-        while (i < xhtml.size) {
-            if (xhtml[i] != '<'.code.toByte()) {
-                i++
+        var i = source.indexOf('<')
+        while (i >= 0) {
+            if (source.startsWith(CDATA_OPEN, i)) {
+                val end = source.indexOf(CDATA_CLOSE, i + CDATA_OPEN.length)
+                if (end < 0) return Int.MAX_VALUE
+                i = source.indexOf('<', end + CDATA_CLOSE.length)
                 continue
             }
             longest = maxOf(longest, i - start)
             start = i
-            if (startsWith(xhtml, i, CDATA_OPEN)) {
-                val end = indexOf(xhtml, CDATA_CLOSE, i + CDATA_OPEN.size)
-                if (end < 0) return Int.MAX_VALUE
-                i = end + CDATA_CLOSE.size
-                longest = maxOf(longest, i - start)
-                start = i
-            } else {
-                i++
-            }
+            i = source.indexOf('<', i + 1)
         }
-        return maxOf(longest, xhtml.size - start)
+        return maxOf(longest, source.length - start)
     }
 
-    private fun startsWith(bytes: ByteArray, at: Int, prefix: ByteArray): Boolean =
-        at + prefix.size <= bytes.size && prefix.indices.all { bytes[at + it] == prefix[it] }
-
-    private fun indexOf(bytes: ByteArray, needle: ByteArray, from: Int): Int =
-        (from..bytes.size - needle.size).firstOrNull { startsWith(bytes, it, needle) } ?: -1
-
-    private val CDATA_OPEN = "<![CDATA[".toByteArray()
-    private val CDATA_CLOSE = "]]>".toByteArray()
+    private const val CDATA_OPEN = "<![CDATA["
+    private const val CDATA_CLOSE = "]]>"
 
     /** One text node as CrossPoint counts them: the character data between two pieces of markup. */
     private class Run(
