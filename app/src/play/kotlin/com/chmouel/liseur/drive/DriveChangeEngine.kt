@@ -1220,6 +1220,7 @@ internal class DriveChangeEngine(
                 records = recoveredRecords,
                 wordAcks = ackMeta.vocabWordAcks,
                 reviewAcks = ackMeta.vocabReviewAcks,
+                localDeviceId = localDeviceId,
             )
             sessionSync?.acknowledgePublished(
                 permissionId = permissionId,
@@ -1443,6 +1444,7 @@ internal class DriveChangeEngine(
                 records = chunk,
                 wordAcks = chunkVocabWordAcks,
                 reviewAcks = chunkVocabReviewAcks,
+                localDeviceId = localDeviceId,
             )
             sessionSync?.acknowledgePublished(
                 permissionId = permissionId,
