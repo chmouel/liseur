@@ -1151,6 +1151,36 @@ class DrivePhase4EndToEndTest {
     }
 
     @Test
+    fun `work-wide delete cancels a queued staged unpublished second edition without uploading it`() = runTest {
+        deviceA.connect()
+        val first = seedBook(deviceA, "pub-a.epub", "9780345391803", "Hitchhiker", "Douglas Adams", customBytes = "ED-A".toByteArray())
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        assertEquals(1, deviceA.epubTransfers.queueSelectedBooks(PERM_ID, setOf(first.url)))
+        assertEquals(1, deviceA.epubTransfers.uploadPending().uploadedCount)
+        val second = seedBook(deviceA, "unpub-b.epub", "9780345391803", "Hitchhiker", "Douglas Adams", customBytes = "ED-B".toByteArray())
+        // Identity resolves without a catalog publish, so the stored catalog body lacks edition B.
+        deviceA.driveSync.workIdentity.resolveBook(PERM_ID, second, computeFingerprintIfMissing = true)
+        val peer = DriveLibrarySync.accountPeerId(PERM_ID)
+        assertNotNull(deviceA.liseurDb.workIdentityDao().alias(second.url, peer))
+        val secondSha = deviceA.liseurDb.workIdentityDao().fingerprint(second.url)!!.sha256
+        assertEquals(1, deviceA.epubTransfers.queueSelectedBooks(PERM_ID, setOf(first.url, second.url)))
+        val staged = DriveEpubTransferManager.stagedFile(deviceA.stagingDir, PERM_ID, secondSha).apply {
+            parentFile?.mkdirs()
+            writeBytes("ED-B".toByteArray())
+        }
+
+        assertTrue(deviceA.driveSync.deleteFromSyncedLibrary(first))
+
+        assertNull(deviceA.driveDb.uploads().get(PERM_ID, secondSha))
+        assertFalse(staged.exists())
+        deviceA.epubTransfers.uploadPending()
+        assertTrue(driveServer.epubFilesSnapshot().none { it.name.contains("unpub-b") || it.name.contains("ED-B") })
+        assertEquals(1, driveServer.epubFilesSnapshot().size)
+        assertNotNull(deviceA.liseurDb.bookDao().getByUrl(second.url))
+        assertNull(deviceA.liseurDb.workIdentityDao().alias(second.url, peer))
+    }
+
+    @Test
     fun `deleting a downloaded Drive book keeps its file and history and the copy is no longer redownloadable`() = runTest {
         deviceA.connect()
         deviceB.connect()

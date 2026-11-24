@@ -709,6 +709,15 @@ internal class DriveCatalogSync(
             ed.driveFileId?.takeIf { it.isNotBlank() }?.let(fileIdsToTrash::add)
         }
         fileIdFromHref(book.downloadHref)?.let(fileIdsToTrash::add)
+        // Same-account copies of the work absent from the stored catalog (e.g. an unpublished
+        // second edition) still need their uploads, staged files and remote copies cleaned.
+        for (workAlias in identities.aliasesFor(peerId)) {
+            if (workIdentity.canonicalWorkKey(permissionId, workAlias.workId) != canonicalKey) continue
+            workAlias.editionSha?.lowercase(Locale.ROOT)?.let(shasToRemove::add)
+            val copy = books.getByUrl(workAlias.bookUrl) ?: continue
+            identities.fingerprint(copy.url)?.sha256?.lowercase(Locale.ROOT)?.let(shasToRemove::add)
+            fileIdFromHref(copy.downloadHref)?.let(fileIdsToTrash::add)
+        }
         alias?.editionSha?.lowercase(Locale.ROOT)?.let(shasToRemove::add)
         identities.fingerprint(book.url)?.sha256?.lowercase(Locale.ROOT)?.let(shasToRemove::add)
         for (sha in shasToRemove) {
@@ -741,7 +750,7 @@ internal class DriveCatalogSync(
                     }
                 }
                 for (sha in shasToRemove) {
-                    uploads.delete(permissionId, sha)
+                    dropUpload(permissionId, sha)
                 }
                 recordStates.upsert(
                     DriveRecordState(
@@ -776,6 +785,23 @@ internal class DriveCatalogSync(
             drainPendingEpubTrashes(permissionId, driveApi, accessToken)
         }
         return true
+    }
+
+    /**
+     * Removes an upload row, except that a row that may own a resumable session or a created
+     * file becomes `CANCELLED` so the upload cleanup still resolves and trashes it.
+     */
+    private suspend fun dropUpload(permissionId: String, sha: String) {
+        val row = uploads.get(permissionId, sha) ?: return
+        val owesCleanup = row.state == DriveUpload.STATE_UPLOADING || row.state == DriveUpload.STATE_REQUEUE ||
+            (row.state != DriveUpload.STATE_UPLOADED && (row.sessionUri != null || row.fileId != null))
+        if (owesCleanup) {
+            if (row.state != DriveUpload.STATE_CANCELLED) {
+                uploads.transition(permissionId, sha, row.state, DriveUpload.STATE_CANCELLED, clock())
+            }
+        } else {
+            uploads.delete(permissionId, sha)
+        }
     }
 
     /** Drains any Drive EPUB trash operations queued while offline during `deleteFromSyncedLibrary`. */
