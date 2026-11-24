@@ -498,10 +498,23 @@ internal class DriveMetadataSync(
             now = clock(),
         )
 
+        // A parked successor can win over the incoming resolution, so apply the body the engine chose.
+        val appliedBody: DriveMetadataBody? = (result.dataAction as? ReconciliationDataAction.ApplyPut)?.let { put ->
+            when (val chosen = DriveWireCodec.decodeMetadataBody(put.body)) {
+                is DriveMetadataBody.Text -> chosen.copy(workKey = canonicalWorkKey)
+                is DriveMetadataBody.Cover -> chosen.copy(workKey = canonicalWorkKey)
+                null -> return true
+            }
+        }
+        val appliedContentFp = appliedBody?.let { DriveCanonicalJson.contentFp(DriveWireCodec.encodeMetadataBody(it)) }
+        val appliedState = result.updatedRecordState?.takeIf { it.versionFp != record.fp }
+        val ackVfp = appliedState?.versionFp ?: record.fp
+        val ackOp = appliedState?.versionOp ?: record.op
+
         // For custom covers, download & SHA-256 verify BEFORE entering Transaction 1.
         // Retryable network/API errors propagate; null (not yet visible / hash mismatch) defers cursor advancement.
-        val downloadedCoverFile: File? = if (result.dataAction is ReconciliationDataAction.ApplyPut && normalizedBody is DriveMetadataBody.Cover) {
-            coverCodec.downloadVerified(permissionId, accessToken, normalizedBody.coverSha256)
+        val downloadedCoverFile: File? = if (appliedBody is DriveMetadataBody.Cover) {
+            coverCodec.downloadVerified(permissionId, accessToken, appliedBody.coverSha256)
                 ?: return false
         } else {
             null
@@ -513,9 +526,9 @@ internal class DriveMetadataSync(
         val now = clock()
 
         // Transaction 1 (`liseur.db`): apply override + revision + atomic `metadata_override_sync` ack.
-        when (val action = result.dataAction) {
+        when (result.dataAction) {
             is ReconciliationDataAction.ApplyPut -> {
-                val body = normalizedBody ?: return true
+                val body = appliedBody ?: return true
                 database.withTransaction {
                     // The reader may have edited this field while the cover downloaded.
                     if (localChangedSince(book, revRow, bookUrl, field)) {
@@ -555,10 +568,10 @@ internal class DriveMetadataSync(
                             ackedRevision = revApplied,
                             sentJson = DriveWireCodec.encodeRevisionAckJson(
                                 DriveRevisionAckPayload(
-                                    vfp = record.fp,
-                                    cfp = action.contentFp,
+                                    vfp = ackVfp,
+                                    cfp = appliedContentFp,
                                     rev = revApplied,
-                                    op = record.op,
+                                    op = ackOp,
                                 ),
                             ),
                             sentRevision = revApplied,
@@ -598,10 +611,10 @@ internal class DriveMetadataSync(
                             ackedRevision = revApplied,
                             sentJson = DriveWireCodec.encodeRevisionAckJson(
                                 DriveRevisionAckPayload(
-                                    vfp = record.fp,
+                                    vfp = ackVfp,
                                     cfp = null,
                                     rev = revApplied,
-                                    op = record.op,
+                                    op = ackOp,
                                 ),
                             ),
                             sentRevision = revApplied,
@@ -637,9 +650,9 @@ internal class DriveMetadataSync(
             }
             result.conflictToOpen?.let { conflicts.upsert(it) }
             result.updatedRecordState?.let { updated ->
-                recordStates.upsert(
-                    if (appliedRev != null) updated.copy(lastSyncedRevision = appliedRev) else updated,
-                )
+                var persisted = if (appliedRev != null) updated.copy(lastSyncedRevision = appliedRev) else updated
+                appliedContentFp?.let { persisted = persisted.copy(contentFp = it) }
+                recordStates.upsert(persisted)
             }
         }
         return true

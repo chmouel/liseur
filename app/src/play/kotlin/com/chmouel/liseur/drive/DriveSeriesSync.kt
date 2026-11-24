@@ -294,9 +294,12 @@ internal class DriveSeriesSync(
 
         var staleLocal = false
         // Transaction 1 (`liseur.db`): apply series columns atomically.
-        when (result.dataAction) {
+        var appliedContentFp: String? = null
+        when (val action = result.dataAction) {
             is ReconciliationDataAction.ApplyPut -> {
-                val body = normalizedBody ?: return true
+                // A parked successor can win over the incoming resolution, so apply the body the engine chose.
+                val body = DriveWireCodec.decodeSeriesBody(action.body)?.copy(workKey = canonicalWorkKey) ?: return true
+                appliedContentFp = DriveCanonicalJson.contentFp(DriveWireCodec.encodeSeriesBody(body))
                 database.withTransaction {
                     if (books.getByUrl(bookUrl)?.let(::seriesEditState) != seriesEditState(book)) {
                         staleLocal = true
@@ -335,7 +338,9 @@ internal class DriveSeriesSync(
                 )
             }
             result.conflictToOpen?.let { conflicts.upsert(it) }
-            result.updatedRecordState?.let { recordStates.upsert(it) }
+            result.updatedRecordState?.let { updated ->
+                recordStates.upsert(appliedContentFp?.let { updated.copy(contentFp = it) } ?: updated)
+            }
         }
         return true
     }

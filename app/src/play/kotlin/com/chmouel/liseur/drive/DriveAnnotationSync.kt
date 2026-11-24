@@ -434,11 +434,17 @@ internal class DriveAnnotationSync(
         )
 
         var staleLocal = false
+        var appliedContentFp: String? = null
         // Transaction 1 (`liseur.db`): data + atomic `annotation_sync` ack.
         when (val action = result.dataAction) {
             is ReconciliationDataAction.ApplyPut -> {
-                val body = decodedBody ?: return true
-                val bookUrl = targetBookUrl ?: return true
+                // A parked successor can win over the incoming resolution, so apply the body the engine chose.
+                val body = DriveWireCodec.decodeAnnotationBody(action.body) ?: return true
+                val bookUrl = targetBookUrl
+                    ?: findBookUrlForWorkKey(permissionId, workIdentity.canonicalWorkKey(permissionId, body.workKey))
+                    ?: return true
+                val bodyContentFp = DriveWireCodec.annotationContentFp(body)
+                appliedContentFp = bodyContentFp
                 database.withTransaction {
                     if (annotations.byId(record.k) != liveRow || annotationSync.get(peerId, record.k) != syncRow) {
                         staleLocal = true
@@ -469,7 +475,7 @@ internal class DriveAnnotationSync(
                             peerId = peerId,
                             bookId = existing?.bookId ?: bookUrl,
                             workId = effectiveWorkKey,
-                            ackedFingerprint = action.contentFp,
+                            ackedFingerprint = bodyContentFp,
                         ),
                     )
                 }
@@ -517,7 +523,9 @@ internal class DriveAnnotationSync(
                 )
             }
             result.conflictToOpen?.let { conflicts.upsert(it) }
-            result.updatedRecordState?.let { recordStates.upsert(it) }
+            result.updatedRecordState?.let { updated ->
+                recordStates.upsert(appliedContentFp?.let { updated.copy(contentFp = it) } ?: updated)
+            }
         }
         return true
     }
