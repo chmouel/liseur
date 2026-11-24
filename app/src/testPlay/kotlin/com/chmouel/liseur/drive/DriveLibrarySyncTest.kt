@@ -64,6 +64,9 @@ class DriveLibrarySyncTest {
     private val serverDisconnectHooks = AtomicInteger(0)
     private val driveWorkersStopped = AtomicInteger(0)
 
+    @Volatile
+    private var onBooksForgetting: suspend (List<String>) -> Unit = {}
+
     @Before
     fun open() {
         CredentialCipher.keyForTesting =
@@ -141,6 +144,19 @@ class DriveLibrarySyncTest {
             stopWorkers = { driveWorkersStopped.incrementAndGet() },
             deviceIdGenerator = { "11111111-2222-4333-8444-555555555555" },
             openStore = { driveDb },
+            bookRemoval = BookRemoval(
+                bookDao = liseurDb.bookDao(),
+                sessionDao = liseurDb.readingSessionDao(),
+                peerStateDao = liseurDb.syncPeerStateDao(),
+                identityDao = liseurDb.workIdentityDao(),
+                progressDao = liseurDb.readingProgressDao(),
+                annotationDao = liseurDb.annotationDao(),
+                annotationSyncDao = liseurDb.annotationSyncDao(),
+                evaluationDao = liseurDb.bookEvaluationDao(),
+                metadataDao = liseurDb.bookMetadataDao(),
+                inTransaction = { work -> liseurDb.withTransaction { work() } },
+                onBooksForgetting = { onBooksForgetting(it) },
+            ),
         )
         driveSync = syncRef
     }
@@ -819,6 +835,42 @@ class DriveLibrarySyncTest {
         assertTrue(outcome.await().exceptionOrNull() is CancellationException)
         assertNotNull(liseurDb.bookDao().getByUrl(book.url))
         assertTrue(driveDb.recordStates().forDomain("perm-a", DriveWireCodec.DOMAIN_CATALOG).isEmpty())
+        assertFalse(driveSync.changeEngine.isSyncLockHeld)
+    }
+
+    @Test
+    fun `cancelling a delete after the tombstone commit still removes the local copy`() = runTest {
+        driveSync.activateAccount("perm-a", "a@example.com", now = 100L)
+        val book = stub("drive:isbn:111")
+        liseurDb.bookDao().upsert(book)
+        val cleanupStarted = CompletableDeferred<Unit>()
+        val releaseCleanup = CompletableDeferred<Unit>()
+        onBooksForgetting = {
+            cleanupStarted.complete(Unit)
+            releaseCleanup.await()
+        }
+
+        withContext(Dispatchers.Default) {
+            withTimeout(10_000) {
+                val delete = launch { runCatching { driveSync.deleteFromSyncedLibrary(book) } }
+                cleanupStarted.await()
+                assertTrue(
+                    driveDb.recordStates().forDomain("perm-a", DriveWireCodec.DOMAIN_CATALOG)
+                        .any { it.versionOp == DriveRecordState.OP_DEL },
+                )
+                val disconnect = launch { driveSync.deactivate() }
+                delete.cancel()
+                releaseCleanup.complete(Unit)
+                disconnect.join()
+                delete.join()
+            }
+        }
+
+        assertNull(liseurDb.bookDao().getByUrl(book.url))
+        assertTrue(
+            driveDb.recordStates().forDomain("perm-a", DriveWireCodec.DOMAIN_CATALOG)
+                .any { it.versionOp == DriveRecordState.OP_DEL },
+        )
         assertFalse(driveSync.changeEngine.isSyncLockHeld)
     }
 
