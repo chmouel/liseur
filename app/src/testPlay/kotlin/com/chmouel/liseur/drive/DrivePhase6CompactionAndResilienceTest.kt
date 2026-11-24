@@ -1866,6 +1866,44 @@ class DrivePhase6CompactionAndResilienceTest {
     }
 
     @Test
+    fun `failed orphan snapshot listing keeps garbage collection pending for the next sync`() = runTest {
+        val devA = createDevice(deviceId = "dev-a", compactionDeltaThreshold = 2)
+        devA.connect()
+        val bookA = seedBook(devA, "orphan-list.epub", "9780451524936", "Orphan List", "Author")
+        val baseTime = 1_746_300_000_000L
+        suspend fun addNote(i: Int) = devA.liseurDb.annotationDao().upsert(
+            BookAnnotation(
+                id = "ann-ol-$i",
+                bookId = bookA.url,
+                kind = AnnotationKind.NOTE.name,
+                locatorJson = """{"href":"ch0$i.xhtml"}""",
+                text = "Quote #$i",
+                note = "Note #$i",
+                createdAt = baseTime + i * 100L,
+                updatedAt = (baseTime + i * 100L) * 1_000L,
+            ),
+        )
+        for (i in 1..4) {
+            addNote(i)
+            assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
+        }
+
+        addNote(5)
+        assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
+        addNote(6)
+        server.failSnapshotListingAfterSnapshotAdvancesBeyond(devA.driveDb.accounts().get(PERM_ID)!!.snapshotThroughSeq)
+        assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
+        server.clearSnapshotListingFailure()
+
+        val orphanId = server.plantOrphanSnapshot("dev-a")
+        assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
+        assertTrue(
+            "Orphan must be collected by a no-edit sync after the listing failure",
+            server.liveSnapshotFilesFor("dev-a").none { it.id == orphanId },
+        )
+    }
+
+    @Test
     fun `crash between remote manifest publication and local state commit adopts published snapshot on retry with zero orphan parts`() = runTest {
         val devA = createDevice(
             deviceId = "dev-a",
@@ -2266,6 +2304,75 @@ class DrivePhase6CompactionAndResilienceTest {
         )
     }
 
+    @Test
+    fun `snapshot resolution record keeps the resolution HLC when record state lastHlc was raised`() = runTest {
+        val devA = createDevice(deviceId = "dev-a", compactionDeltaThreshold = 3)
+        val devB = createDevice(deviceId = "dev-b", compactionDeltaThreshold = 3)
+        devA.connect()
+        devB.connect()
+
+        val bookA = seedBook(devA, "res-hlc.epub", "9780142437248", "Moby-Dick", "Herman Melville")
+        val baseTime = 1_746_500_000_000L
+        val ann0 = BookAnnotation(
+            id = "ann-res-hlc",
+            bookId = bookA.url,
+            kind = AnnotationKind.NOTE.name,
+            locatorJson = """{"href":"ch01.xhtml"}""",
+            text = "Call me Ishmael",
+            note = "f0",
+            createdAt = baseTime,
+            updatedAt = baseTime * 1_000L,
+        )
+        devA.liseurDb.annotationDao().upsert(ann0)
+        assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
+        assertEquals(SyncOutcome.Success, devB.changeEngine.sync().outcome)
+        devA.liseurDb.annotationDao().upsert(ann0.copy(note = "fA", updatedAt = (baseTime + 1_000L) * 1_000L))
+        devB.liseurDb.annotationDao().upsert(
+            devB.liseurDb.annotationDao().byId("ann-res-hlc")!!.copy(note = "fB", updatedAt = (baseTime + 2_000L) * 1_000L),
+        )
+        server.hideOtherDeviceDeltasFor("dev-a")
+        assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
+        server.hideOtherDeviceDeltasFor("dev-b")
+        assertEquals(SyncOutcome.Success, devB.changeEngine.sync().outcome)
+        server.unhideAll()
+        assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
+        devA.driveSync.resolveConflicts(
+            devA.driveDb.conflicts().openForAccount(PERM_ID),
+            DriveConflictChoice.KEEP_LOCAL,
+            syncAfter = true,
+        )
+        val resA = devA.driveDb.resolutions().forRecord(PERM_ID, DriveWireCodec.DOMAIN_ANNOTATION, "ann-res-hlc").single()
+
+        val raisedHlc = "9999999999999" + resA.hlc.substring(13)
+        val resolveState = devA.driveDb.recordStates()
+            .get(PERM_ID, DriveWireCodec.DOMAIN_ANNOTATION, "ann-res-hlc")!!
+        assertEquals(DriveRecordState.OP_RESOLVE, resolveState.versionOp)
+        devA.driveDb.recordStates().upsert(resolveState.copy(lastHlc = raisedHlc))
+
+        for (i in 1..4) {
+            devA.liseurDb.annotationDao().upsert(
+                BookAnnotation(
+                    id = "ann-hlc-pad-$i",
+                    bookId = bookA.url,
+                    kind = AnnotationKind.NOTE.name,
+                    locatorJson = """{"href":"ch0$i.xhtml"}""",
+                    text = "pad",
+                    note = "p$i",
+                    createdAt = baseTime + 10_000L + i * 100L,
+                    updatedAt = (baseTime + 10_000L + i * 100L) * 1_000L,
+                ),
+            )
+            assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
+        }
+
+        val snapA = server.decodeManifestFor("dev-a")!!.snapshot!!
+        val resolveRecords = snapA.parts.flatMap { ref ->
+            DriveWireCodec.decodeSnapshotPart(server.rawBytes(ref.fileId)!!.toString(Charsets.UTF_8)).records
+        }.filter { it.op == DriveRecordState.OP_RESOLVE && it.fp == resA.resolutionFp }
+        assertEquals(1, resolveRecords.size)
+        assertEquals(resA.hlc, resolveRecords.single().hlc)
+    }
+
     // -- Harness helpers ------------------------------------------------------
 
     private suspend fun computeStats(db: LiseurDatabase, nowMs: Long) = run {
@@ -2464,6 +2571,8 @@ class DrivePhase6CompactionAndResilienceTest {
         private var hiddenDeltaSeqs: MutableSet<Pair<String, Long>> = mutableSetOf()
         private val staleOnceBytes = mutableMapOf<String, ByteArray>()
         private var remainingDeleteFailures = 0
+        private var failSnapshotListing = false
+        private var armSnapshotListingFailureAboveSeq: Long? = null
         private var failSnapshotUploadOnNthCall: Int? = null
         private var snapshotUploadAttemptCounter = 0
         private var failAfterSnapshotManifestThroughSeq: Long? = null
@@ -2477,6 +2586,29 @@ class DrivePhase6CompactionAndResilienceTest {
 
         fun failNextDeletes(count: Int) {
             remainingDeleteFailures = count
+        }
+
+        fun failSnapshotListingAfterSnapshotAdvancesBeyond(throughSeq: Long) {
+            armSnapshotListingFailureAboveSeq = throughSeq
+        }
+
+        fun clearSnapshotListingFailure() {
+            armSnapshotListingFailureAboveSeq = null
+            failSnapshotListing = false
+        }
+
+        fun plantOrphanSnapshot(deviceId: String): String {
+            val id = "orphan-${idGen.getAndIncrement()}"
+            val meta = DriveRemoteFile(
+                id = id,
+                name = "orphan-snapshot",
+                mimeType = "application/json",
+                parents = listOf(DriveRestClient.SPACE_APPDATA),
+                appProperties = mapOf("kind" to DriveFile.KIND_SNAPSHOT, "deviceId" to deviceId),
+                size = 2L,
+            )
+            files[id] = StoredFile(meta, "{}".toByteArray(), DriveRestClient.SPACE_APPDATA)
+            return id
         }
 
         fun failSnapshotUploadOnCall(nthCall: Int?) {
@@ -2672,9 +2804,14 @@ class DrivePhase6CompactionAndResilienceTest {
                 accessToken: String,
                 query: String?,
                 pageSize: Int,
-            ): List<DriveRemoteFile> = files.values
-                .filter { it.space == DriveRestClient.SPACE_APPDATA && !it.meta.trashed && isVisibleTo(callerDeviceId, it.meta) }
-                .map { it.meta }
+            ): List<DriveRemoteFile> {
+                if (failSnapshotListing && query?.contains(DriveFile.KIND_SNAPSHOT) == true) {
+                    throw java.io.IOException("injected snapshot listing failure")
+                }
+                return files.values
+                    .filter { it.space == DriveRestClient.SPACE_APPDATA && !it.meta.trashed && isVisibleTo(callerDeviceId, it.meta) }
+                    .map { it.meta }
+            }
 
             override suspend fun findAppDataFileByBatchId(
                 accessToken: String,
@@ -2752,6 +2889,11 @@ class DrivePhase6CompactionAndResilienceTest {
                 props: Map<String, String>,
                 content: ByteArray,
             ) {
+                val armedSeq = armSnapshotListingFailureAboveSeq
+                if (armedSeq != null && props["kind"] == DriveFile.KIND_MANIFEST) {
+                    val published = runCatching { DriveWireCodec.decodeManifest(content.toString(Charsets.UTF_8)) }.getOrNull()
+                    if ((published?.snapshot?.throughSeq ?: 0L) > armedSeq) failSnapshotListing = true
+                }
                 val targetSeq = failAfterSnapshotManifestThroughSeq ?: return
                 if (props["kind"] != DriveFile.KIND_MANIFEST) return
                 val decoded = runCatching { DriveWireCodec.decodeManifest(content.toString(Charsets.UTF_8)) }.getOrNull()

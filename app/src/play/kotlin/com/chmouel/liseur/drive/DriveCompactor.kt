@@ -771,7 +771,7 @@ internal class DriveCompactor(
                                 d = state.domain,
                                 k = state.recordKey,
                                 op = DriveRecordState.OP_RESOLVE,
-                                hlc = state.lastHlc,
+                                hlc = res.hlc,
                                 fp = state.versionFp,
                                 anc = anc,
                                 resRefs = (resRefs + state.versionFp).distinct().sorted(),
@@ -1052,11 +1052,13 @@ internal class DriveCompactor(
         // 1b. Garbage-collect any abandoned/orphan snapshot part files belonging to localDeviceId
         //     in appDataFolder whose file IDs are NOT referenced by snapshot / previousSnapshot
         //     (or an active pending generation / remote manifest).
+        var orphanListingFailed = false
         if (gcOrphanSnapshots && !snapshotDeleteAborted) {
             val ownSnapshotFiles = prefetchedOwnSnapshotFiles ?: runCatching {
                 listOwnSnapshotFiles(localDeviceId, accessToken)
             }.getOrElse { e ->
                 if (e is CancellationException) throw e
+                orphanListingFailed = true
                 emptyList()
             }
             val alreadyTracked = remainingPendingSnapshotIds.toSet()
@@ -1112,7 +1114,7 @@ internal class DriveCompactor(
                     break
                 }
             }
-            if (allDeleted && pruneDeltasThroughSeq > newPrunedThroughSeq) {
+            if (allDeleted && !orphanListingFailed && pruneDeltasThroughSeq > newPrunedThroughSeq) {
                 newPrunedThroughSeq = pruneDeltasThroughSeq
                 stateChanged = true
             }
