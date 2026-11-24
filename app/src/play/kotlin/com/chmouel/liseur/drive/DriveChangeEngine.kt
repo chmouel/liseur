@@ -912,6 +912,7 @@ internal class DriveChangeEngine(
                     remoteSeq = remoteSeq,
                     localDeviceId = localDeviceId,
                     remoteObserved = effectiveObserved,
+                    provenanceKnown = batchObserved != null,
                 )
                 true
             }
@@ -928,6 +929,7 @@ internal class DriveChangeEngine(
                     record = record,
                     remoteDeviceId = remoteDeviceId,
                     remoteSeq = remoteSeq,
+                    provenanceKnown = batchObserved != null,
                 )
                 true
             }

@@ -232,11 +232,11 @@ internal class DriveVocabularySync(
         // -- 4. Reviews (`vocabReview` puts & final undo `del`s) -------------
         val allReviewSyncs = vocabSyncDao.allReviews(peerId).associateBy { it.reviewId }
         val liveReviews = vocabularyDao.exportReviews()
-        val liveReviewSyncIds = mutableSetOf<String>()
+        val candidateReviewPuts = mutableListOf<Pair<VocabularyReview, DriveVocabReviewAckMeta>>()
+        val candidateReviewRecords = mutableListOf<DriveWireRecord>()
         for (review in liveReviews) {
             val word = wordsById[review.wordId] ?: continue
             val sid = review.syncId?.takeIf { it.isNotBlank() } ?: continue
-            liveReviewSyncIds.add(sid)
 
             val rSync = allReviewSyncs[sid]
             if (rSync != null && (rSync.ackedDeleted || rSync.pendingDeleted)) continue
@@ -269,9 +269,8 @@ internal class DriveVocabularySync(
                 hlc = hlc,
                 bodyMap = bodyMap,
             )
-            reviewRecords.add(record)
-            reviewAcks.add(
-                DriveVocabReviewAckMeta(
+            candidateReviewPuts.add(
+                review to DriveVocabReviewAckMeta(
                     reviewId = sid,
                     localReviewId = review.id,
                     language = word.language,
@@ -280,16 +279,39 @@ internal class DriveVocabularySync(
                     isDelete = false,
                 ),
             )
+            candidateReviewRecords.add(record)
         }
 
-        // Final review undo tombstones (`op: "del"`): ONLY for explicit undos (`pendingDeleted`)
-        // or reviews removed while their parent word is STILL alive (never for reviews cascaded
-        // away by a parent word deletion).
+        // Record per-peer sync intent before publishing a review put, so an undo while the put is
+        // built but not yet acknowledged still reaches `pendingDeleted`. A review undone since
+        // it was read is dropped from this batch.
+        if (candidateReviewPuts.isNotEmpty()) {
+            database.withTransaction {
+                for ((i, candidate) in candidateReviewPuts.withIndex()) {
+                    val (review, ack) = candidate
+                    if (vocabularyDao.review(review.id)?.syncId != ack.reviewId) continue
+                    val current = vocabSyncDao.review(peerId, ack.reviewId)
+                    if (current?.ackedDeleted == true || current?.pendingDeleted == true) continue
+                    if (current == null) {
+                        vocabSyncDao.upsertReview(
+                            VocabularyReviewSync(
+                                peerId = peerId,
+                                reviewId = ack.reviewId,
+                                language = ack.language,
+                                normalized = ack.normalized,
+                            ),
+                        )
+                    }
+                    reviewRecords.add(candidateReviewRecords[i])
+                    reviewAcks.add(ack)
+                }
+            }
+        }
+
+        // Final review undo tombstones (`op: "del"`): only explicit undos (`pendingDeleted`).
+        // A review missing because its word was deleted (cascade) is never an undo.
         for (rSync in allReviewSyncs.values) {
-            if (rSync.ackedDeleted) continue
-            val parentAlive = (rSync.language to rSync.normalized) in wordsByKey
-            val undone = rSync.pendingDeleted || (parentAlive && rSync.reviewId !in liveReviewSyncIds)
-            if (!undone) continue
+            if (rSync.ackedDeleted || !rSync.pendingDeleted) continue
 
             val rState = allReviewStates[rSync.reviewId]
             val reuseUnpublishedDel = rState != null &&
@@ -347,6 +369,24 @@ internal class DriveVocabularySync(
         if (vocabRecords.isEmpty() && wordAcks.isEmpty() && reviewAcks.isEmpty()) return
         val peerId = DriveLibrarySync.accountPeerId(permissionId)
 
+        // Published deletes durably record what they observed BEFORE the liseur.db acks, so a crash
+        // between the two transactions cannot lose the boundary.
+        val deleteBoundaries = mutableMapOf<String, Map<String, Long>>()
+        for (ack in wordAcks) {
+            if (!ack.isDelete) continue
+            val observed = records.firstOrNull {
+                it.d == DriveWireCodec.DOMAIN_VOCAB_WORD && it.k == ack.recordKey && it.op == DriveRecordState.OP_DEL
+            }?.observed.orEmpty()
+            if (observed.isNotEmpty()) deleteBoundaries[ack.recordKey] = observed
+        }
+        if (deleteBoundaries.isNotEmpty()) {
+            store.withTransaction {
+                for ((key, observed) in deleteBoundaries) {
+                    writeDeleteBoundary(permissionId, key, mergeBoundaries(readDeleteBoundary(permissionId, key), observed))
+                }
+            }
+        }
+
         // Transaction 1: liseur.db per-peer sync acks.
         if (wordAcks.isNotEmpty() || reviewAcks.isNotEmpty()) {
             database.withTransaction {
@@ -354,6 +394,13 @@ internal class DriveVocabularySync(
                     val existingSync = vocabSyncDao.word(peerId, ack.language, ack.normalized)
                     if (ack.isDelete) {
                         val currentWord = vocabularyDao.findWord(ack.normalized, ack.language)
+                        dropCoveredStagedReviews(
+                            permissionId,
+                            peerId,
+                            ack.language,
+                            ack.normalized,
+                            readDeleteBoundary(permissionId, ack.recordKey),
+                        )
                         if (currentWord == null) {
                             vocabSyncDao.upsertWord(
                                 (existingSync ?: VocabularyWordSync(peerId, ack.language, ack.normalized)).copy(
@@ -462,6 +509,7 @@ internal class DriveVocabularySync(
         remoteSeq: Long,
         localDeviceId: String? = null,
         remoteObserved: Map<String, Long>? = null,
+        provenanceKnown: Boolean = true,
     ) {
         val peerId = DriveLibrarySync.accountPeerId(permissionId)
         when (record.op) {
@@ -647,11 +695,15 @@ internal class DriveVocabularySync(
                     return
                 }
 
+                val appliedBoundary = mergeBoundaries(
+                    readDeleteBoundary(permissionId, recordKey),
+                    deleteBoundaryVector(remoteDeviceId, remoteSeq, remoteObserved, provenanceKnown),
+                )
                 val localWords = vocabularyDao.findAllWordsByKey(normalized, language)
                 if (localWords.isEmpty()) {
                     // Both devices agree the word is deleted.
                     database.withTransaction {
-                        vocabSyncDao.deleteStagedUpToGeneration(peerId, language, normalized, Long.MAX_VALUE)
+                        dropCoveredStagedReviews(permissionId, peerId, language, normalized, appliedBoundary)
                         val sync = vocabSyncDao.word(peerId, language, normalized)
                         vocabSyncDao.upsertWord(
                             (sync ?: VocabularyWordSync(peerId, language, normalized)).copy(
@@ -663,6 +715,7 @@ internal class DriveVocabularySync(
                         )
                     }
                     store.withTransaction {
+                        writeDeleteBoundary(permissionId, recordKey, appliedBoundary)
                         val adoptIncoming = existingState == null ||
                             existingState.versionOp != DriveRecordState.OP_DEL ||
                             compareValuesBy(
@@ -773,7 +826,7 @@ internal class DriveVocabularySync(
                     for (w in words) {
                         vocabularyDao.deleteWord(w.id)
                     }
-                    vocabSyncDao.deleteStagedUpToGeneration(peerId, language, normalized, Long.MAX_VALUE)
+                    dropCoveredStagedReviews(permissionId, peerId, language, normalized, appliedBoundary)
                     val sync = vocabSyncDao.word(peerId, language, normalized)
                     vocabSyncDao.upsertWord(
                         (sync ?: VocabularyWordSync(peerId, language, normalized)).copy(
@@ -787,6 +840,7 @@ internal class DriveVocabularySync(
 
                 if (isUntouched) {
                     store.withTransaction {
+                        writeDeleteBoundary(permissionId, recordKey, appliedBoundary)
                         val mergedAnc = mergeAncestors(
                             record.anc,
                             listOfNotNull(existingState?.versionFp) + existingAnc,
@@ -1035,6 +1089,7 @@ internal class DriveVocabularySync(
         record: DriveWireRecord,
         remoteDeviceId: String,
         remoteSeq: Long,
+        provenanceKnown: Boolean = true,
     ) {
         val peerId = DriveLibrarySync.accountPeerId(permissionId)
         when (record.op) {
@@ -1043,16 +1098,20 @@ internal class DriveVocabularySync(
                 // Transaction 1: final review undo tombstone.
                 database.withTransaction {
                     vocabSyncDao.deleteStaged(peerId, syncId)
-                    val existing = vocabularyDao.reviewBySyncIdAnyOwner(syncId)
                     var language = ""
                     var normalized = ""
-                    if (existing != null) {
-                        val word = vocabularyDao.word(existing.wordId)
-                        language = word?.language.orEmpty()
-                        normalized = word?.normalized.orEmpty()
-                        vocabularyDao.deleteReview(existing.id)
-                        reconcileWordSchedule(existing.wordId)
+                    // The unique index is (wordId, syncId): unowned and retired-account copies of
+                    // one word can each hold the undone event.
+                    val copies = vocabularyDao.reviewsBySyncIdAnyOwner(syncId)
+                    for (copy in copies) {
+                        val word = vocabularyDao.word(copy.wordId)
+                        if (language.isEmpty() && word != null) {
+                            language = word.language
+                            normalized = word.normalized
+                        }
+                        vocabularyDao.deleteReview(copy.id)
                     }
+                    for (wordId in copies.mapTo(linkedSetOf()) { it.wordId }) reconcileWordSchedule(wordId)
                     val existingSync = vocabSyncDao.review(peerId, syncId)
                     vocabSyncDao.upsertReview(
                         (existingSync ?: VocabularyReviewSync(
@@ -1099,6 +1158,16 @@ internal class DriveVocabularySync(
                 // Final undo tombstone check in drive_sync.db before touching liseur.db.
                 val existingState = recordStates.get(permissionId, DriveWireCodec.DOMAIN_VOCAB_REVIEW, syncId)
                 if (existingState?.versionOp == DriveRecordState.OP_DEL) {
+                    return
+                }
+
+                // A put the word's delete already covered must not come back (replay, snapshot,
+                // out-of-order stream); one the deleter had not observed stays.
+                val wordRecordKey = wordKey(remoteBody.language, remoteBody.normalized)
+                if (provenanceKnown &&
+                    boundaryCovers(readDeleteBoundary(permissionId, wordRecordKey), remoteDeviceId, remoteSeq)
+                ) {
+                    vocabSyncDao.deleteStaged(peerId, syncId)
                     return
                 }
 
@@ -1185,7 +1254,7 @@ internal class DriveVocabularySync(
                             publishedFp = record.fp,
                             contentFp = record.fp,
                             originDeviceId = remoteDeviceId,
-                            originSeq = remoteSeq,
+                            originSeq = if (provenanceKnown) remoteSeq else null,
                             ancestorsJson = "[]",
                             resRefsJson = "[]",
                             lastHlc = maxOf(prev?.lastHlc.orEmpty(), record.hlc),
@@ -1211,6 +1280,13 @@ internal class DriveVocabularySync(
             .filter { it.usable }
             .associateBy { it.bookUrl }
 
+        val undoneReviewIds = recordStates.forDomain(permissionId, DriveWireCodec.DOMAIN_VOCAB_REVIEW)
+            .filter { it.versionOp == DriveRecordState.OP_DEL }
+            .mapTo(mutableSetOf()) { it.recordKey }
+        vocabSyncDao.allReviews(peerId)
+            .filter { it.ackedDeleted || it.pendingDeleted }
+            .mapTo(undoneReviewIds) { it.reviewId }
+
         database.withTransaction {
             // 1. Backfill deterministic legacy syncIds BEFORE coalescing duplicate word rows
             // so matching legacy reviews across an unowned row and a retired-account duplicate
@@ -1235,7 +1311,10 @@ internal class DriveVocabularySync(
                     reviewedAt = review.reviewedAt,
                     rating = review.rating,
                 )
-                if (usedForWord.add(deterministicId)) {
+                if (deterministicId in undoneReviewIds) {
+                    vocabularyDao.deleteReview(review.id)
+                    reconciledWordIds.add(review.wordId)
+                } else if (usedForWord.add(deterministicId)) {
                     vocabularyDao.updateReview(review.copy(syncId = deterministicId))
                 } else {
                     vocabularyDao.deleteReview(review.id)
@@ -1549,6 +1628,56 @@ internal class DriveVocabularySync(
         return attached
     }
 
+    private suspend fun readDeleteBoundary(permissionId: String, wordKey: String): Map<String, Long> {
+        val json = recordStates.get(permissionId, DELETE_BOUNDARY_DOMAIN, wordKey)?.bodyJson ?: return emptyMap()
+        val obj = runCatching { JSONObject(json) }.getOrNull() ?: return emptyMap()
+        return buildMap {
+            for (device in obj.keys()) {
+                val seq = obj.optLong(device, 0L)
+                if (seq > 0L) put(device, seq)
+            }
+        }
+    }
+
+    /** Must run inside a `store` transaction. */
+    private suspend fun writeDeleteBoundary(permissionId: String, wordKey: String, boundary: Map<String, Long>) {
+        if (boundary.isEmpty()) return
+        val existing = recordStates.get(permissionId, DELETE_BOUNDARY_DOMAIN, wordKey)
+        recordStates.upsert(
+            DriveRecordState(
+                permissionId = permissionId,
+                domain = DELETE_BOUNDARY_DOMAIN,
+                recordKey = wordKey,
+                versionFp = "boundary",
+                versionOp = DriveRecordState.OP_PUT,
+                lastHlc = existing?.lastHlc.orEmpty(),
+                bodyJson = DriveCanonicalJson.encode(boundary),
+            ),
+        )
+    }
+
+    /**
+     * Drops staged reviews the word's delete already covered; staged reviews it did not observe
+     * stay for the next collection of the word (add-wins).
+     */
+    private suspend fun dropCoveredStagedReviews(
+        permissionId: String,
+        peerId: String,
+        language: String,
+        normalized: String,
+        boundary: Map<String, Long>,
+    ) {
+        if (boundary.isEmpty()) return
+        for (item in vocabSyncDao.stagedForWord(peerId, language, normalized, DRIVE_STAGED_GENERATION)) {
+            val state = recordStates.get(permissionId, DriveWireCodec.DOMAIN_VOCAB_REVIEW, item.reviewId)
+            if (state?.versionOp == DriveRecordState.OP_PUT &&
+                boundaryCovers(boundary, state.originDeviceId, state.originSeq)
+            ) {
+                vocabSyncDao.deleteStaged(peerId, item.reviewId)
+            }
+        }
+    }
+
     internal suspend fun reconcileWordSchedule(wordId: Long) {
         val word = vocabularyDao.word(wordId) ?: return
         val liveReviews = vocabularyDao.reviews(wordId)
@@ -1805,6 +1934,38 @@ internal class DriveVocabularySync(
 
     companion object {
         private const val DRIVE_STAGED_GENERATION = 0L
+
+        /** Local-only record state (never published): per-word vector of deleted review origins. */
+        private const val DELETE_BOUNDARY_DOMAIN = "_vocab_delete_boundary"
+
+        /**
+         * What an applied word delete proves was seen: its `observed` vector plus the deleter's own
+         * records up to the delete's batch. A snapshot's seq is its `throughSeq`, not the delete's
+         * own, so with [provenanceKnown] false only the explicit entries count.
+         */
+        internal fun deleteBoundaryVector(
+            deleterDeviceId: String,
+            deleterSeq: Long,
+            observed: Map<String, Long>?,
+            provenanceKnown: Boolean,
+        ): Map<String, Long> {
+            val explicit = observed.orEmpty()
+            if (!provenanceKnown) return explicit
+            return mergeBoundaries(explicit, mapOf(deleterDeviceId to deleterSeq))
+        }
+
+        internal fun mergeBoundaries(a: Map<String, Long>, b: Map<String, Long>): Map<String, Long> {
+            val merged = a.toMutableMap()
+            for ((device, seq) in b) {
+                merged[device] = maxOf(merged[device] ?: 0L, seq)
+            }
+            return merged
+        }
+
+        internal fun boundaryCovers(boundary: Map<String, Long>, originDeviceId: String?, originSeq: Long?): Boolean {
+            if (originDeviceId == null || originSeq == null) return false
+            return (boundary[originDeviceId] ?: 0L) >= originSeq
+        }
 
         /** Length-prefixed word wire key: `"<language.length>:<language>:<normalized>"`. */
         fun wordKey(language: String, normalized: String): String =
