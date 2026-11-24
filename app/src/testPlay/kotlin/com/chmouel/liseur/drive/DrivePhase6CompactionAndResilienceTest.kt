@@ -1149,8 +1149,11 @@ class DrivePhase6CompactionAndResilienceTest {
             devB.liseurDb.furthestPositionDao().forWork(DriveLibrarySync.accountPeerId(PERM_ID), "isbn:9780060850524").isEmpty(),
         )
 
-        // Late-arriving stale peak from A with seq <= floor (5) MUST be dropped on B;
-        // a new peak with seq = 6 (> floor) MUST survive!
+        // Late-arriving stale peak from A with seq <= floor MUST be dropped on B;
+        // a new peak with seq = floor + 1 MUST survive.
+        val floorOnB = devB.driveSync.positionSync.getPersistedFloor(PERM_ID, "isbn:9780060850524", "dev-a")
+        assertTrue("Reset must persist a non-zero floor for dev-a", floorOnB > 0L)
+
         val stalePeak = DriveWireCodec.putRecord(
             domain = DriveWireCodec.DOMAIN_FURTHEST,
             key = DrivePositionSync.peakRecordKey("isbn:9780060850524", sha, "dev-a"),
@@ -1160,7 +1163,7 @@ class DrivePhase6CompactionAndResilienceTest {
                     workKey = "isbn:9780060850524",
                     editionSha = sha,
                     deviceId = "dev-a",
-                    seq = 5L,
+                    seq = floorOnB,
                     progression = 0.85,
                     locatorJson = """{"href":"ch09.xhtml"}""",
                     coverage = null,
@@ -1183,7 +1186,7 @@ class DrivePhase6CompactionAndResilienceTest {
                     workKey = "isbn:9780060850524",
                     editionSha = sha,
                     deviceId = "dev-a",
-                    seq = 6L,
+                    seq = floorOnB + 1L,
                     progression = 0.35,
                     locatorJson = """{"href":"ch03.xhtml"}""",
                     coverage = null,
