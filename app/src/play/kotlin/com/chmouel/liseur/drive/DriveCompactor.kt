@@ -274,8 +274,12 @@ internal class DriveCompactor(
 
         // 1. Collect all locally authored records across all 12 domains + authored resolutions.
         val (allStates, allResolutions) = readStatesAndResolutions(permissionId)
-        // A key still awaiting publication would be omitted while the covered sequence advances.
-        if (allStates.any { it.domain in DriveWireCodec.SUPPORTED_DOMAIN_VERSIONS && it.publishedFp == null }) {
+        // A key whose current version is unpublished (new, dirty or held by a conflict) would be
+        // omitted while the covered sequence advances, losing its last published version.
+        if (allStates.any {
+                it.domain in DriveWireCodec.SUPPORTED_DOMAIN_VERSIONS && it.publishedFp != it.versionFp
+            }
+        ) {
             return earlyResult()
         }
         val (snapshotRecords, nextAuthoredFps) =
@@ -766,6 +770,11 @@ internal class DriveCompactor(
                     val coveredReview = body != null &&
                         state.domain == DriveWireCodec.DOMAIN_VOCAB_REVIEW &&
                         reviewCoveredByDelete(body, localDeviceId, localSeq, deleteBoundaries)
+                    val wordBoundary = if (state.domain == DriveWireCodec.DOMAIN_VOCAB_WORD) {
+                        deleteBoundaries[state.recordKey]?.takeIf { it.isNotEmpty() }
+                    } else {
+                        null
+                    }
                     body?.takeUnless { coveredReview }?.let {
                         DriveWireRecord(
                             d = state.domain,
@@ -776,13 +785,23 @@ internal class DriveCompactor(
                             anc = anc,
                             resRefs = resRefs,
                             body = it,
+                            observed = wordBoundary,
                             seq = localSeq.takeIf { state.domain in SEQ_CARRYING_DOMAINS },
                         )
                     }
                 }
                 DriveRecordState.OP_DEL -> {
                     val observed = if (state.domain == DriveWireCodec.DOMAIN_VOCAB_WORD) {
-                        parseVocabDeleteObserved(state.bodyJson)
+                        // The delete also covers its author's own records up to its publication.
+                        val covered = DriveVocabularySync.mergeBoundaries(
+                            parseVocabDeleteObserved(state.bodyJson).orEmpty(),
+                            deleteBoundaries[state.recordKey].orEmpty(),
+                        )
+                        if (localSeq != null) {
+                            DriveVocabularySync.mergeBoundaries(covered, mapOf(localDeviceId to localSeq))
+                        } else {
+                            covered
+                        }.takeIf { it.isNotEmpty() }
                     } else {
                         null
                     }
