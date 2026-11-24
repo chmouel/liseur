@@ -479,7 +479,7 @@ interface BookDao {
     suspend fun allOpenable(): List<Book>
 
     /** Remote-only books that will disappear when their account does. */
-    @Query("SELECT url FROM books WHERE remote_uuid IS NOT NULL AND browse_server_id IS NULL AND local_uri IS NULL")
+    @Query("SELECT url FROM books WHERE remote_uuid IS NOT NULL AND browse_server_id IS NULL AND local_uri IS NULL AND download_state != 'DOWNLOADED'")
     suspend fun remoteNotDownloadedUrls(): List<String>
 
     /**
@@ -493,6 +493,7 @@ interface BookDao {
         WHERE remote_uuid IS NOT NULL
           AND browse_server_id IS NULL
           AND local_uri IS NULL
+          AND download_state != 'DOWNLOADED'
           AND (
               title_override = 1
               OR author_override = 1
