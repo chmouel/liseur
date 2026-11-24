@@ -1541,6 +1541,64 @@ class DrivePhase4EndToEndTest {
     }
 
     @Test
+    fun `cleanup racing a completed upload cannot requeue the selection under its trashed file`() = runTest {
+        deviceA.connect()
+        val book = seedBook(deviceA, "completion-cleanup-race.epub", "9780547928432", "Completion Race", "Author", customBytes = "EPUB-COMPLETION-RACE".toByteArray())
+        val sha = deviceA.liseurDb.workIdentityDao().fingerprint(book.url)!!.sha256
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        assertEquals(1, deviceA.epubTransfers.queueSelectedBooks(PERM_ID, setOf(book.url)))
+
+        // The final PUT lands while the reader deselects and re-selects: the row is REQUEUE.
+        driveServer.onUploadResumableFinalPut = { name ->
+            if (name == "Completion Race.epub") {
+                deviceA.epubTransfers.queueSelectedBooks(PERM_ID, emptySet())
+                deviceA.epubTransfers.queueSelectedBooks(PERM_ID, setOf(book.url))
+            }
+        }
+        lateinit var manager: DriveEpubTransferManager
+        var rowDuringCleanup: DriveUpload? = null
+        var racingCleanupRan = false
+        manager = DriveEpubTransferManager(
+            context = context,
+            database = deviceA.liseurDb,
+            store = deviceA.driveDb,
+            driveApi = driveServer.clientFor("dev-a"),
+            workIdentity = deviceA.driveSync.workIdentity,
+            catalogSync = deviceA.driveSync.catalogSync,
+            fingerprintStore = deviceA.driveSync.fingerprintStore,
+            acquireToken = { SilentTokenResult.Token(accessToken = "token-dev-a", permissionId = PERM_ID) },
+            stagingDirProvider = { deviceA.stagingDir },
+            // The upload request has returned, local finalization has not started: run cleanup now.
+            afterUploadRequest = {
+                if (!racingCleanupRan) {
+                    racingCleanupRan = true
+                    manager.uploadPending()
+                    rowDuringCleanup = deviceA.driveDb.uploads().get(PERM_ID, sha)
+                }
+            },
+        )
+        try {
+            assertEquals(0, manager.uploadPending().uploadedCount)
+        } finally {
+            driveServer.onUploadResumableFinalPut = null
+        }
+
+        assertTrue(racingCleanupRan)
+        // Cleanup could not resolve the still-running upload's session, so the row was left alone.
+        assertEquals(DriveUpload.STATE_REQUEUE, rowDuringCleanup!!.state)
+        assertTrue(driveServer.epubFilesSnapshot().single().trashed)
+        val trashedId = driveServer.epubFilesSnapshot().single().id
+        assertTrue(deviceA.driveDb.files().get(PERM_ID, trashedId)?.trashed != false)
+        val requeued = deviceA.driveDb.uploads().get(PERM_ID, sha)!!
+        assertEquals(DriveUpload.STATE_PENDING, requeued.state)
+        assertNull(requeued.fileId)
+
+        assertEquals(1, manager.uploadPending().uploadedCount)
+        val active = driveServer.epubFilesSnapshot().filterNot { it.trashed }.single()
+        assertEquals(active.id, deviceA.driveDb.uploads().get(PERM_ID, sha)!!.fileId)
+    }
+
+    @Test
     fun `a deselected upload whose trash fails is retried and never advertised`() = runTest {
         deviceA.connect()
         deviceB.connect()
