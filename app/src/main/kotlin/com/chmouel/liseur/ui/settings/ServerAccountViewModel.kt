@@ -985,6 +985,7 @@ class ServerAccountViewModel(
             // nothing new to re-emit after this reset.
             val kept = _state.value
             _state.value = ServerAccountUiState(
+                serverLoaded = true,
                 kosync = kept.kosync,
                 kosyncStatus = kept.kosyncStatus,
             )
