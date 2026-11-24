@@ -721,13 +721,13 @@ class DriveLibrarySyncTest {
         )
         fun keyFor(vararg identifiers: Identifier) = DriveLibrarySync.preservedStubWorkKey(
             base,
-            identifiers.map {
+            listOf(
                 BookMetadata.of(
                     bookUrl = base.url,
                     source = MetadataSource.FILE,
-                    snapshot = MetadataSnapshot(identifiers = listOf(it)),
-                )
-            },
+                    snapshot = MetadataSnapshot(identifiers = identifiers.toList()),
+                ),
+            ),
             retiringEditionSha = null,
         )
 
@@ -737,6 +737,28 @@ class DriveLibrarySyncTest {
             assertTrue("$value -> $key", key.startsWith("stub:"))
         }
         assertTrue(keyFor(Identifier("calibre", "calibre_id"), Identifier("uuid", "abc-1")).startsWith("dc:"))
+    }
+
+    @Test
+    fun `blank identifier values in a stored metadata row fall through to the stub key`() {
+        val base = Book(
+            url = "file:///book.epub",
+            title = "Book",
+            author = "Author",
+            coverPath = null,
+            source = null,
+            addedAt = 1L,
+            lastOpenedAt = null,
+        )
+        val raw = BookMetadata(
+            bookUrl = base.url,
+            source = MetadataSource.FILE.key,
+            identifiers = """[{"scheme":"calibre","value":""},{"scheme":"uuid","value":"  "}]""",
+        )
+
+        val key = DriveLibrarySync.preservedStubWorkKey(base, listOf(raw), retiringEditionSha = null)
+
+        assertTrue(key, key.startsWith("stub:"))
     }
 
     @Test
