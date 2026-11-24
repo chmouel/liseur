@@ -1302,4 +1302,143 @@ class DriveConflictEngineTest {
         assertNotNull(edited.conflictToOpen)
         assertEquals(fB, unproven.updatedRecordState!!.versionFp)
     }
+
+    private fun livePutLocal(fp: String, text: String) = LocalRecordView(
+        versionFp = fp,
+        versionOp = DriveRecordState.OP_PUT,
+        isLivePut = true,
+        publishedFp = fp,
+        contentFp = fp,
+        lastHlc = "0017450000600-0001-dev-a",
+        bodyJson = putBody(text).toString(),
+    )
+
+    private fun putRecord(fp: String, text: String, anc: List<String>, resRefs: List<String> = emptyList()) = DriveWireRecord(
+        d = domain,
+        k = key,
+        op = DriveRecordState.OP_PUT,
+        hlc = "0017450000800-0001-dev-b",
+        fp = fp,
+        anc = anc,
+        resRefs = resRefs,
+        body = putBody(text),
+    )
+
+    @Test
+    fun `local unpublished delete resolution winning agreement stays unpublished`() {
+        val resolvedFps = listOf(putFp("edit-A"), putFp("edit-B")).sorted()
+        val hlcA = "0017450000400-0001-dev-a"
+        val resA = resolution(DriveResolution.OUTCOME_DELETE, resolvedFps, hlcA, null)
+        val resB = resolution(DriveResolution.OUTCOME_DELETE, resolvedFps, "0017450000300-0001-dev-b", null)
+        val local = LocalRecordView(
+            versionFp = resA.resolutionFp,
+            versionOp = DriveRecordState.OP_RESOLVE,
+            isLivePut = false,
+            publishedFp = null,
+            contentFp = null,
+            ancestors = resolvedFps,
+            resRefs = listOf(resA.resolutionFp),
+            lastHlc = hlcA,
+        )
+        val result = reconcile(local, listOf(resA), resolveRecord(resB, null, listOf(resB.resolutionFp)), null)
+        assertEquals(ReconciliationCase.AGREEMENT, result.reconciliationCase)
+        assertEquals(resA.resolutionFp, result.updatedRecordState!!.versionFp)
+        assertNull(result.updatedRecordState!!.publishedFp)
+    }
+
+    @Test
+    fun `dirty local row is never overwritten by ancestry supersession or bridged supersession`() {
+        val f0 = putFp("v0")
+        val fL = putFp("L")
+        val fS = putFp("S")
+        val dirty = livePutLocal(fL, "L").copy(ancestors = listOf(f0), localRowMatchesContentFp = false)
+
+        val causal = reconcile(dirty, emptyList(), putRecord(fS, "S", listOf(fL)), fS)
+        assertEquals(ReconciliationDataAction.NoDataChange, causal.dataAction)
+        assertEquals(ReconciliationCase.CONFLICT_EDIT_EDIT, causal.reconciliationCase)
+        assertEquals(fL, causal.updatedRecordState!!.versionFp)
+
+        val causalDelete = reconcile(
+            dirty,
+            emptyList(),
+            DriveWireRecord(
+                d = domain, k = key, op = DriveRecordState.OP_DEL, hlc = "0017450000800-0001-dev-b",
+                fp = DriveCanonicalJson.delFp(domain, key, "0017450000800-0001-dev-b"),
+                anc = listOf(fL), resRefs = emptyList(), body = null,
+            ),
+            null,
+        )
+        assertEquals(ReconciliationDataAction.NoDataChange, causalDelete.dataAction)
+
+        val res1 = resolution(DriveResolution.OUTCOME_PUT, listOf(fL, putFp("other")), "0017450000300-0001-dev-a", putBody("L"))
+        val bridged = reconcile(dirty, listOf(res1), putRecord(fS, "S", emptyList(), listOf(res1.resolutionFp)), fS)
+        assertEquals(ReconciliationDataAction.NoDataChange, bridged.dataAction)
+        assertEquals(fL, bridged.updatedRecordState!!.versionFp)
+
+        val clean = reconcile(dirty.copy(localRowMatchesContentFp = true), listOf(res1), putRecord(fS, "S", emptyList(), listOf(res1.resolutionFp)), fS)
+        assertEquals(ReconciliationCase.RESOLUTION_BRIDGED_SUPERSESSION, clean.reconciliationCase)
+    }
+
+    @Test
+    fun `replayed resolution known only through resRefs after ancestry cap stays stale`() {
+        val fA = putFp("edit-A")
+        val fB = putFp("edit-B")
+        val fNew = putFp("newer")
+        val res1 = resolution(DriveResolution.OUTCOME_PUT, listOf(fA, fB), "0017450000300-0001-dev-a", putBody("edit-A"))
+        val local = livePutLocal(fNew, "newer").copy(resRefs = listOf(res1.resolutionFp))
+        val result = reconcile(local, listOf(res1), resolveRecord(res1, putBody("edit-A"), listOf(res1.resolutionFp)), putFp("edit-A"))
+        assertEquals(ReconciliationCase.RESOLVE_STALE, result.reconciliationCase)
+        assertNull(result.conflictToOpen)
+        assertEquals(fNew, result.updatedRecordState!!.versionFp)
+    }
+
+    @Test
+    fun `device still at the resolution accepts a successor that carries it in resRefs after compaction`() {
+        val fA = putFp("edit-A")
+        val fB = putFp("edit-B")
+        val fS = putFp("successor")
+        val res1 = resolution(DriveResolution.OUTCOME_PUT, listOf(fA, fB), "0017450000300-0001-dev-a", putBody("edit-A"))
+        val local = LocalRecordView(
+            versionFp = res1.resolutionFp,
+            versionOp = DriveRecordState.OP_RESOLVE,
+            isLivePut = true,
+            publishedFp = res1.resolutionFp,
+            contentFp = putFp("edit-A"),
+            resRefs = listOf(res1.resolutionFp),
+            lastHlc = res1.hlc,
+            bodyJson = putBody("edit-A").toString(),
+        )
+        val result = reconcile(local, listOf(res1), putRecord(fS, "successor", emptyList(), listOf(res1.resolutionFp)), fS)
+        assertEquals(ReconciliationCase.RESOLUTION_BRIDGED_SUPERSESSION, result.reconciliationCase)
+        assertNull(result.conflictToOpen)
+        assertEquals(fS, result.updatedRecordState!!.versionFp)
+    }
+
+    @Test
+    fun `fast-forward keeps the incoming recent ancestry when local history is full`() {
+        val f1 = putFp("f1")
+        val f2 = putFp("f2")
+        val fL = putFp("L")
+        val oldAnc = (1..DriveWireCodec.MAX_ANCESTORS).map { putFp("old-$it") }
+        val local = livePutLocal(fL, "L").copy(ancestors = oldAnc)
+        val result = reconcile(local, emptyList(), putRecord(f2, "f2", listOf(f1, fL)), f2)
+        assertEquals(ReconciliationCase.CAUSAL_SUPERSESSION, result.reconciliationCase)
+        val anc = DriveWorkIdentity.decodeStringArray(result.updatedRecordState!!.ancestorsJson)
+        assertEquals(DriveWireCodec.MAX_ANCESTORS, anc.size)
+        assertTrue(f1 in anc)
+        assertTrue(fL in anc)
+
+        val replay = reconcile(
+            local.copy(
+                versionFp = f2,
+                contentFp = f2,
+                publishedFp = f2,
+                ancestors = anc,
+            ),
+            emptyList(),
+            putRecord(f1, "f1", listOf(putFp("f0"))),
+            f1,
+        )
+        assertEquals(ReconciliationCase.STALE, replay.reconciliationCase)
+    }
 }

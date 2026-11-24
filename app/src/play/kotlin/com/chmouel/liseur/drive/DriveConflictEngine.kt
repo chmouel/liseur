@@ -377,7 +377,7 @@ internal object DriveConflictEngine {
                 updatedRecordState = stateKeepingLocal(
                     extraAnc = extraAnc,
                     extraResRefs = finalResRefs,
-                    overridePublishedFp = chosenFp,
+                    overridePublishedFp = if (chosenFp == incoming.fp) incoming.fp else local.publishedFp,
                     overrideVersionFp = chosenFp,
                     overrideVersionOp = chosenOp,
                     overrideLastHlc = chosenHlc,
@@ -397,7 +397,7 @@ internal object DriveConflictEngine {
             allResolutions.firstOrNull { res ->
                 if (res.resolutionFp !in incomingResRefSet) return@firstOrNull false
                 val resFps = decodeFps(res.resolvedFpsJson)
-                if (lFp !in resFps) return@firstOrNull false
+                if (lFp !in resFps && lFp != res.resolutionFp) return@firstOrNull false
                 winningResolutionFor(allResolutions, resFps)?.resolutionFp == res.resolutionFp
             }
         } else {
@@ -409,8 +409,9 @@ internal object DriveConflictEngine {
         // --------------------------------------------------------------------
         if (isIncomingResolve) {
             // 2a. Already superseded in local ancestry -> Stale (Step 0 side effects still persist).
-            if (incomingKnownAncestorOrRetired) {
-                val provenDescent = incoming.fp in local.ancestors
+            val knownViaResRefs = incoming.fp in local.resRefs
+            if (incomingKnownAncestorOrRetired || knownViaResRefs) {
+                val provenDescent = incoming.fp in local.ancestors || knownViaResRefs
                 return ReconciliationResult(
                     reconciliationCase = ReconciliationCase.RESOLVE_STALE,
                     dataAction = ReconciliationDataAction.NoDataChange,
@@ -459,7 +460,7 @@ internal object DriveConflictEngine {
                                 dataAction = applyActionForIncoming(),
                                 updatedRecordState = stateApplyingIncoming(
                                     newOp = DriveRecordState.OP_RESOLVE,
-                                    ancList = listOf(lFp) + local.ancestors + incoming.anc,
+                                    ancList = listOf(lFp) + incoming.anc + local.ancestors,
                                     resRefsList = mergedResRefs,
                                 ),
                                 resolutionsToPersist = resolutionsToPersist,
@@ -491,7 +492,7 @@ internal object DriveConflictEngine {
                     dataAction = applyActionForIncoming(),
                     updatedRecordState = stateApplyingIncoming(
                         newOp = DriveRecordState.OP_RESOLVE,
-                        ancList = listOf(lFp) + local.ancestors + incoming.anc,
+                        ancList = listOf(lFp) + incoming.anc + local.ancestors,
                         resRefsList = mergedResRefs,
                     ),
                     resolutionsToPersist = resolutionsToPersist,
@@ -507,7 +508,7 @@ internal object DriveConflictEngine {
                     dataAction = applyActionForIncoming(),
                     updatedRecordState = stateApplyingIncoming(
                         newOp = DriveRecordState.OP_RESOLVE,
-                        ancList = listOf(lFp) + local.ancestors + incoming.anc,
+                        ancList = listOf(lFp) + incoming.anc + local.ancestors,
                         resRefsList = mergedResRefs,
                     ),
                     resolutionsToPersist = resolutionsToPersist,
@@ -524,7 +525,7 @@ internal object DriveConflictEngine {
                     dataAction = applyActionForIncoming(),
                     updatedRecordState = stateApplyingIncoming(
                         newOp = DriveRecordState.OP_RESOLVE,
-                        ancList = listOf(lFp) + local.ancestors + incoming.anc,
+                        ancList = listOf(lFp) + incoming.anc + local.ancestors,
                         resRefsList = mergedResRefs,
                     ),
                     resolutionsToPersist = resolutionsToPersist,
@@ -559,13 +560,10 @@ internal object DriveConflictEngine {
         // Branch A: Ordinary causal supersession (strictly requires no open conflict & L not retired).
         val ordinarySupersession = remainingOpenConflicts.isEmpty() &&
             !localRetiredByResolution &&
+            local.localRowMatchesContentFp &&
             (
                 lFp in incoming.anc ||
-                    (
-                        local.originDeviceId == remoteDeviceId &&
-                            (local.originSeq ?: -1L) < remoteSeq &&
-                            local.localRowMatchesContentFp
-                        )
+                    (local.originDeviceId == remoteDeviceId && (local.originSeq ?: -1L) < remoteSeq)
                 )
 
         if (ordinarySupersession) {
@@ -574,7 +572,7 @@ internal object DriveConflictEngine {
                 reconciliationCase = ReconciliationCase.CAUSAL_SUPERSESSION,
                 dataAction = applyActionForIncoming(),
                 updatedRecordState = stateApplyingIncoming(
-                    ancList = listOf(lFp) + local.ancestors + incoming.anc,
+                    ancList = listOf(lFp) + incoming.anc + local.ancestors,
                     resRefsList = mergedResRefs,
                 ),
                 resolutionsToPersist = resolutionsToPersist,
@@ -584,13 +582,13 @@ internal object DriveConflictEngine {
 
         // Branch B: Resolution-bridged supersession (requires winning res with L in res.resolvedFps
         // AND explicit causal proof `res.resolutionFp in R.resRefs` — NEVER `R.hlc >= res.hlc`).
-        if (bridgingResolution != null) {
+        if (bridgingResolution != null && local.localRowMatchesContentFp) {
             val mergedResRefs = local.resRefs + incoming.resRefs + step0ResRefsToAdd + bridgingResolution.resolutionFp
             return ReconciliationResult(
                 reconciliationCase = ReconciliationCase.RESOLUTION_BRIDGED_SUPERSESSION,
                 dataAction = applyActionForIncoming(),
                 updatedRecordState = stateApplyingIncoming(
-                    ancList = listOf(lFp) + local.ancestors + incoming.anc,
+                    ancList = listOf(lFp) + incoming.anc + local.ancestors,
                     resRefsList = mergedResRefs,
                 ),
                 resolutionsToPersist = resolutionsToPersist,
