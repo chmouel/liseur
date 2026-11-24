@@ -1895,6 +1895,66 @@ class DrivePhase4EndToEndTest {
     }
 
     @Test
+    fun `a cancelled upload whose trash failed is never advertised, resolved or reused by a peer`() = runTest {
+        deviceA.connect()
+        deviceB.connect()
+        val bytes = "EPUB-UNCONFIRMED".toByteArray()
+        val isbn = "9780547928319"
+        val book = seedBook(deviceA, "unconfirmed.epub", isbn, "Unconfirmed", "Author", customBytes = bytes)
+        val bookB = seedBook(deviceB, "unconfirmed-b.epub", isbn, "Unconfirmed", "Author", customBytes = bytes)
+        val sha = deviceA.liseurDb.workIdentityDao().fingerprint(book.url)!!.sha256
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        assertEquals(1, deviceA.epubTransfers.queueSelectedBooks(PERM_ID, setOf(book.url)))
+        driveServer.onUploadResumableFinalPut = { name ->
+            if (name == "Unconfirmed.epub") deviceA.epubTransfers.queueSelectedBooks(PERM_ID, emptySet())
+        }
+        driveServer.failNextTrashes = 2
+        try {
+            deviceA.epubTransfers.uploadPending()
+        } finally {
+            driveServer.onUploadResumableFinalPut = null
+        }
+        val cancelled = deviceA.driveDb.uploads().get(PERM_ID, sha)!!
+        assertEquals(DriveUpload.STATE_CANCELLED, cancelled.state)
+        val orphanId = cancelled.fileId!!
+        assertFalse(driveServer.epubFilesSnapshot().single { it.id == orphanId }.trashed)
+
+        // Both devices discover the live file, but no catalog edition confirms it.
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        assertEquals(orphanId, deviceB.driveDb.files().byKindAndSha256(PERM_ID, DriveFile.KIND_EPUB, sha).single().fileId)
+        for (device in listOf(deviceA, deviceB)) {
+            assertTrue(device.driveSync.catalogSync.advertisedEpubFileIds(PERM_ID).isEmpty())
+            val editions = device.driveDb.recordStates().forDomain(PERM_ID, DriveWireCodec.DOMAIN_CATALOG)
+                .mapNotNull { it.bodyJson }
+                .flatMap { DriveWireCodec.decodeCatalogBody(org.json.JSONObject(it))!!.editions }
+            assertTrue(editions.isNotEmpty())
+            assertTrue(editions.all { it.driveFileId == null })
+        }
+        assertNull(deviceB.driveSync.catalogSync.resolveDownloadSource(PERM_ID, bookB, sha))
+        assertNull(deviceB.driveSync.catalogSync.resolveDownloadSource(PERM_ID, bookB))
+
+        // The peer does not reuse the unconfirmed file; it uploads its own copy.
+        assertEquals(1, deviceB.epubTransfers.queueSelectedBooks(PERM_ID, setOf(bookB.url)))
+        assertEquals(1, deviceB.epubTransfers.uploadPending().uploadedCount)
+        val reused = deviceB.driveDb.uploads().get(PERM_ID, sha)!!
+        assertEquals(DriveUpload.STATE_UPLOADED, reused.state)
+        assertNotEquals(orphanId, reused.fileId)
+
+        // A confirmed upload syncs normally and is advertised and resolvable on the other device.
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        assertEquals(setOf(reused.fileId!!), deviceA.driveSync.catalogSync.advertisedEpubFileIds(PERM_ID)[sha])
+        assertEquals(setOf(reused.fileId!!), deviceB.driveSync.catalogSync.advertisedEpubFileIds(PERM_ID)[sha])
+        assertEquals(
+            reused.fileId to sha,
+            deviceA.driveSync.catalogSync.resolveDownloadSource(PERM_ID, book, sha),
+        )
+        assertFalse(orphanId in deviceA.driveSync.catalogSync.advertisedEpubFileIds(PERM_ID)[sha].orEmpty())
+    }
+
+    @Test
     fun `concurrent deletion of staging part file skips deleted item and still uploads remaining batch items`() = runTest {
         deviceA.connect()
         val first = seedBook(deviceA, "stage-race-1.epub", "9780547928227", "First Staged", "Author", customBytes = "EPUB-STAGE-RACE-1".toByteArray())
