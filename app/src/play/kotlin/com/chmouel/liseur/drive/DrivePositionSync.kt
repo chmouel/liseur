@@ -430,23 +430,37 @@ internal class DrivePositionSync(
                     (guardRevisions == null ||
                         guardRevisions[edition.bookUrl] == edition.progress.localRevision)
             }
-            for ((winner, template) in peakWinners(workKey, localDeviceId, eligible)) {
-                val existing = recordStates.get(
-                    permissionId,
-                    DriveWireCodec.DOMAIN_FURTHEST,
-                    peakRecordKey(workKey, template.editionSha, localDeviceId),
-                )
-                val seq = boundPeakSeq(existing, winner.progress.peakRevision!!, template) ?: continue
-                if (seq > localFloor) continue
-                // A forget captured these revisions, so every same-edition peak it saw is at or
-                // below the bound winner; a remote reset only covers the peak it can name.
-                val members = if (guardRevisions != null) {
-                    eligible.filter { peakEdition(it) == template.editionSha }
+            val winners = peakWinners(workKey, localDeviceId, eligible).associate { it.first.bookUrl to it.second }
+            for (member in eligible) {
+                val template = peakTemplate(
+                    workKey, localDeviceId, member.bookUrl, member.editionSha, member.progress,
+                ) ?: continue
+                val peakRev = member.progress.peakRevision!!
+                val wireSeq = if (member.bookUrl in winners) {
+                    boundPeakSeq(
+                        recordStates.get(
+                            permissionId,
+                            DriveWireCodec.DOMAIN_FURTHEST,
+                            peakRecordKey(workKey, template.editionSha, localDeviceId),
+                        ),
+                        peakRev,
+                        template,
+                    )
                 } else {
-                    listOf(winner)
+                    null
                 }
-                for (member in members) {
-                    covered.add(Triple(member.bookUrl, member.editionSha, member.progress.peakRevision!!))
+                val ownSeq = boundBookPeakSeq(permissionId, workKey, member.bookUrl, peakRev, template)
+                if (wireSeq != null && wireSeq <= localFloor) {
+                    // A forget captured these revisions, so every same-edition peak it saw is at or
+                    // below the bound winner.
+                    val members = if (guardRevisions != null) {
+                        eligible.filter { peakEdition(it) == template.editionSha }
+                    } else {
+                        listOf(member)
+                    }
+                    for (m in members) covered.add(Triple(m.bookUrl, m.editionSha, m.progress.peakRevision!!))
+                } else if (ownSeq != null && ownSeq <= localFloor) {
+                    covered.add(Triple(member.bookUrl, member.editionSha, peakRev))
                 }
             }
         }
@@ -692,6 +706,9 @@ internal class DrivePositionSync(
         for (entry in local.filter { it.book.url in peakSpeakers }) {
             collectPeak(permissionId, deviceId, drivePeerId, entry, nextHlc, records, peakAcks)
         }
+        bindDominatedPeaks(permissionId, deviceId, resolved.groupBy { it.workKey }.mapValues { (_, group) ->
+            group.map { LocalEdition(it.book.url, it.aliasEditionSha, it.progress) }
+        })
 
         // Unpublished furthest resets (append-only).
         for (state in recordStates.forDomain(permissionId, DriveWireCodec.DOMAIN_FURTHEST)) {
@@ -788,6 +805,69 @@ internal class DrivePositionSync(
             ),
         )
     }
+
+    /**
+     * Records, per local book, the wire sequence its current peak is covered by. A book whose
+     * peak the edition's speaking book dominates shares that book's sequence, so a reset
+     * that covers the published peak also covers the peaks it dominated, while a peak authored
+     * after the reset gets a fresh binding above the floor.
+     */
+    private suspend fun bindDominatedPeaks(
+        permissionId: String,
+        deviceId: String,
+        byWork: Map<String, List<LocalEdition>>,
+    ) {
+        for ((workKey, editions) in byWork) {
+            val winners = peakWinners(workKey, deviceId, editions)
+            for (edition in editions) {
+                val peakRev = edition.progress.peakRevision ?: continue
+                val template = peakTemplate(workKey, deviceId, edition.bookUrl, edition.editionSha, edition.progress)
+                    ?: continue
+                val winner = winners.firstOrNull { it.second.editionSha == template.editionSha } ?: continue
+                val wireSeq = boundPeakSeq(
+                    recordStates.get(
+                        permissionId,
+                        DriveWireCodec.DOMAIN_FURTHEST,
+                        peakRecordKey(workKey, template.editionSha, deviceId),
+                    ),
+                    winner.first.progress.peakRevision!!,
+                    winner.second,
+                ) ?: continue
+                store.withTransaction {
+                    if (boundBookPeakSeq(permissionId, workKey, edition.bookUrl, peakRev, template) == null) {
+                        recordStates.upsert(
+                            DriveRecordState(
+                                permissionId = permissionId,
+                                domain = BOOK_PEAK_DOMAIN,
+                                recordKey = bookPeakKey(workKey, edition.bookUrl),
+                                versionFp = bookPeakFp(template),
+                                versionOp = DriveRecordState.OP_PUT,
+                                publishedFp = bookPeakFp(template),
+                                lastSyncedRevision = peakRev,
+                                lastHlc = "",
+                                bodyJson = wireSeq.toString(),
+                            ),
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    private suspend fun boundBookPeakSeq(
+        permissionId: String,
+        workKey: String,
+        bookUrl: String,
+        peakRev: Long,
+        template: DriveFurthestBody.Peak,
+    ): Long? {
+        val state = recordStates.get(permissionId, BOOK_PEAK_DOMAIN, bookPeakKey(workKey, bookUrl)) ?: return null
+        if (state.lastSyncedRevision != peakRev || state.versionFp != bookPeakFp(template)) return null
+        return state.bodyJson?.toLongOrNull()
+    }
+
+    private fun bookPeakFp(template: DriveFurthestBody.Peak): String =
+        DriveCanonicalJson.contentFp(DriveWireCodec.encodeFurthestBody(template.copy(seq = 0L)))
 
     private fun decodePeak(bodyJson: String?): DriveFurthestBody.Peak? =
         bodyJson?.let { runCatching { DriveWireCodec.decodeFurthestBody(JSONObject(it)) }.getOrNull() }
@@ -1579,6 +1659,7 @@ internal class DrivePositionSync(
         private const val FLOOR_STATE_DOMAIN = "_furthest_floor"
         private const val PEAK_SEQ_DOMAIN = "_furthest_peak_seq"
         private const val PEAK_SEQ_KEY = "self"
+        private const val BOOK_PEAK_DOMAIN = "_furthest_book_peak"
         private const val RESET_PENDING_DOMAIN = "_furthest_reset_pending"
         private const val PENDING_REVISIONS = "revisions"
 
@@ -1600,6 +1681,7 @@ internal class DrivePositionSync(
             "$PEAK_KEY_PREFIX$workKey/$editionSha/$deviceId"
         fun resetRecordKey(workKey: String, resetId: String): String =
             "$RESET_KEY_PREFIX$workKey/$resetId"
+        private fun bookPeakKey(workKey: String, bookUrl: String): String = "$workKey/$bookUrl"
         private fun floorRecordKey(workKey: String, originDeviceId: String): String =
             "$workKey/$originDeviceId"
     }
