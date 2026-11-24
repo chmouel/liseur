@@ -1270,7 +1270,8 @@ with outcome `delete`) when it reaches those records:
     `peak_revision`, which restarts per book and so cannot order peaks against
     work-wide floors. A peak is bound to its allocated `seq` in the same
     transaction that allocates it, so retries re-send the same `seq`; the
-    binding is dropped when the book's peak changes.
+    binding is dropped when the book's peak changes. Internal `_`-prefixed
+    domains are never published.
   - Merge rule: ignore if `seq <= maxFloor[workKey][deviceId]`; otherwise apply
     via `FurthestPositionDao.observe` (keeps max `progression` per
     `(peer_id, work_id, edition, origin = deviceId)`). A peak that `observe`
@@ -1312,17 +1313,18 @@ with outcome `delete`) when it reaches those records:
     snapshots. The visible peak is therefore a function of the set of peaks
     and floors received, never of their delivery order: a peak above the
     floor survives whether it arrives before or after the reset.
-  - Forgetting applies to the whole work, not one edition. The reset record
-    and its floors (the authoring device's floor is its highest allocated
-    `seq`) are persisted in `drive_sync.db` first. Local effects follow: delete
+  - Forgetting applies to the whole work, not one edition. The reset record,
+    its floors (the authoring device's floor is its highest allocated `seq`)
+    and a local-only replay marker are persisted in `drive_sync.db` first.
+    Local effects follow: delete
     the covered `furthest_position` rows, reset the local `reading_progress`
     peak of every local edition of the work whose bound `seq` is at or below
     its device floor, and clear that edition's `peak_delivery`. Resetting the
     local peak is required: otherwise a book that was at 80% and is now at 20%
     could not record a new peak at 30%, because capture needs a strict
-    increase. A peak that is unsent or newer than the floor is preserved. An
-    interrupted forget is completed on the next sync by replaying the persisted
-    reset before pulling.
+    increase. A peak that is unsent or newer than the floor is preserved. The marker is
+    cleared last; each sync replays any remaining marker before pulling, so an
+    interrupted forget completes.
 - **`del` semantics:** Not used.
 - **Room mapping (`liseur.db`):**
   - `furthest_position`: `peer_id = drive:<permissionId>`, `work_id = workKey`,
