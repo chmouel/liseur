@@ -281,6 +281,17 @@ class CreXPathTest {
     }
 
     @Test
+    fun `an offset after a tab is written as the start of the run`() {
+        assertXpath(
+            "/body/DocFragment[1]/body/pre[1]/text()[1].0",
+            "<html><body><pre>key\tvalue</pre></body></html>",
+            "body > pre:nth-of-type(1)",
+            "key\t",
+            "value",
+        )
+    }
+
+    @Test
     fun `an offset after a single line break is kept`() {
         assertXpath(
             "/body/DocFragment[1]/body/p[1]/text()[1].9",
