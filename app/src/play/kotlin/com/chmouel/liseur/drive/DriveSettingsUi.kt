@@ -801,7 +801,7 @@ private fun DriveConflictsDialog(
                                     verticalArrangement = Arrangement.spacedBy(8.dp),
                                     modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
                                 ) {
-                                    if (group.kind == DriveConflict.KIND_DELETE_EDIT) {
+                                    if (group.offersKeepEditedOrDelete) {
                                         val keepLabel = if (group.domain == DriveWireCodec.DOMAIN_ANNOTATION) {
                                             stringResource(R.string.drive_sync_conflict_keep_edited_note)
                                         } else {
