@@ -212,11 +212,17 @@ internal class DriveWorkIdentity(
     /** Returns true if the reader has already rejected matching [keyA] with [keyB]. */
     suspend fun isRejectedPair(permissionId: String, keyA: String, keyB: String): Boolean {
         if (keyA == keyB) return false
-        val low = minOf(keyA, keyB)
-        val high = maxOf(keyA, keyB)
-        val rejectKey = rejectRecordKey(low, high)
-        val state = recordStates.get(permissionId, DriveWireCodec.DOMAIN_WORK_ALIAS, rejectKey)
-        return state != null && state.versionOp == DriveRecordState.OP_PUT
+        val merges = loadMergeMap(permissionId)
+        val canonA = resolveCanonical(keyA, merges)
+        val canonB = resolveCanonical(keyB, merges)
+        if (canonA == canonB) return false
+        return recordStates.forDomain(permissionId, DriveWireCodec.DOMAIN_WORK_ALIAS).any { state ->
+            if (!state.recordKey.startsWith(REJECT_KEY_PREFIX) || state.versionOp != DriveRecordState.OP_PUT) return@any false
+            val reject = state.bodyJson?.let {
+                runCatching { DriveWireCodec.decodeWorkAliasBody(JSONObject(it)) }.getOrNull()
+            } as? DriveWorkAliasBody.Reject ?: return@any false
+            setOf(resolveCanonical(reject.a, merges), resolveCanonical(reject.b, merges)) == setOf(canonA, canonB)
+        }
     }
 
     /**
@@ -395,13 +401,14 @@ internal class DriveWorkIdentity(
             val allAliases = identities.aliasesFor(peerId)
             for (alias in allAliases) {
                 if (resolveCanonical(alias.workId, merges) == from) {
+                    // Only the book the reader confirmed is promoted; other books keep their
+                    // confidence, so a guess or rejection there is not turned into consent.
                     identities.upsert(
-                        alias.copy(
-                            workId = to,
-                            confidence = WorkAlias.HIGH,
-                            confirmed = true,
-                            seeded = false,
-                        ),
+                        if (alias.bookUrl == bookUrl) {
+                            alias.copy(workId = to, confidence = WorkAlias.HIGH, confirmed = true, seeded = false)
+                        } else {
+                            alias.copy(workId = to)
+                        },
                     )
                 }
             }
@@ -686,7 +693,7 @@ internal class DriveWorkIdentity(
 
     /** The work key this alias is pinned to, unlike a candidate still awaiting the reader's answer. */
     private fun WorkAlias.confirmedWorkKey(): String? =
-        workId.takeIf { confirmed && confidence != WorkAlias.LOW && confidence != WorkAlias.REJECTED }
+        workId.takeIf { confirmed && confidence != WorkAlias.REJECTED }
 
     private suspend fun loadMergeMap(permissionId: String): Map<String, String> {
         val states = recordStates.forDomain(permissionId, DriveWireCodec.DOMAIN_WORK_ALIAS)
