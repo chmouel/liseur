@@ -2,6 +2,7 @@ package com.chmouel.liseur.providers
 
 import android.content.Context
 import com.chmouel.liseur.data.db.LiseurDatabase
+import com.chmouel.liseur.data.library.BookRemoval
 import com.chmouel.liseur.data.remote.RemoteAccountRepository
 import com.chmouel.liseur.drive.DriveLibrarySync
 import com.chmouel.liseur.drive.DriveSyncWorkers
@@ -14,6 +15,7 @@ object LibrarySyncBackendFactory {
         context: Context,
         database: LiseurDatabase,
         remoteAccount: RemoteAccountRepository,
+        bookRemoval: BookRemoval? = null,
         switchCoordinator: LibrarySyncSwitchCoordinator = LibrarySyncSwitchCoordinator(),
         beforeServerDisconnect: suspend () -> Unit = {},
     ): LibrarySyncBackend {
@@ -22,6 +24,7 @@ object LibrarySyncBackendFactory {
             context = appContext,
             database = database,
             remoteAccount = remoteAccount,
+            bookRemoval = bookRemoval,
             switchCoordinator = switchCoordinator,
             beforeServerDisconnect = beforeServerDisconnect,
             stopWorkers = { DriveSyncWorkers.cancelAll(appContext) },

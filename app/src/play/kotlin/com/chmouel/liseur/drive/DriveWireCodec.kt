@@ -41,7 +41,7 @@ internal data class DriveManifest(
     val updatedHlc: String,
     val snapshot: DriveSnapshotRef? = null,
     val previousSnapshot: DriveSnapshotRef? = null,
-    val domains: Map<String, Int> = DriveWireCodec.PHASE3_DOMAINS,
+    val domains: Map<String, Int> = DriveWireCodec.PHASE4_DOMAINS,
     val epubFolder: DriveEpubFolderRef? = null,
     val appliedVector: Map<String, Long> = emptyMap(),
 )
@@ -69,6 +69,15 @@ internal data class DriveDeltaBatch(
     val records: List<DriveWireRecord>,
 )
 
+internal data class DriveSnapshotResolution(
+    val d: String,
+    val k: String,
+    val resolutionFp: String,
+    val resolvedFps: List<String>,
+    val outcome: String,
+    val hlc: String,
+)
+
 internal data class DriveSnapshotPart(
     val schemaVersion: Int = DriveWireCodec.SCHEMA_VERSION,
     val deviceId: String,
@@ -78,6 +87,7 @@ internal data class DriveSnapshotPart(
     val createdHlc: String,
     val domains: Map<String, Int>,
     val records: List<DriveWireRecord>,
+    val resolutions: List<DriveSnapshotResolution> = emptyList(),
 )
 
 // -- Phase 3 Domain Wire Bodies -----------------------------------------------
@@ -191,6 +201,107 @@ internal sealed interface DriveFurthestBody {
     }
 }
 
+// -- Phase 4 Domain Wire Bodies -----------------------------------------------
+
+internal data class DriveAnnotationBody(
+    val id: String,
+    val workKey: String,
+    val editionSha: String?,
+    val kind: String,
+    val locatorJson: String,
+    val text: String?,
+    val note: String?,
+    val tint: String?,
+    val chapter: String?,
+    val totalProgression: Double?,
+    val createdAt: Long,
+    val noteCreatedAt: Long?,
+    val noteUpdatedAt: Long?,
+    val updatedAt: Long,
+)
+
+internal data class DriveEvaluationBody(
+    val workKey: String,
+    val field: String,
+    val value: String,
+    val updatedAt: Long,
+)
+
+internal sealed interface DriveMetadataBody {
+    val workKey: String
+    val field: String
+    val updatedAt: Long
+
+    data class Text(
+        override val workKey: String,
+        override val field: String,
+        val value: String,
+        override val updatedAt: Long,
+    ) : DriveMetadataBody
+
+    data class Cover(
+        override val workKey: String,
+        val coverSha256: String,
+        val width: Int,
+        val height: Int,
+        val sizeBytes: Long,
+        override val updatedAt: Long,
+    ) : DriveMetadataBody {
+        override val field: String = com.chmouel.liseur.data.db.MetadataOverrideFields.COVER
+    }
+}
+
+internal data class DriveSeriesBody(
+    val workKey: String,
+    val seriesOverridden: Boolean,
+    val userSeriesName: String?,
+    val indexOverridden: Boolean,
+    val userSeriesIndex: Double?,
+    val seriesKey: String,
+    val updatedAt: Long,
+)
+
+/** Atomic `sent_json` payload for revision-based `evaluation_sync` and `metadata_override_sync` tables. */
+internal data class DriveRevisionAckPayload(
+    val vfp: String,
+    val cfp: String?,
+    val rev: Long,
+    val op: String = DriveRecordState.OP_PUT,
+    val hlc: String? = null,
+)
+
+internal data class DriveAnnotationAckMeta(
+    val id: String,
+    val bookId: String,
+    val workId: String,
+    val ackedFingerprint: String,
+    val recordFp: String,
+)
+
+internal data class DriveEvaluationAckMeta(
+    val bookUrl: String,
+    val field: String,
+    val workKey: String,
+    val targetRevision: Long,
+    val recordKey: String,
+    val recordFp: String,
+    val contentFp: String?,
+    val recordOp: String,
+)
+
+internal data class DriveMetadataAckMeta(
+    val bookUrl: String,
+    val field: String,
+    val workKey: String,
+    val targetRevision: Long,
+    val recordKey: String,
+    val recordFp: String,
+    val contentFp: String?,
+    val recordOp: String,
+    val remoteCoverSha256: String? = null,
+    val remoteCoverUpdatedAt: Long = 0L,
+)
+
 /**
  * Wire-format encoder, decoder, and schema-version guard for `drive.appdata` v1
  * (`docs/DRIVE_SYNC.md` §2 & §4.1–4.6).
@@ -226,8 +337,16 @@ internal object DriveWireCodec {
         DOMAIN_FURTHEST to 1,
     )
 
+    /** Domains actively published and applied in Phase 4 (Phase 5 vocab/sessions stay paused). */
+    val PHASE4_DOMAINS: Map<String, Int> = PHASE3_DOMAINS + mapOf(
+        DOMAIN_METADATA to 1,
+        DOMAIN_SERIES to 1,
+        DOMAIN_ANNOTATION to 1,
+        DOMAIN_EVALUATION to 1,
+    )
+
     /** Highest domain versions actively implemented and supported by this build. */
-    val SUPPORTED_DOMAIN_VERSIONS: Map<String, Int> = PHASE3_DOMAINS
+    val SUPPORTED_DOMAIN_VERSIONS: Map<String, Int> = PHASE4_DOMAINS
 
     /** Canonical apply order within a sync run (`docs/DRIVE_SYNC.md` §4). */
     val APPLY_ORDER: List<String> = listOf(
@@ -275,7 +394,17 @@ internal object DriveWireCodec {
         "liseur" to "1",
         "liseurKind" to DriveFile.KIND_EPUB,
         "sha256" to sha256,
-        "workKey" to workKey.take(DriveRestClient.MAX_APP_PROPERTY_BYTES),
+        "workKey" to workKey.take(DriveRestClient.MAX_APP_PROPERTY_BYTES - "workKey".length),
+    )
+
+    fun coverFileName(sha256: String): String =
+        "cover-${sha256.trim().lowercase(Locale.ROOT)}.webp"
+
+    fun coverAppProperties(sha256: String): Map<String, String> = mapOf(
+        "liseur" to "1",
+        "kind" to DriveFile.KIND_COVER,
+        "schemaVersion" to SCHEMA_VERSION.toString(),
+        "sha256" to sha256.trim().lowercase(Locale.ROOT),
     )
 
     /** Checks envelope and domain versions against what this build supports. */
@@ -422,6 +551,11 @@ internal object DriveWireCodec {
         } else {
             emptyList()
         }
+        val resolutions = if (schemaVersion <= SCHEMA_VERSION) {
+            parseSnapshotResolutions(json.optJSONArray("resolutions"))
+        } else {
+            emptyList()
+        }
         return DriveSnapshotPart(
             schemaVersion = schemaVersion,
             deviceId = deviceId,
@@ -431,6 +565,7 @@ internal object DriveWireCodec {
             createdHlc = createdHlc,
             domains = domains,
             records = records,
+            resolutions = resolutions,
         )
     }
 
@@ -658,6 +793,213 @@ internal object DriveWireCodec {
         else -> null
     }
 
+    // -- Phase 4 Domain Body Codecs -------------------------------------------
+
+    fun encodeAnnotationBody(body: DriveAnnotationBody): Map<String, Any?> {
+        body.totalProgression?.let { prog ->
+            require(prog.isFinite() && prog in 0.0..1.0) { "Invalid annotation totalProgression: $prog" }
+        }
+        return mapOf(
+            "id" to body.id,
+            "workKey" to body.workKey,
+            "editionSha" to body.editionSha,
+            "kind" to body.kind,
+            "locatorJson" to DriveCanonicalJson.canonicalizeJsonString(body.locatorJson),
+            "text" to body.text,
+            "note" to body.note,
+            "tint" to body.tint,
+            "chapter" to body.chapter,
+            "totalProgression" to body.totalProgression,
+            "createdAt" to body.createdAt,
+            "noteCreatedAt" to body.noteCreatedAt,
+            "noteUpdatedAt" to body.noteUpdatedAt,
+            "updatedAt" to body.updatedAt,
+        )
+    }
+
+    /** Canonical fingerprint body for annotations: omits `editionSha` (and `position` is never present). */
+    fun encodeAnnotationBodyForFingerprint(body: DriveAnnotationBody): Map<String, Any?> =
+        encodeAnnotationBody(body).filterKeys { it != "editionSha" }
+
+    fun annotationContentFp(body: DriveAnnotationBody): String =
+        DriveCanonicalJson.contentFp(encodeAnnotationBodyForFingerprint(body))
+
+    /**
+     * True unless [record]'s body names a different record than its envelope key `k`.
+     * Reconciliation and conflict state are keyed by `k`, so a body that disagrees must
+     * never be applied: it could overwrite an unrelated row without being reconciled.
+     */
+    fun bodyMatchesKey(record: DriveWireRecord): Boolean {
+        val body = record.body ?: return true
+        fun s(name: String) = body.optString(name).trim()
+        val expected = when (record.d) {
+            DOMAIN_ANNOTATION -> s("id")
+            DOMAIN_EVALUATION, DOMAIN_METADATA -> "${s("workKey")}/${s("field")}"
+            DOMAIN_POSITION -> "${s("workKey")}/${s("deviceId")}"
+            DOMAIN_SERIES, DOMAIN_CATALOG -> s("workKey")
+            else -> return true
+        }
+        return expected == record.k
+    }
+
+    fun decodeAnnotationBody(json: JSONObject): DriveAnnotationBody? {
+        val id = json.optString("id").trim()
+        val workKey = json.optString("workKey").trim()
+        val kind = json.optString("kind").trim()
+        if (id.isEmpty() || workKey.isEmpty() || kind.isEmpty()) return null
+        if (kind !in VALID_ANNOTATION_KINDS) return null
+        val locatorJson = json.optString("locatorJson")
+        if (kind != "BOOK_NOTE" && locatorJson.isBlank()) return null
+        val progression = json.optNullableDouble("totalProgression")
+            ?.takeIf { it.isFinite() && it in 0.0..1.0 }
+        return DriveAnnotationBody(
+            id = id,
+            workKey = workKey,
+            editionSha = json.optNullableString("editionSha")?.trim()?.lowercase(Locale.ROOT)?.takeIf { it.isNotEmpty() },
+            kind = kind,
+            locatorJson = locatorJson,
+            text = json.optNullableString("text"),
+            note = json.optNullableString("note"),
+            tint = json.optNullableString("tint")?.takeIf { it.isNotBlank() },
+            chapter = json.optNullableString("chapter"),
+            totalProgression = progression,
+            createdAt = json.optLong("createdAt", 0L),
+            noteCreatedAt = json.optNullableLong("noteCreatedAt"),
+            noteUpdatedAt = json.optNullableLong("noteUpdatedAt"),
+            updatedAt = json.optLong("updatedAt", 0L),
+        )
+    }
+
+    fun encodeEvaluationBody(body: DriveEvaluationBody): Map<String, Any?> {
+        require(com.chmouel.liseur.domain.PersonalEvaluation.valid(body.field, body.value)) {
+            "Invalid evaluation body for field=${body.field}"
+        }
+        return mapOf(
+            "workKey" to body.workKey,
+            "field" to body.field,
+            "value" to body.value,
+            "updatedAt" to body.updatedAt,
+        )
+    }
+
+    fun decodeEvaluationBody(json: JSONObject): DriveEvaluationBody? {
+        val workKey = json.optString("workKey").trim()
+        val field = json.optString("field").trim()
+        val value = json.optNullableString("value") ?: return null
+        if (workKey.isEmpty() || field.isEmpty()) return null
+        if (!com.chmouel.liseur.domain.PersonalEvaluation.valid(field, value)) return null
+        return DriveEvaluationBody(
+            workKey = workKey,
+            field = field,
+            value = value,
+            updatedAt = json.optLong("updatedAt", 0L),
+        )
+    }
+
+    fun encodeMetadataBody(body: DriveMetadataBody): Map<String, Any?> = when (body) {
+        is DriveMetadataBody.Text -> mapOf(
+            "workKey" to body.workKey,
+            "field" to body.field,
+            "value" to body.value,
+            "updatedAt" to body.updatedAt,
+        )
+        is DriveMetadataBody.Cover -> mapOf(
+            "workKey" to body.workKey,
+            "field" to body.field,
+            "coverSha256" to body.coverSha256.lowercase(Locale.ROOT),
+            "width" to body.width,
+            "height" to body.height,
+            "sizeBytes" to body.sizeBytes,
+            "updatedAt" to body.updatedAt,
+        )
+    }
+
+    fun decodeMetadataBody(json: JSONObject): DriveMetadataBody? {
+        val workKey = json.optString("workKey").trim()
+        val field = json.optString("field").trim()
+        if (workKey.isEmpty() || field.isEmpty()) return null
+        val updatedAt = json.optLong("updatedAt", 0L)
+        return when (field) {
+            in com.chmouel.liseur.data.db.MetadataOverrideFields.TEXT_FIELDS -> {
+                val value = json.optNullableString("value") ?: return null
+                DriveMetadataBody.Text(
+                    workKey = workKey,
+                    field = field,
+                    value = value,
+                    updatedAt = updatedAt,
+                )
+            }
+            com.chmouel.liseur.data.db.MetadataOverrideFields.COVER -> {
+                val sha = json.optString("coverSha256").trim().lowercase(Locale.ROOT)
+                val width = json.optInt("width", 0)
+                val height = json.optInt("height", 0)
+                val sizeBytes = json.optLong("sizeBytes", 0L)
+                if (!SHA256_REGEX.matches(sha) || width <= 0 || height <= 0 || sizeBytes <= 0L) return null
+                DriveMetadataBody.Cover(
+                    workKey = workKey,
+                    coverSha256 = sha,
+                    width = width,
+                    height = height,
+                    sizeBytes = sizeBytes,
+                    updatedAt = updatedAt,
+                )
+            }
+            else -> null
+        }
+    }
+
+    fun encodeSeriesBody(body: DriveSeriesBody): Map<String, Any?> {
+        body.userSeriesIndex?.let { idx ->
+            require(idx.isFinite()) { "Invalid userSeriesIndex: $idx" }
+        }
+        return mapOf(
+            "workKey" to body.workKey,
+            "seriesOverridden" to body.seriesOverridden,
+            "userSeriesName" to body.userSeriesName,
+            "indexOverridden" to body.indexOverridden,
+            "userSeriesIndex" to body.userSeriesIndex,
+            "seriesKey" to body.seriesKey,
+            "updatedAt" to body.updatedAt,
+        )
+    }
+
+    fun decodeSeriesBody(json: JSONObject): DriveSeriesBody? {
+        val workKey = json.optString("workKey").trim()
+        if (workKey.isEmpty()) return null
+        return DriveSeriesBody(
+            workKey = workKey,
+            seriesOverridden = json.optBoolean("seriesOverridden", false),
+            userSeriesName = json.optNullableString("userSeriesName"),
+            indexOverridden = json.optBoolean("indexOverridden", false),
+            userSeriesIndex = json.optNullableDouble("userSeriesIndex"),
+            seriesKey = json.optString("seriesKey"),
+            updatedAt = json.optLong("updatedAt", 0L),
+        )
+    }
+
+    fun encodeRevisionAckJson(payload: DriveRevisionAckPayload): String {
+        val map = linkedMapOf<String, Any?>(
+            "vfp" to payload.vfp,
+            "cfp" to payload.cfp,
+            "rev" to payload.rev,
+            "op" to payload.op,
+        )
+        payload.hlc?.takeIf { it.isNotBlank() }?.let { map["hlc"] = it }
+        return DriveCanonicalJson.encode(map)
+    }
+
+    fun decodeRevisionAckJson(rawJson: String?): DriveRevisionAckPayload? {
+        if (rawJson.isNullOrBlank()) return null
+        val obj = runCatching { JSONObject(rawJson) }.getOrNull() ?: return null
+        val vfp = obj.optString("vfp").trim()
+        if (vfp.isEmpty()) return null
+        val cfp = obj.optNullableString("cfp")?.takeIf { it.isNotBlank() }
+        val rev = obj.optLong("rev", 0L)
+        val op = obj.optString("op").ifBlank { DriveRecordState.OP_PUT }
+        val hlc = obj.optNullableString("hlc")?.takeIf { it.isNotBlank() }
+        return DriveRevisionAckPayload(vfp = vfp, cfp = cfp, rev = rev, op = op, hlc = hlc)
+    }
+
     /** Encodes frozen outbox delivery ACK metadata for crash-safe replay. */
     fun encodeOutboxAckMetadata(metadata: DriveOutboxAckMetadata): String =
         DriveCanonicalJson.encode(
@@ -680,6 +1022,41 @@ internal object DriveWireCodec {
                         "peakRevision" to ack.peakRevision,
                         "recordKey" to ack.recordKey,
                         "recordFp" to ack.recordFp,
+                    )
+                },
+                "annotationAcks" to metadata.annotationAcks.map { ack ->
+                    mapOf(
+                        "id" to ack.id,
+                        "bookId" to ack.bookId,
+                        "workId" to ack.workId,
+                        "ackedFingerprint" to ack.ackedFingerprint,
+                        "recordFp" to ack.recordFp,
+                    )
+                },
+                "evaluationAcks" to metadata.evaluationAcks.map { ack ->
+                    mapOf(
+                        "bookUrl" to ack.bookUrl,
+                        "field" to ack.field,
+                        "workKey" to ack.workKey,
+                        "targetRevision" to ack.targetRevision,
+                        "recordKey" to ack.recordKey,
+                        "recordFp" to ack.recordFp,
+                        "contentFp" to ack.contentFp,
+                        "recordOp" to ack.recordOp,
+                    )
+                },
+                "metadataAcks" to metadata.metadataAcks.map { ack ->
+                    mapOf(
+                        "bookUrl" to ack.bookUrl,
+                        "field" to ack.field,
+                        "workKey" to ack.workKey,
+                        "targetRevision" to ack.targetRevision,
+                        "recordKey" to ack.recordKey,
+                        "recordFp" to ack.recordFp,
+                        "contentFp" to ack.contentFp,
+                        "recordOp" to ack.recordOp,
+                        "remoteCoverSha256" to ack.remoteCoverSha256,
+                        "remoteCoverUpdatedAt" to ack.remoteCoverUpdatedAt,
                     )
                 },
             ),
@@ -725,7 +1102,74 @@ internal object DriveWireCodec {
                 )
             }
         }
-        return DriveOutboxAckMetadata(positionAcks = positionAcks, peakAcks = peakAcks)
+        val annArr = json.optJSONArray("annotationAcks") ?: JSONArray()
+        val annotationAcks = buildList(annArr.length()) {
+            for (i in 0 until annArr.length()) {
+                val obj = annArr.optJSONObject(i) ?: continue
+                val id = obj.optString("id").trim()
+                if (id.isEmpty()) continue
+                add(
+                    DriveAnnotationAckMeta(
+                        id = id,
+                        bookId = obj.optString("bookId"),
+                        workId = obj.optString("workId"),
+                        ackedFingerprint = obj.optString("ackedFingerprint"),
+                        recordFp = obj.optString("recordFp"),
+                    ),
+                )
+            }
+        }
+        val evalArr = json.optJSONArray("evaluationAcks") ?: JSONArray()
+        val evaluationAcks = buildList(evalArr.length()) {
+            for (i in 0 until evalArr.length()) {
+                val obj = evalArr.optJSONObject(i) ?: continue
+                val bookUrl = obj.optString("bookUrl").trim()
+                val field = obj.optString("field").trim()
+                if (bookUrl.isEmpty() || field.isEmpty()) continue
+                add(
+                    DriveEvaluationAckMeta(
+                        bookUrl = bookUrl,
+                        field = field,
+                        workKey = obj.optString("workKey"),
+                        targetRevision = obj.optLong("targetRevision", 0L),
+                        recordKey = obj.optString("recordKey"),
+                        recordFp = obj.optString("recordFp"),
+                        contentFp = obj.optNullableString("contentFp"),
+                        recordOp = obj.optString("recordOp").ifBlank { DriveRecordState.OP_PUT },
+                    ),
+                )
+            }
+        }
+        val metaArr = json.optJSONArray("metadataAcks") ?: JSONArray()
+        val metadataAcks = buildList(metaArr.length()) {
+            for (i in 0 until metaArr.length()) {
+                val obj = metaArr.optJSONObject(i) ?: continue
+                val bookUrl = obj.optString("bookUrl").trim()
+                val field = obj.optString("field").trim()
+                if (bookUrl.isEmpty() || field.isEmpty()) continue
+                add(
+                    DriveMetadataAckMeta(
+                        bookUrl = bookUrl,
+                        field = field,
+                        workKey = obj.optString("workKey"),
+                        targetRevision = obj.optLong("targetRevision", 0L),
+                        recordKey = obj.optString("recordKey"),
+                        recordFp = obj.optString("recordFp"),
+                        contentFp = obj.optNullableString("contentFp"),
+                        recordOp = obj.optString("recordOp").ifBlank { DriveRecordState.OP_PUT },
+                        remoteCoverSha256 = obj.optNullableString("remoteCoverSha256"),
+                        remoteCoverUpdatedAt = obj.optLong("remoteCoverUpdatedAt", 0L),
+                    ),
+                )
+            }
+        }
+        return DriveOutboxAckMetadata(
+            positionAcks = positionAcks,
+            peakAcks = peakAcks,
+            annotationAcks = annotationAcks,
+            evaluationAcks = evaluationAcks,
+            metadataAcks = metadataAcks,
+        )
     }
 
     /** Creates a `put` [DriveWireRecord] with canonical fingerprint and capped ancestry. */
@@ -736,9 +1180,27 @@ internal object DriveWireCodec {
         bodyMap: Map<String, Any?>,
         ancestors: List<String> = emptyList(),
         resRefs: List<String> = emptyList(),
+    ): DriveWireRecord = putRecordWithFp(
+        domain = domain,
+        key = key,
+        hlc = hlc,
+        fp = DriveCanonicalJson.contentFp(bodyMap),
+        bodyMap = bodyMap,
+        ancestors = ancestors,
+        resRefs = resRefs,
+    )
+
+    /** Creates a `put` [DriveWireRecord] using an explicit [fp] (e.g. annotations omitting `editionSha`). */
+    fun putRecordWithFp(
+        domain: String,
+        key: String,
+        hlc: String,
+        fp: String,
+        bodyMap: Map<String, Any?>,
+        ancestors: List<String> = emptyList(),
+        resRefs: List<String> = emptyList(),
     ): DriveWireRecord {
         val canonicalBody = DriveCanonicalJson.encode(bodyMap)
-        val fp = DriveCanonicalJson.putFp(bodyMap, hlc)
         return DriveWireRecord(
             d = domain,
             k = key,
@@ -756,6 +1218,65 @@ internal object DriveWireCodec {
         val chunks: List<List<DriveWireRecord>>,
         val oversized: List<DriveWireRecord>,
     )
+
+    /** Creates a `del` [DriveWireRecord] with HLC-salted `delFp` and null `body`. */
+    fun delRecord(
+        domain: String,
+        key: String,
+        hlc: String,
+        ancestors: List<String> = emptyList(),
+        resRefs: List<String> = emptyList(),
+        explicitFp: String? = null,
+    ): DriveWireRecord = DriveWireRecord(
+        d = domain,
+        k = key,
+        op = DriveRecordState.OP_DEL,
+        hlc = hlc,
+        fp = explicitFp ?: DriveCanonicalJson.delFp(domain, key, hlc),
+        anc = ancestors.distinct().take(MAX_ANCESTORS),
+        resRefs = resRefs.distinct().sorted(),
+        body = null,
+    )
+
+    /**
+     * Creates an `op: "resolve"` [DriveWireRecord] encoding either `outcome: "put"` (non-null [bodyMap])
+     * or `outcome: "delete"` (`bodyMap == null`) with sorted [resolvedFps] and uncapped [resRefs].
+     */
+    fun resolveRecord(
+        domain: String,
+        key: String,
+        outcome: String,
+        resolvedFps: Collection<String>,
+        hlc: String,
+        bodyMap: Map<String, Any?>?,
+        ancestors: List<String> = emptyList(),
+        resRefs: List<String> = emptyList(),
+        explicitFp: String? = null,
+    ): DriveWireRecord {
+        require(outcome == DriveResolution.OUTCOME_PUT || outcome == DriveResolution.OUTCOME_DELETE) {
+            "Invalid resolve outcome: $outcome"
+        }
+        if (outcome == DriveResolution.OUTCOME_PUT) {
+            require(bodyMap != null) { "resolve(outcome=put) requires non-null body" }
+        } else {
+            require(bodyMap == null) { "resolve(outcome=delete) requires null body" }
+        }
+        val sortedResolved = resolvedFps.distinct().sorted()
+        val bodyJson = bodyMap?.let { JSONObject(DriveCanonicalJson.encode(it)) }
+        val fp = explicitFp ?: DriveCanonicalJson.resolveFp(outcome, sortedResolved, hlc, bodyMap)
+        return DriveWireRecord(
+            d = domain,
+            k = key,
+            op = DriveRecordState.OP_RESOLVE,
+            hlc = hlc,
+            fp = fp,
+            anc = ancestors.distinct().take(MAX_ANCESTORS),
+            resRefs = (resRefs + fp).distinct().sorted(),
+            body = bodyJson,
+            outcome = outcome,
+            resolvedFps = sortedResolved,
+        )
+    }
 
     /** Splits outgoing records into size- and count-bounded chunks respecting 2,000 records / 1 MiB. */
     fun chunkRecordsForBatches(records: List<DriveWireRecord>): BatchChunking {
@@ -861,6 +1382,33 @@ internal object DriveWireCodec {
         return DriveSnapshotRef(throughSeq = throughSeq, parts = parts)
     }
 
+    private fun parseSnapshotResolutions(array: JSONArray?): List<DriveSnapshotResolution> {
+        if (array == null) return emptyList()
+        return buildList(array.length()) {
+            for (i in 0 until array.length()) {
+                val obj = array.optJSONObject(i) ?: continue
+                val d = obj.optString("d").trim()
+                val k = obj.optString("k").trim()
+                val resolutionFp = obj.optString("resolutionFp").trim()
+                val outcome = obj.optString("outcome").trim()
+                val hlc = obj.optString("hlc").trim()
+                val resolvedFps = parseStringList(obj.optJSONArray("resolvedFps"))
+                if (d.isEmpty() || k.isEmpty() || resolutionFp.isEmpty() || resolvedFps.isEmpty()) continue
+                if (outcome != DriveResolution.OUTCOME_PUT && outcome != DriveResolution.OUTCOME_DELETE) continue
+                add(
+                    DriveSnapshotResolution(
+                        d = d,
+                        k = k,
+                        resolutionFp = resolutionFp,
+                        resolvedFps = resolvedFps.distinct().sorted(),
+                        outcome = outcome,
+                        hlc = hlc,
+                    ),
+                )
+            }
+        }
+    }
+
     private fun parseStringList(array: JSONArray?): List<String> {
         if (array == null) return emptyList()
         return buildList(array.length()) {
@@ -892,6 +1440,9 @@ internal object DriveWireCodec {
             }
         }
     }
+
+    private val VALID_ANNOTATION_KINDS = setOf("HIGHLIGHT", "NOTE", "BOOK_NOTE", "BOOKMARK")
+    private val SHA256_REGEX = Regex("[0-9a-f]{64}")
 
     private fun JSONObject.optNullableString(key: String): String? =
         if (!has(key) || isNull(key)) null else optString(key)

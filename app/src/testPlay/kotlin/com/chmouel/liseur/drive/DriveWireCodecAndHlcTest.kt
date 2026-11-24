@@ -2,6 +2,7 @@ package com.chmouel.liseur.drive
 
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -242,12 +243,12 @@ class DriveWireCodecAndHlcTest {
     @Test
     fun `schemaVersion guard flags unsupported stream version, per-domain versions, and unimplemented domains`() {
         assertEquals(
-            setOf("workAlias", "catalog", "position", "furthest"),
+            setOf("workAlias", "catalog", "metadata", "series", "position", "furthest", "annotation", "evaluation"),
             DriveWireCodec.SUPPORTED_DOMAIN_VERSIONS.keys,
         )
         assertEquals(
             DriveSchemaCheck.Supported,
-            DriveWireCodec.checkSchema(1, mapOf("catalog" to 1, "position" to 1)),
+            DriveWireCodec.checkSchema(1, mapOf("catalog" to 1, "position" to 1, "annotation" to 1, "metadata" to 1, "series" to 1, "evaluation" to 1)),
         )
         val streamCheck = DriveWireCodec.checkSchema(2, mapOf("catalog" to 1), deviceLabel = "Future Tablet")
         assertTrue(streamCheck is DriveSchemaCheck.UnsupportedStream)
@@ -258,10 +259,10 @@ class DriveWireCodecAndHlcTest {
         assertTrue(domainCheck is DriveSchemaCheck.UnsupportedDomains)
         assertEquals(mapOf("catalog" to 2), (domainCheck as DriveSchemaCheck.UnsupportedDomains).unsupported)
 
-        val unimplementedCheck = DriveWireCodec.checkSchema(1, mapOf("position" to 1, "annotation" to 1, "session" to 1))
+        val unimplementedCheck = DriveWireCodec.checkSchema(1, mapOf("position" to 1, "vocabWord" to 1, "session" to 1))
         assertTrue(unimplementedCheck is DriveSchemaCheck.UnsupportedDomains)
         assertEquals(
-            mapOf("annotation" to 1, "session" to 1),
+            mapOf("vocabWord" to 1, "session" to 1),
             (unimplementedCheck as DriveSchemaCheck.UnsupportedDomains).unsupported,
         )
         assertNotNull(DriveWireCodec.deltaAppProperties("dev-a", 1L, "batch-1"))
@@ -289,5 +290,28 @@ class DriveWireCodecAndHlcTest {
             ),
         )
         assertEquals(ackMeta, DriveWireCodec.decodeOutboxAckMetadata(DriveWireCodec.encodeOutboxAckMetadata(ackMeta)))
+    }
+
+    @Test
+    fun `records whose body names a different record than their key are rejected`() {
+        fun record(d: String, k: String, body: Map<String, Any?>) = DriveWireRecord(
+            d = d, k = k, op = DriveRecordState.OP_PUT, hlc = "0017450000000-0001-dev-a",
+            fp = DriveCanonicalJson.contentFp(body), anc = emptyList(), resRefs = emptyList(),
+            body = org.json.JSONObject(DriveCanonicalJson.encode(body)),
+        )
+        val annotation = mapOf("id" to "ann-existing", "workKey" to "isbn:1")
+        assertTrue(DriveWireCodec.bodyMatchesKey(record(DriveWireCodec.DOMAIN_ANNOTATION, "ann-existing", annotation)))
+        assertFalse(DriveWireCodec.bodyMatchesKey(record(DriveWireCodec.DOMAIN_ANNOTATION, "ann-fresh", annotation)))
+        val evaluation = mapOf("workKey" to "isbn:1", "field" to "rating")
+        assertTrue(DriveWireCodec.bodyMatchesKey(record(DriveWireCodec.DOMAIN_EVALUATION, "isbn:1/rating", evaluation)))
+        assertFalse(DriveWireCodec.bodyMatchesKey(record(DriveWireCodec.DOMAIN_EVALUATION, "isbn:2/rating", evaluation)))
+        assertFalse(
+            DriveWireCodec.bodyMatchesKey(record(DriveWireCodec.DOMAIN_SERIES, "isbn:2", mapOf("workKey" to "isbn:1"))),
+        )
+        assertFalse(
+            DriveWireCodec.bodyMatchesKey(
+                record(DriveWireCodec.DOMAIN_POSITION, "isbn:1/dev-b", mapOf("workKey" to "isbn:1", "deviceId" to "dev-a")),
+            ),
+        )
     }
 }

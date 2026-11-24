@@ -84,6 +84,10 @@ internal class DriveWorkIdentity(
             val rawKey = book.url.removePrefix(DRIVE_BOOK_URL_PREFIX).trim()
             if (rawKey.isEmpty()) return null
             val canonical = canonicalWorkKey(permissionId, rawKey)
+            // Never silently re-link or resurrect a downloaded Drive book unlinked by a catalog tombstone.
+            if (recordStates.get(permissionId, DriveWireCodec.DOMAIN_CATALOG, canonical)?.versionOp == DriveRecordState.OP_DEL) {
+                return null
+            }
             val fp = identities.fingerprint(book.url)
             val alias = WorkAlias(
                 bookUrl = book.url,
@@ -112,6 +116,10 @@ internal class DriveWorkIdentity(
             } else {
                 identifierKey
             }
+            // Never silently re-link or resurrect a local book unlinked by a catalog tombstone.
+            if (recordStates.get(permissionId, DriveWireCodec.DOMAIN_CATALOG, canonical)?.versionOp == DriveRecordState.OP_DEL) {
+                return null
+            }
             val alias = WorkAlias(
                 bookUrl = book.url,
                 peerId = peerId,
@@ -131,6 +139,9 @@ internal class DriveWorkIdentity(
         val metadataRows = metadata.forBook(book.url)
         val derived = DriveLibrarySync.preservedStubWorkKey(book, metadataRows, existing?.editionSha)
         val canonical = canonicalWorkKey(permissionId, derived)
+        if (recordStates.get(permissionId, DriveWireCodec.DOMAIN_CATALOG, canonical)?.versionOp == DriveRecordState.OP_DEL) {
+            return null
+        }
         val alias = WorkAlias(
             bookUrl = book.url,
             peerId = peerId,
@@ -235,6 +246,23 @@ internal class DriveWorkIdentity(
     suspend fun canonicalWorkKey(permissionId: String, workKey: String): String {
         val merges = loadMergeMap(permissionId)
         return resolveCanonical(workKey, merges)
+    }
+
+    /**
+     * True when a book-scoped record for [rawWorkKey] names a work that has no local
+     * book yet and whose catalog entry has not arrived. The caller keeps the domain
+     * cursor so the record replays once the catalog creates the book.
+     */
+    suspend fun awaitsCatalogEntry(permissionId: String, rawWorkKey: String): Boolean {
+        val canonical = canonicalWorkKey(permissionId, rawWorkKey)
+        val peerId = DriveLibrarySync.accountPeerId(permissionId)
+        val hasLocalBook = identities.aliasesFor(peerId).any {
+            it.usable && canonicalWorkKey(permissionId, it.workId) == canonical && books.getByUrl(it.bookUrl) != null
+        } || books.getByUrl(driveBookUrl(canonical)) != null
+        if (hasLocalBook) return false
+        return listOf(canonical, rawWorkKey).distinct().all {
+            recordStates.get(permissionId, DriveWireCodec.DOMAIN_CATALOG, it) == null
+        }
     }
 
     /** Returns true if the reader has already rejected matching [keyA] with [keyB]. */

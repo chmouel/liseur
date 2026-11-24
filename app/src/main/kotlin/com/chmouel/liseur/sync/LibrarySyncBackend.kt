@@ -39,6 +39,16 @@ interface LibrarySyncBackend {
     /** Cancels an in-flight download for [book] if owned by this backend. */
     suspend fun cancelDownload(book: Book) = Unit
 
+    /** Whether [book] can be deleted from the active external synced library. */
+    suspend fun canDeleteFromSyncedLibrary(book: Book): Boolean = false
+
+    /**
+     * Deletes [book] from the active external synced library (writes a durable
+     * library tombstone and trashes/removes any uploaded remote file; removes
+     * remote-only stubs while preserving annotations, or unlinks local files).
+     */
+    suspend fun deleteFromSyncedLibrary(book: Book): Boolean = false
+
     /**
      * Position-sync partner for [com.chmouel.liseur.data.remote.CompositePositionSync].
      * Answers `NotSynced` / `NotApplicable` while inactive; null when unsupported.
@@ -73,6 +83,10 @@ interface LibrarySyncBackend {
     /** Action on a connected main server that opens this backend's controls to switch to it. */
     @Composable
     fun BookServerSwitchAction(onClick: () -> Unit) = Unit
+
+    /** Optional flavor-provided action row inside a book's Manage section. */
+    @Composable
+    fun BookManageAction(book: Book, onDone: () -> Unit) = Unit
 
     /** No-op backend for builds without an external library-sync provider. */
     object None : LibrarySyncBackend {
