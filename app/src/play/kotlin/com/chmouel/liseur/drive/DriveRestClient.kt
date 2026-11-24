@@ -263,7 +263,9 @@ class DriveRestClient(
     }
 
     override suspend fun listLiseurFolders(accessToken: String): List<DriveRemoteFile> {
-        val query = "name = '$LISEUR_FOLDER_NAME' and mimeType = '$FOLDER_MIME_TYPE' and trashed = false"
+        val query = "name = '$LISEUR_FOLDER_NAME' and mimeType = '$FOLDER_MIME_TYPE' and " +
+            "appProperties has { key='liseur' and value='1' } and " +
+            "appProperties has { key='kind' and value='${DriveFile.KIND_FOLDER}' } and trashed = false"
         val folders = listFiles(
             accessToken = accessToken,
             spaces = SPACE_DRIVE,
@@ -825,6 +827,10 @@ class DriveRestClient(
                         is ResumableUploadStatus.Completed -> return probed.file
                         is ResumableUploadStatus.InProgress -> {
                             offset = probed.nextByteOffset.coerceIn(0L, totalBytes)
+                            if (offset > highWaterOffset) {
+                                highWaterOffset = offset
+                                attempt = 0
+                            }
                             continue
                         }
                         ResumableUploadStatus.Expired -> ResumableUploadStatus.Expired
@@ -843,6 +849,10 @@ class DriveRestClient(
                         is ResumableUploadStatus.Completed -> return probed.file
                         is ResumableUploadStatus.InProgress -> {
                             offset = probed.nextByteOffset.coerceIn(0L, totalBytes)
+                            if (offset > highWaterOffset) {
+                                highWaterOffset = offset
+                                attempt = 0
+                            }
                             continue
                         }
                         ResumableUploadStatus.Expired -> ResumableUploadStatus.Expired
