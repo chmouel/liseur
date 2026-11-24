@@ -245,18 +245,18 @@ internal class DriveSeriesSync(
         remoteDeviceId: String,
         remoteSeq: Long,
         nextHlc: suspend () -> String,
-    ) {
+    ): Boolean {
         val isIncomingDelete = record.op == DriveRecordState.OP_DEL ||
             (record.op == DriveRecordState.OP_RESOLVE && record.outcome == DriveResolution.OUTCOME_DELETE)
         val decodedBody = if (!isIncomingDelete) {
-            record.body?.let(DriveWireCodec::decodeSeriesBody) ?: return
+            record.body?.let(DriveWireCodec::decodeSeriesBody) ?: return true
         } else {
             null
         }
         val rawWorkKey = decodedBody?.workKey ?: record.k
         val canonicalWorkKey = workIdentity.canonicalWorkKey(permissionId, rawWorkKey)
-        val bookUrl = findBookUrlForWorkKey(permissionId, canonicalWorkKey) ?: return
-        val book = books.getByUrl(bookUrl) ?: return
+        val bookUrl = findBookUrlForWorkKey(permissionId, canonicalWorkKey) ?: return true
+        val book = books.getByUrl(bookUrl) ?: return true
         val normalizedBody = decodedBody?.copy(workKey = canonicalWorkKey)
         val incomingContentFp = normalizedBody?.let {
             DriveCanonicalJson.contentFp(DriveWireCodec.encodeSeriesBody(it))
@@ -292,21 +292,33 @@ internal class DriveSeriesSync(
             now = clock(),
         )
 
+        var staleLocal = false
         // Transaction 1 (`liseur.db`): apply series columns atomically.
         when (result.dataAction) {
             is ReconciliationDataAction.ApplyPut -> {
-                val body = normalizedBody ?: return
+                val body = normalizedBody ?: return true
                 database.withTransaction {
+                    if (books.getByUrl(bookUrl)?.let(::seriesEditState) != seriesEditState(book)) {
+                        staleLocal = true
+                        return@withTransaction
+                    }
                     applySeriesBodyToBook(bookUrl, body)
                 }
             }
             ReconciliationDataAction.ApplyDelete -> {
                 database.withTransaction {
+                    if (books.getByUrl(bookUrl)?.let(::seriesEditState) != seriesEditState(book)) {
+                        staleLocal = true
+                        return@withTransaction
+                    }
                     clearSeriesOverridesOnBook(bookUrl)
                 }
             }
             ReconciliationDataAction.NoDataChange -> Unit
         }
+
+        // Defer: the record replays and reconciles against the reader's newer edit.
+        if (staleLocal) return false
 
         // Transaction 2 (`drive_sync.db`): commit Step 0 side effects + causal state BEFORE cursor advance.
         store.withTransaction {
@@ -325,7 +337,18 @@ internal class DriveSeriesSync(
             result.conflictToOpen?.let { conflicts.upsert(it) }
             result.updatedRecordState?.let { recordStates.upsert(it) }
         }
+        return true
     }
+
+    private fun seriesEditState(book: Book): List<Any?> = listOf(
+        book.seriesOverridden,
+        book.userSeriesName,
+        book.indexOverridden,
+        book.userSeriesIndex,
+        book.userSeriesUpdatedAt,
+        book.seriesClaimPending,
+        book.seriesClaimReset,
+    )
 
     /** Resolves one `series` conflict (or called once per book for a shelf-grouped resolution). */
     suspend fun resolveLocalConflict(
@@ -444,7 +467,10 @@ internal class DriveSeriesSync(
         nextHlc: suspend () -> String,
     ) {
         val existingState = recordStates.get(permissionId, DriveWireCodec.DOMAIN_SERIES, conflict.recordKey)
-        if (existingState != null && existingState.versionOp == DriveRecordState.OP_RESOLVE) {
+        if (existingState != null &&
+            existingState.versionOp == DriveRecordState.OP_RESOLVE &&
+            existingState.versionFp == conflict.resolutionFp
+        ) {
             val res = resolutions.get(permissionId, DriveWireCodec.DOMAIN_SERIES, conflict.recordKey, existingState.versionFp)
             if (res != null && existingState.publishedFp == existingState.versionFp) {
                 conflicts.markResolved(permissionId, conflict.conflictId, conflict.choice ?: res.outcome, res.resolutionFp, clock())

@@ -372,12 +372,12 @@ internal class DriveAnnotationSync(
         remoteDeviceId: String,
         remoteSeq: Long,
         nextHlc: suspend () -> String,
-    ) {
+    ): Boolean {
         val peerId = DriveLibrarySync.accountPeerId(permissionId)
         val isIncomingDelete = record.op == DriveRecordState.OP_DEL ||
             (record.op == DriveRecordState.OP_RESOLVE && record.outcome == DriveResolution.OUTCOME_DELETE)
         val decodedBody = if (!isIncomingDelete) {
-            record.body?.let(DriveWireCodec::decodeAnnotationBody) ?: return
+            record.body?.let(DriveWireCodec::decodeAnnotationBody) ?: return true
         } else {
             null
         }
@@ -391,7 +391,7 @@ internal class DriveAnnotationSync(
             ?: canonicalWorkKey?.let { findBookUrlForWorkKey(permissionId, it) }
 
         // Per docs/DRIVE_SYNC.md §4: skip put records for an unknown workKey until the book exists locally.
-        if (!isIncomingDelete && targetBookUrl == null) return
+        if (!isIncomingDelete && targetBookUrl == null) return true
 
         val effectiveWorkKey = canonicalWorkKey
             ?: syncRow?.workId
@@ -433,12 +433,17 @@ internal class DriveAnnotationSync(
             now = clock(),
         )
 
+        var staleLocal = false
         // Transaction 1 (`liseur.db`): data + atomic `annotation_sync` ack.
         when (val action = result.dataAction) {
             is ReconciliationDataAction.ApplyPut -> {
-                val body = decodedBody ?: return
-                val bookUrl = targetBookUrl ?: return
+                val body = decodedBody ?: return true
+                val bookUrl = targetBookUrl ?: return true
                 database.withTransaction {
+                    if (annotations.byId(record.k) != liveRow || annotationSync.get(peerId, record.k) != syncRow) {
+                        staleLocal = true
+                        return@withTransaction
+                    }
                     val existing = annotations.byId(body.id)
                     annotations.upsert(
                         BookAnnotation(
@@ -471,6 +476,10 @@ internal class DriveAnnotationSync(
             }
             ReconciliationDataAction.ApplyDelete -> {
                 database.withTransaction {
+                    if (annotations.byId(record.k) != liveRow || annotationSync.get(peerId, record.k) != syncRow) {
+                        staleLocal = true
+                        return@withTransaction
+                    }
                     annotations.deleteById(record.k)
                     val bookUrl = targetBookUrl ?: syncRow?.bookId
                     if (bookUrl != null) {
@@ -490,6 +499,9 @@ internal class DriveAnnotationSync(
             ReconciliationDataAction.NoDataChange -> Unit
         }
 
+        // Defer: the record replays and reconciles against the reader's newer edit.
+        if (staleLocal) return false
+
         // Transaction 2 (`drive_sync.db`): commit Step 0 side effects + causal state BEFORE cursor advance.
         store.withTransaction {
             for (res in result.resolutionsToPersist) {
@@ -507,6 +519,7 @@ internal class DriveAnnotationSync(
             result.conflictToOpen?.let { conflicts.upsert(it) }
             result.updatedRecordState?.let { recordStates.upsert(it) }
         }
+        return true
     }
 
     /**
@@ -659,7 +672,10 @@ internal class DriveAnnotationSync(
         nextHlc: suspend () -> String,
     ) {
         val existingState = recordStates.get(permissionId, DriveWireCodec.DOMAIN_ANNOTATION, conflict.recordKey)
-        if (existingState != null && existingState.versionOp == DriveRecordState.OP_RESOLVE) {
+        if (existingState != null &&
+            existingState.versionOp == DriveRecordState.OP_RESOLVE &&
+            existingState.versionFp == conflict.resolutionFp
+        ) {
             val res = resolutions.get(permissionId, DriveWireCodec.DOMAIN_ANNOTATION, conflict.recordKey, existingState.versionFp)
             if (res != null && existingState.publishedFp == existingState.versionFp) {
                 conflicts.markResolved(permissionId, conflict.conflictId, conflict.choice ?: res.outcome, res.resolutionFp, clock())

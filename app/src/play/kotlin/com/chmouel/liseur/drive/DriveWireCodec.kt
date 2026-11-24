@@ -268,6 +268,7 @@ internal data class DriveRevisionAckPayload(
     val rev: Long,
     val op: String = DriveRecordState.OP_PUT,
     val hlc: String? = null,
+    val bodyJson: String? = null,
 )
 
 internal data class DriveAnnotationAckMeta(
@@ -985,6 +986,7 @@ internal object DriveWireCodec {
             "op" to payload.op,
         )
         payload.hlc?.takeIf { it.isNotBlank() }?.let { map["hlc"] = it }
+        payload.bodyJson?.takeIf { it.isNotBlank() }?.let { map["body"] = it }
         return DriveCanonicalJson.encode(map)
     }
 
@@ -997,7 +999,8 @@ internal object DriveWireCodec {
         val rev = obj.optLong("rev", 0L)
         val op = obj.optString("op").ifBlank { DriveRecordState.OP_PUT }
         val hlc = obj.optNullableString("hlc")?.takeIf { it.isNotBlank() }
-        return DriveRevisionAckPayload(vfp = vfp, cfp = cfp, rev = rev, op = op, hlc = hlc)
+        val bodyJson = obj.optNullableString("body")?.takeIf { it.isNotBlank() }
+        return DriveRevisionAckPayload(vfp = vfp, cfp = cfp, rev = rev, op = op, hlc = hlc, bodyJson = bodyJson)
     }
 
     /** Encodes frozen outbox delivery ACK metadata for crash-safe replay. */
