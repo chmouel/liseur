@@ -150,6 +150,7 @@ jobs:
       # that it builds and shrinks.
       - name: Assemble release APKs
         run: |
+          ./gradlew --stop
           ./gradlew assembleFossRelease --no-daemon --max-workers=1 -Dorg.gradle.jvmargs="-Xmx5120m -Dfile.encoding=UTF-8" --console=plain
           ./gradlew assemblePlayRelease --no-daemon --max-workers=1 -Dorg.gradle.jvmargs="-Xmx5120m -Dfile.encoding=UTF-8" --console=plain
 
