@@ -138,4 +138,20 @@ class MemorableLinesTest {
         val found = best("en", "$line $line", line, "A second sentence that is long enough to be acceptable here.")
         assertEquals(1, found.count { it == line })
     }
+
+    @Test
+    fun `large books keep exact offsets while reusing sentence iteration`() {
+        val filler = QuoteParagraph("Marcus walked down the road with Helen before dinner on Tuesday.")
+        val target = "We never know how much we love a place until we have to leave it behind."
+        val prefix = "A quiet note. "
+        val paragraphs = MutableList(5_000) { filler }
+        paragraphs[2_500] = QuoteParagraph("$prefix$target")
+
+        val found = MemorableLines.find(paragraphs, "en")
+
+        val hit = found.first { it.text == target }
+        assertEquals(2_500, hit.paragraph)
+        assertEquals(prefix.length, hit.start)
+        assertEquals(prefix.length + target.length, hit.end)
+    }
 }
