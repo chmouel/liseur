@@ -169,6 +169,7 @@ internal class DriveLibrarySync(
             catalogSync = catalogSync,
             fingerprintStore = fingerprintStore,
             acquireToken = { stale -> accountController.acquireSilentAccessToken(stale) },
+            nextHlc = { permissionId -> changeEngine.nextHlc(permissionId) },
             onCatalogAvailabilityChanged = {
                 changeEngine.sync()
             },
