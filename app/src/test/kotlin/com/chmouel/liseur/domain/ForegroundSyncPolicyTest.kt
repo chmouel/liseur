@@ -156,7 +156,9 @@ class ForegroundSyncPolicyTest {
      * A pairing outlives the server it was made for: an account switch
      * interrupted halfway, a crash, a database restored onto another
      * phone. Waking a sync for it would have it talk to a server on
-     * behalf of a library nobody paired it with.
+     * behalf of a library nobody paired it with. An active library
+     * backend is no licence for that either: the server that answered
+     * is still there and still cannot host the pairing.
      */
     @Test
     fun `a pairing left behind by a server that cannot host one is not woken`() {
@@ -168,15 +170,50 @@ class ForegroundSyncPolicyTest {
                 false,
                 shouldSyncOnForeground(fresh, now, kosync = stale),
             )
+            assertEquals(
+                "$kind must not wake a kosync pairing behind an active backend",
+                false,
+                shouldSyncOnForeground(
+                    fresh,
+                    now,
+                    kosync = stale,
+                    externalLibrarySyncActive = true,
+                ),
+            )
         }
     }
 
-    /** With nothing connected there is no library for a pairing to cover. */
+    /**
+     * With nothing connected and nothing else carrying positions there is
+     * no library for a pairing to cover.
+     */
     @Test
     fun `a pairing with no server connected is not woken`() {
         assertEquals(
             false,
             shouldSyncOnForeground(null, now, kosync = kosync(syncedAt = null)),
         )
+    }
+
+    /**
+     * Switching to Drive retires the Custom row and keeps the pairing,
+     * which is still the reader's (ADR-0078). Opening the app has to ask
+     * about it, or the pairing only ever moves a position when the reader
+     * asks for one by hand.
+     */
+    @Test
+    fun `a pairing kept alive by the active library backend is woken`() {
+        val stale = kosync(syncedAt = now - 2 * 60 * 60 * 1000)
+        assertEquals(
+            true,
+            shouldSyncOnForeground(
+                null,
+                now,
+                kosync = stale,
+                externalLibrarySyncActive = true,
+            ),
+        )
+        assertEquals(true, syncsPositions(null, stale, externalLibrarySyncActive = true))
+        assertEquals(false, syncsPositions(null, stale))
     }
 }

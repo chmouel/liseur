@@ -95,6 +95,7 @@ class LiseurApplication : Application(), SingletonImageLoader.Factory {
                             container.remoteAccount.current(),
                             now,
                             kosync = container.kosyncAccount.current(),
+                            externalLibrarySyncActive = container.librarySync.isActive(),
                         )
                         if (!due) return@launch
                         runCatching { container.positionSync.request(SyncScope.Full, now) }

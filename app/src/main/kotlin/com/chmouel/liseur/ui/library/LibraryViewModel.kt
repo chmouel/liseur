@@ -619,6 +619,12 @@ class LibraryViewModel(
     private val seriesExtras: SeriesExtrasRepository,
     private val refusals: UploadRefusalDao,
     private val kosyncPeer: Flow<KosyncPeer?> = flowOf(null),
+    /**
+     * Whether a flavor-provided library-sync backend is the active
+     * source, which with no server connected is what keeps a retained
+     * kosync pairing in play (ADR-0078).
+     */
+    externalLibrarySyncActive: Flow<Boolean> = flowOf(false),
     /** Books whose translations the account could be asked to clear (ADR-0050). */
     accountTranslationBookUrls: Flow<Set<String>> = flowOf(emptySet()),
     /** Records the account's clear of a book's translations; whether there was one to record. */
@@ -945,6 +951,7 @@ class LibraryViewModel(
                 _seriesView,
                 ratedBooks,
                 listeningShelf,
+                externalLibrarySyncActive,
             ) { values -> values },
             _searchQuery,
             _isSearchActive,
@@ -1188,7 +1195,12 @@ class LibraryViewModel(
                 hasArchived = books.any { it.archived },
                 hasFinished = books.any { !it.archived && it.finished },
                 hasServer = server != null,
-                canSyncPositions = syncsPositions(server, baseValues[13] as KosyncPeer?),
+                canSyncPositions =
+                    syncsPositions(
+                        server,
+                        baseValues[13] as KosyncPeer?,
+                        externalLibrarySyncActive = baseValues[17] as Boolean,
+                    ),
                 catalogIsAddressable = server?.kind == ServerKind.CUSTOM,
                 // Not an error and not retryable, so it is not folded
                 // into the failure notice: the shelf is real, there is
@@ -2189,6 +2201,7 @@ class LibraryViewModel(
                         seriesExtras = container.seriesExtras,
                         refusals = container.database.uploadRefusalDao(),
                         kosyncPeer = container.kosyncAccount.peer,
+                        externalLibrarySyncActive = container.librarySync.active,
                         accountTranslationBookUrls = container.accountTranslationClears.observeBooks(),
                         requestAccountTranslationClear = container::requestAccountTranslationClear,
                         readingSessions = container.database.readingSessionDao().observeAll(),
