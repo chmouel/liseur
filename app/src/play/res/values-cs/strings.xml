@@ -227,4 +227,30 @@
         <item quantity="many">%d nevyřešeného konfliktu</item>
         <item quantity="other">%d nevyřešených konfliktů</item>
     </plurals>
+    <string name="drive_sync_now">Synchronizovat nyní</string>
+    <string name="drive_sync_syncing">Synchronizace s Google Drive…</string>
+    <string name="drive_sync_upload_epubs">Nahrát soubory EPUB</string>
+    <string name="drive_sync_upload_epubs_title">Nahrát soubory EPUB</string>
+    <string name="drive_sync_upload_epubs_intro">Vyberte soubory EPUB v tomto zařízení, které chcete nahrát do složky Liseur na Google Drive. Katalog a postup čtení se již synchronizují.</string>
+    <string name="drive_sync_upload_epubs_empty">V tomto zařízení nejsou dostupné žádné soubory EPUB.</string>
+    <string name="drive_sync_upload_epubs_select_all">Vybrat vše</string>
+    <string name="drive_sync_upload_epubs_clear">Zrušit výběr</string>
+    <string name="drive_sync_upload_epubs_unmetered_only">Nahrávat soubory EPUB pouze přes Wi-Fi</string>
+    <string name="drive_sync_upload_epubs_unmetered_summary">Před přenosem souborů EPUB počkat na připojení bez datového limitu.</string>
+    <string name="drive_sync_upload_epubs_confirm">Nahrát vybrané</string>
+    <string name="drive_sync_upload_epubs_status_uploaded">Nahráno</string>
+    <string name="drive_sync_upload_epubs_status_pending">Čeká</string>
+    <string name="drive_sync_upload_epubs_status_uploading">Nahrávání</string>
+    <string name="drive_sync_upload_epubs_status_failed">Selhalo</string>
+    <string name="drive_sync_upgrade_required">Aktualizujte Liseur pro načtení novějších změn Google Drive od %1$s.</string>
+    <string name="drive_sync_match_section_title">Možné duplicitní knihy</string>
+    <string name="drive_sync_match_body">„%1$s“ se zdá být stejnou knihou jako „%2$s“ na Google Drive. Sloučit je pro sdílení postupu čtení?</string>
+    <string name="drive_sync_match_merge">Sloučit knihy</string>
+    <string name="drive_sync_match_keep_separate">Ponechat odděleně</string>
+    <plurals name="drive_sync_upload_epubs_selection_summary">
+        <item quantity="one">Vybrána %1$d kniha · %2$s</item>
+        <item quantity="few">Vybrány %1$d knihy · %2$s</item>
+        <item quantity="many">Vybráno %1$d knihy · %2$s</item>
+        <item quantity="other">Vybráno %1$d knih · %2$s</item>
+    </plurals>
 </resources>
