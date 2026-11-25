@@ -1244,6 +1244,7 @@ class DrivePhase4EndToEndTest {
             workIdentity = deviceA.driveSync.workIdentity,
             catalogSync = deviceA.driveSync.catalogSync,
             fingerprintStore = deviceA.driveSync.fingerprintStore,
+            nextHlc = { perm -> deviceA.changeEngine.nextHlc(perm) },
             acquireToken = { SilentTokenResult.Token(accessToken = "token-dev-a", permissionId = PERM_ID) },
             stagingDirProvider = { deviceA.stagingDir },
             // All selected/staging checks have passed; the deletion lands before the state write.
@@ -1420,6 +1421,7 @@ class DrivePhase4EndToEndTest {
             workIdentity = deviceA.driveSync.workIdentity,
             catalogSync = deviceA.driveSync.catalogSync,
             fingerprintStore = deviceA.driveSync.fingerprintStore,
+            nextHlc = { perm -> deviceA.changeEngine.nextHlc(perm) },
             acquireToken = { SilentTokenResult.Token(accessToken = "token-dev-a", permissionId = PERM_ID) },
             stagingDirProvider = { deviceA.stagingDir },
             // The upload finishes after the picker decided to write but before it does.
@@ -1816,6 +1818,7 @@ class DrivePhase4EndToEndTest {
             workIdentity = deviceA.driveSync.workIdentity,
             catalogSync = deviceA.driveSync.catalogSync,
             fingerprintStore = deviceA.driveSync.fingerprintStore,
+            nextHlc = { perm -> deviceA.changeEngine.nextHlc(perm) },
             acquireToken = { SilentTokenResult.Token(accessToken = "token-dev-a", permissionId = PERM_ID) },
             stagingDirProvider = { deviceA.stagingDir },
             // The upload request has returned, local finalization has not started: run cleanup now.
@@ -2273,6 +2276,7 @@ class DrivePhase4EndToEndTest {
             workIdentity = deviceA.driveSync.workIdentity,
             catalogSync = deviceA.driveSync.catalogSync,
             fingerprintStore = deviceA.driveSync.fingerprintStore,
+            nextHlc = { perm -> deviceA.changeEngine.nextHlc(perm) },
             acquireToken = { SilentTokenResult.Token(accessToken = "token-dev-a", permissionId = PERM_ID) },
             onCatalogAvailabilityChanged = { deviceA.changeEngine.sync() },
             openBookStream = { book ->

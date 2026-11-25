@@ -159,7 +159,6 @@ internal class DriveAccountController(
         val uploadCandidates: List<DriveUploadCandidate> = emptyList(),
         val conflictsDialogVisible: Boolean = false,
         val resolvingConflict: Boolean = false,
-        val errorMessage: String? = null,
         val pendingConfirmation: PendingAccountSwitchConfirmation? = null,
         val pendingAuthIntent: PendingIntent? = null,
     )
