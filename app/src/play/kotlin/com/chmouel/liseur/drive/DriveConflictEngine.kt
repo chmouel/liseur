@@ -6,9 +6,10 @@ import org.json.JSONObject
 internal data class LocalRecordView(
     val versionFp: String?,
     val versionOp: String = DriveRecordState.OP_PUT,
-    val isLivePut: Boolean = versionFp != null && versionOp == DriveRecordState.OP_PUT,
     val publishedFp: String? = null,
     val contentFp: String? = null,
+    val isLivePut: Boolean = versionFp != null &&
+        (versionOp == DriveRecordState.OP_PUT || (versionOp == DriveRecordState.OP_RESOLVE && contentFp != null)),
     val lastSyncedRevision: Long? = null,
     val originDeviceId: String? = null,
     val originSeq: Long? = null,
@@ -153,7 +154,11 @@ internal object DriveConflictEngine {
             for (conflict in unsettledConflicts) {
                 val conflictFps = setOf(conflict.localFp, conflict.remoteFp)
                 if (conflictFps.all { it in resolvedSet }) {
-                    val winner = winningResolutionFor(allResolutions, conflictFps) ?: res
+                    val candidates = allResolutions.filter { candidate ->
+                        val covered = decodeFps(candidate.resolvedFpsJson)
+                        conflictFps.all { it in covered }
+                    }
+                    val winner = winningResolutionFor(candidates, conflictFps) ?: res
                     settlementsByConflictId[conflict.conflictId] = ConflictSettlement(
                         conflictId = conflict.conflictId,
                         choice = winner.outcome,
@@ -192,7 +197,7 @@ internal object DriveConflictEngine {
         val remainingOpenConflicts = unsettledConflicts.filter { it.conflictId !in settlementsByConflictId }
         val lFp = local.versionFp
         val incomingRetiredByResolution = allResolutions.any { incoming.fp in decodeFps(it.resolvedFpsJson) }
-        val incomingKnownAncestorOrRetired = incoming.fp in local.ancestors || incomingRetiredByResolution
+        val incomingKnownAncestorOrRetired = incoming.fp in local.ancestors || incoming.fp in local.resRefs || incomingRetiredByResolution
 
         fun applyActionForIncoming(): ReconciliationDataAction = when {
             isIncomingDelete -> ReconciliationDataAction.ApplyDelete
@@ -328,17 +333,27 @@ internal object DriveConflictEngine {
         // --------------------------------------------------------------------
         // CASE 1 — Agreement
         // --------------------------------------------------------------------
-        val bothDeletions = !local.isLivePut && isIncomingDelete && !incomingKnownAncestorOrRetired
+        val incomingDescendsFromLocal = lFp in incoming.anc || lFp in incoming.resolvedFps ||
+            (local.versionOp == DriveRecordState.OP_RESOLVE && lFp in incoming.resRefs)
+        val bothDeletions = !local.isLivePut && isIncomingDelete && !incomingKnownAncestorOrRetired && !incomingDescendsFromLocal
+        val sameContent = local.versionOp == DriveRecordState.OP_PUT && incoming.op == DriveRecordState.OP_PUT &&
+            local.contentFp != null && local.contentFp == incomingContentFp && local.localRowMatchesContentFp &&
+            !local.hasPostCrashLocalEdit && !incomingKnownAncestorOrRetired && !incomingDescendsFromLocal
         val postCrashReplayAgreement = local.postCrashAckMatchesIncoming &&
             !local.hasPostCrashLocalEdit &&
             !incomingKnownAncestorOrRetired
-        if (incoming.fp == lFp || ((bothDeletions || postCrashReplayAgreement) && successors.isEmpty())) {
+        if (incoming.fp == lFp || ((bothDeletions || postCrashReplayAgreement || sameContent) && successors.isEmpty())) {
             val mergedResRefs = buildSet {
                 addAll(local.resRefs)
                 addAll(incoming.resRefs)
                 addAll(step0ResRefsToAdd)
             }
             val (chosenFp, chosenOp, chosenHlc) = when {
+                sameContent -> if (compareHlcFp(local.lastHlc, lFp, incoming.hlc, incoming.fp) >= 0) {
+                    Triple(lFp, local.versionOp, local.lastHlc)
+                } else {
+                    Triple(incoming.fp, incoming.op, incoming.hlc)
+                }
                 isIncomingResolve && bothDeletions && local.versionOp == DriveRecordState.OP_RESOLVE -> {
                     val localResolutionHlc = allResolutions.find { it.resolutionFp == lFp }?.hlc ?: local.lastHlc
                     val localWins = compareHlcFp(localResolutionHlc, lFp, incoming.hlc, incoming.fp) >= 0
@@ -421,7 +436,7 @@ internal object DriveConflictEngine {
         if (isIncomingResolve) {
             // 2a. Already superseded in local ancestry -> Stale (Step 0 side effects still persist).
             val knownViaResRefs = incoming.fp in local.resRefs
-            if (incomingKnownAncestorOrRetired || knownViaResRefs) {
+            if ((incomingKnownAncestorOrRetired || knownViaResRefs) && successors.isEmpty()) {
                 val provenDescent = incoming.fp in local.ancestors || knownViaResRefs
                 return ReconciliationResult(
                     reconciliationCase = ReconciliationCase.RESOLVE_STALE,
@@ -441,10 +456,14 @@ internal object DriveConflictEngine {
             // parked in an open conflict. The successor descends from R, so R's own outcome is older.
             if (successors.isNotEmpty()) {
                 val tips = successors
-                    .filter { c -> successors.none { o -> o.remoteFp != c.remoteFp && c.remoteFp in decodeFps(o.remoteAncJson) } }
+                    .filter { c -> successors.none { o ->
+                        o.remoteFp != c.remoteFp && (c.remoteFp in remoteLineage(o) ||
+                            (o.remoteDeviceId == c.remoteDeviceId && o.remoteSeq != null && c.remoteSeq != null && o.remoteSeq > c.remoteSeq))
+                    } }
                     .distinctBy { it.remoteFp }
                 val tip = tips.singleOrNull()
-                val settledBySuccessor = if (tip != null && (lFp == tip.remoteFp || lFp in incomingResolvedSet) && local.localRowMatchesContentFp) {
+                val resolutionCoversLocal = lFp in incomingResolvedSet || lFp in incoming.anc || bridgingResolution != null
+                val settledBySuccessor = if (tip != null && (lFp == tip.remoteFp || resolutionCoversLocal) && local.localRowMatchesContentFp) {
                     successors.map { c ->
                         ConflictSettlement(
                             conflictId = c.conflictId,
@@ -496,7 +515,7 @@ internal object DriveConflictEngine {
                                     .take(DriveWireCodec.MAX_ANCESTORS),
                             ),
                             resRefsJson = DriveCanonicalJson.encode(refs.distinct().sorted()),
-                            lastHlc = maxOf(local.lastHlc, incoming.hlc, tip.remoteHlc),
+                            lastHlc = tip.remoteHlc,
                             bodyJson = tipBody?.let(DriveCanonicalJson::encode),
                         ),
                         resolutionsToPersist = resolutionsToPersist,
@@ -774,12 +793,15 @@ internal object DriveConflictEngine {
         val resolveFp = explicitResolutionFp
             ?: DriveCanonicalJson.resolveFp(outcome, resolvedFps, hlc, chosenBodyMap)
         val existingAnc = DriveWorkIdentity.decodeStringArray(existingState?.ancestorsJson)
-        val newAnc = (resolvedFps + listOfNotNull(existingState?.versionFp) + existingAnc)
+        val remoteAnc = DriveWorkIdentity.decodeStringArray(conflict.remoteAncJson)
+        val newAnc = (resolvedFps + listOfNotNull(existingState?.versionFp) + existingAnc + remoteAnc)
             .distinct()
             .filter { it != resolveFp }
             .take(DriveWireCodec.MAX_ANCESTORS)
         val existingResRefs = DriveWorkIdentity.decodeStringArray(existingState?.resRefsJson)
-        val newResRefs = (existingResRefs + resolveFp).distinct().sorted()
+        val remoteResRefs = DriveWorkIdentity.decodeStringArray(conflict.remoteResRefsJson)
+        val remoteResolution = conflict.remoteFp.takeIf { conflict.remoteOp == DriveRecordState.OP_RESOLVE }
+        val newResRefs = (existingResRefs + remoteResRefs + listOfNotNull(remoteResolution) + resolveFp).distinct().sorted()
         val bodyJson = chosenBodyMap?.let(DriveCanonicalJson::encode)
 
         val resolution = DriveResolution(
@@ -825,8 +847,8 @@ internal object DriveConflictEngine {
         wireRecord: DriveWireRecord,
         createdHlc: String,
         now: Long,
-    ) {
-        val account = store.accounts().get(permissionId) ?: return
+    ): Boolean {
+        val account = store.accounts().get(permissionId) ?: return false
         val seq = account.nextSeq
         val batchId = DriveCanonicalJson.batchId(localDeviceId, seq)
         val batch = DriveDeltaBatch(
@@ -839,6 +861,7 @@ internal object DriveConflictEngine {
             records = listOf(wireRecord),
         )
         val payload = DriveWireCodec.encodeDeltaBatch(batch)
+        if (payload.toByteArray(Charsets.UTF_8).size > DriveWireCodec.MAX_BATCH_BYTES) return false
         store.accounts().setNextSeq(permissionId, seq + 1L)
         store.outbox().upsert(
             DriveOutbox(
@@ -852,6 +875,7 @@ internal object DriveConflictEngine {
                 ackMetadataJson = null,
             ),
         )
+        return true
     }
 
     private fun decodeList(json: String?): List<String> = DriveWorkIdentity.decodeStringArray(json)

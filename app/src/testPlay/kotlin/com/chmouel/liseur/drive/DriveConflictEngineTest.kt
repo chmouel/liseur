@@ -30,6 +30,64 @@ class DriveConflictEngineTest {
         DriveCanonicalJson.contentFp(putBody(text))
 
     @Test
+    fun `local resolution keeps remote lineage`() {
+        val conflict = DriveConflict(
+            permissionId = permId, conflictId = "conflict", domain = domain, recordKey = key,
+            kind = DriveConflict.KIND_EDIT_EDIT, localFp = "local", remoteFp = "remote-resolution",
+            remoteDeviceId = "dev-b", remoteHlc = "0017450000000-0001-dev-b", remoteOp = DriveRecordState.OP_RESOLVE,
+            remoteAncJson = "[\"remote-ancestor\"]", remoteResRefsJson = "[\"previous-resolution\"]",
+            state = DriveConflict.STATE_OPEN, openedAt = 1L,
+        )
+        val (_, state) = DriveConflictEngine.buildLocalResolution(
+            permId, conflict, DriveResolution.OUTCOME_PUT, mapOf("note" to "chosen"), "content", null,
+            "0017450000000-0002-dev-a", "dev-a", now = 2L,
+        )
+        assertTrue("remote-ancestor" in DriveWorkIdentity.decodeStringArray(state.ancestorsJson))
+        assertTrue("remote-resolution" in DriveWorkIdentity.decodeStringArray(state.resRefsJson))
+        assertTrue("previous-resolution" in DriveWorkIdentity.decodeStringArray(state.resRefsJson))
+    }
+
+    @Test
+    fun `equal concurrent puts agree on the later version`() {
+        val body = putBody("same")
+        val content = DriveCanonicalJson.contentFp(body)
+        val hA = "0017450000100-0001-dev-a"
+        val hB = "0017450000200-0001-dev-b"
+        val fpA = DriveCanonicalJson.putFp(body, hA)
+        val fpB = DriveCanonicalJson.putFp(body, hB)
+        fun local(fp: String, hlc: String) = LocalRecordView(versionFp = fp, publishedFp = fp,
+            contentFp = content, bodyJson = body.toString(), lastHlc = hlc)
+        fun incoming(fp: String, hlc: String) = DriveWireRecord(domain, key, DriveRecordState.OP_PUT, hlc, fp, body = body)
+        val onA = reconcile(local(fpA, hA), emptyList(), incoming(fpB, hB), content)
+        val onB = reconcile(local(fpB, hB), emptyList(), incoming(fpA, hA), content)
+        for (result in listOf(onA, onB)) {
+            assertEquals(ReconciliationCase.AGREEMENT, result.reconciliationCase)
+            assertEquals(fpB, result.updatedRecordState?.versionFp)
+            assertEquals(hB, result.updatedRecordState?.lastHlc)
+        }
+    }
+
+    @Test
+    fun `resolved live put conflicts with unrelated delete`() {
+        val body = putBody("kept")
+        val local = LocalRecordView(versionFp = "resolved", versionOp = DriveRecordState.OP_RESOLVE,
+            contentFp = DriveCanonicalJson.contentFp(body), bodyJson = body.toString())
+        val incoming = DriveWireRecord(domain, key, DriveRecordState.OP_DEL, "0017450000100-0001-dev-b", "delete")
+        val result = reconcile(local, emptyList(), incoming, null)
+        assertEquals(ReconciliationCase.CONFLICT_DELETE_EDIT, result.reconciliationCase)
+    }
+
+    @Test
+    fun `a later delete that descends from a delete advances the version`() {
+        val local = LocalRecordView(versionFp = "old-delete", versionOp = DriveRecordState.OP_DEL)
+        val incoming = DriveWireRecord(domain, key, DriveRecordState.OP_DEL, "0017450000100-0001-dev-b", "new-delete",
+            anc = listOf("old-delete"))
+        val result = reconcile(local, emptyList(), incoming, null)
+        assertEquals(ReconciliationCase.CAUSAL_SUPERSESSION, result.reconciliationCase)
+        assertEquals("new-delete", result.updatedRecordState?.versionFp)
+    }
+
+    @Test
     fun `simultaneous offline uploads create EDIT_EDIT despite both having published_fp == L`() {
         val f0 = putFp("v0")
         val fA = putFp("edit-A")
