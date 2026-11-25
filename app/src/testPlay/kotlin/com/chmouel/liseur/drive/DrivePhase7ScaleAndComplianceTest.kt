@@ -416,7 +416,7 @@ class DrivePhase7ScaleAndComplianceTest {
             )
             books.add(book)
             bookRows.add(book)
-            fpRows.add(BookFingerprintRow(url, fp.sha256, fp.partialMd5, fp.size, baseTime, baseTime))
+            fpRows.add(BookFingerprintRow(url, fp.sha256, fp.partialMd5, fp.size, book.fileModifiedAt, baseTime))
             metaRows.add(
                 BookMetadata.of(
                     url,
