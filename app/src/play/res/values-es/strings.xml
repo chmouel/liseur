@@ -209,4 +209,28 @@
         <item quantity="one">%d conflicto sin resolver</item>
         <item quantity="other">%d conflictos sin resolver</item>
     </plurals>
+    <string name="drive_sync_now">Sincronizar ahora</string>
+    <string name="drive_sync_syncing">Sincronizando con Google Drive…</string>
+    <string name="drive_sync_upload_epubs">Subir archivos EPUB</string>
+    <string name="drive_sync_upload_epubs_title">Subir archivos EPUB</string>
+    <string name="drive_sync_upload_epubs_intro">Elige los archivos EPUB de este dispositivo que quieras subir a la carpeta Liseur de Google Drive. Tu catálogo y progreso de lectura ya se sincronizan.</string>
+    <string name="drive_sync_upload_epubs_empty">No hay archivos EPUB disponibles en este dispositivo.</string>
+    <string name="drive_sync_upload_epubs_select_all">Seleccionar todo</string>
+    <string name="drive_sync_upload_epubs_clear">Borrar selección</string>
+    <string name="drive_sync_upload_epubs_unmetered_only">Subir archivos EPUB solo por wifi</string>
+    <string name="drive_sync_upload_epubs_unmetered_summary">Esperar a una conexión sin límite de datos antes de transferir los archivos EPUB.</string>
+    <string name="drive_sync_upload_epubs_confirm">Subir selección</string>
+    <string name="drive_sync_upload_epubs_status_uploaded">Subido</string>
+    <string name="drive_sync_upload_epubs_status_pending">Pendiente</string>
+    <string name="drive_sync_upload_epubs_status_uploading">Subiendo</string>
+    <string name="drive_sync_upload_epubs_status_failed">Error</string>
+    <string name="drive_sync_upgrade_required">Actualiza Liseur para leer cambios de Google Drive más recientes de %1$s.</string>
+    <string name="drive_sync_match_section_title">Posibles libros duplicados</string>
+    <string name="drive_sync_match_body">«%1$s» parece ser el mismo libro que «%2$s» en Google Drive. ¿Quieres unirlos para compartir el progreso de lectura?</string>
+    <string name="drive_sync_match_merge">Unir libros</string>
+    <string name="drive_sync_match_keep_separate">Mantener separados</string>
+    <plurals name="drive_sync_upload_epubs_selection_summary">
+        <item quantity="one">%1$d libro seleccionado · %2$s</item>
+        <item quantity="other">%1$d libros seleccionados · %2$s</item>
+    </plurals>
 </resources>

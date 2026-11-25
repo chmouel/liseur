@@ -201,4 +201,27 @@
     <plurals name="drive_sync_conflicts_count">
         <item quantity="other">%d 个未解决的冲突</item>
     </plurals>
+    <string name="drive_sync_now">立即同步</string>
+    <string name="drive_sync_syncing">正在与 Google Drive 同步…</string>
+    <string name="drive_sync_upload_epubs">上传 EPUB 文件</string>
+    <string name="drive_sync_upload_epubs_title">上传 EPUB 文件</string>
+    <string name="drive_sync_upload_epubs_intro">选择此设备上的 EPUB 文件，上传到 Google Drive 的 Liseur 文件夹。书目和阅读进度已同步。</string>
+    <string name="drive_sync_upload_epubs_empty">此设备上没有可用的 EPUB 文件。</string>
+    <string name="drive_sync_upload_epubs_select_all">全选</string>
+    <string name="drive_sync_upload_epubs_clear">清除选择</string>
+    <string name="drive_sync_upload_epubs_unmetered_only">仅通过 Wi-Fi 上传 EPUB 文件</string>
+    <string name="drive_sync_upload_epubs_unmetered_summary">传输 EPUB 文件前等待非计量网络连接。</string>
+    <string name="drive_sync_upload_epubs_confirm">上传所选文件</string>
+    <string name="drive_sync_upload_epubs_status_uploaded">已上传</string>
+    <string name="drive_sync_upload_epubs_status_pending">等待中</string>
+    <string name="drive_sync_upload_epubs_status_uploading">正在上传</string>
+    <string name="drive_sync_upload_epubs_status_failed">失败</string>
+    <string name="drive_sync_upgrade_required">请更新 Liseur 以读取来自 %1$s 的较新 Google Drive 同步更改。</string>
+    <string name="drive_sync_match_section_title">可能重复的书籍</string>
+    <string name="drive_sync_match_body">“%1$s”似乎与 Google Drive 上的“%2$s”是同一本书。合并以共享阅读进度吗？</string>
+    <string name="drive_sync_match_merge">合并书籍</string>
+    <string name="drive_sync_match_keep_separate">保持分开</string>
+    <plurals name="drive_sync_upload_epubs_selection_summary">
+        <item quantity="other">已选择 %1$d 本书 · %2$s</item>
+    </plurals>
 </resources>
