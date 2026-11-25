@@ -83,6 +83,18 @@ interface DriveAccountDao {
 
     @Query("UPDATE drive_account SET metered_transfers = :metered WHERE permission_id = :permissionId")
     suspend fun setMeteredTransfers(permissionId: String, metered: Boolean)
+
+    @Query(
+        "UPDATE drive_account SET pending_switch_previous_state = :previousState " +
+            "WHERE permission_id = :permissionId",
+    )
+    suspend fun markPendingSwitch(permissionId: String, previousState: String)
+
+    @Query("UPDATE drive_account SET pending_switch_previous_state = NULL")
+    suspend fun clearPendingSwitches()
+
+    @Query("SELECT * FROM drive_account WHERE pending_switch_previous_state IS NOT NULL")
+    suspend fun withPendingSwitch(): List<DriveAccount>
 }
 
 @Dao

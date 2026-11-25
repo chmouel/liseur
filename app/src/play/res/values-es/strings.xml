@@ -154,5 +154,59 @@
     <string name="hardcover_conflict_review_too_long">Esta reseña de Hardcover es demasiado larga para traerla a Liseur.</string>
     <string name="hardcover_conflict_stale">El valor de Liseur cambió mientras tanto. Revísalo y vuelve a elegir.</string>
     <string name="hardcover_review_public_note">Pública. También se publica como tu reseña en Hardcover.</string>
+    <string name="drive_sync_settings_summary">Sincroniza tu biblioteca, notas y progreso de lectura con Google Drive</string>
+    <string name="drive_sync_intro">Mantén tu catálogo, notas, vocabulario, sesiones de lectura y progreso de lectura sincronizados entre dispositivos usando los datos de aplicación de tu Google Drive. Los archivos EPUB seleccionados se guardan en una carpeta Liseur en Drive.</string>
+    <string name="drive_sync_status_active">Activa</string>
+    <string name="drive_sync_status_paused">En pausa</string>
+    <string name="drive_sync_status_needs_reconnect">Reconexión necesaria</string>
+    <string name="drive_sync_account_summary">%1$s · %2$s</string>
+    <string name="drive_sync_status_label">Estado</string>
+    <string name="drive_sync_last_sync_label">Última sincronización</string>
+    <string name="drive_sync_last_sync_never">Nunca</string>
+    <string name="drive_sync_pending_uploads_label">Subidas de EPUB pendientes</string>
+    <string name="drive_sync_conflicts_label">Conflictos sin resolver</string>
+    <string name="drive_sync_none">Ninguno</string>
+    <string name="drive_sync_connect">Conectar Google Drive</string>
+    <string name="drive_sync_reconnect">Reconectar</string>
+    <string name="drive_sync_disconnect">Desconectar</string>
+    <string name="drive_sync_switch_account">Cambiar de cuenta</string>
+    <string name="drive_sync_connecting">Conectando con Google Drive…</string>
+    <string name="drive_sync_needs_reconnect_detail">La autorización de Google Drive caducó o fue revocada. Vuelve a conectarte para reanudar la sincronización.</string>
+    <string name="drive_sync_switch_title">¿Sincronizar con %1$s?</string>
+    <string name="drive_sync_switch_body_summary">Liseur sincronizará tu biblioteca local con %1$s: %2$s, %3$s, %4$s y %5$s.</string>
+    <string name="drive_sync_switch_body_keep_previous">Tu cuenta anterior (%1$s) seguirá en pausa en este dispositivo y conservará su progreso de sincronización.</string>
+    <string name="drive_sync_switch_body_disconnect_server">Se desconectará tu servidor de libros actual. Se conservarán los libros descargados, el historial de lectura y los catálogos de solo exploración.</string>
+    <string name="drive_sync_switch_confirm">Sincronizar con esta cuenta</string>
+    <string name="drive_sync_switch_cancel">Cancelar</string>
     <string name="drive_sync_use_instead">Usar Google Drive en su lugar</string>
+    <string name="drive_sync_error_sign_in_prompt">Google Play Services no pudo abrir el aviso de inicio de sesión.</string>
+    <string name="drive_sync_error_auth_incomplete">La autorización de Google Drive no se completó.</string>
+    <string name="drive_sync_error_auth_failed">No se pudo autorizar Google Drive.</string>
+    <string name="drive_sync_error_token_rejected">Google Drive rechazó el token de autorización.</string>
+    <string name="drive_sync_error_unreachable">No se pudo conectar con Google Drive. Comprueba tu conexión e inténtalo de nuevo.</string>
+    <string name="drive_sync_error_activate_failed">No se pudo activar la cuenta de Google Drive.</string>
+    <plurals name="drive_sync_books_count">
+        <item quantity="one">%d libro</item>
+        <item quantity="other">%d libros</item>
+    </plurals>
+    <plurals name="drive_sync_notes_count">
+        <item quantity="one">%d nota</item>
+        <item quantity="other">%d notas</item>
+    </plurals>
+    <plurals name="drive_sync_sessions_count">
+        <item quantity="one">%d sesión de lectura</item>
+        <item quantity="other">%d sesiones de lectura</item>
+    </plurals>
+    <plurals name="drive_sync_vocabulary_count">
+        <item quantity="one">%d palabra guardada</item>
+        <item quantity="other">%d palabras guardadas</item>
+    </plurals>
+    <plurals name="drive_sync_pending_uploads_count">
+        <item quantity="one">%d subida pendiente</item>
+        <item quantity="other">%d subidas pendientes</item>
+    </plurals>
+    <plurals name="drive_sync_conflicts_count">
+        <item quantity="one">%d conflicto sin resolver</item>
+        <item quantity="other">%d conflictos sin resolver</item>
+    </plurals>
 </resources>

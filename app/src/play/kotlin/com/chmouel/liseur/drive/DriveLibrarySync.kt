@@ -62,7 +62,7 @@ internal class DriveLibrarySync(
 ) : LibrarySyncBackend {
 
     private val appContext = context.applicationContext
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    internal val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val storeFile = appContext.getDatabasePath(DriveSyncDatabase.NAME)
     private val storeOpened = MutableStateFlow(openStore != null)
 
@@ -115,21 +115,45 @@ internal class DriveLibrarySync(
     override suspend fun deactivate() {
         stopWorkers()
         if (!hasStore()) return
-        store.accounts().pauseAllActive()
+        store.withTransaction {
+            store.accounts().pauseAllActive()
+            // An intentional disconnect must not look like an abandoned switch at startup.
+            store.accounts().clearPendingSwitches()
+        }
     }
 
     override fun resume() {
         if (!hasStore()) return
         scope.launch {
             runCatching {
-                if (store.accounts().active() != null) onResumeActive()
+                val recovered = recoverAbandonedSwitches()
+                if (!recovered && store.accounts().active() != null) onResumeActive()
             }
         }
     }
 
+    /**
+     * Restores accounts left `PAUSED` by an account switch that never finished,
+     * because Android killed the process while the confirmation was open.
+     *
+     * Returns true when it resumed an account, which has already been handed to
+     * [onResumeActive] by [restoreAccountState].
+     */
+    private suspend fun recoverAbandonedSwitches(): Boolean {
+        var restored = false
+        for (account in store.accounts().withPendingSwitch()) {
+            val previous = account.pendingSwitchPreviousState ?: continue
+            if (restoreAccountState(account.permissionId, previous)) restored = true
+        }
+        return restored
+    }
+
     override val positionPeer: PeerPositionSync = DrivePositionPeer()
 
-    override val supportsBookServerOption: Boolean = true
+    // Hidden until a Drive sync pipeline exists: activation today only records
+    // account state, so an option offered here would promise a library sync
+    // nothing performs.
+    override val supportsBookServerOption: Boolean = false
 
     @Composable
     override fun connectedSummary(): String? = driveConnectedSummary(controller = accountController)
@@ -185,9 +209,11 @@ internal class DriveLibrarySync(
     /**
      * Restores a previously saved account state after cancelling a pending switch,
      * while upholding the mutual exclusion invariant with any connected main server.
+     *
+     * Returns true when the account is `ACTIVE` again and its workers were resumed.
      */
-    internal suspend fun restoreAccountState(permissionId: String, state: String) {
-        if (!hasStore()) return
+    internal suspend fun restoreAccountState(permissionId: String, state: String): Boolean {
+        if (!hasStore()) return false
         val restoredActive = switchCoordinator.withSwitchLock {
             if (state == DriveAccount.STATE_ACTIVE && remoteAccount.current() != null) {
                 return@withSwitchLock false
@@ -197,10 +223,29 @@ internal class DriveLibrarySync(
                     store.accounts().pauseAllActive()
                 }
                 store.accounts().setState(permissionId, state)
+                store.accounts().clearPendingSwitches()
             }
             state == DriveAccount.STATE_ACTIVE
         }
         if (restoredActive) onResumeActive()
+        return restoredActive
+    }
+
+    /**
+     * Pauses the active account for a switch awaiting the reader's confirmation,
+     * recording in the same transaction that the pause is part of a switch.
+     *
+     * A process death during the confirmation then leaves a marker that startup
+     * restores, instead of an account silently stopped and indistinguishable from
+     * an intentional disconnect.
+     */
+    internal suspend fun pauseForPendingSwitch(previous: DriveAccount) {
+        if (!hasStore()) return
+        stopWorkers()
+        store.withTransaction {
+            store.accounts().pauseAllActive()
+            store.accounts().markPendingSwitch(previous.permissionId, previous.state)
+        }
     }
 
     internal fun notifyActivated() {
@@ -256,6 +301,7 @@ internal class DriveLibrarySync(
             }
             db.withTransaction {
                 db.accounts().pauseAllActive()
+                db.accounts().clearPendingSwitches()
                 val existing = db.accounts().get(permissionId)
                 val updated = existing?.copy(
                     email = email,

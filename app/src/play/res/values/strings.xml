@@ -187,6 +187,12 @@
     <string name="drive_sync_switch_confirm">Sync with this account</string>
     <string name="drive_sync_switch_cancel">Cancel</string>
     <string name="drive_sync_use_instead">Use Google Drive instead</string>
+    <string name="drive_sync_error_sign_in_prompt">Google Play Services could not open the sign-in prompt.</string>
+    <string name="drive_sync_error_auth_incomplete">Google Drive authorization did not complete.</string>
+    <string name="drive_sync_error_auth_failed">Could not authorize Google Drive.</string>
+    <string name="drive_sync_error_token_rejected">Google Drive rejected the authorization token.</string>
+    <string name="drive_sync_error_unreachable">Could not reach Google Drive. Check your connection and try again.</string>
+    <string name="drive_sync_error_activate_failed">Could not activate the Google Drive account.</string>
     <plurals name="drive_sync_books_count">
         <item quantity="one">%d book</item>
         <item quantity="other">%d books</item>

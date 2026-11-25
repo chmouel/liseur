@@ -3,9 +3,12 @@ package com.chmouel.liseur.drive
 import android.app.Activity
 import android.app.PendingIntent
 import android.content.Intent
+import androidx.annotation.StringRes
+import com.chmouel.liseur.R
 import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.data.remote.RemoteAccountRepository
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -15,6 +18,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -38,6 +42,7 @@ data class PendingAccountSwitchConfirmation(
     val previousAccount: DriveAccount?,
     val previousState: String?,
     val targetPermissionId: String,
+    /** The address Drive reported for the target, blank when Drive omitted it. */
     val targetEmail: String,
     val localSummary: LocalLibrarySummary,
     val mainServerConnected: Boolean,
@@ -46,6 +51,9 @@ data class PendingAccountSwitchConfirmation(
 ) {
     val isAccountSwitch: Boolean
         get() = previousAccount != null && previousAccount.permissionId != targetPermissionId
+
+    /** Names the target account when Drive returned no email address for it. */
+    val targetDisplayName: String get() = targetEmail.ifBlank { targetPermissionId }
 }
 
 /** Snapshot rendered by Play's Google Drive Sync Settings UI. */
@@ -55,7 +63,7 @@ data class DriveSettingsUiState(
     val pendingUploadsCount: Int = 0,
     val unresolvedConflictsCount: Int = 0,
     val busy: Boolean = false,
-    val errorMessage: String? = null,
+    @param:StringRes val errorMessageRes: Int? = null,
     val pendingConfirmation: PendingAccountSwitchConfirmation? = null,
     val pendingAuthIntent: PendingIntent? = null,
 )
@@ -110,7 +118,7 @@ internal class DriveAccountController(
 
     private data class EphemeralState(
         val busy: Boolean = false,
-        val errorMessage: String? = null,
+        @param:StringRes val errorMessageRes: Int? = null,
         val pendingConfirmation: PendingAccountSwitchConfirmation? = null,
         val pendingAuthIntent: PendingIntent? = null,
     )
@@ -162,7 +170,7 @@ internal class DriveAccountController(
                 pendingUploadsCount = storeSnapshot.pendingUploadsCount,
                 unresolvedConflictsCount = storeSnapshot.unresolvedConflictsCount,
                 busy = ui.busy,
-                errorMessage = ui.errorMessage,
+                errorMessageRes = ui.errorMessageRes,
                 pendingConfirmation = ui.pendingConfirmation,
                 pendingAuthIntent = ui.pendingAuthIntent,
             )
@@ -180,7 +188,7 @@ internal class DriveAccountController(
             if (ephemeral.value.busy || ephemeral.value.pendingConfirmation != null) return
             ephemeral.value = ephemeral.value.copy(
                 busy = true,
-                errorMessage = null,
+                errorMessageRes = null,
                 pendingAuthIntent = null,
             )
             var awaitingActivityResult = false
@@ -208,14 +216,14 @@ internal class DriveAccountController(
                         } else {
                             ephemeral.value = ephemeral.value.copy(
                                 busy = false,
-                                errorMessage = "Google Play Services could not open the sign-in prompt",
+                                errorMessageRes = R.string.drive_sync_error_sign_in_prompt,
                             )
                         }
                     }
                     is DriveAuthResult.Failed -> {
                         ephemeral.value = ephemeral.value.copy(
                             busy = false,
-                            errorMessage = result.reason,
+                            errorMessageRes = R.string.drive_sync_error_auth_failed,
                         )
                     }
                 }
@@ -252,6 +260,18 @@ internal class DriveAccountController(
         ephemeral.update { it.copy(busy = false, pendingAuthIntent = null) }
     }
 
+    /**
+     * Drops any interactive authorization or pending switch confirmation when the
+     * settings section leaves composition on a non-configuration disposal, restoring
+     * any paused account on the backend's scope so it completes after UI disposal.
+     */
+    fun abandonInteractiveFlow(scope: CoroutineScope = driveSync.scope) {
+        abandonAuthorization()
+        if (ephemeral.value.pendingConfirmation != null) {
+            scope.launch { cancelPendingSwitch() }
+        }
+    }
+
     /** Handles the result of launching Play Services' interactive authorization [PendingIntent]. */
     suspend fun onAuthorizationActivityResult(resultCode: Int, data: Intent?) {
         transitionMutex.withLock {
@@ -268,13 +288,13 @@ internal class DriveAccountController(
                     is DriveAuthResult.NeedsResolution -> {
                         ephemeral.value = ephemeral.value.copy(
                             busy = false,
-                            errorMessage = "Google Drive authorization did not complete",
+                            errorMessageRes = R.string.drive_sync_error_auth_incomplete,
                         )
                     }
                     is DriveAuthResult.Failed -> {
                         ephemeral.value = ephemeral.value.copy(
                             busy = false,
-                            errorMessage = parsed.reason,
+                            errorMessageRes = R.string.drive_sync_error_auth_failed,
                         )
                     }
                 }
@@ -298,7 +318,7 @@ internal class DriveAccountController(
     /** Processes an access token obtained from interactive authorization. */
     suspend fun onAccessTokenObtained(accessToken: String) {
         transitionMutex.withLock {
-            ephemeral.value = ephemeral.value.copy(busy = true, errorMessage = null)
+            ephemeral.value = ephemeral.value.copy(busy = true, errorMessageRes = null)
             try {
                 handleAuthorizedTokenLocked(accessToken)
             } catch (e: CancellationException) {
@@ -328,7 +348,7 @@ internal class DriveAccountController(
         transitionMutex.withLock {
             accountGeneration++
             val pending = ephemeral.value.pendingConfirmation ?: return
-            ephemeral.value = ephemeral.value.copy(busy = true, errorMessage = null)
+            ephemeral.value = ephemeral.value.copy(busy = true, errorMessageRes = null)
             try {
                 // Consent covers only the server state the reader was shown; one that
                 // connected since needs a fresh confirmation.
@@ -353,10 +373,10 @@ internal class DriveAccountController(
                         confirmedServer = e.server,
                     ),
                 )
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 ephemeral.value = ephemeral.value.copy(
                     busy = false,
-                    errorMessage = e.message ?: "Could not activate Google Drive account",
+                    errorMessageRes = R.string.drive_sync_error_activate_failed,
                 )
             }
         }
@@ -373,13 +393,16 @@ internal class DriveAccountController(
         transitionMutex.withLock {
             accountGeneration++
             val pending = ephemeral.value.pendingConfirmation ?: return
-            pendingAccessToken = null
-            ephemeral.value = EphemeralState()
             val previous = pending.previousAccount
             val previousState = pending.previousState
+            // Restore first: cancelling this coroutine mid-restore must leave the
+            // confirmation in place, so the reader can still retry instead of
+            // being left with a paused account and nothing pending.
             if (previous != null && previousState != null && driveSync.hasStore()) {
                 driveSync.restoreAccountState(previous.permissionId, previousState)
             }
+            pendingAccessToken = null
+            ephemeral.value = EphemeralState()
         }
     }
 
@@ -396,7 +419,7 @@ internal class DriveAccountController(
 
     /** Dismisses a transient error banner in the UI. */
     fun clearError() {
-        ephemeral.value = ephemeral.value.copy(errorMessage = null)
+        ephemeral.value = ephemeral.value.copy(errorMessageRes = null)
     }
 
     /**
@@ -416,7 +439,7 @@ internal class DriveAccountController(
         if (!staleTokenToClear.isNullOrBlank()) {
             authClient.clearCachedToken(staleTokenToClear)
         }
-        return when (val result = authClient.authorizeSilently(accountEmail = active.email)) {
+        return when (val result = authClient.authorizeSilently(accountEmail = active.email.ifBlank { null })) {
             is DriveAuthResult.Authorized -> {
                 val about = try {
                     driveApi.getAbout(result.accessToken)
@@ -504,7 +527,12 @@ internal class DriveAccountController(
             (it.browseServerId == null || it.localUri != null) && it.url !in discarded
         }
         val notes = database.annotationDao().all().size
-        val sessions = database.readingSessionDao().closedForBackup().size
+        // Only sittings Drive will carry: an imported one stays local, and one that
+        // cannot say where in the book it happened is never uploaded
+        // (`ReadingSessionDao.awaitingUpload`).
+        val sessions = database.readingSessionDao().closedForBackup().count {
+            it.importedAt == null && it.startProgression != null && it.endProgression != null
+        }
         return LocalLibrarySummary(
             booksCount = books,
             notesCount = notes,
@@ -520,17 +548,17 @@ internal class DriveAccountController(
             driveApi.getAbout(accessToken)
         } catch (e: CancellationException) {
             throw e
-        } catch (e: DriveAuthExpiredException) {
+        } catch (_: DriveAuthExpiredException) {
             authClient.clearCachedToken(accessToken)
             ephemeral.value = ephemeral.value.copy(
                 busy = false,
-                errorMessage = e.message ?: "Google Drive rejected the authorization token",
+                errorMessageRes = R.string.drive_sync_error_token_rejected,
             )
             return
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             ephemeral.value = ephemeral.value.copy(
                 busy = false,
-                errorMessage = e.message ?: "Could not reach Google Drive",
+                errorMessageRes = R.string.drive_sync_error_unreachable,
             )
             return
         }
@@ -557,9 +585,11 @@ internal class DriveAccountController(
         if (needsConfirmation) {
             val previousState = primaryExisting?.state
             // Keep Account A PAUSED (and stop its workers) while awaiting confirmation,
-            // preserving all of A's cursors, queues, folder mappings, and conflicts.
+            // preserving all of A's cursors, queues, folder mappings, and conflicts,
+            // and remembering that pause so a process death during the confirmation
+            // can be undone on the next start.
             if (primaryExisting != null && previousState != DriveAccount.STATE_PAUSED) {
-                driveSync.deactivate()
+                driveSync.pauseForPendingSwitch(primaryExisting)
             }
             pendingAccessToken = accessToken
             ephemeral.value = EphemeralState(
@@ -568,7 +598,7 @@ internal class DriveAccountController(
                     previousAccount = primaryExisting,
                     previousState = previousState,
                     targetPermissionId = about.permissionId,
-                    targetEmail = about.emailAddress.ifBlank { about.permissionId },
+                    targetEmail = about.emailAddress,
                     localSummary = localSummary,
                     mainServerConnected = mainServerConnected,
                     confirmedServer = connectedServer,
@@ -580,7 +610,7 @@ internal class DriveAccountController(
         try {
             driveSync.activateAccount(
                 permissionId = about.permissionId,
-                email = about.emailAddress.ifBlank { about.permissionId },
+                email = about.emailAddress,
                 now = clock(),
                 confirmedDisconnectServer = false,
             )
@@ -599,16 +629,16 @@ internal class DriveAccountController(
                     previousAccount = primaryExisting,
                     previousState = primaryExisting?.state,
                     targetPermissionId = about.permissionId,
-                    targetEmail = about.emailAddress.ifBlank { about.permissionId },
+                    targetEmail = about.emailAddress,
                     localSummary = localSummary,
                     mainServerConnected = true,
                     confirmedServer = e.server,
                 ),
             )
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             ephemeral.value = ephemeral.value.copy(
                 busy = false,
-                errorMessage = e.message ?: "Could not activate Google Drive account",
+                errorMessageRes = R.string.drive_sync_error_activate_failed,
             )
         }
     }
