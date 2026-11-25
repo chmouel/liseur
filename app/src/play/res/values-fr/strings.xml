@@ -154,8 +154,8 @@
     <string name="hardcover_conflict_review_too_long">Cette critique Hardcover est trop longue pour être importée dans Liseur.</string>
     <string name="hardcover_conflict_stale">La valeur de Liseur a changé entre-temps. Vérifiez-la et choisissez à nouveau.</string>
     <string name="hardcover_review_public_note">Public. Publié aussi comme votre critique Hardcover.</string>
-    <string name="drive_sync_settings_summary">Synchronisez votre bibliothèque, vos notes et votre progression de lecture avec Google Drive</string>
-    <string name="drive_sync_intro">Gardez votre catalogue, vos notes, votre vocabulaire, vos séances de lecture et votre progression synchronisés entre vos appareils grâce aux données d\'application de Google Drive. Les fichiers EPUB sélectionnés sont stockés dans un dossier Liseur sur Drive.</string>
+    <string name="drive_sync_settings_summary">Synchronisez votre bibliothèque et votre progression de lecture avec Google Drive</string>
+    <string name="drive_sync_intro">Synchronisez votre catalogue et votre progression entre vos appareils grâce aux données d\'application de Google Drive. Les fichiers EPUB sélectionnés sont stockés dans un dossier Liseur sur Drive.</string>
     <string name="drive_sync_status_active">Active</string>
     <string name="drive_sync_status_paused">En pause</string>
     <string name="drive_sync_status_needs_reconnect">Reconnexion requise</string>
