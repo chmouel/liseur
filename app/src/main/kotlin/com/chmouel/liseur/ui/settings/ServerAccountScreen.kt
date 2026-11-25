@@ -15,6 +15,7 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -27,6 +28,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -36,22 +38,30 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.CloudDownload
 import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.LinkOff
+import androidx.compose.material.icons.outlined.PersonOutline
+import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeTopAppBar
@@ -66,6 +76,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -83,17 +94,21 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.chmouel.liseur.R
@@ -175,6 +190,7 @@ fun ServerAccountScreen(
     }
     var pickingDriveKind by rememberSaveable { mutableStateOf(false) }
     var driveSwitchRequested by rememberSaveable { mutableStateOf(false) }
+    var confirmDisconnectVisible by rememberSaveable { mutableStateOf(false) }
     val settingsFocus = SettingsFocus.key
     LaunchedEffect(settingsFocus, librarySync.settingsFocusKey) {
         if (settingsFocus != null && settingsFocus == librarySync.settingsFocusKey && librarySync.supportsBookServerOption) {
@@ -329,20 +345,87 @@ fun ServerAccountScreen(
                         }
                     }
                 } else if (server.needsLiseurSyncPairing) {
-                    Text(server.baseUrl, style = MaterialTheme.typography.titleMedium)
-                    Notice(
-                        text = stringResource(
-                            R.string.settings_backup_liseur_sync_restored_notice,
-                            stringResource(R.string.server_kind_liseur_sync),
+                    val eInk = LocalEInk.current
+                    val scheme = MaterialTheme.colorScheme
+                    Card(
+                        shape = RoundedCornerShape(20.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (eInk) scheme.surface else scheme.surfaceContainerLow,
                         ),
-                        tone = NoticeTone.NEUTRAL,
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        TextButton(onClick = onEditAddress) {
-                            Text(stringResource(R.string.server_pair_again))
-                        }
-                        TextButton(onClick = onDisconnect) {
-                            Text(stringResource(R.string.server_disconnect))
+                        border = BorderStroke(
+                            width = 1.dp,
+                            color = if (eInk) scheme.outline else scheme.outlineVariant.copy(alpha = 0.65f),
+                        ),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(14.dp),
+                            modifier = Modifier.padding(20.dp),
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                    modifier = Modifier.weight(1f),
+                                ) {
+                                    ServerKindLogo(server.kind, Modifier.size(28.dp))
+                                    Text(
+                                        text = server.baseUrl.substringAfter("://"),
+                                        style = MaterialTheme.typography.titleLarge.copy(
+                                            fontSize = 18.sp,
+                                            lineHeight = 23.sp,
+                                        ),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                                ConnectionStatusBadge(
+                                    label = stringResource(R.string.server_status_paused),
+                                    tone = ConnectionStatusTone.PAUSED,
+                                )
+                            }
+                            Notice(
+                                text = stringResource(
+                                    R.string.settings_backup_liseur_sync_restored_notice,
+                                    stringResource(R.string.server_kind_liseur_sync),
+                                ),
+                                tone = NoticeTone.NEUTRAL,
+                            )
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Button(
+                                    onClick = onEditAddress,
+                                    shape = RoundedCornerShape(14.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = scheme.secondaryContainer,
+                                        contentColor = scheme.onSecondaryContainer,
+                                    ),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .heightIn(min = 48.dp),
+                                ) {
+                                    Text(stringResource(R.string.server_pair_again))
+                                }
+                                OutlinedButton(
+                                    onClick = { confirmDisconnectVisible = true },
+                                    shape = RoundedCornerShape(14.dp),
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        contentColor = scheme.error,
+                                    ),
+                                    border = BorderStroke(1.dp, scheme.error.copy(alpha = 0.45f)),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .heightIn(min = 48.dp),
+                                ) {
+                                    Text(stringResource(R.string.server_disconnect))
+                                }
+                            }
                         }
                     }
                     if (librarySync.supportsBookServerOption) {
@@ -365,7 +448,7 @@ fun ServerAccountScreen(
                         busy = state.connecting,
                         onRetryCapabilities = onRetryCapabilities,
                         onKoboToken = onKoboToken,
-                        onDisconnect = onDisconnect,
+                        onRequestDisconnect = { confirmDisconnectVisible = true },
                         onEditAddress = onEditAddress,
                         uploadPolicy = state.uploadPolicy,
                         onSetUploadPolicy = onSetUploadPolicy,
@@ -460,6 +543,34 @@ fun ServerAccountScreen(
             estimate = estimate,
             onConfirm = onDownloadAll,
             onDismiss = onDismissDownloadAll,
+        )
+    }
+
+    val currentServer = state.server
+    if (confirmDisconnectVisible && currentServer != null) {
+        val displayHost = currentServer.baseUrl.substringAfter("://")
+        AlertDialog(
+            onDismissRequest = { confirmDisconnectVisible = false },
+            title = { Text(stringResource(R.string.server_disconnect_confirm_title, displayHost)) },
+            text = { Text(stringResource(R.string.server_disconnect_confirm_body)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmDisconnectVisible = false
+                        onDisconnect()
+                    },
+                ) {
+                    Text(
+                        text = stringResource(R.string.server_disconnect),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDisconnectVisible = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
         )
     }
 }
@@ -674,17 +785,30 @@ private fun ServerSection(
     title: String,
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    val eInk = LocalEInk.current
+    val scheme = MaterialTheme.colorScheme
     Card(
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            containerColor = if (eInk) scheme.surface else scheme.surfaceContainerLow,
+        ),
+        border = BorderStroke(
+            width = 1.dp,
+            color = if (eInk) scheme.outline else scheme.outlineVariant.copy(alpha = 0.65f),
         ),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(
             Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
             content = {
-                Text(title, style = MaterialTheme.typography.titleSmall)
+                Text(
+                    title,
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontSize = 18.sp,
+                        lineHeight = 23.sp,
+                    ),
+                )
                 content()
             },
         )
@@ -1003,6 +1127,11 @@ private fun ConnectForm(
 
     Button(
         onClick = { onConnect(false) },
+        shape = RoundedCornerShape(14.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        ),
         enabled = !state.connecting && when (state.kind) {
             ServerKind.CALIBRE, ServerKind.BOOKORBIT ->
                 state.url.isNotBlank() &&
@@ -1027,13 +1156,15 @@ private fun ConnectForm(
                     catalogReady && kosyncReady
             }
         },
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp),
     ) {
         if (state.connecting) {
             BusyIndicator(
                 Modifier.size(18.dp),
                 strokeWidth = 2.dp,
-                color = MaterialTheme.colorScheme.onPrimary,
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
             )
         } else {
             Text(stringResource(R.string.server_connect))
@@ -1095,6 +1226,86 @@ private fun ConnectError(
 }
 
 @Composable
+private fun ServerMetricRow(
+    icon: ImageVector,
+    label: String,
+    value: String,
+    valueColor: Color = MaterialTheme.colorScheme.onSurface,
+) {
+    val scheme = MaterialTheme.colorScheme
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = scheme.onSurfaceVariant,
+            modifier = Modifier.size(18.dp),
+        )
+        Text(
+            text = "$label:",
+            style = MaterialTheme.typography.bodyMedium,
+            color = scheme.onSurfaceVariant,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f, fill = false),
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+            color = valueColor,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+    }
+}
+
+internal enum class ServerUiConnectionState {
+    DISCONNECTED,
+    CONNECTING,
+    ACTIVE,
+    SYNCING,
+    PAUSED,
+    ERROR,
+}
+
+internal fun resolveServerUiConnectionState(
+    server: RemoteServer?,
+    syncStatus: PositionSyncStatus,
+    busy: Boolean,
+    paired: Boolean,
+): ServerUiConnectionState = when {
+    server == null && busy -> ServerUiConnectionState.CONNECTING
+    server == null -> ServerUiConnectionState.DISCONNECTED
+    busy || syncStatus == PositionSyncStatus.Syncing -> ServerUiConnectionState.SYNCING
+    syncStatus is PositionSyncStatus.Failed -> ServerUiConnectionState.ERROR
+    syncStatus == PositionSyncStatus.Unavailable -> ServerUiConnectionState.PAUSED
+    !server.canSync && !(paired && server.kind.hostsKosyncPeer) && server.kind != ServerKind.CUSTOM ->
+        ServerUiConnectionState.PAUSED
+    else -> ServerUiConnectionState.ACTIVE
+}
+
+internal fun serverConnectionBadge(state: ServerUiConnectionState): Pair<Int, ConnectionStatusTone> = when (state) {
+    ServerUiConnectionState.DISCONNECTED -> R.string.server_status_disconnected to ConnectionStatusTone.PAUSED
+    ServerUiConnectionState.CONNECTING -> R.string.server_status_syncing to ConnectionStatusTone.SYNCING
+    ServerUiConnectionState.ACTIVE -> R.string.server_status_active to ConnectionStatusTone.ACTIVE
+    ServerUiConnectionState.SYNCING -> R.string.server_status_syncing to ConnectionStatusTone.SYNCING
+    ServerUiConnectionState.PAUSED -> R.string.server_status_paused to ConnectionStatusTone.PAUSED
+    ServerUiConnectionState.ERROR -> R.string.server_status_error to ConnectionStatusTone.ERROR
+}
+
+internal fun lastSyncedAtMillis(
+    syncStatus: PositionSyncStatus,
+    storedSyncedAt: Long?,
+): Long? = when (syncStatus) {
+    is PositionSyncStatus.Synced -> syncStatus.at
+    else -> storedSyncedAt
+}
+
+@Composable
 private fun ConnectedCard(
     server: RemoteServer,
     storage: StorageUse,
@@ -1105,7 +1316,7 @@ private fun ConnectedCard(
     busy: Boolean,
     onRetryCapabilities: () -> Unit,
     onKoboToken: (String) -> Unit,
-    onDisconnect: () -> Unit,
+    onRequestDisconnect: () -> Unit,
     onEditAddress: () -> Unit,
     onSyncNow: () -> Unit,
     uploadPolicy: UploadPolicy,
@@ -1118,60 +1329,84 @@ private fun ConnectedCard(
     onCancelDownloadAll: () -> Unit,
     onDismissBatch: () -> Unit,
 ) {
+    val eInk = LocalEInk.current
+    val scheme = MaterialTheme.colorScheme
+
+    val connectionState = resolveServerUiConnectionState(
+        server = server,
+        syncStatus = syncStatus,
+        busy = busy,
+        paired = paired,
+    )
+    val (statusLabelRes, statusTone) = serverConnectionBadge(connectionState)
+    val statusLabel = stringResource(statusLabelRes)
+
     Card(
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            containerColor = if (eInk) scheme.surface else scheme.surfaceContainerLow,
+        ),
+        border = BorderStroke(
+            width = 1.dp,
+            color = if (eInk) scheme.outline else scheme.outlineVariant.copy(alpha = 0.65f),
         ),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(
             Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Row(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                // The address is the one thing here the reader may want to
-                // act on rather than read: it is where the library they are
-                // borrowing from actually lives.
+                ServerLogoTile {
+                    ServerKindLogo(server.kind, Modifier.size(28.dp))
+                }
                 val uriHandler = LocalUriHandler.current
                 val open = stringResource(R.string.server_open_in_browser)
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        // A long address wraps, and without a share of
-                        // the row to wrap inside it takes the whole
-                        // width and pushes both icons off the card.
-                        .weight(1f)
-                        .clip(MaterialTheme.shapes.small)
-                        .clickable(onClickLabel = open) {
-                            runCatching { uriHandler.openUri(server.baseUrl) }
-                        },
-                ) {
-                    Text(
-                        server.baseUrl.substringAfter("://"),
-                        style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.weight(1f, fill = false),
-                    )
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Outlined.OpenInNew,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(16.dp),
-                    )
+                Column(modifier = Modifier.weight(1f)) {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                        itemVerticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = stringResource(server.kind.labelRes()),
+                            style = MaterialTheme.typography.titleLarge.copy(
+                                fontSize = 20.sp,
+                                lineHeight = 25.sp,
+                            ),
+                            color = scheme.onSurface,
+                        )
+                        ConnectionStatusBadge(label = statusLabel, tone = statusTone)
+                    }
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .clip(MaterialTheme.shapes.small)
+                            .clickable(onClickLabel = open) {
+                                runCatching { uriHandler.openUri(server.baseUrl) }
+                            },
+                    ) {
+                        Text(
+                            server.baseUrl.substringAfter("://"),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = scheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false),
+                        )
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Outlined.OpenInNew,
+                            contentDescription = null,
+                            tint = scheme.onSurfaceVariant,
+                            modifier = Modifier.size(14.dp),
+                        )
+                    }
                 }
-                // Beside the address rather than at the foot of the
-                // screen: the reader who wants to change it is looking
-                // at it, and the button down there reads as a sibling
-                // of Disconnect.
-                //
-                // Not offered where the address on show is the sync
-                // partner's: this form edits a catalog, and the partner
-                // has its own card below, with the password only it can
-                // ask for again.
                 if (server.catalogUrl != null) {
                     IconButton(onClick = onEditAddress) {
                         Icon(
@@ -1179,19 +1414,27 @@ private fun ConnectedCard(
                             contentDescription = stringResource(
                                 R.string.server_change_address,
                             ),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            tint = scheme.onSurfaceVariant,
                         )
                     }
                 }
             }
-            Text(
-                server.username.orEmpty()
-                    .ifBlank { stringResource(server.kind.labelRes()) },
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+
+            HorizontalDivider(color = scheme.outlineVariant.copy(alpha = 0.45f))
+
+            val accountDisplay = server.username?.takeIf { it.isNotBlank() }
+                ?: identity?.login?.takeIf { it.isNotBlank() }
+                ?: stringResource(server.kind.labelRes())
+            ServerMetricRow(
+                icon = Icons.Outlined.PersonOutline,
+                label = stringResource(R.string.server_detail_account),
+                value = accountDisplay,
             )
-            DetailLine(
-                text = if (storage.count == 0) {
+
+            ServerMetricRow(
+                icon = Icons.Outlined.CloudDownload,
+                label = stringResource(R.string.server_detail_downloaded),
+                value = if (storage.count == 0) {
                     stringResource(R.string.server_storage_empty)
                 } else {
                     pluralStringResource(
@@ -1202,6 +1445,17 @@ private fun ConnectedCard(
                     )
                 },
             )
+
+            if (server.canSync) {
+                val lastSyncedValue = lastSyncedAtMillis(syncStatus, server.positionSyncedAt)
+                    ?.let { relative(it).toString() }
+                    ?: stringResource(R.string.server_detail_last_sync_never)
+                ServerMetricRow(
+                    icon = Icons.Outlined.History,
+                    label = stringResource(R.string.server_detail_last_sync),
+                    value = lastSyncedValue,
+                )
+            }
         }
     }
 
@@ -1251,11 +1505,18 @@ private fun ConnectedCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             } else {
-                TextButton(
+                OutlinedButton(
                     onClick = onAskDownloadAll,
                     enabled = !busy,
-                    contentPadding = PaddingValues(0.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.heightIn(min = 48.dp),
                 ) {
+                    Icon(
+                        imageVector = Icons.Outlined.CloudDownload,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(Modifier.width(8.dp))
                     Text(stringResource(R.string.download_all))
                 }
             }
@@ -1301,9 +1562,16 @@ private fun ConnectedCard(
         )
 
         if (server.canSync) {
-            DetailLine(
-                text = syncStatus.describe(server.positionSyncedAt),
-            )
+            if (syncStatus is PositionSyncStatus.Failed) {
+                Notice(
+                    text = syncStatus.describe(server.positionSyncedAt),
+                    tone = NoticeTone.PROBLEM,
+                )
+            } else {
+                DetailLine(
+                    text = syncStatus.describe(server.positionSyncedAt),
+                )
+            }
             if (identity != null) {
                 DetailLine(
                     text = stringResource(R.string.server_sync_identity, identity.login),
@@ -1341,11 +1609,22 @@ private fun ConnectedCard(
                     onCheckedChange = onSetClearTranslationsOnFinish,
                 )
             }
-            TextButton(
+            OutlinedButton(
                 onClick = onSyncNow,
                 enabled = syncStatus != PositionSyncStatus.Syncing,
-                contentPadding = PaddingValues(0.dp),
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.heightIn(min = 48.dp),
             ) {
+                if (syncStatus == PositionSyncStatus.Syncing) {
+                    BusyIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                } else {
+                    Icon(
+                        imageVector = Icons.Outlined.Sync,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+                Spacer(Modifier.width(8.dp))
                 Text(stringResource(R.string.server_sync_now))
             }
         }
@@ -1391,10 +1670,27 @@ private fun ConnectedCard(
     }
 
     // The Kobo token is a calibre-web notion; the others have nothing like it.
-    if (server.kind == ServerKind.CALIBRE) {        AdvancedSection(server = server, onKoboToken = onKoboToken)
+    if (server.kind == ServerKind.CALIBRE) {
+        AdvancedSection(server = server, onKoboToken = onKoboToken)
     }
 
-    OutlinedButton(onClick = onDisconnect, modifier = Modifier.fillMaxWidth()) {
+    OutlinedButton(
+        onClick = onRequestDisconnect,
+        shape = RoundedCornerShape(14.dp),
+        colors = ButtonDefaults.outlinedButtonColors(
+            contentColor = scheme.error,
+        ),
+        border = BorderStroke(1.dp, scheme.error.copy(alpha = 0.45f)),
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp),
+    ) {
+        Icon(
+            imageVector = Icons.Outlined.LinkOff,
+            contentDescription = null,
+            modifier = Modifier.size(18.dp),
+        )
+        Spacer(Modifier.width(8.dp))
         Text(stringResource(R.string.server_disconnect))
     }
 }

@@ -1,6 +1,7 @@
 package com.chmouel.liseur.sync
 
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.remote.PeerPositionSync
 import java.util.UUID
@@ -86,6 +87,14 @@ interface LibrarySyncBackend {
     /** Action on a connected main server that opens this backend's controls to switch to it. */
     @Composable
     fun BookServerSwitchAction(onClick: () -> Unit) = Unit
+
+    /** Optional hint for the initial empty-library "Connect a library" card. */
+    @Composable
+    fun welcomeConnectHint(): String? = null
+
+    /** Optional provider logo for the initial empty-library "Connect a library" card. */
+    @Composable
+    fun WelcomeConnectIcon(modifier: Modifier) = Unit
 
     /** Optional flavor-provided action row inside a book's Manage section. */
     @Composable

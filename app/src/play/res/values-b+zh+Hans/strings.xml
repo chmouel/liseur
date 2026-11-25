@@ -153,9 +153,12 @@
     <string name="hardcover_conflict_stale">Liseur 中的值在此期间已更改。请检查后重新选择。</string>
     <string name="hardcover_review_public_note">公开。也会作为你在 Hardcover 上的书评发布。</string>
     <string name="drive_sync_settings_summary">将书库和阅读进度与 Google Drive 同步</string>
+    <string name="drive_welcome_connect_library_hint">Google Drive、Calibre、BookOrbit、OPDS 等多种书库。</string>
     <string name="drive_sync_intro">利用 Google Drive 应用数据在设备间同步书目和阅读进度。选定的 EPUB 文件会存储在云端硬盘的 Liseur 文件夹中。</string>
     <string name="drive_sync_status_active">已启用</string>
     <string name="drive_sync_status_paused">已暂停</string>
+    <string name="drive_sync_status_syncing">正在同步</string>
+    <string name="drive_sync_status_error">错误</string>
     <string name="drive_sync_status_needs_reconnect">需要重新连接</string>
     <string name="drive_sync_account_summary">%1$s · %2$s</string>
     <string name="drive_sync_status_label">状态</string>
@@ -167,6 +170,9 @@
     <string name="drive_sync_connect">连接 Google Drive</string>
     <string name="drive_sync_reconnect">重新连接</string>
     <string name="drive_sync_disconnect">断开连接</string>
+    <string name="drive_sync_disconnect_title">要断开 Google Drive 吗？</string>
+    <string name="drive_sync_disconnect_body">此设备上的同步将暂停。你的本地书籍、笔记和阅读进度都会保留。</string>
+    <string name="drive_sync_paused_detail">此设备上的同步已暂停。重新连接以继续同步书库和阅读进度。</string>
     <string name="drive_sync_switch_account">切换账号</string>
     <string name="drive_sync_connecting">正在连接 Google Drive…</string>
     <string name="drive_sync_needs_reconnect_detail">Google Drive 授权已过期或已撤销。请重新连接以恢复同步。</string>

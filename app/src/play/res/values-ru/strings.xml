@@ -159,9 +159,12 @@
     <string name="hardcover_conflict_stale">Значение в Liseur тем временем изменилось. Проверьте его и выберите снова.</string>
     <string name="hardcover_review_public_note">Публично. Также публикуется как ваш отзыв на Hardcover.</string>
     <string name="drive_sync_settings_summary">Синхронизировать библиотеку и прогресс чтения с Google Drive</string>
+    <string name="drive_welcome_connect_library_hint">Google Диск, Calibre, BookOrbit, OPDS и многие другие.</string>
     <string name="drive_sync_intro">Синхронизируйте каталог и прогресс чтения между устройствами через данные приложения на Google Drive. Выбранные файлы EPUB хранятся в папке Liseur на Диске.</string>
     <string name="drive_sync_status_active">Активна</string>
     <string name="drive_sync_status_paused">Приостановлена</string>
+    <string name="drive_sync_status_syncing">Синхронизация</string>
+    <string name="drive_sync_status_error">Ошибка</string>
     <string name="drive_sync_status_needs_reconnect">Требуется переподключение</string>
     <string name="drive_sync_account_summary">%1$s · %2$s</string>
     <string name="drive_sync_status_label">Статус</string>
@@ -173,6 +176,9 @@
     <string name="drive_sync_connect">Подключить Google Drive</string>
     <string name="drive_sync_reconnect">Переподключить</string>
     <string name="drive_sync_disconnect">Отключить</string>
+    <string name="drive_sync_disconnect_title">Отключить Google Диск?</string>
+    <string name="drive_sync_disconnect_body">Синхронизация на этом устройстве будет приостановлена. Ваши локальные книги, заметки и прогресс чтения сохранятся.</string>
+    <string name="drive_sync_paused_detail">Синхронизация на этом устройстве приостановлена. Подключитесь снова, чтобы возобновить синхронизацию библиотеки и прогресса чтения.</string>
     <string name="drive_sync_switch_account">Сменить аккаунт</string>
     <string name="drive_sync_connecting">Подключение к Google Drive…</string>
     <string name="drive_sync_needs_reconnect_detail">Авторизация Google Drive истекла или была отозвана. Переподключитесь, чтобы возобновить синхронизацию.</string>

@@ -5,6 +5,16 @@ import android.text.format.Formatter
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -13,27 +23,33 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.CloudSync
-import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.material.icons.outlined.CloudUpload
+import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.LinkOff
+import androidx.compose.material.icons.outlined.PersonOutline
+import androidx.compose.material.icons.outlined.SwapHoriz
+import androidx.compose.material.icons.outlined.Sync
+import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ListItem
-import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedCard
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -46,15 +62,21 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.MetadataOverrideFields
@@ -62,13 +84,51 @@ import com.chmouel.liseur.domain.PersonalEvaluation
 import com.chmouel.liseur.providers.PlaySettingsEntries
 import com.chmouel.liseur.reader.chrome.findActivity
 import com.chmouel.liseur.ui.BusyIndicator
+import com.chmouel.liseur.ui.LocalEInk
 import com.chmouel.liseur.ui.settings.ConnectionRow
+import com.chmouel.liseur.ui.settings.ConnectionStatusBadge
+import com.chmouel.liseur.ui.settings.ConnectionStatusTone
 import com.chmouel.liseur.ui.settings.RowDivider
-import com.chmouel.liseur.ui.settings.SettingsGroup
+import com.chmouel.liseur.ui.settings.ServerProviderPickerOptionRow
+import com.chmouel.liseur.ui.settings.ServerProviderSelectorCard
 import com.chmouel.liseur.ui.settings.search.SettingsFocus
 import com.chmouel.liseur.ui.settings.search.settingsAnchor
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+
+/** Explicit UI connection state for the Google Drive settings card. */
+internal enum class DriveUiConnectionState {
+    DISCONNECTED,
+    CONNECTING,
+    ACTIVE,
+    SYNCING,
+    PAUSED,
+    ERROR,
+}
+
+internal fun resolveDriveUiConnectionState(state: DriveSettingsUiState): DriveUiConnectionState {
+    val account = state.account
+    val hasError = state.errorMessageRes != null ||
+        !state.errorMessage.isNullOrBlank() ||
+        (!account?.lastError.isNullOrBlank() && account?.state != DriveAccount.STATE_PAUSED)
+    return when {
+        state.busy && account == null -> DriveUiConnectionState.CONNECTING
+        account == null -> DriveUiConnectionState.DISCONNECTED
+        state.syncingNow || state.busy -> DriveUiConnectionState.SYNCING
+        account.state == DriveAccount.STATE_NEEDS_RECONNECT || hasError -> DriveUiConnectionState.ERROR
+        account.state == DriveAccount.STATE_ACTIVE -> DriveUiConnectionState.ACTIVE
+        else -> DriveUiConnectionState.PAUSED
+    }
+}
+
+@Composable
+internal fun GoogleDriveLogo(modifier: Modifier = Modifier) {
+    Image(
+        painter = painterResource(R.drawable.ic_server_google_drive),
+        contentDescription = null,
+        modifier = modifier.size(28.dp),
+    )
+}
 
 /** Short status shown on the Settings > Book server row when Google Drive is linked. */
 @Composable
@@ -87,46 +147,27 @@ internal fun DriveBookServerSelectedRow(
     enabled: Boolean,
     onClick: () -> Unit,
 ) {
-    OutlinedCard(
-        onClick = onClick,
+    ServerProviderSelectorCard(
+        title = stringResource(R.string.drive_sync_title),
+        description = stringResource(R.string.drive_sync_settings_summary),
+        leadingIcon = { GoogleDriveLogo() },
         enabled = enabled,
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        ListItem(
-            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-            overlineContent = { Text(stringResource(R.string.server_kind)) },
-            headlineContent = { Text(stringResource(R.string.drive_sync_title)) },
-            supportingContent = {
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(stringResource(R.string.drive_sync_settings_summary))
-                    Text(
-                        stringResource(R.string.server_sync_exact),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            },
-            leadingContent = {
-                Icon(
-                    imageVector = Icons.Outlined.CloudSync,
-                    contentDescription = null,
-                    modifier = Modifier.size(32.dp),
-                )
-            },
-            trailingContent = {
-                Icon(
-                    imageVector = Icons.Outlined.ExpandMore,
-                    contentDescription = stringResource(R.string.server_kind_change),
-                )
-            },
-        )
-    }
+        onClick = onClick,
+    )
 }
 
 /** Switch entry on a connected main server; the controller confirms before disconnecting it. */
 @Composable
 internal fun DriveBookServerSwitchAction(onClick: () -> Unit) {
-    OutlinedButton(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+    OutlinedButton(
+        onClick = onClick,
+        shape = RoundedCornerShape(14.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp),
+    ) {
+        GoogleDriveLogo(Modifier.size(18.dp))
+        Spacer(Modifier.width(8.dp))
         Text(stringResource(R.string.drive_sync_use_instead))
     }
 }
@@ -137,34 +178,14 @@ internal fun DriveBookServerPickerRow(
     selected: Boolean,
     onPick: () -> Unit,
 ) {
-    ListItem(
-        modifier = Modifier.selectable(
-            selected = selected,
-            role = Role.RadioButton,
-            onClick = onPick,
-        ),
-        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-        headlineContent = { Text(stringResource(R.string.drive_sync_title)) },
-        supportingContent = {
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(stringResource(R.string.drive_sync_settings_summary))
-                Text(
-                    stringResource(R.string.server_sync_exact),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        },
-        leadingContent = {
-            Icon(
-                imageVector = Icons.Outlined.CloudSync,
-                contentDescription = null,
-                modifier = Modifier.size(32.dp),
-            )
-        },
-        trailingContent = {
-            RadioButton(selected = selected, onClick = null)
-        },
+    ServerProviderPickerOptionRow(
+        title = stringResource(R.string.drive_sync_title),
+        description = stringResource(R.string.drive_sync_settings_summary),
+        selected = selected,
+        onPick = onPick,
+        leadingIcon = { GoogleDriveLogo() },
+        syncLine = stringResource(R.string.server_sync_exact),
+        syncIcon = Icons.Outlined.Sync,
     )
 }
 
@@ -198,7 +219,7 @@ internal fun DriveSettingsEntry(
     }
     RowDivider()
     ConnectionRow(
-        icon = { Icon(Icons.Outlined.CloudSync, contentDescription = null) },
+        icon = { GoogleDriveLogo(Modifier.size(24.dp)) },
         title = stringResource(R.string.drive_sync_title),
         subtitle = subtitle,
         onClick = {
@@ -209,12 +230,13 @@ internal fun DriveSettingsEntry(
     )
 }
 
-/** Play-only Google Drive Sync Settings group rendered on the Services page. */
+/** Play-only Google Drive Sync Settings group rendered on the Book server page. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun DriveSettingsSection(controller: DriveAccountController) {
     val state by controller.uiState.collectAsState(initial = DriveSettingsUiState())
     val scope = rememberCoroutineScope()
+    var confirmDisconnectVisible by rememberSaveable { mutableStateOf(false) }
 
     val authLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartIntentSenderForResult(),
@@ -249,6 +271,32 @@ internal fun DriveSettingsSection(controller: DriveAccountController) {
         )
     }
 
+    if (confirmDisconnectVisible) {
+        AlertDialog(
+            onDismissRequest = { confirmDisconnectVisible = false },
+            title = { Text(stringResource(R.string.drive_sync_disconnect_title)) },
+            text = { Text(stringResource(R.string.drive_sync_disconnect_body)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmDisconnectVisible = false
+                        scope.launch { controller.disconnect() }
+                    },
+                ) {
+                    Text(
+                        text = stringResource(R.string.drive_sync_disconnect),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDisconnectVisible = false }) {
+                    Text(stringResource(R.string.drive_sync_switch_cancel))
+                }
+            },
+        )
+    }
+
     if (state.uploadPickerVisible) {
         DriveUploadFilesDialog(
             candidates = state.uploadCandidates,
@@ -275,81 +323,153 @@ internal fun DriveSettingsSection(controller: DriveAccountController) {
         )
     }
 
-    SettingsGroup(stringResource(R.string.drive_sync_title)) {
-        Column(Modifier.settingsAnchor(PlaySettingsEntries.GoogleDrive)) {
+    val uiState = resolveDriveUiConnectionState(state)
+    val eInk = LocalEInk.current
+    val scheme = MaterialTheme.colorScheme
+
+    Card(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (eInk) scheme.surface else scheme.surfaceContainerLow,
+        ),
+        border = BorderStroke(
+            width = 1.dp,
+            color = if (eInk) scheme.outline else scheme.outlineVariant.copy(alpha = 0.65f),
+        ),
+        modifier = Modifier
+            .fillMaxWidth()
+            .settingsAnchor(PlaySettingsEntries.GoogleDrive),
+    ) {
+        Column(
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.padding(20.dp),
+        ) {
+            // Card header: provider title + connection status badge
+            val account = state.account
+            FlowRow(
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                itemVerticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    text = stringResource(R.string.drive_sync_title),
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontSize = 20.sp,
+                        lineHeight = 25.sp,
+                    ),
+                    color = scheme.onSurface,
+                    modifier = Modifier.padding(end = 8.dp),
+                )
+                if (account != null || uiState == DriveUiConnectionState.CONNECTING) {
+                    val (badgeLabel, badgeTone) = when (uiState) {
+                        DriveUiConnectionState.SYNCING, DriveUiConnectionState.CONNECTING ->
+                            stringResource(R.string.drive_sync_status_syncing) to ConnectionStatusTone.SYNCING
+                        DriveUiConnectionState.ERROR ->
+                            (if (account?.state == DriveAccount.STATE_NEEDS_RECONNECT) {
+                                stringResource(R.string.drive_sync_status_needs_reconnect)
+                            } else {
+                                stringResource(R.string.drive_sync_status_error)
+                            }) to ConnectionStatusTone.ERROR
+                        DriveUiConnectionState.PAUSED ->
+                            stringResource(R.string.drive_sync_status_paused) to ConnectionStatusTone.PAUSED
+                        else ->
+                            stringResource(R.string.drive_sync_status_active) to ConnectionStatusTone.ACTIVE
+                    }
+                    ConnectionStatusBadge(label = badgeLabel, tone = badgeTone)
+                }
+            }
+
             Text(
                 text = stringResource(R.string.drive_sync_intro),
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 12.dp),
+                color = scheme.onSurfaceVariant,
             )
 
-            val account = state.account
-            if (account != null) {
-                RowDivider()
-                val statusLabel = statusLabelFor(account.state)
-                val statusColor = when (account.state) {
-                    DriveAccount.STATE_NEEDS_RECONNECT -> MaterialTheme.colorScheme.error
-                    DriveAccount.STATE_ACTIVE -> MaterialTheme.colorScheme.primary
-                    else -> MaterialTheme.colorScheme.onSurfaceVariant
-                }
-                ListItem(
-                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                    headlineContent = { Text(account.displayName) },
-                    supportingContent = {
-                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            Text(
-                                text = "${stringResource(R.string.drive_sync_status_label)}: $statusLabel",
-                                color = statusColor,
+            AnimatedContent(
+                targetState = account != null,
+                transitionSpec = {
+                    if (eInk) {
+                        ContentTransform(EnterTransition.None, ExitTransition.None)
+                    } else {
+                        fadeIn() togetherWith fadeOut()
+                    }
+                },
+                label = "DriveAccountDetails",
+            ) { hasAccount ->
+                if (hasAccount && account != null) {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        HorizontalDivider(color = scheme.outlineVariant.copy(alpha = 0.45f))
+
+                        // Connected account row
+                        DriveMetricRow(
+                            icon = Icons.Outlined.PersonOutline,
+                            label = account.displayName,
+                            value = null,
+                            emphasizeLabel = true,
+                        )
+
+                        // Last successful sync
+                        val lastSyncText = account.lastSuccessAt?.let { timestamp ->
+                            DateUtils.getRelativeTimeSpanString(
+                                timestamp,
+                                System.currentTimeMillis(),
+                                DateUtils.MINUTE_IN_MILLIS,
+                            ).toString()
+                        } ?: stringResource(R.string.drive_sync_last_sync_never)
+                        DriveMetricRow(
+                            icon = Icons.Outlined.History,
+                            label = stringResource(R.string.drive_sync_last_sync_label),
+                            value = lastSyncText,
+                        )
+
+                        // Pending EPUB uploads
+                        val uploadsText = if (state.pendingUploadsCount > 0) {
+                            pluralStringResource(
+                                R.plurals.drive_sync_pending_uploads_count,
+                                state.pendingUploadsCount,
+                                state.pendingUploadsCount,
                             )
-                            if (account.state == DriveAccount.STATE_NEEDS_RECONNECT) {
-                                Text(
-                                    text = stringResource(R.string.drive_sync_needs_reconnect_detail),
-                                    color = MaterialTheme.colorScheme.error,
-                                )
-                            }
-                            val lastSyncText = account.lastSuccessAt?.let { timestamp ->
-                                DateUtils.getRelativeTimeSpanString(
-                                    timestamp,
-                                    System.currentTimeMillis(),
-                                    DateUtils.MINUTE_IN_MILLIS,
-                                ).toString()
-                            } ?: stringResource(R.string.drive_sync_last_sync_never)
-                            Text(
-                                text = "${stringResource(R.string.drive_sync_last_sync_label)}: $lastSyncText",
+                        } else {
+                            stringResource(R.string.drive_sync_none)
+                        }
+                        DriveMetricRow(
+                            icon = Icons.Outlined.CloudUpload,
+                            label = stringResource(R.string.drive_sync_pending_uploads_label),
+                            value = uploadsText,
+                        )
+
+                        // Unresolved conflicts
+                        val hasConflicts = state.unresolvedConflictsCount > 0
+                        val conflictsText = if (hasConflicts) {
+                            pluralStringResource(
+                                R.plurals.drive_sync_conflicts_count,
+                                state.unresolvedConflictsCount,
+                                state.unresolvedConflictsCount,
                             )
-                            val uploadsText = if (state.pendingUploadsCount > 0) {
-                                pluralStringResource(
-                                    R.plurals.drive_sync_pending_uploads_count,
-                                    state.pendingUploadsCount,
-                                    state.pendingUploadsCount,
-                                )
-                            } else {
-                                stringResource(R.string.drive_sync_none)
-                            }
-                            Text(
-                                text = "${stringResource(R.string.drive_sync_pending_uploads_label)}: $uploadsText",
+                        } else {
+                            stringResource(R.string.drive_sync_none)
+                        }
+                        DriveMetricRow(
+                            icon = Icons.Outlined.WarningAmber,
+                            label = stringResource(R.string.drive_sync_conflicts_label),
+                            value = conflictsText,
+                            valueColor = if (hasConflicts) scheme.error else scheme.onSurface,
+                        )
+
+                        if (account.state == DriveAccount.STATE_PAUSED) {
+                            DriveInlineBanner(
+                                text = stringResource(R.string.drive_sync_paused_detail),
+                                isError = false,
                             )
-                            val conflictsText = if (state.unresolvedConflictsCount > 0) {
-                                pluralStringResource(
-                                    R.plurals.drive_sync_conflicts_count,
-                                    state.unresolvedConflictsCount,
-                                    state.unresolvedConflictsCount,
-                                )
-                            } else {
-                                stringResource(R.string.drive_sync_none)
-                            }
-                            Text(
-                                text = "${stringResource(R.string.drive_sync_conflicts_label)}: $conflictsText",
-                                color = if (state.unresolvedConflictsCount > 0) {
-                                    MaterialTheme.colorScheme.error
-                                } else {
-                                    Color.Unspecified
-                                },
+                        } else if (account.state == DriveAccount.STATE_NEEDS_RECONNECT) {
+                            DriveInlineBanner(
+                                text = stringResource(R.string.drive_sync_needs_reconnect_detail),
+                                isError = true,
                             )
                         }
-                    },
-                )
+                    }
+                }
             }
 
             val errorText = state.errorMessageRes?.let { stringResource(it) }
@@ -357,40 +477,35 @@ internal fun DriveSettingsSection(controller: DriveAccountController) {
                 ?: state.account?.lastError?.takeIf {
                     state.account?.state != DriveAccount.STATE_NEEDS_RECONNECT
                 }
-            if (!errorText.isNullOrBlank()) {
-                Text(
-                    text = errorText,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-                )
+            AnimatedVisibility(
+                visible = !errorText.isNullOrBlank(),
+                enter = if (eInk) EnterTransition.None else fadeIn(),
+                exit = if (eInk) ExitTransition.None else fadeOut(),
+            ) {
+                if (!errorText.isNullOrBlank()) {
+                    DriveInlineBanner(text = errorText, isError = true)
+                }
             }
 
             if (state.pausedSchemaDeviceLabels.isNotEmpty()) {
-                RowDivider()
-                Text(
+                DriveInlineBanner(
                     text = stringResource(
                         R.string.drive_sync_upgrade_required,
                         state.pausedSchemaDeviceLabels.joinToString(", "),
                     ),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    isError = true,
                 )
             }
 
             if (state.pendingWorkMatches.isNotEmpty()) {
-                RowDivider()
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                ) {
+                HorizontalDivider(color = scheme.outlineVariant.copy(alpha = 0.45f))
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
                         text = stringResource(R.string.drive_sync_match_section_title),
                         style = MaterialTheme.typography.titleSmall,
                     )
                     state.pendingWorkMatches.forEach { match ->
-                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Text(
                                 text = stringResource(
                                     R.string.drive_sync_match_body,
@@ -398,6 +513,7 @@ internal fun DriveSettingsSection(controller: DriveAccountController) {
                                     match.candidateTitle ?: match.candidateWorkKey,
                                 ),
                                 style = MaterialTheme.typography.bodySmall,
+                                color = scheme.onSurfaceVariant,
                             )
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 OutlinedButton(
@@ -416,76 +532,353 @@ internal fun DriveSettingsSection(controller: DriveAccountController) {
                 }
             }
 
+            HorizontalDivider(color = scheme.outlineVariant.copy(alpha = 0.45f))
+
             if (state.busy || state.syncingNow) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                    modifier = Modifier.padding(vertical = 4.dp),
                 ) {
-                    BusyIndicator()
+                    BusyIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                     Spacer(Modifier.width(12.dp))
                     Text(
                         text = stringResource(
                             if (state.syncingNow) R.string.drive_sync_syncing else R.string.drive_sync_connecting,
                         ),
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = scheme.onSurfaceVariant,
                     )
                 }
             } else {
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                DriveActionButtons(
+                    account = account,
+                    unresolvedConflictsCount = state.unresolvedConflictsCount,
+                    onConnect = { scope.launch { controller.beginConnect(switchAccount = false) } },
+                    onSwitchAccount = { scope.launch { controller.beginConnect(switchAccount = true) } },
+                    onUploadEpubs = { scope.launch { controller.openUploadPicker() } },
+                    onSyncNow = { scope.launch { controller.syncNow() } },
+                    onResolveConflicts = { controller.openConflictsDialog() },
+                    onRequestDisconnect = { confirmDisconnectVisible = true },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DriveMetricRow(
+    icon: ImageVector,
+    label: String,
+    value: String?,
+    emphasizeLabel: Boolean = false,
+    valueColor: Color = MaterialTheme.colorScheme.onSurface,
+) {
+    val scheme = MaterialTheme.colorScheme
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = scheme.onSurfaceVariant,
+            modifier = Modifier.size(18.dp),
+        )
+        if (value == null) {
+            Text(
+                text = label,
+                style = if (emphasizeLabel) {
+                    MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium)
+                } else {
+                    MaterialTheme.typography.bodyMedium
+                },
+                color = scheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+        } else {
+            Text(
+                text = "$label:",
+                style = MaterialTheme.typography.bodyMedium,
+                color = scheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false),
+            )
+            Text(
+                text = value,
+                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                color = valueColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+}
+
+@Composable
+private fun DriveInlineBanner(
+    text: String,
+    isError: Boolean,
+) {
+    val eInk = LocalEInk.current
+    val scheme = MaterialTheme.colorScheme
+    val container = when {
+        eInk -> scheme.surfaceContainerHigh
+        isError -> scheme.errorContainer.copy(alpha = 0.45f)
+        else -> scheme.surfaceContainerHighest.copy(alpha = 0.65f)
+    }
+    val content = when {
+        eInk -> scheme.onSurface
+        isError -> scheme.error
+        else -> scheme.onSurfaceVariant
+    }
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = container,
+        contentColor = content,
+        border = if (eInk) BorderStroke(1.dp, scheme.outline) else null,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+        ) {
+            Icon(
+                imageVector = if (isError) Icons.Outlined.ErrorOutline else Icons.Outlined.WarningAmber,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+            )
+            Text(
+                text = text,
+                style = MaterialTheme.typography.bodySmall,
+                color = content,
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun DriveActionButtons(
+    account: DriveAccount?,
+    unresolvedConflictsCount: Int,
+    onConnect: () -> Unit,
+    onSwitchAccount: () -> Unit,
+    onUploadEpubs: () -> Unit,
+    onSyncNow: () -> Unit,
+    onResolveConflicts: () -> Unit,
+    onRequestDisconnect: () -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+    val buttonShape = RoundedCornerShape(14.dp)
+    val primaryButtonColors = ButtonDefaults.buttonColors(
+        containerColor = scheme.secondaryContainer,
+        contentColor = scheme.onSecondaryContainer,
+    )
+
+    Column(
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        when (account?.state) {
+            null -> {
+                Button(
+                    onClick = onConnect,
+                    shape = buttonShape,
+                    colors = primaryButtonColors,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                        .heightIn(min = 48.dp),
                 ) {
-                    when (account?.state) {
-                        null -> {
-                            Button(onClick = { scope.launch { controller.beginConnect(switchAccount = false) } }) {
-                                Text(stringResource(R.string.drive_sync_connect))
-                            }
-                        }
-                        DriveAccount.STATE_ACTIVE -> {
-                            if (state.unresolvedConflictsCount > 0) {
-                                Button(onClick = { controller.openConflictsDialog() }) {
-                                    Text(
-                                        "${stringResource(R.string.drive_sync_resolve_conflicts)} (${state.unresolvedConflictsCount})",
-                                    )
-                                }
-                            }
-                            Button(onClick = { scope.launch { controller.openUploadPicker() } }) {
-                                Text(stringResource(R.string.drive_sync_upload_epubs))
-                            }
-                            OutlinedButton(onClick = { scope.launch { controller.syncNow() } }) {
-                                Text(stringResource(R.string.drive_sync_now))
-                            }
-                            OutlinedButton(onClick = { scope.launch { controller.disconnect() } }) {
-                                Text(stringResource(R.string.drive_sync_disconnect))
-                            }
-                            OutlinedButton(onClick = { scope.launch { controller.beginConnect(switchAccount = true) } }) {
-                                Text(stringResource(R.string.drive_sync_switch_account))
-                            }
-                        }
-                        DriveAccount.STATE_NEEDS_RECONNECT -> {
-                            Button(onClick = { scope.launch { controller.beginConnect(switchAccount = false) } }) {
-                                Text(stringResource(R.string.drive_sync_reconnect))
-                            }
-                            OutlinedButton(onClick = { scope.launch { controller.beginConnect(switchAccount = true) } }) {
-                                Text(stringResource(R.string.drive_sync_switch_account))
-                            }
-                            TextButton(onClick = { scope.launch { controller.disconnect() } }) {
-                                Text(stringResource(R.string.drive_sync_disconnect))
-                            }
-                        }
-                        else -> { // PAUSED
-                            Button(onClick = { scope.launch { controller.beginConnect(switchAccount = false) } }) {
-                                Text(stringResource(R.string.drive_sync_reconnect))
-                            }
-                            OutlinedButton(onClick = { scope.launch { controller.beginConnect(switchAccount = true) } }) {
-                                Text(stringResource(R.string.drive_sync_switch_account))
-                            }
-                        }
+                    GoogleDriveLogo(Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.drive_sync_connect))
+                }
+            }
+            DriveAccount.STATE_ACTIVE -> {
+                if (unresolvedConflictsCount > 0) {
+                    Button(
+                        onClick = onResolveConflicts,
+                        shape = buttonShape,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = scheme.errorContainer,
+                            contentColor = scheme.onErrorContainer,
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.WarningAmber,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            "${stringResource(R.string.drive_sync_resolve_conflicts)} ($unresolvedConflictsCount)",
+                        )
                     }
+                }
+                Button(
+                    onClick = onUploadEpubs,
+                    shape = buttonShape,
+                    colors = primaryButtonColors,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.CloudUpload,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.drive_sync_upload_epubs))
+                }
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    OutlinedButton(
+                        onClick = onSyncNow,
+                        shape = buttonShape,
+                        modifier = Modifier
+                            .weight(1f)
+                            .heightIn(min = 46.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Sync,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(stringResource(R.string.drive_sync_now))
+                    }
+                    OutlinedButton(
+                        onClick = onSwitchAccount,
+                        shape = buttonShape,
+                        modifier = Modifier
+                            .weight(1f)
+                            .heightIn(min = 46.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.SwapHoriz,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(stringResource(R.string.drive_sync_switch_account))
+                    }
+                }
+                OutlinedButton(
+                    onClick = onRequestDisconnect,
+                    shape = buttonShape,
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = scheme.error,
+                    ),
+                    border = BorderStroke(1.dp, scheme.error.copy(alpha = 0.45f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 44.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.LinkOff,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.drive_sync_disconnect))
+                }
+            }
+            DriveAccount.STATE_NEEDS_RECONNECT -> {
+                Button(
+                    onClick = onConnect,
+                    shape = buttonShape,
+                    colors = primaryButtonColors,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Sync,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.drive_sync_reconnect))
+                }
+                OutlinedButton(
+                    onClick = onSwitchAccount,
+                    shape = buttonShape,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 46.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.SwapHoriz,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.drive_sync_switch_account))
+                }
+                OutlinedButton(
+                    onClick = onRequestDisconnect,
+                    shape = buttonShape,
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = scheme.error,
+                    ),
+                    border = BorderStroke(1.dp, scheme.error.copy(alpha = 0.45f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 44.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.LinkOff,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.drive_sync_disconnect))
+                }
+            }
+            else -> { // PAUSED
+                Button(
+                    onClick = onConnect,
+                    shape = buttonShape,
+                    colors = primaryButtonColors,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Sync,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.drive_sync_reconnect))
+                }
+                OutlinedButton(
+                    onClick = onSwitchAccount,
+                    shape = buttonShape,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 46.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.SwapHoriz,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.drive_sync_switch_account))
                 }
             }
         }

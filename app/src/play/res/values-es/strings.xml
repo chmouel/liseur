@@ -155,9 +155,12 @@
     <string name="hardcover_conflict_stale">El valor de Liseur cambió mientras tanto. Revísalo y vuelve a elegir.</string>
     <string name="hardcover_review_public_note">Pública. También se publica como tu reseña en Hardcover.</string>
     <string name="drive_sync_settings_summary">Sincroniza tu biblioteca y progreso de lectura con Google Drive</string>
+    <string name="drive_welcome_connect_library_hint">Google Drive, Calibre, BookOrbit, OPDS y muchos más.</string>
     <string name="drive_sync_intro">Mantén tu catálogo y progreso de lectura sincronizados entre dispositivos usando los datos de aplicación de Google Drive. Los archivos EPUB seleccionados se guardan en una carpeta Liseur en Drive.</string>
     <string name="drive_sync_status_active">Activa</string>
     <string name="drive_sync_status_paused">En pausa</string>
+    <string name="drive_sync_status_syncing">Sincronizando</string>
+    <string name="drive_sync_status_error">Error</string>
     <string name="drive_sync_status_needs_reconnect">Reconexión necesaria</string>
     <string name="drive_sync_account_summary">%1$s · %2$s</string>
     <string name="drive_sync_status_label">Estado</string>
@@ -169,6 +172,9 @@
     <string name="drive_sync_connect">Conectar Google Drive</string>
     <string name="drive_sync_reconnect">Reconectar</string>
     <string name="drive_sync_disconnect">Desconectar</string>
+    <string name="drive_sync_disconnect_title">¿Desconectar Google Drive?</string>
+    <string name="drive_sync_disconnect_body">La sincronización se pausará en este dispositivo. Se conservarán tus libros locales, notas y progreso de lectura.</string>
+    <string name="drive_sync_paused_detail">La sincronización está en pausa en este dispositivo. Vuelve a conectarte para seguir sincronizando tu biblioteca y progreso de lectura.</string>
     <string name="drive_sync_switch_account">Cambiar de cuenta</string>
     <string name="drive_sync_connecting">Conectando con Google Drive…</string>
     <string name="drive_sync_needs_reconnect_detail">La autorización de Google Drive caducó o fue revocada. Vuelve a conectarte para reanudar la sincronización.</string>
