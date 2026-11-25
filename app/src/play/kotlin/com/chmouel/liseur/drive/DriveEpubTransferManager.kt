@@ -268,14 +268,6 @@ internal class DriveEpubTransferManager(
 
         for (item in pending) {
             val sha = item.sha256.lowercase(Locale.ROOT)
-            // Deduplicate if an identical non-trashed EPUB already exists in any Liseur/ folder.
-            val existingRemote = driveFiles.byKindAndSha256(permissionId, DriveFile.KIND_EPUB, sha).firstOrNull()
-            if (existingRemote != null) {
-                uploads.markUploaded(permissionId, sha, existingRemote.fileId, clock())
-                uploadedCount++
-                continue
-            }
-
             val book = books.getByUrl(item.bookUrl)
             if (book == null || book.openableUrl == null) {
                 uploads.updateState(
@@ -285,6 +277,49 @@ internal class DriveEpubTransferManager(
                     updatedAt = clock(),
                 )
                 failedCount++
+                continue
+            }
+
+            val currentFingerprint = try {
+                withContext(Dispatchers.IO) { openBookStream(book)?.use(BookFingerprints::of) }
+            } catch (_: IOException) {
+                null
+            } catch (_: SecurityException) {
+                null
+            }
+            if (currentFingerprint == null) {
+                uploads.updateState(permissionId, sha, DriveUpload.STATE_FAILED, clock())
+                failedCount++
+                anyRetryable = true
+                continue
+            }
+            if (currentFingerprint.sha256.lowercase(Locale.ROOT) != sha || currentFingerprint.size != item.sizeBytes) {
+                val newSha = currentFingerprint.sha256.lowercase(Locale.ROOT)
+                val saved = identities.saveFingerprint(
+                    book,
+                    BookFingerprintRow(book.url, newSha, currentFingerprint.partialMd5, currentFingerprint.size, book.fileModifiedAt, clock()),
+                )
+                if (!saved) {
+                    uploads.updateState(permissionId, sha, DriveUpload.STATE_FAILED, clock())
+                } else {
+                    store.withTransaction {
+                        val replacement = uploads.get(permissionId, newSha)
+                        uploads.delete(permissionId, sha)
+                        if (replacement == null) {
+                            uploads.upsert(item.copy(sha256 = newSha, sizeBytes = currentFingerprint.size, state = DriveUpload.STATE_PENDING,
+                                sessionUri = null, bytesSent = 0L, fileId = null, updatedAt = clock()))
+                        }
+                    }
+                }
+                anyRetryable = true
+                continue
+            }
+
+            // Deduplicate if an identical non-trashed EPUB already exists in any Liseur/ folder.
+            val existingRemote = driveFiles.byKindAndSha256(permissionId, DriveFile.KIND_EPUB, sha).firstOrNull()
+            if (existingRemote != null) {
+                uploads.markUploaded(permissionId, sha, existingRemote.fileId, clock())
+                uploadedCount++
                 continue
             }
 

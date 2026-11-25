@@ -1649,6 +1649,35 @@ class DrivePhase3EndToEndTest {
     }
 
     @Test
+    fun `changed upload source discards the old resumable session`() = runTest {
+        deviceA.connect()
+        val oldBytes = "old EPUB contents for upload".toByteArray()
+        val file = File(tempDir, "changed-upload.epub").apply { writeBytes(oldBytes) }
+        val oldFp = BookFingerprints.of(ByteArrayInputStream(oldBytes))
+        val book = Book(
+            url = file.toURI().toString(), title = "Changed", author = "Author", coverPath = null,
+            source = null, addedAt = 1L, lastOpenedAt = null, localUri = file.toURI().toString(),
+            downloadState = DownloadState.DOWNLOADED, fileMetadataChecked = true,
+        )
+        deviceA.liseurDb.bookDao().upsert(book)
+        assertEquals(1, deviceA.epubTransfers.queueSelectedBooks(PERM_ID, setOf(book.url)))
+        driveServer.failNextResumableUploadAfterBytes = 8L to IOException("interrupted")
+        assertTrue(deviceA.epubTransfers.uploadPending().retryableFailure)
+        assertNotNull(deviceA.driveDb.uploads().get(PERM_ID, oldFp.sha256)?.sessionUri)
+
+        val newBytes = "new and different EPUB contents".toByteArray()
+        val newFp = BookFingerprints.of(ByteArrayInputStream(newBytes))
+        file.writeBytes(newBytes)
+        assertTrue(deviceA.epubTransfers.uploadPending().retryableFailure)
+        assertNull(deviceA.driveDb.uploads().get(PERM_ID, oldFp.sha256))
+        val replacement = requireNotNull(deviceA.driveDb.uploads().get(PERM_ID, newFp.sha256))
+        assertNull(replacement.sessionUri)
+        assertEquals(0L, replacement.bytesSent)
+        driveServer.failNextResumableUploadAfterBytes = null
+        assertEquals(1, deviceA.epubTransfers.uploadPending().uploadedCount)
+    }
+
+    @Test
     fun `mid-upload failures preserve resumable session URI and byte offset across retries`() = runTest {
         deviceA.connect()
 
