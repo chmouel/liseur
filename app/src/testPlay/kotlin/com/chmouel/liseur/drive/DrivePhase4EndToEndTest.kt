@@ -1177,7 +1177,7 @@ class DrivePhase4EndToEndTest {
         assertTrue(driveServer.epubFilesSnapshot().none { it.name.contains("unpub-b") || it.name.contains("ED-B") })
         assertEquals(1, driveServer.epubFilesSnapshot().size)
         assertNotNull(deviceA.liseurDb.bookDao().getByUrl(second.url))
-        assertNull(deviceA.liseurDb.workIdentityDao().alias(second.url, peer))
+        assertEquals(com.chmouel.liseur.data.db.WorkAlias.REJECTED, deviceA.liseurDb.workIdentityDao().alias(second.url, peer)?.confidence)
     }
 
     @Test
@@ -1300,7 +1300,7 @@ class DrivePhase4EndToEndTest {
 
         // Neither canDownloadAgain nor a subsequent sync may resurrect the Drive alias or publish records for the deleted work.
         val peerId = DriveLibrarySync.accountPeerId(PERM_ID)
-        assertNull(deviceB.liseurDb.workIdentityDao().alias(stubB, peerId))
+        assertEquals(com.chmouel.liseur.data.db.WorkAlias.REJECTED, deviceB.liseurDb.workIdentityDao().alias(stubB, peerId)?.confidence)
         val appDataBefore = driveServer.appDataFilesSnapshot().map { it.id }.toSet()
         deviceB.liseurDb.annotationDao().upsert(
             BookAnnotation(
@@ -1315,7 +1315,7 @@ class DrivePhase4EndToEndTest {
             ),
         )
         assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
-        assertNull(deviceB.liseurDb.workIdentityDao().alias(stubB, peerId))
+        assertEquals(com.chmouel.liseur.data.db.WorkAlias.REJECTED, deviceB.liseurDb.workIdentityDao().alias(stubB, peerId)?.confidence)
         assertEquals(appDataBefore, driveServer.appDataFilesSnapshot().map { it.id }.toSet())
     }
 
@@ -3416,6 +3416,7 @@ class DrivePhase4EndToEndTest {
             seriesName = fileSeriesName,
             seriesIndex = fileSeriesIndex,
             fileMetadataChecked = true,
+            fileModifiedAt = file.lastModified(),
         )
         device.liseurDb.bookDao().upsert(book)
         device.liseurDb.workIdentityDao().upsert(
