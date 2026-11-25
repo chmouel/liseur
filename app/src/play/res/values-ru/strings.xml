@@ -158,8 +158,8 @@
     <string name="hardcover_conflict_review_too_long">Этот отзыв в Hardcover слишком длинный для импорта в Liseur.</string>
     <string name="hardcover_conflict_stale">Значение в Liseur тем временем изменилось. Проверьте его и выберите снова.</string>
     <string name="hardcover_review_public_note">Публично. Также публикуется как ваш отзыв на Hardcover.</string>
-    <string name="drive_sync_settings_summary">Синхронизировать библиотеку, заметки и прогресс чтения с Google Drive</string>
-    <string name="drive_sync_intro">Синхронизируйте каталог, заметки, словарь, сеансы чтения и прогресс чтения между устройствами через данные приложения на Google Drive. Выбранные файлы EPUB хранятся в папке Liseur на Диске.</string>
+    <string name="drive_sync_settings_summary">Синхронизировать библиотеку и прогресс чтения с Google Drive</string>
+    <string name="drive_sync_intro">Синхронизируйте каталог и прогресс чтения между устройствами через данные приложения на Google Drive. Выбранные файлы EPUB хранятся в папке Liseur на Диске.</string>
     <string name="drive_sync_status_active">Активна</string>
     <string name="drive_sync_status_paused">Приостановлена</string>
     <string name="drive_sync_status_needs_reconnect">Требуется переподключение</string>

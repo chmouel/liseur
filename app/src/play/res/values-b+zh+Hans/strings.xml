@@ -152,8 +152,8 @@
     <string name="hardcover_conflict_review_too_long">这条 Hardcover 书评太长，无法导入 Liseur。</string>
     <string name="hardcover_conflict_stale">Liseur 中的值在此期间已更改。请检查后重新选择。</string>
     <string name="hardcover_review_public_note">公开。也会作为你在 Hardcover 上的书评发布。</string>
-    <string name="drive_sync_settings_summary">将书库、笔记和阅读进度与 Google Drive 同步</string>
-    <string name="drive_sync_intro">利用 Google Drive 应用数据在设备间同步书目、笔记、生词本、阅读记录和阅读进度。选定的 EPUB 文件会存储在云端硬盘的 Liseur 文件夹中。</string>
+    <string name="drive_sync_settings_summary">将书库和阅读进度与 Google Drive 同步</string>
+    <string name="drive_sync_intro">利用 Google Drive 应用数据在设备间同步书目和阅读进度。选定的 EPUB 文件会存储在云端硬盘的 Liseur 文件夹中。</string>
     <string name="drive_sync_status_active">已启用</string>
     <string name="drive_sync_status_paused">已暂停</string>
     <string name="drive_sync_status_needs_reconnect">需要重新连接</string>
