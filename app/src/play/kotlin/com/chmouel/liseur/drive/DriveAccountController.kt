@@ -70,6 +70,7 @@ data class DriveSettingsUiState(
     val syncingNow: Boolean = false,
     val busy: Boolean = false,
     @param:StringRes val errorMessageRes: Int? = null,
+    val errorMessage: String? = null,
     val pendingConfirmation: PendingAccountSwitchConfirmation? = null,
     val pendingAuthIntent: PendingIntent? = null,
 )
@@ -125,6 +126,7 @@ internal class DriveAccountController(
     private data class EphemeralState(
         val busy: Boolean = false,
         @param:StringRes val errorMessageRes: Int? = null,
+        val errorMessage: String? = null,
         val syncingNow: Boolean = false,
         val uploadPickerVisible: Boolean = false,
         val uploadCandidates: List<DriveUploadCandidate> = emptyList(),
@@ -204,6 +206,7 @@ internal class DriveAccountController(
                 syncingNow = ui.syncingNow,
                 busy = ui.busy,
                 errorMessageRes = ui.errorMessageRes,
+                errorMessage = ui.errorMessage,
                 pendingConfirmation = ui.pendingConfirmation,
                 pendingAuthIntent = ui.pendingAuthIntent,
             )

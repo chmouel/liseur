@@ -259,7 +259,7 @@ internal class DriveCatalogSync(
                     if (book.url.startsWith(DriveWorkIdentity.DRIVE_BOOK_URL_PREFIX) && book.localUri == null) {
                         books.deleteByUrls(listOf(book.url))
                     }
-                    identities.forgetAliases(listOf(book.url))
+                    identities.deleteAliasIfStale(book.url, peerId, alias.workId)
                 }
             }
             store.withTransaction {
@@ -292,6 +292,7 @@ internal class DriveCatalogSync(
         val incoming = DriveWireCodec.decodeCatalogBody(bodyJson) ?: return
         val canonicalKey = workIdentity.canonicalWorkKey(permissionId, incoming.workKey)
         val existingState = recordStates.get(permissionId, DriveWireCodec.DOMAIN_CATALOG, canonicalKey)
+        if (existingState?.versionOp == DriveRecordState.OP_DEL && record.hlc <= existingState.lastHlc) return
         val existingBody = existingState?.bodyJson?.let {
             runCatching { DriveWireCodec.decodeCatalogBody(JSONObject(it)) }.getOrNull()
         }
@@ -404,9 +405,11 @@ internal class DriveCatalogSync(
                     if (book.archivedAt != archivedAt) {
                         books.setArchived(url, archivedAt)
                     }
-                    if (book.url.startsWith(DriveWorkIdentity.DRIVE_BOOK_URL_PREFIX) && book.localUri == null) {
+                    if (book.openableUrl == null) {
                         // A fileless stub has no file of its own: the catalog is its baseline metadata.
-                        val refreshed = if (incomingNewerHlc) book.withCatalogBaseline(merged) else book
+                        val refreshed = if (incomingNewerHlc && book.url.startsWith(DriveWorkIdentity.DRIVE_BOOK_URL_PREFIX)) {
+                            book.withCatalogBaseline(merged)
+                        } else book
                         books.upsert(
                             refreshed.copy(
                                 remoteUuid = null,
