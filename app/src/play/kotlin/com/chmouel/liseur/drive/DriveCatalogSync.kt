@@ -40,9 +40,15 @@ internal class DriveCatalogSync(
      */
     suspend fun collectDirtyRecords(
         permissionId: String,
+        bookUrlFilter: String? = null,
         nextHlc: suspend () -> String,
     ): List<DriveWireRecord> {
         val eligibleBooks = books.allOnce().filter { it.browseServerId == null }
+        val selectedKey = if (bookUrlFilter != null) {
+            val book = eligibleBooks.firstOrNull { it.url == bookUrlFilter } ?: return emptyList()
+            val alias = workIdentity.resolveBook(permissionId, book) ?: return emptyList()
+            workIdentity.canonicalWorkKey(permissionId, alias.workId)
+        } else null
         val uploadedBySha = uploads.forAccount(permissionId)
             .filter {
                 it.state == DriveUpload.STATE_UPLOADED &&
@@ -59,6 +65,7 @@ internal class DriveCatalogSync(
             val alias = workIdentity.resolveBook(permissionId, book) ?: continue
             if (!alias.usable) continue
             val canonical = workIdentity.canonicalWorkKey(permissionId, alias.workId)
+            if (selectedKey != null && canonical != selectedKey) continue
             grouped.getOrPut(canonical) { mutableListOf() }.add(book to alias)
         }
 
@@ -117,7 +124,7 @@ internal class DriveCatalogSync(
                     else -> existingEd?.uploadedAt ?: clock()
                 }
                 val resolvedFileName = when {
-                    resolvedFileId == null -> existingEd?.fileName
+                    resolvedFileId == null -> null
                     knownFile != null -> knownFile.name
                     else -> existingEd?.fileName ?: sanitizeEpubFileName(primaryBook.stableTitle ?: primaryBook.title)
                 }
@@ -125,8 +132,9 @@ internal class DriveCatalogSync(
                     sha256 = sha,
                     sizeBytes = fpRow?.fileSize ?: book.sizeBytes ?: upload?.sizeBytes ?: existingEd?.sizeBytes,
                     driveFileId = resolvedFileId,
-                    fileName = resolvedFileName,
-                    uploadedAt = resolvedUploadedAt,
+                    fileName = if (existingEd != null && resolvedFileId == existingEd.driveFileId) existingEd.fileName else resolvedFileName,
+                    uploadedAt = if (existingEd != null && resolvedFileId == existingEd.driveFileId) existingEd.uploadedAt else resolvedUploadedAt,
+                    availabilityHlc = if (resolvedFileId != existingEd?.driveFileId) nextHlc() else existingEd?.availabilityHlc,
                 )
             }
 
@@ -134,7 +142,7 @@ internal class DriveCatalogSync(
             for ((sha, ed) in editionsBySha.toMap()) {
                 val fid = ed.driveFileId ?: continue
                 if (driveFiles.get(permissionId, fid)?.trashed == true) {
-                    editionsBySha[sha] = ed.copy(driveFileId = null, uploadedAt = null)
+                    editionsBySha[sha] = ed.copy(driveFileId = null, fileName = null, uploadedAt = null, availabilityHlc = nextHlc())
                 }
             }
 
@@ -174,18 +182,26 @@ internal class DriveCatalogSync(
             )
             val candidateMap = DriveWireCodec.encodeCatalogBody(candidateBody)
             val candidateFp = DriveCanonicalJson.contentFp(candidateMap)
-            if (existingState != null && existingState.publishedFp == candidateFp) {
+            if (existingState != null && existingState.versionOp == DriveRecordState.OP_PUT && existingState.contentFp == candidateFp) {
+                if (existingState.publishedFp != existingState.versionFp) {
+                    out.add(
+                        DriveWireRecord(
+                            d = DriveWireCodec.DOMAIN_CATALOG, k = workKey, op = DriveRecordState.OP_PUT,
+                            hlc = existingState.lastHlc, fp = existingState.versionFp,
+                            anc = DriveWorkIdentity.decodeStringArray(existingState.ancestorsJson),
+                            resRefs = DriveWorkIdentity.decodeStringArray(existingState.resRefsJson),
+                            body = JSONObject(requireNotNull(existingState.bodyJson)),
+                        ),
+                    )
+                }
                 continue
             }
 
-            val finalBody = if (existingBody != null && existingState?.versionFp == candidateFp) {
-                candidateBody
-            } else {
-                candidateBody.copy(updatedAt = clock())
-            }
+            val finalBody = candidateBody.copy(updatedAt = clock())
             val finalMap = DriveWireCodec.encodeCatalogBody(finalBody)
-            val finalFp = DriveCanonicalJson.contentFp(finalMap)
+            val contentFp = DriveCanonicalJson.contentFp(finalMap)
             val hlc = nextHlc()
+            val finalFp = DriveCanonicalJson.putFp(finalMap, hlc)
             val ancestors = buildList {
                 existingState?.versionFp?.takeIf { it != finalFp }?.let(::add)
                 addAll(DriveWorkIdentity.decodeStringArray(existingState?.ancestorsJson))
@@ -207,7 +223,7 @@ internal class DriveCatalogSync(
                     versionFp = finalFp,
                     versionOp = DriveRecordState.OP_PUT,
                     publishedFp = existingState?.publishedFp,
-                    contentFp = finalFp,
+                    contentFp = contentFp,
                     originDeviceId = existingState?.originDeviceId,
                     originSeq = existingState?.originSeq,
                     ancestorsJson = DriveCanonicalJson.encode(ancestors),
@@ -611,22 +627,13 @@ internal class DriveCatalogSync(
             val prev = editions[sha]
             editions[sha] = if (prev == null) {
                 ed
-            } else if (incomingNewerHlc) {
-                DriveCatalogEdition(
-                    sha256 = sha,
-                    sizeBytes = ed.sizeBytes ?: prev.sizeBytes,
-                    driveFileId = ed.driveFileId,
-                    fileName = ed.fileName ?: prev.fileName,
-                    uploadedAt = if (ed.driveFileId != null) ed.uploadedAt ?: prev.uploadedAt else null,
-                )
             } else {
-                DriveCatalogEdition(
-                    sha256 = sha,
-                    sizeBytes = prev.sizeBytes ?: ed.sizeBytes,
-                    driveFileId = prev.driveFileId,
-                    fileName = prev.fileName ?: ed.fileName,
-                    uploadedAt = if (prev.driveFileId != null) prev.uploadedAt ?: ed.uploadedAt else null,
-                )
+                val incomingAvailabilityWins = when {
+                    ed.availabilityHlc != prev.availabilityHlc -> (ed.availabilityHlc ?: "") > (prev.availabilityHlc ?: "")
+                    else -> (ed.driveFileId ?: "") > (prev.driveFileId ?: "")
+                }
+                val chosen = if (incomingAvailabilityWins) ed else prev
+                chosen.copy(sizeBytes = listOfNotNull(ed.sizeBytes, prev.sizeBytes).maxOrNull())
             }
         }
         val identifiers = (existing.identifiers + incoming.identifiers)
