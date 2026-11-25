@@ -45,7 +45,18 @@ data class DriveAccount(
     @ColumnInfo(name = "hlc_wall_ms", defaultValue = "0") val hlcWallMs: Long = 0L,
     @ColumnInfo(name = "hlc_counter", defaultValue = "0") val hlcCounter: Int = 0,
     @ColumnInfo(name = "metered_transfers", defaultValue = "0") val meteredTransfers: Boolean = false,
+    /**
+     * The state this account held before it was paused for a pending account
+     * switch; non-null means a confirmation was left open.
+     *
+     * Startup uses it to tell an abandoned switch (restore the previous state)
+     * from an intentional disconnect (stay `PAUSED`).
+     */
+    @ColumnInfo(name = "pending_switch_previous_state") val pendingSwitchPreviousState: String? = null,
 ) {
+    /** Drive sometimes omits `emailAddress`; the permission id still names the account. */
+    val displayName: String get() = email.ifBlank { permissionId }
+
     companion object {
         const val STATE_ACTIVE = "ACTIVE"
         const val STATE_PAUSED = "PAUSED"

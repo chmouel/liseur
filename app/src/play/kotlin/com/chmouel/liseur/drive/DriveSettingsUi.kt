@@ -61,7 +61,7 @@ internal fun driveConnectedSummary(controller: DriveAccountController): String? 
     val account = state.account ?: return null
     val statusLabel = statusLabelFor(account.state)
     return "${stringResource(R.string.drive_sync_title)} · ${
-        stringResource(R.string.drive_sync_account_summary, account.email, statusLabel)
+        stringResource(R.string.drive_sync_account_summary, account.displayName, statusLabel)
     }"
 }
 
@@ -162,7 +162,7 @@ internal fun DriveSettingsEntry(
     val account = state.account
     val subtitle = if (account != null) {
         val statusLabel = statusLabelFor(account.state)
-        stringResource(R.string.drive_sync_account_summary, account.email, statusLabel)
+        stringResource(R.string.drive_sync_account_summary, account.displayName, statusLabel)
     } else {
         stringResource(R.string.drive_sync_settings_summary)
     }
@@ -197,7 +197,7 @@ internal fun DriveSettingsSection(controller: DriveAccountController) {
     val activity = LocalContext.current.findActivity()
     DisposableEffect(controller) {
         onDispose {
-            if (activity?.isChangingConfigurations != true) controller.abandonAuthorization()
+            if (activity?.isChangingConfigurations != true) controller.abandonInteractiveFlow()
         }
     }
 
@@ -239,7 +239,7 @@ internal fun DriveSettingsSection(controller: DriveAccountController) {
                 }
                 ListItem(
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                    headlineContent = { Text(account.email) },
+                    headlineContent = { Text(account.displayName) },
                     supportingContent = {
                         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text(
@@ -296,9 +296,10 @@ internal fun DriveSettingsSection(controller: DriveAccountController) {
                 )
             }
 
-            val errorText = state.errorMessage ?: state.account?.lastError?.takeIf {
-                state.account?.state != DriveAccount.STATE_NEEDS_RECONNECT
-            }
+            val errorText = state.errorMessageRes?.let { stringResource(it) }
+                ?: state.account?.lastError?.takeIf {
+                    state.account?.state != DriveAccount.STATE_NEEDS_RECONNECT
+                }
             if (!errorText.isNullOrBlank()) {
                 Text(
                     text = errorText,
@@ -400,13 +401,13 @@ private fun DriveAccountSwitchDialog(
 
     AlertDialog(
         onDismissRequest = { if (!busy) onCancel() },
-        title = { Text(stringResource(R.string.drive_sync_switch_title, confirmation.targetEmail)) },
+        title = { Text(stringResource(R.string.drive_sync_switch_title, confirmation.targetDisplayName)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
                     text = stringResource(
                         R.string.drive_sync_switch_body_summary,
-                        confirmation.targetEmail,
+                        confirmation.targetDisplayName,
                         booksLabel,
                         notesLabel,
                         sessionsLabel,
@@ -417,7 +418,7 @@ private fun DriveAccountSwitchDialog(
                     Text(
                         text = stringResource(
                             R.string.drive_sync_switch_body_keep_previous,
-                            confirmation.previousAccount.email,
+                            confirmation.previousAccount.displayName,
                         ),
                     )
                 }

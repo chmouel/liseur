@@ -158,5 +158,71 @@
     <string name="hardcover_conflict_review_too_long">Этот отзыв в Hardcover слишком длинный для импорта в Liseur.</string>
     <string name="hardcover_conflict_stale">Значение в Liseur тем временем изменилось. Проверьте его и выберите снова.</string>
     <string name="hardcover_review_public_note">Публично. Также публикуется как ваш отзыв на Hardcover.</string>
+    <string name="drive_sync_settings_summary">Синхронизировать библиотеку, заметки и прогресс чтения с Google Drive</string>
+    <string name="drive_sync_intro">Синхронизируйте каталог, заметки, словарь, сеансы чтения и прогресс чтения между устройствами через данные приложения на Google Drive. Выбранные файлы EPUB хранятся в папке Liseur на Диске.</string>
+    <string name="drive_sync_status_active">Активна</string>
+    <string name="drive_sync_status_paused">Приостановлена</string>
+    <string name="drive_sync_status_needs_reconnect">Требуется переподключение</string>
+    <string name="drive_sync_account_summary">%1$s · %2$s</string>
+    <string name="drive_sync_status_label">Статус</string>
+    <string name="drive_sync_last_sync_label">Последняя синхронизация</string>
+    <string name="drive_sync_last_sync_never">Никогда</string>
+    <string name="drive_sync_pending_uploads_label">Ожидающие загрузки EPUB</string>
+    <string name="drive_sync_conflicts_label">Нерешённые конфликты</string>
+    <string name="drive_sync_none">Нет</string>
+    <string name="drive_sync_connect">Подключить Google Drive</string>
+    <string name="drive_sync_reconnect">Переподключить</string>
+    <string name="drive_sync_disconnect">Отключить</string>
+    <string name="drive_sync_switch_account">Сменить аккаунт</string>
+    <string name="drive_sync_connecting">Подключение к Google Drive…</string>
+    <string name="drive_sync_needs_reconnect_detail">Авторизация Google Drive истекла или была отозвана. Переподключитесь, чтобы возобновить синхронизацию.</string>
+    <string name="drive_sync_switch_title">Синхронизировать с %1$s?</string>
+    <string name="drive_sync_switch_body_summary">Liseur будет синхронизировать локальную библиотеку с %1$s: %2$s, %3$s, %4$s и %5$s.</string>
+    <string name="drive_sync_switch_body_keep_previous">Предыдущий аккаунт (%1$s) останется приостановленным на этом устройстве, а его прогресс синхронизации сохранится.</string>
+    <string name="drive_sync_switch_body_disconnect_server">Текущий книжный сервер будет отключён. Скачанные книги, история чтения и каталоги только для просмотра сохранятся.</string>
+    <string name="drive_sync_switch_confirm">Синхронизировать с этим аккаунтом</string>
+    <string name="drive_sync_switch_cancel">Отмена</string>
     <string name="drive_sync_use_instead">Использовать Google Drive вместо этого</string>
+    <string name="drive_sync_error_sign_in_prompt">Сервисам Google Play не удалось открыть окно входа.</string>
+    <string name="drive_sync_error_auth_incomplete">Авторизация Google Drive не была завершена.</string>
+    <string name="drive_sync_error_auth_failed">Не удалось авторизовать Google Drive.</string>
+    <string name="drive_sync_error_token_rejected">Google Drive отклонил токен авторизации.</string>
+    <string name="drive_sync_error_unreachable">Не удалось подключиться к Google Drive. Проверьте соединение и повторите попытку.</string>
+    <string name="drive_sync_error_activate_failed">Не удалось активировать аккаунт Google Drive.</string>
+    <plurals name="drive_sync_books_count">
+        <item quantity="one">%d книга</item>
+        <item quantity="few">%d книги</item>
+        <item quantity="many">%d книг</item>
+        <item quantity="other">%d книги</item>
+    </plurals>
+    <plurals name="drive_sync_notes_count">
+        <item quantity="one">%d заметка</item>
+        <item quantity="few">%d заметки</item>
+        <item quantity="many">%d заметок</item>
+        <item quantity="other">%d заметки</item>
+    </plurals>
+    <plurals name="drive_sync_sessions_count">
+        <item quantity="one">%d сеанс чтения</item>
+        <item quantity="few">%d сеанса чтения</item>
+        <item quantity="many">%d сеансов чтения</item>
+        <item quantity="other">%d сеанса чтения</item>
+    </plurals>
+    <plurals name="drive_sync_vocabulary_count">
+        <item quantity="one">%d сохранённое слово</item>
+        <item quantity="few">%d сохранённых слова</item>
+        <item quantity="many">%d сохранённых слов</item>
+        <item quantity="other">%d сохранённых слова</item>
+    </plurals>
+    <plurals name="drive_sync_pending_uploads_count">
+        <item quantity="one">%d загрузка ожидает</item>
+        <item quantity="few">%d загрузки ожидают</item>
+        <item quantity="many">%d загрузок ожидают</item>
+        <item quantity="other">%d загрузки ожидают</item>
+    </plurals>
+    <plurals name="drive_sync_conflicts_count">
+        <item quantity="one">%d нерешённый конфликт</item>
+        <item quantity="few">%d нерешённых конфликта</item>
+        <item quantity="many">%d нерешённых конфликтов</item>
+        <item quantity="other">%d нерешённых конфликта</item>
+    </plurals>
 </resources>

@@ -154,5 +154,59 @@
     <string name="hardcover_conflict_review_too_long">Questa recensione di Hardcover è troppo lunga per essere importata in Liseur.</string>
     <string name="hardcover_conflict_stale">Il valore di Liseur è cambiato nel frattempo. Controllalo e scegli di nuovo.</string>
     <string name="hardcover_review_public_note">Pubblica. Pubblicata anche come tua recensione su Hardcover.</string>
+    <string name="drive_sync_settings_summary">Sincronizza libreria, note e avanzamento di lettura con Google Drive</string>
+    <string name="drive_sync_intro">Mantieni catalogo, note, vocabolario, sessioni di lettura e avanzamento di lettura sincronizzati tra i dispositivi usando i dati dell\'app su Google Drive. I file EPUB selezionati vengono salvati in una cartella Liseur su Drive.</string>
+    <string name="drive_sync_status_active">Attiva</string>
+    <string name="drive_sync_status_paused">In pausa</string>
+    <string name="drive_sync_status_needs_reconnect">Riconnessione necessaria</string>
+    <string name="drive_sync_account_summary">%1$s · %2$s</string>
+    <string name="drive_sync_status_label">Stato</string>
+    <string name="drive_sync_last_sync_label">Ultima sincronizzazione</string>
+    <string name="drive_sync_last_sync_never">Mai</string>
+    <string name="drive_sync_pending_uploads_label">Caricamenti EPUB in sospeso</string>
+    <string name="drive_sync_conflicts_label">Conflitti non risolti</string>
+    <string name="drive_sync_none">Nessuno</string>
+    <string name="drive_sync_connect">Connetti Google Drive</string>
+    <string name="drive_sync_reconnect">Riconnetti</string>
+    <string name="drive_sync_disconnect">Disconnetti</string>
+    <string name="drive_sync_switch_account">Cambia account</string>
+    <string name="drive_sync_connecting">Connessione a Google Drive…</string>
+    <string name="drive_sync_needs_reconnect_detail">L\'autorizzazione di Google Drive è scaduta o è stata revocata. Riconnettiti per riprendere la sincronizzazione.</string>
+    <string name="drive_sync_switch_title">Sincronizzare con %1$s?</string>
+    <string name="drive_sync_switch_body_summary">Liseur sincronizzerà la tua libreria locale con %1$s: %2$s, %3$s, %4$s e %5$s.</string>
+    <string name="drive_sync_switch_body_keep_previous">Il tuo account precedente (%1$s) rimarrà in pausa su questo dispositivo mantenendo il proprio stato di sincronizzazione.</string>
+    <string name="drive_sync_switch_body_disconnect_server">Il server di libri attuale verrà disconnesso. I libri scaricati, la cronologia di lettura e i cataloghi di sola consultazione verranno conservati.</string>
+    <string name="drive_sync_switch_confirm">Sincronizza con questo account</string>
+    <string name="drive_sync_switch_cancel">Annulla</string>
     <string name="drive_sync_use_instead">Usa invece Google Drive</string>
+    <string name="drive_sync_error_sign_in_prompt">Google Play Services non è riuscito ad aprire la richiesta di accesso.</string>
+    <string name="drive_sync_error_auth_incomplete">L\'autorizzazione di Google Drive non è stata completata.</string>
+    <string name="drive_sync_error_auth_failed">Impossibile autorizzare Google Drive.</string>
+    <string name="drive_sync_error_token_rejected">Google Drive ha rifiutato il token di autorizzazione.</string>
+    <string name="drive_sync_error_unreachable">Impossibile raggiungere Google Drive. Controlla la connessione e riprova.</string>
+    <string name="drive_sync_error_activate_failed">Impossibile attivare l\'account Google Drive.</string>
+    <plurals name="drive_sync_books_count">
+        <item quantity="one">%d libro</item>
+        <item quantity="other">%d libri</item>
+    </plurals>
+    <plurals name="drive_sync_notes_count">
+        <item quantity="one">%d nota</item>
+        <item quantity="other">%d note</item>
+    </plurals>
+    <plurals name="drive_sync_sessions_count">
+        <item quantity="one">%d sessione di lettura</item>
+        <item quantity="other">%d sessioni di lettura</item>
+    </plurals>
+    <plurals name="drive_sync_vocabulary_count">
+        <item quantity="one">%d parola salvata</item>
+        <item quantity="other">%d parole salvate</item>
+    </plurals>
+    <plurals name="drive_sync_pending_uploads_count">
+        <item quantity="one">%d caricamento in sospeso</item>
+        <item quantity="other">%d caricamenti in sospeso</item>
+    </plurals>
+    <plurals name="drive_sync_conflicts_count">
+        <item quantity="one">%d conflitto non risolto</item>
+        <item quantity="other">%d conflitti non risolti</item>
+    </plurals>
 </resources>

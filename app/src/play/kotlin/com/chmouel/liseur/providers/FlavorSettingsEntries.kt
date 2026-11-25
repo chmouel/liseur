@@ -45,7 +45,6 @@ internal object PlaySettingsEntries {
 
 internal val flavorSettingsEntries: List<SettingsEntry> = listOf(
     PlaySettingsEntries.GeminiKey,
-    PlaySettingsEntries.GoogleDrive,
     PlaySettingsEntries.ReadingServices,
     PlaySettingsEntries.Hardcover,
     PlaySettingsEntries.Reporting,

@@ -160,5 +160,71 @@
     <string name="hardcover_conflict_review_too_long">Tato recenze z Hardcoveru je příliš dlouhá na to, aby ji šlo přenést do Liseuru.</string>
     <string name="hardcover_conflict_stale">Hodnota v Liseuru se mezitím změnila. Zkontrolujte ji a vyberte znovu.</string>
     <string name="hardcover_review_public_note">Veřejné. Zveřejňuje se také jako vaše recenze na Hardcoveru.</string>
+    <string name="drive_sync_settings_summary">Synchronizovat knihovnu, poznámky a postup čtení s Google Drive</string>
+    <string name="drive_sync_intro">Udržujte katalog, poznámky, slovníček, čtenářská sezení a postup čtení synchronizované napříč zařízeními pomocí dat aplikací na Google Drive. Vybrané soubory EPUB se ukládají do složky Liseur na Disku.</string>
+    <string name="drive_sync_status_active">Aktivní</string>
+    <string name="drive_sync_status_paused">Pozastaveno</string>
+    <string name="drive_sync_status_needs_reconnect">Nutné znovu připojit</string>
+    <string name="drive_sync_account_summary">%1$s · %2$s</string>
+    <string name="drive_sync_status_label">Stav</string>
+    <string name="drive_sync_last_sync_label">Naposledy synchronizováno</string>
+    <string name="drive_sync_last_sync_never">Nikdy</string>
+    <string name="drive_sync_pending_uploads_label">Čekající nahrání EPUB</string>
+    <string name="drive_sync_conflicts_label">Nevyřešené konflikty</string>
+    <string name="drive_sync_none">Žádné</string>
+    <string name="drive_sync_connect">Připojit Google Drive</string>
+    <string name="drive_sync_reconnect">Znovu připojit</string>
+    <string name="drive_sync_disconnect">Odpojit</string>
+    <string name="drive_sync_switch_account">Přepnout účet</string>
+    <string name="drive_sync_connecting">Připojování ke Google Drive…</string>
+    <string name="drive_sync_needs_reconnect_detail">Autorizace Google Drive vypršela nebo byla odvolána. Pro pokračování v synchronizaci se znovu připojte.</string>
+    <string name="drive_sync_switch_title">Synchronizovat s %1$s?</string>
+    <string name="drive_sync_switch_body_summary">Liseur bude synchronizovat vaši místní knihovnu s účtem %1$s: %2$s, %3$s, %4$s a %5$s.</string>
+    <string name="drive_sync_switch_body_keep_previous">Váš předchozí účet (%1$s) zůstane v tomto zařízení pozastavený a jeho stav synchronizace zůstane zachován.</string>
+    <string name="drive_sync_switch_body_disconnect_server">Váš současný knižní server bude odpojen. Stažené knihy, historie čtení a katalogy jen k procházení zůstanou zachovány.</string>
+    <string name="drive_sync_switch_confirm">Synchronizovat s tímto účtem</string>
+    <string name="drive_sync_switch_cancel">Zrušit</string>
     <string name="drive_sync_use_instead">Použít místo toho Google Drive</string>
+    <string name="drive_sync_error_sign_in_prompt">Služby Google Play nemohly otevřít výzvu k přihlášení.</string>
+    <string name="drive_sync_error_auth_incomplete">Autorizace Google Drive nebyla dokončena.</string>
+    <string name="drive_sync_error_auth_failed">Google Drive se nepodařilo autorizovat.</string>
+    <string name="drive_sync_error_token_rejected">Google Drive odmítl autorizační token.</string>
+    <string name="drive_sync_error_unreachable">Ke Google Drive se nepodařilo připojit. Zkontrolujte připojení a zkuste to znovu.</string>
+    <string name="drive_sync_error_activate_failed">Účet Google Drive se nepodařilo aktivovat.</string>
+    <plurals name="drive_sync_books_count">
+        <item quantity="one">%d kniha</item>
+        <item quantity="few">%d knihy</item>
+        <item quantity="many">%d knihy</item>
+        <item quantity="other">%d knih</item>
+    </plurals>
+    <plurals name="drive_sync_notes_count">
+        <item quantity="one">%d poznámka</item>
+        <item quantity="few">%d poznámky</item>
+        <item quantity="many">%d poznámky</item>
+        <item quantity="other">%d poznámek</item>
+    </plurals>
+    <plurals name="drive_sync_sessions_count">
+        <item quantity="one">%d čtenářské sezení</item>
+        <item quantity="few">%d čtenářská sezení</item>
+        <item quantity="many">%d čtenářského sezení</item>
+        <item quantity="other">%d čtenářských sezení</item>
+    </plurals>
+    <plurals name="drive_sync_vocabulary_count">
+        <item quantity="one">%d uložené slovo</item>
+        <item quantity="few">%d uložená slova</item>
+        <item quantity="many">%d uloženého slova</item>
+        <item quantity="other">%d uložených slov</item>
+    </plurals>
+    <plurals name="drive_sync_pending_uploads_count">
+        <item quantity="one">%d čekající nahrání</item>
+        <item quantity="few">%d čekající nahrání</item>
+        <item quantity="many">%d čekajícího nahrání</item>
+        <item quantity="other">%d čekajících nahrání</item>
+    </plurals>
+    <plurals name="drive_sync_conflicts_count">
+        <item quantity="one">%d nevyřešený konflikt</item>
+        <item quantity="few">%d nevyřešené konflikty</item>
+        <item quantity="many">%d nevyřešeného konfliktu</item>
+        <item quantity="other">%d nevyřešených konfliktů</item>
+    </plurals>
 </resources>

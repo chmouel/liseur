@@ -4,6 +4,9 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.SQLiteConnection
+import androidx.sqlite.execSQL
 
 /**
  * Play-only Room database for Google Drive sync transport, causal lineage,
@@ -27,7 +30,7 @@ import androidx.room.RoomDatabase
         DriveSessionAck::class,
         DriveUpload::class,
     ],
-    version = 1,
+    version = 2,
     exportSchema = true,
 )
 abstract class DriveSyncDatabase : RoomDatabase() {
@@ -46,7 +49,18 @@ abstract class DriveSyncDatabase : RoomDatabase() {
     companion object {
         const val NAME = "drive_sync.db"
 
+        /** Adds the pending-switch marker that lets startup recover an abandoned confirmation. */
+        val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL("ALTER TABLE drive_account ADD COLUMN pending_switch_previous_state TEXT")
+            }
+        }
+
+        val MIGRATIONS: Array<Migration> get() = arrayOf(MIGRATION_1_2)
+
         fun open(context: Context): DriveSyncDatabase =
-            Room.databaseBuilder(context.applicationContext, DriveSyncDatabase::class.java, NAME).build()
+            Room.databaseBuilder(context.applicationContext, DriveSyncDatabase::class.java, NAME)
+                .addMigrations(*MIGRATIONS)
+                .build()
     }
 }
