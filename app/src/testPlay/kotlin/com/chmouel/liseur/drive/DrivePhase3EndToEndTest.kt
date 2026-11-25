@@ -121,7 +121,7 @@ class DrivePhase3EndToEndTest {
             deviceB.catalogSync.applyRemoteRecord(
                 PERM_ID, DriveWireCodec.putRecord(DriveWireCodec.DOMAIN_CATALOG, key, hlc, DriveWireCodec.encodeCatalogBody(value)),
                 "dev-a", 1L,
-            )
+            ) { deviceB.changeEngine.nextHlc(PERM_ID) }
         }
         apply(body, oldClock)
         apply(body.copy(editions = listOf(edition.copy(driveFileId = null, fileName = null, uploadedAt = null, availabilityHlc = clearClock))), clearClock)
@@ -130,6 +130,8 @@ class DrivePhase3EndToEndTest {
         val merged = requireNotNull(DriveWireCodec.decodeCatalogBody(org.json.JSONObject(state.bodyJson)))
         assertEquals(clearClock, merged.editions.single().availabilityHlc)
         assertNull(merged.editions.single().driveFileId)
+        assertEquals(DriveCanonicalJson.contentFp(org.json.JSONObject(requireNotNull(state.bodyJson))), state.contentFp)
+        assertEquals(DriveCanonicalJson.putFp(org.json.JSONObject(state.bodyJson), state.lastHlc), state.versionFp)
     }
 
     @Test
@@ -149,13 +151,13 @@ class DrivePhase3EndToEndTest {
             d = DriveWireCodec.DOMAIN_CATALOG, k = key, op = DriveRecordState.OP_DEL,
             hlc = hlc, fp = DriveCanonicalJson.delFp(DriveWireCodec.DOMAIN_CATALOG, key, hlc),
         )
-        deviceB.catalogSync.applyRemoteRecord(PERM_ID, deletion, "dev-a", 2L)
+        deviceB.catalogSync.applyRemoteRecord(PERM_ID, deletion, "dev-a", 2L) { deviceB.changeEngine.nextHlc(PERM_ID) }
         assertEquals(com.chmouel.liseur.data.db.WorkAlias.REJECTED, aliases.alias(book.url, peer)?.confidence)
         assertNotNull(aliases.alias(book.url, otherPeer))
         assertTrue(deviceB.catalogSync.collectDirtyRecords(PERM_ID) { deviceB.changeEngine.nextHlc(PERM_ID) }.isEmpty())
         val body = DriveCatalogBody(key, "The Hobbit", null, emptyList(), emptyList(), null, null, 1L, null, 1L)
         val older = DriveWireCodec.putRecord(DriveWireCodec.DOMAIN_CATALOG, key, "0017450000000-0001-dev-a", DriveWireCodec.encodeCatalogBody(body))
-        deviceB.catalogSync.applyRemoteRecord(PERM_ID, older, "dev-a", 1L)
+        deviceB.catalogSync.applyRemoteRecord(PERM_ID, older, "dev-a", 1L) { deviceB.changeEngine.nextHlc(PERM_ID) }
         assertNull(deviceB.liseurDb.bookDao().getByUrl("drive:$key"))
         assertEquals(DriveRecordState.OP_DEL, deviceB.driveDb.recordStates().get(PERM_ID, DriveWireCodec.DOMAIN_CATALOG, key)?.versionOp)
         assertEquals(1, deviceB.epubTransfers.queueSelectedBooks(PERM_ID, setOf(book.url)))
@@ -1216,7 +1218,7 @@ class DrivePhase3EndToEndTest {
         val fileId = driveServer.seedEpubFile("race.epub", bytes, fp.sha256, "sha:${fp.sha256}")
         val body = DriveCatalogBody(
             workKey = "sha:${fp.sha256}", title = "Race Book", author = "Author", identifiers = emptyList(),
-            editions = listOf(DriveCatalogEdition(fp.sha256, fp.size, fileId, "race.epub", 100L)),
+            editions = listOf(DriveCatalogEdition(fp.sha256, fp.size, fileId, "race.epub", 100L, "0017450000000-0001-dev-a")),
             fileSeriesName = null, fileSeriesIndex = null, addedAt = 100L, archivedAt = null, updatedAt = 100L,
         )
         catalogSync.applyRemoteRecord(
@@ -1224,7 +1226,7 @@ class DrivePhase3EndToEndTest {
             DriveWireCodec.putRecord(DriveWireCodec.DOMAIN_CATALOG, body.workKey, "0017450000000-0001-dev-a", DriveWireCodec.encodeCatalogBody(body)),
             "dev-a",
             1L,
-        )
+        ) { changeEngine.nextHlc(PERM_ID) }
         return "drive:sha:${fp.sha256}" to fp
     }
 
@@ -1280,7 +1282,7 @@ class DrivePhase3EndToEndTest {
         val body = DriveCatalogBody(
             workKey = "sha:${fp.sha256}", title = "Valid Book", author = "Author",
             identifiers = emptyList(),
-            editions = listOf(DriveCatalogEdition(fp.sha256, fp.size, fileId, "valid.epub", 100L)),
+            editions = listOf(DriveCatalogEdition(fp.sha256, fp.size, fileId, "valid.epub", 100L, "0017450000000-0001-dev-a")),
             fileSeriesName = null, fileSeriesIndex = null, addedAt = 100L, archivedAt = null, updatedAt = 100L,
         )
         deviceB.catalogSync.applyRemoteRecord(
@@ -1288,7 +1290,7 @@ class DrivePhase3EndToEndTest {
             DriveWireCodec.putRecord(DriveWireCodec.DOMAIN_CATALOG, body.workKey, "0017450000000-0001-dev-a", DriveWireCodec.encodeCatalogBody(body)),
             "dev-a",
             1L,
-        )
+        ) { deviceB.changeEngine.nextHlc(PERM_ID) }
 
         // Case 1: Server returns corrupted bytes -> SHA-256 fails, .part deleted, book NOT moved into place
         driveServer.corruptNextDownload = true
