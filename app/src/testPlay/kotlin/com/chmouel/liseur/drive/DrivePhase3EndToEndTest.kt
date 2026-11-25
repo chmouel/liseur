@@ -181,6 +181,9 @@ class DrivePhase3EndToEndTest {
         assertEquals(1, deviceB.epubTransfers.queueSelectedBooks(PERM_ID, setOf(book.url)))
         val put = deviceB.catalogSync.collectDirtyRecords(PERM_ID) { deviceB.changeEngine.nextHlc(PERM_ID) }.single()
         assertTrue(deletion.fp in put.anc)
+        deviceB.catalogSync.applyRemoteRecord(PERM_ID, deletion, "dev-a", 2L) { deviceB.changeEngine.nextHlc(PERM_ID) }
+        assertEquals(put.fp, deviceB.driveDb.recordStates().get(PERM_ID, DriveWireCodec.DOMAIN_CATALOG, key)?.versionFp)
+        assertTrue(requireNotNull(aliases.alias(book.url, peer)).usable)
     }
 
     @Test

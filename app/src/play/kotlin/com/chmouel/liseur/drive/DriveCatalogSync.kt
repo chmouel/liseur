@@ -309,6 +309,7 @@ internal class DriveCatalogSync(
         if (record.op == DriveRecordState.OP_DEL) {
             val canonical = workIdentity.canonicalWorkKey(permissionId, record.k)
             val existing = recordStates.get(permissionId, DriveWireCodec.DOMAIN_CATALOG, canonical)
+            if (existing != null && record.fp in DriveWorkIdentity.decodeStringArray(existing.ancestorsJson)) return
             if (existing != null && existing.versionOp == DriveRecordState.OP_DEL && record.hlc <= existing.lastHlc) {
                 return
             }

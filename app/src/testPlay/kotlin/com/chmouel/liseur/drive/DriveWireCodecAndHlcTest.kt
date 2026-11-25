@@ -57,6 +57,7 @@ class DriveWireCodecAndHlcTest {
         assertEquals(64, fp1.length)
         val put1 = DriveCanonicalJson.putFp(body, "0017450000000-0001-dev-a")
         assertEquals("76c82fff73717556b2108fd24b700e633935f7fef43d97da64fcabd0b97036a2", put1)
+        assertEquals(put1, DriveWireCodec.putRecord("catalog", "key", "0017450000000-0001-dev-a", body).fp)
         assertNotEquals(put1, DriveCanonicalJson.putFp(body, "0017450000000-0002-dev-a"))
 
         val del1 = DriveCanonicalJson.delFp("annotation", "id-1", "0017450000000-0001-dev-a")
