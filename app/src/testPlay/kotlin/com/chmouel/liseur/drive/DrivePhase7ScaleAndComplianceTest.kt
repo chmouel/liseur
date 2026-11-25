@@ -866,6 +866,7 @@ class DrivePhase7ScaleAndComplianceTest {
             workIdentity = driveSync.workIdentity,
             catalogSync = driveSync.catalogSync,
             fingerprintStore = driveSync.fingerprintStore,
+            nextHlc = { perm -> driveSync.changeEngine.nextHlc(perm) },
             acquireToken = { stale -> driveSync.accountController.acquireSilentAccessToken(stale) },
             onCatalogAvailabilityChanged = { driveSync.changeEngine.sync() },
             booksDirProvider = { booksDir },
