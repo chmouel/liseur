@@ -14,7 +14,9 @@ import kotlin.math.min
 import kotlin.random.Random
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
@@ -1187,9 +1189,11 @@ class DriveRestClient(
         var written = 0L
         stream.use { input ->
             while (true) {
+                currentCoroutineContext().ensureActive()
                 val read = input.read(buffer)
                 if (read < 0) break
                 if (read > 0) {
+                    currentCoroutineContext().ensureActive()
                     destination.write(buffer, 0, read)
                     written += read
                     onProgress(baseOffset + written)
