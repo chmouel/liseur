@@ -225,4 +225,30 @@
         <item quantity="many">%d нерешённых конфликтов</item>
         <item quantity="other">%d нерешённых конфликта</item>
     </plurals>
+    <string name="drive_sync_now">Синхронизировать сейчас</string>
+    <string name="drive_sync_syncing">Синхронизация с Google Drive…</string>
+    <string name="drive_sync_upload_epubs">Загрузить файлы EPUB</string>
+    <string name="drive_sync_upload_epubs_title">Загрузить файлы EPUB</string>
+    <string name="drive_sync_upload_epubs_intro">Выберите файлы EPUB на этом устройстве для загрузки в папку Liseur на Google Drive. Каталог и прогресс чтения уже синхронизируются.</string>
+    <string name="drive_sync_upload_epubs_empty">На этом устройстве нет доступных файлов EPUB.</string>
+    <string name="drive_sync_upload_epubs_select_all">Выбрать все</string>
+    <string name="drive_sync_upload_epubs_clear">Очистить выбор</string>
+    <string name="drive_sync_upload_epubs_unmetered_only">Загружать файлы EPUB только по Wi-Fi</string>
+    <string name="drive_sync_upload_epubs_unmetered_summary">Дождаться безлимитного соединения перед передачей файлов EPUB.</string>
+    <string name="drive_sync_upload_epubs_confirm">Загрузить выбранные</string>
+    <string name="drive_sync_upload_epubs_status_uploaded">Загружено</string>
+    <string name="drive_sync_upload_epubs_status_pending">Ожидает</string>
+    <string name="drive_sync_upload_epubs_status_uploading">Загрузка</string>
+    <string name="drive_sync_upload_epubs_status_failed">Ошибка</string>
+    <string name="drive_sync_upgrade_required">Обновите Liseur, чтобы прочитать новые изменения Google Drive от %1$s.</string>
+    <string name="drive_sync_match_section_title">Возможные дубликаты книг</string>
+    <string name="drive_sync_match_body">«%1$s» похожа на ту же книгу, что и «%2$s» на Google Drive. Объединить их для синхронизации прогресса чтения?</string>
+    <string name="drive_sync_match_merge">Объединить книги</string>
+    <string name="drive_sync_match_keep_separate">Оставить раздельно</string>
+    <plurals name="drive_sync_upload_epubs_selection_summary">
+        <item quantity="one">Выбрана %1$d книга · %2$s</item>
+        <item quantity="few">Выбрано %1$d книги · %2$s</item>
+        <item quantity="many">Выбрано %1$d книг · %2$s</item>
+        <item quantity="other">Выбрано %1$d книги · %2$s</item>
+    </plurals>
 </resources>
