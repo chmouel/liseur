@@ -980,6 +980,14 @@ internal class DriveMetadataSync(
                 explicitFp = resolution.resolutionFp,
             )
             store.withTransaction {
+                if (!DriveConflictEngine.freezeRecoveredResolutionOutbox(
+                    store = store,
+                    permissionId = permissionId,
+                    localDeviceId = localDeviceId,
+                    wireRecord = wire,
+                    createdHlc = hlc,
+                    now = now,
+                )) return@withTransaction
                 resolutions.upsert(resolution)
                 recordStates.upsert(state)
                 conflicts.markResolved(
@@ -988,14 +996,6 @@ internal class DriveMetadataSync(
                     choice = choice.name,
                     resolutionFp = resolution.resolutionFp,
                     resolvedAt = now,
-                )
-                DriveConflictEngine.freezeRecoveredResolutionOutbox(
-                    store = store,
-                    permissionId = permissionId,
-                    localDeviceId = localDeviceId,
-                    wireRecord = wire,
-                    createdHlc = hlc,
-                    now = now,
                 )
             }
             return
