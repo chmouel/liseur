@@ -1085,7 +1085,8 @@ class DrivePhase5EndToEndTest {
     @Test
     fun `unchanged vocabulary sync retains its published version`() = runTest {
         deviceA.connect(PERM_A, "a@example.com")
-        VocabularyRepository(deviceA.liseurDb).collect(
+        val repo = VocabularyRepository(deviceA.liseurDb)
+        val wordId = repo.collect(
             VocabularyLookup("nuit", "fr", null), "night", "en", 1_745_900_000_000L,
         )!!
         assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
@@ -1097,6 +1098,11 @@ class DrivePhase5EndToEndTest {
         assertEquals(before.versionFp, after.versionFp)
         assertEquals(before.publishedFp, after.publishedFp)
         assertEquals(before.contentFp, after.contentFp)
+
+        repo.edit(wordId, definition = "nightfall", notes = "", now = 1_745_900_001_000L)
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        val edited = deviceA.driveDb.recordStates().get(PERM_A, DriveWireCodec.DOMAIN_VOCAB_WORD, key)!!
+        assertTrue(before.versionFp in DriveWorkIdentity.decodeStringArray(edited.ancestorsJson))
     }
 
     @Test
