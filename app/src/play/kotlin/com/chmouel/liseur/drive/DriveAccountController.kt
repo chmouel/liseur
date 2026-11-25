@@ -3,6 +3,7 @@ package com.chmouel.liseur.drive
 import android.app.Activity
 import android.app.PendingIntent
 import android.content.Intent
+import android.util.Log
 import androidx.annotation.StringRes
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.db.Book
@@ -12,6 +13,8 @@ import com.chmouel.liseur.data.remote.RemoteAccountRepository
 import com.chmouel.liseur.domain.PersonalEvaluation
 import com.chmouel.liseur.domain.seriesIndexLabel
 import com.chmouel.liseur.domain.seriesKey
+import com.google.android.gms.common.api.ApiException
+import com.google.android.gms.common.api.CommonStatusCodes
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -348,15 +351,39 @@ internal class DriveAccountController(
     /** Handles the result of launching Play Services' interactive authorization [PendingIntent]. */
     suspend fun onAuthorizationActivityResult(resultCode: Int, data: Intent?) {
         transitionMutex.withLock {
+            Log.i(TAG, "Authorization activity returned code=$resultCode, hasData=${data != null}, awaiting=$awaitingAuthorizationResult")
             if (!awaitingAuthorizationResult) return
             awaitingAuthorizationResult = false
             ephemeral.value = ephemeral.value.copy(pendingAuthIntent = null)
             try {
-                if (resultCode != Activity.RESULT_OK || data == null) {
+                if (data == null) {
                     ephemeral.value = ephemeral.value.copy(busy = false)
                     return
                 }
-                when (val parsed = authClient.parseAuthorizationResult(data)) {
+                val parsed = authClient.parseAuthorizationResult(data)
+                when (parsed) {
+                    is DriveAuthResult.Authorized -> Log.i(TAG, "Authorization response contained a token")
+                    is DriveAuthResult.NeedsResolution -> Log.i(TAG, "Authorization response requires another resolution")
+                    is DriveAuthResult.Failed -> Log.w(
+                        TAG,
+                        "Authorization response failed: status=${(parsed.cause as? ApiException)?.statusCode}, " +
+                            "type=${parsed.cause?.javaClass?.simpleName}",
+                    )
+                }
+                if (resultCode != Activity.RESULT_OK) {
+                    val failed = parsed as? DriveAuthResult.Failed
+                    val status = (failed?.cause as? ApiException)?.statusCode
+                    ephemeral.value = ephemeral.value.copy(
+                        busy = false,
+                        errorMessageRes = if (failed != null && status != CommonStatusCodes.CANCELED) {
+                            R.string.drive_sync_error_auth_failed
+                        } else {
+                            null
+                        },
+                    )
+                    return
+                }
+                when (parsed) {
                     is DriveAuthResult.Authorized -> handleAuthorizedTokenLocked(parsed.accessToken)
                     is DriveAuthResult.NeedsResolution -> {
                         ephemeral.value = ephemeral.value.copy(
@@ -1025,6 +1052,7 @@ internal class DriveAccountController(
     }
 
     companion object {
+        private const val TAG = "DriveAuth"
         const val RECONNECT_REQUIRED_REASON = "Google Drive access needs to be reconnected"
         const val STALE_ACCOUNT_REASON = "Google Drive account changed during authorization"
         const val ACCOUNT_MISMATCH_REASON =

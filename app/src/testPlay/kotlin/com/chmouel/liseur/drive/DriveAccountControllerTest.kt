@@ -23,6 +23,9 @@ import com.chmouel.liseur.data.remote.ServerKind
 import com.chmouel.liseur.data.remote.ServerSetup
 import com.chmouel.liseur.data.remote.SetupResult
 import com.chmouel.liseur.sync.LibrarySyncSwitchCoordinator
+import com.google.android.gms.common.api.ApiException
+import com.google.android.gms.common.api.CommonStatusCodes
+import com.google.android.gms.common.api.Status
 import java.io.InputStream
 import java.io.OutputStream
 import java.util.concurrent.atomic.AtomicInteger
@@ -497,6 +500,48 @@ class DriveAccountControllerTest {
         assertFalse(connected.busy)
         assertEquals("perm-A", connected.account?.permissionId)
         assertEquals(DriveAccount.STATE_ACTIVE, connected.account?.state)
+    }
+
+    @Test
+    fun `cancelled authorization with result data is inspected without connecting`() = runTest {
+        val pendingIntent = PendingIntent.getActivity(
+            context, 0, Intent("com.chmouel.liseur.TEST_DRIVE_AUTH"), PendingIntent.FLAG_IMMUTABLE,
+        )
+        fakeAuth.nextAuthorize = DriveAuthResult.NeedsResolution(pendingIntent)
+        controller.beginConnect()
+        fakeAuth.nextParsedResult = DriveAuthResult.Authorized("token")
+
+        controller.onAuthorizationActivityResult(Activity.RESULT_CANCELED, Intent())
+
+        assertEquals(1, fakeAuth.parsedResults)
+        assertFalse(controller.uiState.first().busy)
+        assertNull(controller.uiState.first().account)
+    }
+
+    @Test
+    fun `authorization error in cancelled activity result is shown while user cancellation stays quiet`() = runTest {
+        val pendingIntent = PendingIntent.getActivity(
+            context, 0, Intent("com.chmouel.liseur.TEST_DRIVE_AUTH"), PendingIntent.FLAG_IMMUTABLE,
+        )
+        fakeAuth.nextAuthorize = DriveAuthResult.NeedsResolution(pendingIntent)
+        controller.beginConnect()
+        fakeAuth.nextParsedResult = DriveAuthResult.Failed(
+            "Google authorization error", cause = ApiException(Status(CommonStatusCodes.INTERNAL_ERROR)),
+        )
+
+        controller.onAuthorizationActivityResult(Activity.RESULT_CANCELED, Intent())
+
+        assertEquals(R.string.drive_sync_error_auth_failed, controller.uiState.first().errorMessageRes)
+        assertFalse(controller.uiState.first().busy)
+
+        controller.beginConnect()
+        fakeAuth.nextParsedResult = DriveAuthResult.Failed(
+            "Authorization cancelled", cause = ApiException(Status(CommonStatusCodes.CANCELED)),
+        )
+        controller.onAuthorizationActivityResult(Activity.RESULT_CANCELED, Intent())
+
+        assertNull(controller.uiState.first().errorMessageRes)
+        assertFalse(controller.uiState.first().busy)
     }
 
     @Test
@@ -1040,6 +1085,7 @@ class DriveAccountControllerTest {
         var authorizeHandler: (suspend (accountEmail: String?, selectAccount: Boolean) -> DriveAuthResult)? = null
         var nextSilent: DriveAuthResult = DriveAuthResult.Failed("Unconfigured")
         var nextParsedResult: DriveAuthResult = DriveAuthResult.Failed("Unconfigured")
+        var parsedResults = 0
         var lastAccountEmail: String? = null
         var lastSelectAccount: Boolean = false
         val clearedTokens = mutableListOf<String>()
@@ -1057,7 +1103,10 @@ class DriveAccountControllerTest {
             return silentHandler?.invoke(accountEmail) ?: nextSilent
         }
 
-        override fun parseAuthorizationResult(data: Intent?): DriveAuthResult = nextParsedResult
+        override fun parseAuthorizationResult(data: Intent?): DriveAuthResult {
+            parsedResults++
+            return nextParsedResult
+        }
 
         override suspend fun clearCachedToken(accessToken: String) {
             clearedTokens += accessToken
