@@ -81,6 +81,22 @@ class DriveSuccessorBeforeResolutionTest {
     }
 
     @Test
+    fun `a parked successor resolution applies before its retired predecessor`() = runTest {
+        val resolvedAgain = listOf(res1Fp, fp("other")).sorted()
+        val hlc = "0017450000500-0001-dev-c"
+        val newBody = body("resolved again")
+        val nextFp = DriveCanonicalJson.resolveFp(DriveResolution.OUTCOME_PUT, resolvedAgain, hlc, newBody)
+        val next = DriveWireRecord(domain, key, DriveRecordState.OP_RESOLVE, hlc, nextFp,
+            anc = listOf(res1Fp), resRefs = listOf(res1Fp, nextFp), body = newBody,
+            outcome = DriveResolution.OUTCOME_PUT, resolvedFps = resolvedAgain)
+        val first = deliver(localAt(e1, "edit-A"), next, "dev-c", 2L)
+        assertEquals(ReconciliationCase.CONFLICT_EDIT_EDIT, first.reconciliationCase)
+        val second = deliver(first.updatedRecordState!!.toView(), res1, "dev-c", 1L)
+        assertEquals(nextFp, second.updatedRecordState?.versionFp)
+        assertTrue(db.conflicts().unsettledForRecord(perm, domain, key).isEmpty())
+    }
+
+    @Test
     fun `oversized recovered resolution does not consume a sequence`() = runTest {
         db.accounts().upsert(DriveAccount(perm, "reader@example.com", DriveAccount.STATE_ACTIVE, 1L))
         val oversized = res1.copy(body = body("x".repeat(DriveWireCodec.MAX_BATCH_BYTES)))
