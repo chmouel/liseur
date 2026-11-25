@@ -2851,6 +2851,7 @@ class DrivePhase6CompactionAndResilienceTest {
             downloadState = DownloadState.DOWNLOADED,
             sizeBytes = fp.size,
             fileMetadataChecked = true,
+            fileModifiedAt = epubFile.lastModified(),
             fileTitle = title,
             fileAuthor = author,
             fileSeriesName = fileSeriesName,

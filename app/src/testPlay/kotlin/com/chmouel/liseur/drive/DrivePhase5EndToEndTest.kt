@@ -1673,6 +1673,7 @@ class DrivePhase5EndToEndTest {
             fileTitle = title,
             fileAuthor = author,
             fileMetadataChecked = true,
+            fileModifiedAt = file.lastModified(),
         )
         device.liseurDb.bookDao().upsert(book)
         device.liseurDb.workIdentityDao().upsert(
