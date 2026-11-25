@@ -2030,6 +2030,47 @@ class DrivePhase6CompactionAndResilienceTest {
     }
 
     @Test
+    fun `a readded catalog entry survives an old authored deletion after ancestry rolls over`() = runTest {
+        val devA = createDevice(deviceId = "dev-z", compactionDeltaThreshold = 2)
+        devA.connect()
+        val book = seedBook(devA, "readded.epub", "9780451524936", "Readded", "Author")
+        assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
+        val original = devA.driveDb.recordStates().forDomain(PERM_ID, DriveWireCodec.DOMAIN_CATALOG).single()
+        val body = DriveWireCodec.decodeCatalogBody(JSONObject(original.bodyJson!!))!!
+        assertTrue(devA.driveSync.catalogSync.deleteFromSyncedLibrary(PERM_ID, book, { devA.changeEngine.nextHlc(PERM_ID) }))
+        assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
+        val deletion = devA.driveDb.recordStates().get(PERM_ID, DriveWireCodec.DOMAIN_CATALOG, original.recordKey)!!
+        assertEquals(DriveRecordState.OP_DEL, deletion.versionOp)
+
+        var ancestors = listOf(deletion.versionFp)
+        repeat(66) { index ->
+            val hlc = "001746${index.toString().padStart(7, '0')}-0000-dev-b"
+            val record = DriveWireCodec.putRecord(
+                domain = DriveWireCodec.DOMAIN_CATALOG, key = original.recordKey, hlc = hlc,
+                bodyMap = DriveWireCodec.encodeCatalogBody(body), ancestors = ancestors,
+            )
+            server.injectRemoteDelta("dev-b", index + 1L, hlc, listOf(record))
+            ancestors = (listOf(record.fp) + ancestors).take(DriveWireCodec.MAX_ANCESTORS)
+        }
+        assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
+        val readded = devA.driveDb.recordStates().get(PERM_ID, DriveWireCodec.DOMAIN_CATALOG, original.recordKey)!!
+        assertEquals(DriveRecordState.OP_PUT, readded.versionOp)
+        assertFalse(deletion.versionFp in DriveWorkIdentity.decodeStringArray(readded.ancestorsJson))
+
+        val driver = seedBook(devA, "driver.epub", "9780547928227", "Driver", "Author")
+        repeat(3) { syncWithNewNoteUntilSnapshotAdvances(devA, driver.url, "readded-$it") }
+        val snapshot = restartedCompactionState(devA).snapshot!!
+        val records = snapshot.parts.flatMap {
+            DriveWireCodec.decodeSnapshotPart(server.rawBytes(it.fileId)!!.toString(Charsets.UTF_8)).records
+        }
+        assertTrue(records.none { it.d == DriveWireCodec.DOMAIN_CATALOG && it.k == original.recordKey && it.op == DriveRecordState.OP_DEL })
+        val devC = createDevice(deviceId = "dev-c")
+        devC.connect()
+        assertEquals(SyncOutcome.Success, devC.changeEngine.sync().outcome)
+        assertNotNull(devC.liseurDb.bookDao().allOnce().find { it.title == "Readded" })
+    }
+
+    @Test
     fun `snapshot does not restore an authored word after another device deletes it`() = runTest {
         val devA = createDevice(deviceId = "dev-a", compactionDeltaThreshold = 2)
         val devB = createDevice(deviceId = "dev-b")
