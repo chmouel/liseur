@@ -100,6 +100,15 @@ class DrivePhase3EndToEndTest {
     }
 
     @Test
+    fun `a missing Drive download source leaves the book retryable`() = runTest {
+        deviceB.connect()
+        val book = peakBook("missing-source").copy(localUri = null, downloadState = DownloadState.QUEUED)
+        deviceB.liseurDb.bookDao().upsert(book)
+        assertTrue(deviceB.epubTransfers.downloadBook(book.url) is DriveEpubDownloadOutcome.PermanentFailure)
+        assertEquals(DownloadState.FAILED, deviceB.liseurDb.bookDao().getByUrl(book.url)?.downloadState)
+    }
+
+    @Test
     fun `newer catalog metadata cannot restore cleared edition availability`() = runTest {
         deviceB.connect()
         val key = "isbn:123"

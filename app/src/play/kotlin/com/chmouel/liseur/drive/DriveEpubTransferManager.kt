@@ -401,7 +401,11 @@ internal class DriveEpubTransferManager(
         val job = currentCoroutineContext()[Job]
         job?.let(activeDownloads::add)
         try {
-            return downloadBookTracked(bookUrl, onProgress)
+            val result = downloadBookTracked(bookUrl, onProgress)
+            if (result is DriveEpubDownloadOutcome.PermanentFailure || result == DriveEpubDownloadOutcome.NeedsReconnect) {
+                books.setDownloadState(bookUrl, DownloadState.FAILED, null)
+            }
+            return result
         } finally {
             job?.let(activeDownloads::remove)
         }
@@ -437,6 +441,7 @@ internal class DriveEpubTransferManager(
             } catch (e: DriveAuthExpiredException) {
                 if (retriedAuth) {
                     val reason = e.message ?: DriveAccountController.RECONNECT_REQUIRED_REASON
+                    books.setDownloadState(bookUrl, DownloadState.FAILED, null)
                     onNeedsReconnect(permissionId, reason)
                     return DriveEpubDownloadOutcome.NeedsReconnect
                 }

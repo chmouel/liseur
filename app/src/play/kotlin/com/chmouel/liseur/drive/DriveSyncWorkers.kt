@@ -18,6 +18,7 @@ import androidx.work.await
 import com.chmouel.liseur.container
 import com.chmouel.liseur.data.calibre.BookDownloadRepository
 import com.chmouel.liseur.data.calibre.resolveWorkId
+import com.chmouel.liseur.data.db.DownloadState
 import com.chmouel.liseur.data.remote.SyncOutcome
 import kotlinx.coroutines.flow.first
 import java.util.UUID
@@ -100,8 +101,10 @@ class DriveEpubDownloadWorker(
         val bookUrl = inputData.getString(BookDownloadRepository.KEY_BOOK_URL)
             ?: return Result.failure()
         val backend = applicationContext.container.librarySync as? DriveLibrarySync
-            ?: return Result.failure()
-        if (!backend.isActive()) return Result.failure()
+        if (backend == null || !backend.isActive()) {
+            applicationContext.container.database.bookDao().setDownloadState(bookUrl, DownloadState.FAILED, null)
+            return Result.failure()
+        }
 
         return applicationContext.container.bookDownloads.withBookLock(bookUrl) {
             download(backend, bookUrl)
