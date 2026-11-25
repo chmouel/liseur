@@ -127,6 +127,7 @@ internal data class DriveCatalogEdition(
     val driveFileId: String?,
     val fileName: String?,
     val uploadedAt: Long?,
+    val availabilityHlc: String? = null,
 )
 
 internal data class DriveCatalogBody(
@@ -492,6 +493,7 @@ internal object DriveWireCodec {
                     "driveFileId" to it.driveFileId,
                     "fileName" to it.fileName,
                     "uploadedAt" to it.uploadedAt,
+                    "availabilityHlc" to it.availabilityHlc,
                 )
             },
         "fileSeriesName" to body.fileSeriesName,
@@ -513,7 +515,7 @@ internal object DriveWireCodec {
                 val obj = identifiersArr.optJSONObject(i) ?: continue
                 val scheme = obj.optString("scheme").trim()
                 val value = obj.optString("value").trim()
-                if (scheme.isNotEmpty() && value.isNotEmpty()) {
+                if (value.isNotEmpty()) {
                     add(DriveCatalogIdentifier(scheme = scheme, value = value))
                 }
             }
@@ -524,13 +526,17 @@ internal object DriveWireCodec {
                 val obj = editionsArr.optJSONObject(i) ?: continue
                 val sha = obj.optString("sha256").trim().lowercase(Locale.ROOT)
                 if (sha.isEmpty()) continue
+                val fileId = obj.optNullableString("driveFileId")
+                val availabilityHlc = obj.optNullableString("availabilityHlc")
+                if (fileId != null && availabilityHlc == null) return null
                 add(
                     DriveCatalogEdition(
                         sha256 = sha,
                         sizeBytes = obj.optNullableLong("sizeBytes"),
-                        driveFileId = obj.optNullableString("driveFileId"),
+                        driveFileId = fileId,
                         fileName = obj.optNullableString("fileName"),
                         uploadedAt = obj.optNullableLong("uploadedAt"),
+                        availabilityHlc = availabilityHlc,
                     ),
                 )
             }
@@ -662,7 +668,7 @@ internal object DriveWireCodec {
         resRefs: List<String> = emptyList(),
     ): DriveWireRecord {
         val canonicalBody = DriveCanonicalJson.encode(bodyMap)
-        val fp = DriveCanonicalJson.contentFp(bodyMap)
+        val fp = DriveCanonicalJson.putFp(bodyMap, hlc)
         return DriveWireRecord(
             d = domain,
             k = key,
