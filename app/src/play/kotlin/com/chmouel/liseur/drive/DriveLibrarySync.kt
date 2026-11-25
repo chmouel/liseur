@@ -19,6 +19,7 @@ import com.chmouel.liseur.domain.USELESS_IDENTIFIERS
 import com.chmouel.liseur.domain.WorkIdentifiers
 import com.chmouel.liseur.domain.identifierOf
 import com.chmouel.liseur.hardcover.Isbn
+import com.chmouel.liseur.providers.PlaySettingsEntries
 import com.chmouel.liseur.sync.LibrarySyncBackend
 import com.chmouel.liseur.sync.LibrarySyncSwitchCoordinator
 import java.security.MessageDigest
@@ -279,6 +280,7 @@ internal class DriveLibrarySync(
         get() = positionSync
 
     override val supportsBookServerOption: Boolean = true
+    override val settingsFocusKey: String = PlaySettingsEntries.GoogleDrive.key
 
     @Composable
     override fun connectedSummary(): String? = driveConnectedSummary(controller = accountController)
