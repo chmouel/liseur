@@ -259,6 +259,7 @@ internal class DriveCatalogSync(
         record: DriveWireRecord,
         remoteDeviceId: String,
         remoteSeq: Long,
+        nextHlc: suspend () -> String,
     ) {
         val peerId = DriveLibrarySync.accountPeerId(permissionId)
         if (record.op == DriveRecordState.OP_DEL) {
@@ -324,6 +325,19 @@ internal class DriveCatalogSync(
         val mergedMap = DriveWireCodec.encodeCatalogBody(merged)
         val mergedJson = DriveCanonicalJson.encode(mergedMap)
         val mergedFp = DriveCanonicalJson.contentFp(mergedMap)
+        val incomingFp = DriveCanonicalJson.contentFp(bodyJson)
+        val useIncoming = mergedFp == incomingFp
+        val useExisting = !useIncoming && existingState?.versionOp == DriveRecordState.OP_PUT && existingState.contentFp == mergedFp
+        val versionHlc = when {
+            useIncoming -> record.hlc
+            useExisting -> requireNotNull(existingState).lastHlc
+            else -> nextHlc()
+        }
+        val versionFp = when {
+            useIncoming -> record.fp
+            useExisting -> requireNotNull(existingState).versionFp
+            else -> DriveCanonicalJson.putFp(mergedMap, versionHlc)
+        }
 
         val uploadedEdition = merged.editions.firstOrNull { ed ->
             val fid = ed.driveFileId
@@ -453,25 +467,29 @@ internal class DriveCatalogSync(
 
         // Transaction 2 (`drive_sync.db`): record merged catalog state & discovered Drive EPUB files.
         store.withTransaction {
-            val anc = (listOfNotNull(existingState?.versionFp) +
+            val anc = (listOfNotNull(existingState?.versionFp, record.fp) +
                 DriveWorkIdentity.decodeStringArray(existingState?.ancestorsJson) + record.anc)
                 .distinct()
-                .filter { it != mergedFp }
+                .filter { it != versionFp }
                 .take(DriveWireCodec.MAX_ANCESTORS)
             recordStates.upsert(
                 DriveRecordState(
                     permissionId = permissionId,
                     domain = DriveWireCodec.DOMAIN_CATALOG,
                     recordKey = canonicalKey,
-                    versionFp = mergedFp,
+                    versionFp = versionFp,
                     versionOp = DriveRecordState.OP_PUT,
-                    publishedFp = if (mergedFp == record.fp) record.fp else existingState?.publishedFp,
+                    publishedFp = when {
+                        useIncoming -> record.fp
+                        useExisting -> existingState?.publishedFp
+                        else -> null
+                    },
                     contentFp = mergedFp,
-                    originDeviceId = remoteDeviceId,
-                    originSeq = remoteSeq,
+                    originDeviceId = if (useIncoming) remoteDeviceId else if (useExisting) existingState?.originDeviceId else null,
+                    originSeq = if (useIncoming) remoteSeq else if (useExisting) existingState?.originSeq else null,
                     ancestorsJson = DriveCanonicalJson.encode(anc),
                     resRefsJson = DriveCanonicalJson.encode(record.resRefs.distinct().sorted()),
-                    lastHlc = maxOf(existingState?.lastHlc ?: "", record.hlc),
+                    lastHlc = versionHlc,
                     bodyJson = mergedJson,
                 ),
             )
