@@ -2,7 +2,10 @@ package com.chmouel.liseur.drive
 
 import android.content.Context
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.room.withTransaction
+import com.chmouel.liseur.R
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.DownloadState
 import com.chmouel.liseur.data.db.LiseurDatabase
@@ -528,6 +531,15 @@ internal class DriveLibrarySync(
     @Composable
     override fun BookServerSwitchAction(onClick: () -> Unit) {
         DriveBookServerSwitchAction(onClick)
+    }
+
+    @Composable
+    override fun welcomeConnectHint(): String =
+        stringResource(R.string.drive_welcome_connect_library_hint)
+
+    @Composable
+    override fun WelcomeConnectIcon(modifier: Modifier) {
+        GoogleDriveLogo(modifier)
     }
 
     @Composable

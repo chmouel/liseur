@@ -163,9 +163,12 @@
     <string name="hardcover_review_public_note">Public. Also published as your Hardcover review.</string>
     <string name="drive_sync_title" translatable="false">Google Drive</string>
     <string name="drive_sync_settings_summary">Sync your library and reading progress with Google Drive</string>
+    <string name="drive_welcome_connect_library_hint">Google Drive, Calibre, BookOrbit, OPDS and many others.</string>
     <string name="drive_sync_intro">Keep your catalog and reading progress in sync across devices using Google Drive app data. Selected EPUB files are stored in a Liseur folder in Drive.</string>
     <string name="drive_sync_status_active">Active</string>
     <string name="drive_sync_status_paused">Paused</string>
+    <string name="drive_sync_status_syncing">Syncing</string>
+    <string name="drive_sync_status_error">Error</string>
     <string name="drive_sync_status_needs_reconnect">Reconnect needed</string>
     <string name="drive_sync_account_summary">%1$s · %2$s</string>
     <string name="drive_sync_status_label">Status</string>
@@ -177,6 +180,9 @@
     <string name="drive_sync_connect">Connect Google Drive</string>
     <string name="drive_sync_reconnect">Reconnect</string>
     <string name="drive_sync_disconnect">Disconnect</string>
+    <string name="drive_sync_disconnect_title">Disconnect Google Drive?</string>
+    <string name="drive_sync_disconnect_body">Syncing will pause on this device. Your local books, notes, and reading progress will be kept.</string>
+    <string name="drive_sync_paused_detail">Syncing is paused on this device. Reconnect to resume keeping your library and reading progress in sync.</string>
     <string name="drive_sync_switch_account">Switch account</string>
     <string name="drive_sync_connecting">Connecting to Google Drive…</string>
     <string name="drive_sync_needs_reconnect_detail">Google Drive authorization expired or was revoked. Reconnect to resume syncing.</string>

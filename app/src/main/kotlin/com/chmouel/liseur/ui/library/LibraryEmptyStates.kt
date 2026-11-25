@@ -86,6 +86,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.chmouel.liseur.R
+import com.chmouel.liseur.sync.LibrarySyncBackend
 import com.chmouel.liseur.ui.BusyIndicator
 import com.chmouel.liseur.ui.LiseurModalBottomSheet
 import com.chmouel.liseur.ui.LocalEInk
@@ -197,6 +198,7 @@ internal fun LibraryActionCard(
     hint: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    leadingIcon: (@Composable (Dp) -> Unit)? = null,
     busy: Boolean = false,
     prominence: ActionCardProminence = ActionCardProminence.SECONDARY,
 ) {
@@ -402,11 +404,15 @@ internal fun LibraryActionCard(
                 modifier = Modifier.size(badgeSize),
             ) {
                 Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = null,
-                        modifier = Modifier.size(iconSize),
-                    )
+                    if (leadingIcon != null) {
+                        leadingIcon(iconSize)
+                    } else {
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = null,
+                            modifier = Modifier.size(iconSize),
+                        )
+                    }
                 }
             }
             Spacer(Modifier.width(if (prominence == ActionCardProminence.COMPACT) 14.dp else 16.dp))
@@ -486,6 +492,7 @@ internal fun EmptyLibrary(
     onTrySampleBook: () -> Unit = {},
     openingSample: Boolean = false,
     onRestoreBackup: () -> Unit = {},
+    librarySync: LibrarySyncBackend = LibrarySyncBackend.None,
 ) {
     // Which cut of the mark to draw is asked of the theme in force
     // here, not of a -night qualifier: those follow the system, and the
@@ -551,8 +558,14 @@ internal fun EmptyLibrary(
         )
         LibraryActionCard(
             icon = Icons.Outlined.CloudQueue,
+            leadingIcon = if (librarySync.supportsBookServerOption) {
+                { size -> librarySync.WelcomeConnectIcon(Modifier.size(size)) }
+            } else {
+                null
+            },
             title = stringResource(R.string.welcome_connect_library),
-            hint = stringResource(R.string.welcome_connect_library_hint),
+            hint = librarySync.welcomeConnectHint()
+                ?: stringResource(R.string.welcome_connect_library_hint),
             onClick = onConnectServer,
             prominence = ActionCardProminence.COMPACT,
             modifier = Modifier.entrance(delayMillis = 6 * ENTRANCE_STEP_MS),

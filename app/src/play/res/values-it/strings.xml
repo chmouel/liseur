@@ -155,9 +155,12 @@
     <string name="hardcover_conflict_stale">Il valore di Liseur è cambiato nel frattempo. Controllalo e scegli di nuovo.</string>
     <string name="hardcover_review_public_note">Pubblica. Pubblicata anche come tua recensione su Hardcover.</string>
     <string name="drive_sync_settings_summary">Sincronizza libreria e avanzamento di lettura con Google Drive</string>
+    <string name="drive_welcome_connect_library_hint">Google Drive, Calibre, BookOrbit, OPDS e molti altri.</string>
     <string name="drive_sync_intro">Mantieni catalogo e avanzamento di lettura sincronizzati tra i dispositivi usando i dati dell\'app su Google Drive. I file EPUB selezionati vengono salvati in una cartella Liseur su Drive.</string>
     <string name="drive_sync_status_active">Attiva</string>
     <string name="drive_sync_status_paused">In pausa</string>
+    <string name="drive_sync_status_syncing">Sincronizzazione</string>
+    <string name="drive_sync_status_error">Errore</string>
     <string name="drive_sync_status_needs_reconnect">Riconnessione necessaria</string>
     <string name="drive_sync_account_summary">%1$s · %2$s</string>
     <string name="drive_sync_status_label">Stato</string>
@@ -169,6 +172,9 @@
     <string name="drive_sync_connect">Connetti Google Drive</string>
     <string name="drive_sync_reconnect">Riconnetti</string>
     <string name="drive_sync_disconnect">Disconnetti</string>
+    <string name="drive_sync_disconnect_title">Disconnettere Google Drive?</string>
+    <string name="drive_sync_disconnect_body">La sincronizzazione verrà messa in pausa su questo dispositivo. I tuoi libri locali, le note e i progressi di lettura verranno conservati.</string>
+    <string name="drive_sync_paused_detail">La sincronizzazione è in pausa su questo dispositivo. Riconnettiti per riprendere a sincronizzare libreria e progressi di lettura.</string>
     <string name="drive_sync_switch_account">Cambia account</string>
     <string name="drive_sync_connecting">Connessione a Google Drive…</string>
     <string name="drive_sync_needs_reconnect_detail">L\'autorizzazione di Google Drive è scaduta o è stata revocata. Riconnettiti per riprendere la sincronizzazione.</string>
