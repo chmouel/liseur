@@ -149,6 +149,18 @@ class DriveWorkIdentityTest {
     }
 
     @Test
+    fun `rejecting one unconfirmed candidate preserves the other`() = runTest {
+        val perm = "perm-1"
+        val book = localBook("file:///choice.epub", "Emma", "Jane Austen")
+        liseurDb.bookDao().upsert(book)
+        assertTrue(identity.detectAmbiguousTitleAuthorMatch(perm, "isbn:aaa", "Emma", "Jane Austen"))
+        assertTrue(identity.detectAmbiguousTitleAuthorMatch(perm, "isbn:bbb", "Emma", "Jane Austen"))
+        identity.rejectMerge(perm, book.url, "", "isbn:bbb", "0017450000000-0001-dev-a")
+        assertEquals(listOf("isbn:aaa"), identity.pendingMatches(perm).map { it.candidateWorkKey })
+        assertFalse(identity.detectAmbiguousTitleAuthorMatch(perm, "isbn:bbb", "Emma", "Jane Austen"))
+    }
+
+    @Test
     fun `ambiguous title-author match requires explicit confirmation and publishes acyclic merge alias`() = runTest {
         val perm = "perm-1"
         val peerId = DriveLibrarySync.accountPeerId(perm)
@@ -489,7 +501,8 @@ class DriveWorkIdentityTest {
         assertEquals(toA.fp, state.versionFp)
         assertEquals(toA.fp, state.publishedFp)
         assertEquals("dev-b", state.originDeviceId)
-        assertEquals(DriveCanonicalJson.contentFp(org.json.JSONObject(state.bodyJson!!)), state.versionFp)
+        assertEquals(DriveCanonicalJson.contentFp(org.json.JSONObject(state.bodyJson!!)), state.contentFp)
+        assertEquals(DriveCanonicalJson.putFp(org.json.JSONObject(state.bodyJson!!), state.lastHlc), state.versionFp)
         assertEquals(toA.body.toString(), state.bodyJson)
         assertEquals("dc:aaa", identity.canonicalWorkKey(perm, "isbn:bbb"))
     }

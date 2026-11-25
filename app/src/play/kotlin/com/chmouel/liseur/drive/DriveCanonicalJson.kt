@@ -71,6 +71,10 @@ internal object DriveCanonicalJson {
         ),
     )
 
+    fun putFp(body: Any, hlc: String): String = sha256Hex(
+        encode(mapOf("op" to DriveRecordState.OP_PUT, "body" to body, "hlc" to hlc)),
+    )
+
     /** `sha256Hex(canonicalJson({"op":"del","d":<domain>,"k":<key>,"hlc":<hlc>}))` */
     fun delFp(domain: String, key: String, hlc: String): String = sha256Hex(
         encode(

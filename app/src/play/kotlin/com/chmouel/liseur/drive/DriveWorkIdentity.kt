@@ -58,8 +58,12 @@ internal class DriveWorkIdentity(
         val existing = identities.alias(book.url, peerId)
         if (existing != null && existing.usable) {
             val canonical = canonicalWorkKey(permissionId, existing.workId)
-            val currentSha = identities.fingerprint(book.url)?.sha256?.lowercase(Locale.ROOT)
-                ?: existing.editionSha
+            val currentSha = if (book.openableUrl != null) {
+                validFingerprint(book, computeFingerprintIfMissing)?.sha256?.lowercase(Locale.ROOT)
+                    ?: return null
+            } else {
+                identities.fingerprint(book.url)?.sha256?.lowercase(Locale.ROOT) ?: existing.editionSha
+            }
             if (canonical != existing.workId || (currentSha != null && existing.editionSha != currentSha)) {
                 val updated = existing.copy(
                     workId = canonical,
@@ -97,15 +101,7 @@ internal class DriveWorkIdentity(
         // Local/downloaded book path.
         if (book.openableUrl != null) {
             if (!book.fileMetadataChecked) return null
-            val fpRow = identities.fingerprint(book.url)
-                ?: if (computeFingerprintIfMissing) {
-                    fingerprintStore?.of(book)?.let {
-                        identities.fingerprint(book.url)
-                    }
-                } else {
-                    null
-                }
-                ?: return null
+            val fpRow = validFingerprint(book, computeFingerprintIfMissing) ?: return null
             val metadataRows = metadata.forBook(book.url)
             val localSha = fpRow.sha256.lowercase(Locale.ROOT)
             val identifierKey = canonicalWorkKey(permissionId, deriveLocalWorkKey(book, metadataRows, fpRow))
@@ -125,7 +121,7 @@ internal class DriveWorkIdentity(
                 editionSha = localSha,
                 resolvedAt = now,
             )
-            val persistedBook = if (book.id > 0L) book else books.getByUrl(book.url) ?: book
+            val persistedBook = if (book.id > 0L) book else book.copy(id = books.getByUrl(book.url)?.id ?: book.id)
             if (!identities.saveResolution(persistedBook, alias)) return null
             return identities.alias(book.url, peerId) ?: alias
         }
@@ -148,6 +144,13 @@ internal class DriveWorkIdentity(
         return alias
     }
 
+    private suspend fun validFingerprint(book: Book, compute: Boolean): BookFingerprintRow? {
+        val cached = identities.fingerprint(book.url)
+        if (cached != null && cached.fileModifiedAt == book.fileModifiedAt) return cached
+        if (!compute || fingerprintStore?.of(book) == null) return null
+        return identities.fingerprint(book.url)?.takeIf { it.fileModifiedAt == book.fileModifiedAt }
+    }
+
     /**
      * True when [key] (derived from a shared identifier) already names a different
      * file whose title and author also differ from [book]: two unrelated EPUBs
@@ -162,9 +165,10 @@ internal class DriveWorkIdentity(
         if (key.startsWith("sha:")) return false
         val localTa = bookTitleAuthor(book) ?: return false
         val peerId = DriveLibrarySync.accountPeerId(permissionId)
+        val merges = loadMergeMap(permissionId)
         for (alias in identities.aliasesFor(peerId)) {
             if (alias.bookUrl == book.url || !alias.usable) continue
-            if (canonicalWorkKey(permissionId, alias.workId) != key) continue
+            if (resolveCanonical(alias.workId, merges) != key) continue
             val other = books.getByUrl(alias.bookUrl) ?: continue
             val otherSha = identities.fingerprint(other.url)?.sha256?.lowercase(Locale.ROOT)
                 ?: alias.editionSha?.lowercase(Locale.ROOT)
@@ -254,8 +258,12 @@ internal class DriveWorkIdentity(
                 local.identityAuthor ?: local.stableAuthor,
             ) ?: continue
             if (localTa != remoteTa) continue
+            if (isCandidateRejected(permissionId, local.url, canonicalRemote)) continue
             val localAlias = allAliases[local.url]
-            if (localAlias == null) {
+            if (localAlias?.confidence == WorkAlias.REJECTED &&
+                !isCandidateRejected(permissionId, local.url, resolveCanonical(localAlias.workId, merges))
+            ) continue
+            if (localAlias == null || localAlias.confidence == WorkAlias.REJECTED) {
                 // Local book has no Drive workKey yet; record a low-confidence alias awaiting answer.
                 identities.upsert(
                     WorkAlias(
@@ -272,10 +280,9 @@ internal class DriveWorkIdentity(
                 found = true
                 continue
             }
-            if (localAlias.confidence == WorkAlias.REJECTED) continue
             val canonicalLocal = resolveCanonical(localAlias.workId, merges)
             if (canonicalLocal == canonicalRemote) continue
-            if (isRejectedPair(permissionId, canonicalLocal, canonicalRemote)) continue
+            if (localAlias.confirmed && isRejectedPair(permissionId, canonicalLocal, canonicalRemote)) continue
 
             val existingAmbiguity = identities.ambiguitiesFor(peerId).firstOrNull { it.bookUrl == local.url }
             val existingCandidates = existingAmbiguity?.candidates.orEmpty()
@@ -313,6 +320,7 @@ internal class DriveWorkIdentity(
             val localKey = localAlias?.confirmedWorkKey()?.let { resolveCanonical(it, merges) }.orEmpty()
             for (candidate in ambiguity.candidates) {
                 val canonicalCandidate = resolveCanonical(candidate, merges)
+                if (isCandidateRejected(permissionId, localBook.url, canonicalCandidate)) continue
                 if (canonicalCandidate == localKey) continue
                 if (localKey.isNotEmpty() && isRejectedPair(permissionId, localKey, canonicalCandidate)) continue
                 if (results.any { it.bookUrl == localBook.url && it.candidateWorkKey == canonicalCandidate }) continue
@@ -336,6 +344,7 @@ internal class DriveWorkIdentity(
         for (alias in identities.aliasesFor(peerId).filter { it.awaitingAnswer }) {
             val localBook = allBooks[alias.bookUrl] ?: continue
             val canonicalCandidate = resolveCanonical(alias.workId, merges)
+            if (isCandidateRejected(permissionId, localBook.url, canonicalCandidate)) continue
             if (results.any { it.bookUrl == localBook.url && it.candidateWorkKey == canonicalCandidate }) continue
             val remoteBook = allBooks[driveBookUrl(canonicalCandidate)]
             results.add(
@@ -390,6 +399,7 @@ internal class DriveWorkIdentity(
         val canonA = resolveCanonical(keyA, merges)
         val canonB = resolveCanonical(keyB, merges)
         if (canonA == canonB) {
+            identities.confirm(bookUrl, peerId)
             identities.clearAmbiguity(bookUrl, peerId)
             return canonA
         }
@@ -400,7 +410,7 @@ internal class DriveWorkIdentity(
         val body = DriveWorkAliasBody.Merge(from = from, to = to, updatedAt = now)
         val bodyMap = DriveWireCodec.encodeWorkAliasBody(body)
         val bodyJson = DriveCanonicalJson.encode(bodyMap)
-        val fp = DriveCanonicalJson.contentFp(bodyMap)
+        val fp = DriveCanonicalJson.putFp(bodyMap, hlc)
 
         // The wire record and the recovery marker commit together, before any `liseur.db` change.
         val intent = PendingAliasEffect.Merge(bookUrl = bookUrl, from = from, to = to)
@@ -415,7 +425,7 @@ internal class DriveWorkIdentity(
                     versionFp = fp,
                     versionOp = DriveRecordState.OP_PUT,
                     publishedFp = null,
-                    contentFp = fp,
+                    contentFp = DriveCanonicalJson.contentFp(bodyMap),
                     ancestorsJson = DriveCanonicalJson.encode(ancestors),
                     resRefsJson = existing?.resRefsJson ?: "[]",
                     lastHlc = hlc,
@@ -446,7 +456,33 @@ internal class DriveWorkIdentity(
         val peerId = DriveLibrarySync.accountPeerId(permissionId)
         val now = clock()
         if (keyA.isBlank() || keyB.isBlank() || keyA == keyB) {
-            applyPendingEffect(peerId, PendingAliasEffect.Reject(bookUrl, a = "", b = ""), emptyMap())
+            if (keyB.isBlank()) return
+            val candidate = canonicalWorkKey(permissionId, keyB)
+            val rejectionKey = candidateRejectionKey(bookUrl, candidate)
+            recordStates.upsert(
+                DriveRecordState(
+                    permissionId = permissionId,
+                    domain = DOMAIN_REJECTED_CANDIDATE,
+                    recordKey = rejectionKey,
+                    versionFp = rejectionKey,
+                    versionOp = DriveRecordState.OP_PUT,
+                    publishedFp = rejectionKey,
+                    contentFp = rejectionKey,
+                    lastHlc = hlc,
+                ),
+            )
+            database.withTransaction {
+                val ambiguity = identities.ambiguitiesFor(peerId).firstOrNull { it.bookUrl == bookUrl }
+                val remaining = ambiguity?.candidates.orEmpty().filter { it != candidate }
+                val alias = identities.alias(bookUrl, peerId)
+                if (alias?.awaitingAnswer == true && alias.workId == candidate) {
+                    if (remaining.isEmpty()) identities.reject(bookUrl, peerId)
+                    else identities.upsert(alias.copy(workId = remaining.first()))
+                }
+                if (remaining.size > 1 && ambiguity != null) {
+                    identities.upsert(ambiguity.copy(workIds = remaining.joinToString("\n")))
+                } else identities.clearAmbiguity(bookUrl, peerId)
+            }
             return
         }
 
@@ -456,7 +492,7 @@ internal class DriveWorkIdentity(
         val body = DriveWorkAliasBody.Reject(a = low, b = high, updatedAt = now)
         val bodyMap = DriveWireCodec.encodeWorkAliasBody(body)
         val bodyJson = DriveCanonicalJson.encode(bodyMap)
-        val fp = DriveCanonicalJson.contentFp(bodyMap)
+        val fp = DriveCanonicalJson.putFp(bodyMap, hlc)
 
         store.withTransaction {
             val existing = recordStates.get(permissionId, DriveWireCodec.DOMAIN_WORK_ALIAS, rejectKey)
@@ -469,7 +505,7 @@ internal class DriveWorkIdentity(
                     versionFp = fp,
                     versionOp = DriveRecordState.OP_PUT,
                     publishedFp = null,
-                    contentFp = fp,
+                    contentFp = DriveCanonicalJson.contentFp(bodyMap),
                     ancestorsJson = DriveCanonicalJson.encode(ancestors),
                     resRefsJson = existing?.resRefsJson ?: "[]",
                     lastHlc = hlc,
@@ -480,6 +516,12 @@ internal class DriveWorkIdentity(
         }
         replayPendingAliasEffects(permissionId)
     }
+
+    private fun candidateRejectionKey(bookUrl: String, candidate: String): String =
+        DriveCanonicalJson.sha256Hex(DriveCanonicalJson.encode(listOf(bookUrl, candidate)))
+
+    private suspend fun isCandidateRejected(permissionId: String, bookUrl: String, candidate: String): Boolean =
+        recordStates.get(permissionId, DOMAIN_REJECTED_CANDIDATE, candidateRejectionKey(bookUrl, candidate)) != null
 
     /**
      * Completes `liseur.db` effects of a confirm/reject whose wire record is already durable.
@@ -507,7 +549,7 @@ internal class DriveWorkIdentity(
                     val target = resolveCanonical(effect.to, merges)
                     for (alias in identities.aliasesFor(peerId)) {
                         val resolved = resolveCanonical(alias.workId, merges)
-                        if (resolved == alias.workId) continue
+                        if (resolved == alias.workId && !(alias.bookUrl == effect.bookUrl && resolved == target)) continue
                         // Only the book the reader confirmed is promoted; other books keep their
                         // confidence, so a guess or rejection there is not turned into consent.
                         identities.upsert(
@@ -591,11 +633,13 @@ internal class DriveWorkIdentity(
 
     /** Marks published `workAlias` records acknowledged in `drive_record_state`. */
     suspend fun markPublished(permissionId: String, records: List<DriveWireRecord>) {
-        for (record in records) {
-            if (record.d != DriveWireCodec.DOMAIN_WORK_ALIAS) continue
-            val existing = recordStates.get(permissionId, DriveWireCodec.DOMAIN_WORK_ALIAS, record.k) ?: continue
-            if (existing.versionFp == record.fp) {
-                recordStates.upsert(existing.copy(publishedFp = record.fp))
+        store.withTransaction {
+            for (record in records) {
+                if (record.d != DriveWireCodec.DOMAIN_WORK_ALIAS) continue
+                val existing = recordStates.get(permissionId, DriveWireCodec.DOMAIN_WORK_ALIAS, record.k) ?: continue
+                if (existing.versionFp == record.fp) {
+                    recordStates.upsert(existing.copy(publishedFp = record.fp))
+                }
             }
         }
     }
@@ -667,7 +711,7 @@ internal class DriveWorkIdentity(
                     if (existingWins) {
                         // The incoming version lost: keep the stored winner's body, fingerprint,
                         // ancestry and publication status coherent.
-                        recordStates.upsert(existing!!.copy(lastHlc = maxOf(existing.lastHlc, record.hlc)))
+                        recordStates.upsert(existing!!)
                     } else recordStates.upsert(
                         DriveRecordState(
                             permissionId = permissionId,
@@ -676,12 +720,12 @@ internal class DriveWorkIdentity(
                             versionFp = chosenFp,
                             versionOp = DriveRecordState.OP_PUT,
                             publishedFp = chosenFp,
-                            contentFp = chosenFp,
+                            contentFp = DriveCanonicalJson.contentFp(bodyJson),
                             originDeviceId = remoteDeviceId,
                             originSeq = remoteSeq,
                             ancestorsJson = DriveCanonicalJson.encode(anc),
                             resRefsJson = DriveCanonicalJson.encode(record.resRefs.distinct().sorted()),
-                            lastHlc = maxOf(existing?.lastHlc ?: "", record.hlc),
+                            lastHlc = record.hlc,
                             bodyJson = chosenBody,
                         ),
                     )
@@ -699,13 +743,14 @@ internal class DriveWorkIdentity(
                 val merges = loadMergeMap(permissionId)
                 if (resolveCanonical(parsed.a, merges) == resolveCanonical(parsed.b, merges)) return
                 val rejectKey = rejectRecordKey(parsed.a, parsed.b)
-                val existing = recordStates.get(permissionId, DriveWireCodec.DOMAIN_WORK_ALIAS, rejectKey)
                 val canonicalBody = DriveCanonicalJson.encode(DriveWireCodec.encodeWorkAliasBody(parsed))
 
                 database.withTransaction {
                     for (amb in identities.ambiguitiesFor(peerId)) {
                         val cands = amb.candidates.map { resolveCanonical(it, merges) }.toSet()
-                        if (parsed.a in cands && parsed.b in cands && cands.size == 2) {
+                        val confirmed = identities.alias(amb.bookUrl, peerId)?.confirmedWorkKey()
+                            ?.let { resolveCanonical(it, merges) }
+                        if (confirmed != null && confirmed in cands && parsed.a in cands && parsed.b in cands && cands.size == 2) {
                             identities.clearAmbiguity(amb.bookUrl, peerId)
                         }
                     }
@@ -719,12 +764,12 @@ internal class DriveWorkIdentity(
                             versionFp = record.fp,
                             versionOp = DriveRecordState.OP_PUT,
                             publishedFp = record.fp,
-                            contentFp = record.fp,
+                            contentFp = DriveCanonicalJson.contentFp(bodyJson),
                             originDeviceId = remoteDeviceId,
                             originSeq = remoteSeq,
                             ancestorsJson = DriveCanonicalJson.encode(record.anc.take(DriveWireCodec.MAX_ANCESTORS)),
                             resRefsJson = DriveCanonicalJson.encode(record.resRefs.distinct().sorted()),
-                            lastHlc = maxOf(existing?.lastHlc ?: "", record.hlc),
+                            lastHlc = record.hlc,
                             bodyJson = canonicalBody,
                         ),
                     )
@@ -736,7 +781,7 @@ internal class DriveWorkIdentity(
     /** Persists a locally derived `merge:` record, unpublished, so the next delta carries it. Runs inside the caller's transaction. */
     private suspend fun queueDerivedMerge(permissionId: String, merge: DriveWorkAliasBody.Merge, hlc: String) {
         val bodyMap = DriveWireCodec.encodeWorkAliasBody(merge)
-        val fp = DriveCanonicalJson.contentFp(bodyMap)
+        val fp = DriveCanonicalJson.putFp(bodyMap, hlc)
         val key = mergeRecordKey(merge.from)
         store.withTransaction {
             val existing = recordStates.get(permissionId, DriveWireCodec.DOMAIN_WORK_ALIAS, key)
@@ -752,7 +797,7 @@ internal class DriveWorkIdentity(
                     versionFp = fp,
                     versionOp = DriveRecordState.OP_PUT,
                     publishedFp = null,
-                    contentFp = fp,
+                    contentFp = DriveCanonicalJson.contentFp(bodyMap),
                     ancestorsJson = DriveCanonicalJson.encode(buildAncestors(existing)),
                     resRefsJson = existing?.resRefsJson ?: "[]",
                     lastHlc = hlc,
@@ -798,6 +843,7 @@ internal class DriveWorkIdentity(
 
         /** Local-only recovery markers in `drive_record_state`; not a wire domain. */
         const val DOMAIN_PENDING_ALIAS_EFFECT = "_work_alias_pending"
+        const val DOMAIN_REJECTED_CANDIDATE = "_work_alias_rejected_candidate"
 
         fun driveBookUrl(workKey: String): String = "$DRIVE_BOOK_URL_PREFIX$workKey"
 

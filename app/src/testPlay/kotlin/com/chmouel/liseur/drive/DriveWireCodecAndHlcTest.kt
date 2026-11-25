@@ -54,6 +54,9 @@ class DriveWireCodecAndHlcTest {
         val fp2 = DriveCanonicalJson.contentFp(JSONObject("""{"addedAt":1000,"title":"The Hobbit"}"""))
         assertEquals(fp1, fp2)
         assertEquals(64, fp1.length)
+        val put1 = DriveCanonicalJson.putFp(body, "0017450000000-0001-dev-a")
+        assertEquals("76c82fff73717556b2108fd24b700e633935f7fef43d97da64fcabd0b97036a2", put1)
+        assertNotEquals(put1, DriveCanonicalJson.putFp(body, "0017450000000-0002-dev-a"))
 
         val del1 = DriveCanonicalJson.delFp("annotation", "id-1", "0017450000000-0001-dev-a")
         val del2 = DriveCanonicalJson.delFp("annotation", "id-1", "0017450000000-0002-dev-a")
@@ -72,6 +75,15 @@ class DriveWireCodecAndHlcTest {
             DriveCanonicalJson.batchId("dev-a", 7L),
             DriveCanonicalJson.batchId("dev-a", 8L),
         )
+    }
+
+    @Test
+    fun `catalog rejects uploaded edition without availability clock`() {
+        val body = JSONObject("""{"workKey":"isbn:1","editions":[{"sha256":"abc","driveFileId":"file-1"}]}""")
+        assertNull(DriveWireCodec.decodeCatalogBody(body))
+        body.getJSONArray("editions").getJSONObject(0).put("driveFileId", JSONObject.NULL)
+            .put("availabilityHlc", "0017450000000-0001-dev-a")
+        assertEquals("0017450000000-0001-dev-a", DriveWireCodec.decodeCatalogBody(body)!!.editions.single().availabilityHlc)
     }
 
     @Test
@@ -157,7 +169,7 @@ class DriveWireCodecAndHlcTest {
             workKey = "isbn:9780547928227",
             title = "The Hobbit",
             author = "J.R.R. Tolkien",
-            identifiers = listOf(DriveCatalogIdentifier("isbn", "9780547928227")),
+            identifiers = listOf(DriveCatalogIdentifier("", "bare-id"), DriveCatalogIdentifier("isbn", "9780547928227")),
             editions = listOf(
                 DriveCatalogEdition(
                     sha256 = "a".repeat(64),
@@ -165,6 +177,7 @@ class DriveWireCodecAndHlcTest {
                     driveFileId = "file-1",
                     fileName = "The Hobbit.epub",
                     uploadedAt = 1000L,
+                    availabilityHlc = "0017450000000-0001-dev-a",
                 ),
             ),
             fileSeriesName = "Middle-earth",
