@@ -103,6 +103,7 @@ import com.chmouel.liseur.ui.widget.widgetInputs
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -138,7 +139,18 @@ class AppContainer(
     val eInkDisplay: EInkDisplay by lazy { OnyxEInkDisplay.bind() }
 
     private val httpClient = DefaultHttpClient()
-    private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    /**
+     * The app scope, for work that outlives the screen and whose result the
+     * caller reads back; [launchAppWide] answers only a [Job].
+     */
+    internal val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    /**
+     * Hands work to the app scope, which outlives the screen that started it:
+     * a reader leaving the book must not cancel an upload it just accepted.
+     */
+    fun launchAppWide(block: suspend CoroutineScope.() -> Unit): Job = applicationScope.launch(block = block)
 
     val assetRetriever = permissionSafeAssetRetriever(context.contentResolver, httpClient)
 

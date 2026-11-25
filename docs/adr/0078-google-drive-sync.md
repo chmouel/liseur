@@ -880,7 +880,7 @@ restored device gets its own `deviceId`.
 | Table | PK | Columns |
 |---|---|---|
 | `drive_install` | `id` (=1) | `device_id`, `created_at` |
-| `drive_account` | `permission_id` | `email`, `state` (ACTIVE / PAUSED / NEEDS_RECONNECT), `connected_at`, `last_success_at`, `last_error`, `folder_id`, `start_page_token`, `next_seq`, `manifest_file_id`, `snapshot_through_seq`, `deltas_since_snapshot`, `hlc_wall_ms`, `hlc_counter`, `metered_transfers` |
+| `drive_account` | `permission_id` | `email`, `state` (ACTIVE / PAUSED / NEEDS_RECONNECT), `connected_at`, `last_success_at`, `last_error`, `folder_id`, `start_page_token`, `next_seq`, `manifest_file_id`, `snapshot_through_seq`, `deltas_since_snapshot`, `hlc_wall_ms`, `hlc_counter`, `metered_transfers`, `upload_selection_at` |
 | `drive_device` | `(permission_id, device_id)` | `label`, `manifest_file_id`, `app_version_code`, `snapshot_through_seq`, `last_seen_at` |
 | `drive_cursor` | `(permission_id, device_id, domain)` | `applied_seq`, `paused_schema_version` |
 | `drive_file` | `(permission_id, file_id)` | `name`, `kind` (`manifest` / `delta` / `snapshot` / `cover`, or `epub` from `liseurKind`), `device_id`, `seq`, `sha256`, `size`, `md5`, `trashed`, `created_time`; index `(permission_id, kind, sha256)` |
@@ -976,6 +976,21 @@ history live here.
   - Before the first EPUB upload on initial connect or after switching
     Google accounts, show the **Upload EPUB files** selection listing
     locally available books and estimated total bytes.
+  - The device-wide `uploadPolicy` (`Ask` by default) is the second
+    consumer of the server's setting: `Ask` offers a book added here,
+    `Always` sends it, `Never` stays quiet. Both apply only to books
+    added after `max(connected_at, upload_selection_at)`, so confirming
+    or unchecking the picker is the reader's answer for everything
+    already on the device. The per-book "upload" action ignores the
+    cutoff, because tapping it is consent. A book whose uploaded file the
+    reader deletes in Drive is suppressed for that account and edition,
+    so no policy sends it again until they select it by hand; the upgrade
+    that added `upload_selection_at` backfills it with its own time for
+    the same reason.
+  - Offers go through the queue additively and schedule the upload
+    worker with `APPEND_OR_REPLACE`, so a book added while a bulk
+    transfer runs drains after it instead of cancelling it; the picker
+    and the metered-network toggle keep `REPLACE`.
   - Bulk EPUB uploads and downloads (`drive.file`) default to unmetered
     networks (`metered_transfers = 0`, user-configurable) and run on a
     separate transfer pipeline from `drive.appdata`, so a large EPUB

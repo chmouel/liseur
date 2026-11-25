@@ -7,6 +7,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.chmouel.liseur.AppContainer
 import com.chmouel.liseur.data.calibre.CredentialCipher
 import com.chmouel.liseur.data.db.Book
+import com.chmouel.liseur.data.db.BookFingerprintRow
 import com.chmouel.liseur.data.db.BookMetadata
 import com.chmouel.liseur.data.db.DownloadState
 import com.chmouel.liseur.data.db.LiseurDatabase
@@ -48,6 +49,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicInteger
 import javax.crypto.KeyGenerator
 
@@ -67,6 +69,13 @@ class DriveLibrarySyncTest {
     @Volatile
     private var onBooksForgetting: suspend (List<String>) -> Unit = {}
 
+    /** Runs inside the transfer manager between fingerprinting a book and writing its row. */
+    @Volatile
+    private var beforeQueueWrite: suspend () -> Unit = {}
+
+    /** The metered-transfer allowance each EPUB upload worker was scheduled with. */
+    private val uploadWorkScheduledWith = CopyOnWriteArrayList<Boolean>()
+
     @Before
     fun open() {
         CredentialCipher.keyForTesting =
@@ -77,6 +86,7 @@ class DriveLibrarySyncTest {
         switchCoordinator = LibrarySyncSwitchCoordinator()
         serverDisconnectHooks.set(0)
         driveWorkersStopped.set(0)
+        uploadWorkScheduledWith.clear()
 
         val removal = BookRemoval(
             bookDao = liseurDb.bookDao(),
@@ -142,6 +152,8 @@ class DriveLibrarySyncTest {
             switchCoordinator = switchCoordinator,
             beforeServerDisconnect = { serverDisconnectHooks.incrementAndGet() },
             stopWorkers = { driveWorkersStopped.incrementAndGet() },
+            beforeQueueWrite = { beforeQueueWrite() },
+            appendEpubUploadsWork = { allowMetered -> uploadWorkScheduledWith.add(allowMetered) },
             deviceIdGenerator = { "11111111-2222-4333-8444-555555555555" },
             openStore = { driveDb },
             bookRemoval = BookRemoval(
@@ -980,6 +992,503 @@ class DriveLibrarySyncTest {
         assertTrue(driveSync.deleteFromSyncedLibrary(stub))
 
         assertNull(liseurDb.bookDao().getByUrl(stub.url))
+    }
+
+    @Test
+    fun `no upload target while inactive`() = runTest {
+        assertNull(driveSync.uploadTarget.first())
+    }
+
+    @Test
+    fun `a stale account key queues nothing`() = runTest {
+        driveSync.activateAccount("perm-a", "a@example.com", now = 100L)
+        val book = localBook("stale.epub")
+
+        assertTrue(driveSync.enqueueUploads("drive:someone-else", listOf(book)).isEmpty())
+        assertTrue(driveDb.uploads().forAccount("perm-a").isEmpty())
+    }
+
+    @Test
+    fun `a valid account key queues the book and the target reflects it`() = runTest {
+        driveSync.activateAccount("perm-a", "a@example.com", now = 100L)
+        val book = localBook("valid.epub")
+
+        assertEquals(
+            setOf(book.url),
+            driveSync.enqueueUploads(DriveLibrarySync.accountPeerId("perm-a"), listOf(book)),
+        )
+        assertEquals(DriveUpload.STATE_PENDING, driveDb.uploads().forAccount("perm-a").single().state)
+
+        val target = requireNotNull(driveSync.uploadTarget.first { it != null })
+        assertEquals(setOf(book.url), target.queued)
+        assertEquals(100L, target.offerSince)
+    }
+
+    @Test
+    fun `an unsettled selection exposes no offer until the picker is answered`() = runTest {
+        driveSync.activateAccount("perm-a", "a@example.com", now = 100L)
+
+        val beforePicker = requireNotNull(driveSync.uploadTarget.first { it != null })
+        assertFalse(beforePicker.selectionSettled)
+
+        driveDb.accounts().setUploadSelectionAt("perm-a", 200L)
+
+        val afterPicker = requireNotNull(driveSync.uploadTarget.first { it != null })
+        assertTrue(afterPicker.selectionSettled)
+        assertEquals(200L, afterPicker.offerSince)
+    }
+
+    @Test
+    fun `upload target follows only the active account`() = runTest {
+        driveSync.activateAccount("perm-a", "a@example.com", now = 100L)
+        val queuedForA = localBook("account-a.epub")
+        assertEquals(1, driveSync.epubTransfers.queueBooks("perm-a", listOf(queuedForA.url)).size)
+
+        val targetA = requireNotNull(
+            driveSync.uploadTarget.first { it?.accountKey == DriveLibrarySync.accountPeerId("perm-a") },
+        )
+        assertEquals(setOf(queuedForA.url), targetA.queued)
+
+        driveSync.activateAccount("perm-b", "b@example.com", now = 200L)
+
+        val targetB = requireNotNull(
+            driveSync.uploadTarget.first { it?.accountKey == DriveLibrarySync.accountPeerId("perm-b") },
+        )
+        assertTrue(targetB.queued.isEmpty())
+        assertEquals(setOf(queuedForA.url), driveDb.uploads().forAccount("perm-a").map { it.bookUrl }.toSet())
+    }
+
+    @Test
+    fun `queueing one book leaves an earlier selection pending`() = runTest {
+        driveSync.activateAccount("perm-a", "a@example.com", now = 100L)
+        val a = localBook("picked.epub")
+        val b = localBook("offered.epub")
+
+        assertEquals(1, driveSync.epubTransfers.queueSelectedBooks("perm-a", setOf(a.url)))
+        assertEquals(setOf(b.url), driveSync.epubTransfers.queueBooks("perm-a", listOf(b.url)))
+
+        assertEquals(
+            setOf(a.url, b.url),
+            driveDb.uploads().forAccount("perm-a").map { it.bookUrl }.toSet(),
+        )
+    }
+
+    @Test
+    fun `an uploaded edition is not queued again`() = runTest {
+        driveSync.activateAccount("perm-a", "a@example.com", now = 100L)
+        val a = localBook("uploaded.epub")
+        driveSync.epubTransfers.queueBooks("perm-a", listOf(a.url))
+        val sha = driveDb.uploads().forAccount("perm-a").single().sha256
+        driveDb.uploads().markUploaded("perm-a", sha, "file-1", 200L)
+
+        assertTrue(driveSync.epubTransfers.queueBooks("perm-a", listOf(a.url)).isEmpty())
+    }
+
+    @Test
+    fun `a picker answer landing mid-enqueue keeps the book out of the queue`() = runTest {
+        driveSync.activateAccount("perm-a", "a@example.com", now = 100L)
+        driveDb.accounts().setUploadSelectionAt("perm-a", 200L)
+        val offered = localBook("in-flight.epub")
+        // The reader confirms an empty picker after the offer was computed but before it was written.
+        beforeQueueWrite = { driveDb.accounts().setUploadSelectionAt("perm-a", 300L) }
+
+        val queued = driveSync.enqueueUploads(
+            DriveLibrarySync.accountPeerId("perm-a"),
+            listOf(offered),
+            expectedOfferSince = 200L,
+        )
+
+        assertEquals(emptySet<String>(), queued)
+        assertTrue(driveDb.uploads().forAccount("perm-a").isEmpty())
+    }
+
+    @Test
+    fun `an offer decided under the current answer still queues`() = runTest {
+        driveSync.activateAccount("perm-a", "a@example.com", now = 100L)
+        driveDb.accounts().setUploadSelectionAt("perm-a", 200L)
+        val offered = localBook("offered.epub")
+
+        val queued = driveSync.enqueueUploads(
+            DriveLibrarySync.accountPeerId("perm-a"),
+            listOf(offered),
+            expectedOfferSince = 200L,
+        )
+
+        assertEquals(setOf(offered.url), queued)
+        assertEquals(DriveUpload.STATE_PENDING, driveDb.uploads().forAccount("perm-a").single().state)
+    }
+
+    /**
+     * The answer and the rows it drops are one write: a worker that starts while the
+     * selected books are still being queued must never find the new cutoff over a queue
+     * that still holds a book the answer left out.
+     */
+    @Test
+    fun `an answer drops the rows it leaves out even when queueing its selection fails`() = runTest {
+        driveSync.activateAccount("perm-a", "a@example.com", now = 100L)
+        val leftOut = localBook("left-out.epub")
+        assertEquals(1, driveSync.epubTransfers.queueSelectedBooks("perm-a", setOf(leftOut.url)))
+        // The queue survives a switch away and back; the answer does not.
+        driveSync.activateAccount("perm-b", "b@example.com", now = 200L)
+        driveSync.activateAccount("perm-a", "a@example.com", now = 300L)
+        val kept = driveDb.uploads().forAccount("perm-a").single()
+        driveDb.uploads().upsert(kept.copy(selectedAt = 1L, updatedAt = 1L))
+        assertNull(driveDb.accounts().get("perm-a")?.uploadSelectionAt)
+
+        val picked = localBook("picked.epub")
+        beforeQueueWrite = { throw IllegalStateException("the queue write failed") }
+        val failure = runCatching {
+            driveSync.epubTransfers.queueSelectedBooks("perm-a", setOf(picked.url), 400L)
+        }
+        beforeQueueWrite = {}
+
+        assertTrue(failure.isFailure)
+        assertEquals(400L, driveDb.accounts().get("perm-a")?.uploadSelectionAt)
+        assertEquals(emptyList<String>(), driveDb.uploads().pendingForAccount("perm-a").map { it.bookUrl })
+    }
+
+    @Test
+    fun `an empty answer records the cutoff and empties the kept queue in one write`() = runTest {
+        driveSync.activateAccount("perm-a", "a@example.com", now = 100L)
+        val leftOut = localBook("left-out.epub")
+        assertEquals(1, driveSync.epubTransfers.queueSelectedBooks("perm-a", setOf(leftOut.url)))
+        driveSync.activateAccount("perm-b", "b@example.com", now = 200L)
+        driveSync.activateAccount("perm-a", "a@example.com", now = 300L)
+        val kept = driveDb.uploads().forAccount("perm-a").single()
+        driveDb.uploads().upsert(kept.copy(selectedAt = 1L, updatedAt = 1L))
+
+        assertEquals(0, driveSync.epubTransfers.queueSelectedBooks("perm-a", emptySet(), 400L))
+
+        assertEquals(400L, driveDb.accounts().get("perm-a")?.uploadSelectionAt)
+        assertTrue(driveDb.uploads().pendingForAccount("perm-a").isEmpty())
+    }
+
+    /**
+     * The reader can reopen the picker and uncheck a book while the answer that checked it
+     * is still fingerprinting. The later answer is the last word: the older one must not
+     * write down the row it was working on.
+     */
+    @Test
+    fun `an answer replaced while its book is fingerprinting queues nothing`() = runTest {
+        driveSync.activateAccount("perm-a", "a@example.com", now = 100L)
+        val unchecked = localBook("unchecked.epub")
+        var answeredAgain = false
+        beforeQueueWrite = {
+            if (!answeredAgain) {
+                answeredAgain = true
+                driveSync.epubTransfers.queueSelectedBooks("perm-a", emptySet(), 300L)
+            }
+        }
+
+        val queued = driveSync.epubTransfers.queueSelectedBooks("perm-a", setOf(unchecked.url), 200L)
+        beforeQueueWrite = {}
+
+        assertEquals(0, queued)
+        assertEquals(300L, driveDb.accounts().get("perm-a")?.uploadSelectionAt)
+        assertTrue(driveDb.uploads().forAccount("perm-a").isEmpty())
+    }
+
+    /** A file deleted in Drive stays deleted even where only another device's upload held the book. */
+    @Test
+    fun `deleting a file another device uploaded suppresses this device's edition`() = runTest {
+        driveSync.activateAccount("perm-a", "a@example.com", now = 100L)
+        driveDb.accounts().setUploadSelectionAt("perm-a", 200L)
+        val held = localBook("held-elsewhere.epub")
+        val sha = requireNotNull(liseurDb.workIdentityDao().fingerprint(held.url)).sha256
+        driveDb.files().upsert(
+            DriveFile(
+                permissionId = "perm-a",
+                fileId = "file-b",
+                name = "held-elsewhere.epub",
+                kind = DriveFile.KIND_EPUB,
+                sha256 = sha,
+                trashed = false,
+            ),
+        )
+        assertTrue(driveDb.uploads().forAccount("perm-a").isEmpty())
+        advertiseEdition("perm-a", held, sha, "file-b")
+        assertTrue(held.url in requireNotNull(driveSync.uploadTarget.first { it != null }).held)
+
+        driveSync.catalogSync.handleDriveEpubRemoved("perm-a", "file-b") { "0000000000001-0000-dev" }
+
+        val target = requireNotNull(driveSync.uploadTarget.first { it != null })
+        assertTrue(held.url in target.withheld)
+        assertFalse(held.url in target.held)
+        assertEquals(DriveUpload.STATE_SUPPRESSED, driveDb.uploads().get("perm-a", sha)?.state)
+
+        // Asking for this book by hand is still consent: the suppression is not a refusal.
+        assertEquals(
+            setOf(held.url),
+            driveSync.enqueueUploads(DriveLibrarySync.accountPeerId("perm-a"), listOf(held)),
+        )
+        assertEquals(DriveUpload.STATE_PENDING, driveDb.uploads().get("perm-a", sha)?.state)
+    }
+
+    /**
+     * A live file left behind by a cancelled upload is on no other device, so treating it as
+     * held would keep the book out of the offer and hide the action that uploads it again.
+     */
+    @Test
+    fun `only a live file an advertised catalog edition points at holds the book`() = runTest {
+        driveSync.activateAccount("perm-a", "a@example.com", now = 100L)
+        driveDb.accounts().setUploadSelectionAt("perm-a", 200L)
+        val book = localBook("orphan.epub")
+        val sha = requireNotNull(liseurDb.workIdentityDao().fingerprint(book.url)).sha256
+        driveDb.files().upsert(
+            DriveFile(
+                permissionId = "perm-a",
+                fileId = "file-orphan",
+                name = "orphan.epub",
+                kind = DriveFile.KIND_EPUB,
+                sha256 = sha,
+                trashed = false,
+            ),
+        )
+
+        assertFalse(book.url in requireNotNull(driveSync.uploadTarget.first { it != null }).held)
+
+        advertiseEdition("perm-a", book, sha, "file-orphan")
+
+        assertTrue(book.url in requireNotNull(driveSync.uploadTarget.first { it != null }).held)
+    }
+
+    /**
+     * A corrected EPUB reindexed at the same path is a different set of bytes. The hash
+     * cached for the file it replaced must not let an UPLOADED row hold the book and hide
+     * the upload the current edition still needs.
+     */
+    @Test
+    fun `reindexing a book discards the fingerprint of the file it replaced`() = runTest {
+        driveSync.activateAccount("perm-a", "a@example.com", now = 100L)
+        driveDb.accounts().setUploadSelectionAt("perm-a", 200L)
+        val book = localBook("corrected.epub")
+        val sha = requireNotNull(liseurDb.workIdentityDao().fingerprint(book.url)).sha256
+        liseurDb.bookDao().markDownloaded(book.url, book.url, downloadedAt = 10L, fileModifiedAt = 100L)
+        liseurDb.workIdentityDao().upsert(BookFingerprintRow(book.url, sha, "md5", 1L, 100L, 1L))
+        driveDb.uploads().upsert(
+            DriveUpload(
+                permissionId = "perm-a",
+                sha256 = sha,
+                bookUrl = book.url,
+                sizeBytes = 1L,
+                state = DriveUpload.STATE_UPLOADED,
+                fileId = "file-corrected",
+                selectedAt = 1L,
+                updatedAt = 1L,
+            ),
+        )
+        assertTrue(book.url in requireNotNull(driveSync.uploadTarget.first { it != null }).held)
+
+        // The reader drops a corrected EPUB in at the same path.
+        liseurDb.bookDao().markDownloaded(book.url, book.url, downloadedAt = 20L, fileModifiedAt = 200L)
+
+        val target = requireNotNull(driveSync.uploadTarget.first { it != null })
+        assertTrue(book.url !in target.held)
+        assertTrue(book.url !in target.queued)
+        assertTrue(book.url !in target.withheld)
+    }
+
+    /**
+     * The reader can ask for a book while the deletion of its Drive copy is still on its way.
+     * That request is theirs and outlives the deletion; only the automatic offer's own row is
+     * cancelled, and what its upload started is still cleaned up.
+     */
+    @Test
+    fun `a Drive deletion cancels the automatic offer's queued row but not a hand-picked one`() = runTest {
+        driveSync.activateAccount("perm-a", "a@example.com", now = 100L)
+        driveDb.accounts().setUploadSelectionAt("perm-a", 200L)
+        val peer = DriveLibrarySync.accountPeerId("perm-a")
+        val automatic = localBook("automatic.epub")
+        val byHand = localBook("by-hand.epub")
+        val automaticSha = requireNotNull(liseurDb.workIdentityDao().fingerprint(automatic.url)).sha256
+        val byHandSha = requireNotNull(liseurDb.workIdentityDao().fingerprint(byHand.url)).sha256
+        assertEquals(setOf(automatic.url), driveSync.enqueueUploads(peer, listOf(automatic), expectedOfferSince = 200L))
+        assertEquals(setOf(byHand.url), driveSync.enqueueUploads(peer, listOf(byHand)))
+        // The automatic row's upload had already started when the old copy was deleted.
+        driveDb.uploads().updateProgress("perm-a", automaticSha, DriveUpload.STATE_UPLOADING, "session-1", 10L, 210L)
+        for ((sha, fileId) in listOf(automaticSha to "file-old-auto", byHandSha to "file-old-hand")) {
+            driveDb.files().upsert(
+                DriveFile(
+                    permissionId = "perm-a",
+                    fileId = fileId,
+                    name = "deleted.epub",
+                    kind = DriveFile.KIND_EPUB,
+                    sha256 = sha,
+                    trashed = false,
+                ),
+            )
+        }
+
+        driveSync.catalogSync.handleDriveEpubRemoved("perm-a", "file-old-auto") { "0000000000001-0000-dev" }
+        driveSync.catalogSync.handleDriveEpubRemoved("perm-a", "file-old-hand") { "0000000000002-0000-dev" }
+
+        val cancelled = requireNotNull(driveDb.uploads().get("perm-a", automaticSha))
+        assertEquals(DriveUpload.STATE_SUPPRESSED, cancelled.state)
+        // Its copy in Drive still has to be trashed, so the session stays for cleanup.
+        assertEquals("session-1", cancelled.sessionUri)
+        // The suppressed row's pending cleanup keeps the worker scheduled, as does the other book.
+        assertEquals(2, driveDb.uploads().workCount("perm-a"))
+        val kept = requireNotNull(driveDb.uploads().get("perm-a", byHandSha))
+        assertEquals(DriveUpload.STATE_PENDING, kept.state)
+
+        // Asking for the cancelled edition by hand keeps its session for cleanup, so the copy
+        // that upload started is still trashed before a fresh one goes up.
+        assertEquals(setOf(automatic.url), driveSync.enqueueUploads(peer, listOf(automatic)))
+        val requeued = requireNotNull(driveDb.uploads().get("perm-a", automaticSha))
+        assertEquals(DriveUpload.STATE_REQUEUE, requeued.state)
+        assertEquals("session-1", requeued.sessionUri)
+    }
+
+    /** The offer's snapshot can predate the row, so the write itself has to refuse these states. */
+    @Test
+    fun `an automatic offer does not overwrite a suppressed or failed edition`() = runTest {
+        driveSync.activateAccount("perm-a", "a@example.com", now = 100L)
+        driveDb.accounts().setUploadSelectionAt("perm-a", 200L)
+        val deleted = localBook("deleted-in-drive.epub")
+        val failed = localBook("failed.epub")
+        for (book in listOf(deleted, failed)) {
+            val sha = requireNotNull(liseurDb.workIdentityDao().fingerprint(book.url)).sha256
+            driveSync.epubTransfers.queueBooks("perm-a", listOf(book.url))
+            val state = if (book == deleted) DriveUpload.STATE_SUPPRESSED else DriveUpload.STATE_FAILED
+            driveDb.uploads().transition("perm-a", sha, DriveUpload.STATE_PENDING, state, 300L)
+        }
+
+        val queued = driveSync.enqueueUploads(
+            DriveLibrarySync.accountPeerId("perm-a"),
+            listOf(deleted, failed),
+            expectedOfferSince = 200L,
+        )
+
+        assertTrue(queued.isEmpty())
+        assertEquals(
+            mapOf(deleted.url to DriveUpload.STATE_SUPPRESSED, failed.url to DriveUpload.STATE_FAILED),
+            driveDb.uploads().forAccount("perm-a").associate { it.bookUrl to it.state },
+        )
+    }
+
+    /**
+     * Queueing fingerprints the books first, and the reader can turn metered transfers off
+     * while that runs. An empty queue reschedules nothing, so the worker this write
+     * schedules has to carry the setting as it stands after the write.
+     */
+    @Test
+    fun `the scheduled upload worker carries the metered setting read after the queue write`() = runTest {
+        driveSync.activateAccount("perm-a", "a@example.com", now = 100L)
+        driveDb.accounts().setUploadSelectionAt("perm-a", 200L)
+        driveDb.accounts().setMeteredTransfers("perm-a", true)
+        val book = localBook("metered-while-queueing.epub")
+        beforeQueueWrite = { driveDb.accounts().setMeteredTransfers("perm-a", false) }
+
+        assertEquals(
+            setOf(book.url),
+            driveSync.enqueueUploads(DriveLibrarySync.accountPeerId("perm-a"), listOf(book), expectedOfferSince = 200L),
+        )
+
+        assertEquals(listOf(false), uploadWorkScheduledWith)
+    }
+
+    /**
+     * A rejected Drive work match is the reader's answer about these bytes: an automatic
+     * offer must neither promote it back to confirmed nor upload the book under it.
+     */
+    @Test
+    fun `an automatic offer leaves a rejected work match rejected and queues nothing`() = runTest {
+        driveSync.activateAccount("perm-a", "a@example.com", now = 100L)
+        driveDb.accounts().setUploadSelectionAt("perm-a", 200L)
+        val book = localBook("refused-match.epub")
+        val peer = DriveLibrarySync.accountPeerId("perm-a")
+        liseurDb.workIdentityDao().upsert(
+            WorkAlias(
+                bookUrl = book.url,
+                peerId = peer,
+                workId = "isbn:999",
+                confidence = WorkAlias.REJECTED,
+                confirmed = false,
+                resolvedAt = 2L,
+            ),
+        )
+
+        assertTrue(driveSync.enqueueUploads(peer, listOf(book), expectedOfferSince = 200L).isEmpty())
+        assertTrue(driveDb.uploads().forAccount("perm-a").isEmpty())
+        assertEquals(WorkAlias.REJECTED, liseurDb.workIdentityDao().alias(book.url, peer)?.confidence)
+
+        // Asking for this book by hand is still the reader's choice to make.
+        assertEquals(setOf(book.url), driveSync.enqueueUploads(peer, listOf(book)))
+        assertEquals(WorkAlias.HIGH, liseurDb.workIdentityDao().alias(book.url, peer)?.confidence)
+    }
+
+    @Test
+    fun `a paused account writes no queued row`() = runTest {
+        driveSync.activateAccount("perm-a", "a@example.com", now = 100L)
+        val a = localBook("paused.epub")
+        driveDb.accounts().setState("perm-a", DriveAccount.STATE_PAUSED)
+
+        assertTrue(driveSync.epubTransfers.queueBooks("perm-a", listOf(a.url)).isEmpty())
+        assertTrue(driveDb.uploads().forAccount("perm-a").isEmpty())
+    }
+
+    /** A local file book with a matching stored fingerprint, so no hashing is needed. */
+    private suspend fun localBook(name: String): Book {
+        val url = "file:///tmp/$name"
+        val book = Book(
+            url = url,
+            title = name,
+            author = null,
+            coverPath = null,
+            source = null,
+            addedAt = 1_000L,
+            lastOpenedAt = null,
+            localUri = url,
+            downloadState = DownloadState.DOWNLOADED,
+        )
+        liseurDb.bookDao().upsert(book)
+        liseurDb.workIdentityDao().upsert(
+            BookFingerprintRow(
+                bookUrl = url,
+                sha256 = name.hashCode().toString().padStart(64, '0'),
+                partialMd5 = "md5",
+                fileSize = 1,
+                fileModifiedAt = null,
+                computedAt = 1,
+            ),
+        )
+        return book
+    }
+
+    /** Publishes the catalog edition a synced upload leaves behind for [book]. */
+    private suspend fun advertiseEdition(permissionId: String, book: Book, sha: String, driveFileId: String) {
+        val body = DriveCatalogBody(
+            workKey = "sha256:$sha",
+            title = book.title,
+            author = book.author,
+            identifiers = emptyList(),
+            editions = listOf(
+                DriveCatalogEdition(
+                    sha256 = sha,
+                    sizeBytes = 1L,
+                    driveFileId = driveFileId,
+                    fileName = "${book.title}.epub",
+                    uploadedAt = 1L,
+                    availabilityHlc = "0017450000000-0001-dev-a",
+                ),
+            ),
+            fileSeriesName = null,
+            fileSeriesIndex = null,
+            addedAt = book.addedAt,
+            archivedAt = null,
+            updatedAt = 1L,
+        )
+        driveDb.recordStates().upsert(
+            DriveRecordState(
+                permissionId = permissionId,
+                domain = DriveWireCodec.DOMAIN_CATALOG,
+                recordKey = body.workKey,
+                versionFp = "advertised-$driveFileId",
+                versionOp = DriveRecordState.OP_PUT,
+                lastHlc = "0017450000000-0001-dev-a",
+                bodyJson = DriveCanonicalJson.encode(DriveWireCodec.encodeCatalogBody(body)),
+            ),
+        )
     }
 
     private fun stub(url: String) = Book(

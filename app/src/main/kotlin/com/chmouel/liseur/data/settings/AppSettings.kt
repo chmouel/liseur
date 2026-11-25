@@ -518,8 +518,8 @@ data class AppSettings(
 }
 
 /**
- * What to do with a book that arrives on the device when the connected
- * server accepts uploads.
+ * What to do with a book that arrives on the device when the active
+ * upload destination accepts it: the connected server, or Google Drive.
  *
  * The default is [ASK] because sending a book nobody asked to send, over
  * whatever connection happens to be up, is the one way this feature can

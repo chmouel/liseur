@@ -26,6 +26,7 @@ import com.chmouel.liseur.hardcover.Isbn
 import com.chmouel.liseur.providers.PlaySettingsEntries
 import com.chmouel.liseur.sync.LibrarySyncBackend
 import com.chmouel.liseur.sync.LibrarySyncSwitchCoordinator
+import com.chmouel.liseur.sync.LibraryUploadTarget
 import java.io.File
 import java.security.MessageDigest
 import java.util.Locale
@@ -37,9 +38,11 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -62,9 +65,11 @@ internal class DriveLibrarySync(
     private val stopWorkers: () -> Unit = {},
     private val onResumeActive: () -> Unit = {},
     private val scheduleEpubUploadsWork: (allowMetered: Boolean) -> Unit = {},
+    private val appendEpubUploadsWork: (allowMetered: Boolean) -> Unit = scheduleEpubUploadsWork,
     private val cancelEpubUploadsWork: () -> Unit = {},
     private val enqueueEpubDownloadWork: suspend (bookUrl: String, allowMetered: Boolean) -> UUID? = { _, _ -> null },
     private val cancelEpubDownloadWork: suspend (bookUrl: String) -> Unit = {},
+    private val beforeQueueWrite: suspend () -> Unit = {},
     private val deviceIdGenerator: () -> String = { UUID.randomUUID().toString().lowercase(Locale.ROOT) },
     private val openStore: (() -> DriveSyncDatabase)? = null,
     authClient: DriveAuthClient? = null,
@@ -266,6 +271,7 @@ internal class DriveLibrarySync(
             },
             onNeedsReconnect = { permissionId, reason -> markNeedsReconnectIfActive(permissionId, reason) },
             stagingDirProvider = stagingDirProvider,
+            beforeQueueWrite = beforeQueueWrite,
             clock = clock,
         )
     }
@@ -288,6 +294,65 @@ internal class DriveLibrarySync(
     override suspend fun isActive(): Boolean {
         if (!hasStore()) return false
         return store.accounts().active() != null
+    }
+
+    /**
+     * The books the main-side upload offer must leave alone, kept in step with
+     * the queue and with the Drive files a catalog edition advertises.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    override val uploadTarget: Flow<LibraryUploadTarget?> = storeAvailable
+        .flatMapLatest { exists ->
+            if (!exists) {
+                flowOf(null)
+            } else {
+                store.accounts().observeActive()
+                    .map { account ->
+                        account?.let { Triple(it.permissionId, it.connectedAt, it.uploadSelectionAt) }
+                    }.distinctUntilChanged()
+                    .flatMapLatest { identity ->
+                        if (identity == null) {
+                            flowOf(null)
+                        } else {
+                            val (permissionId, connectedAt, selectionAt) = identity
+                            val held = combine(
+                                store.files().observeLiveEpubFiles(permissionId),
+                                store.recordStates().observeDomain(permissionId, DriveWireCodec.DOMAIN_CATALOG),
+                                ::heldEpubSha256s,
+                            ).distinctUntilChanged().flowOn(Dispatchers.Default)
+                            combine(
+                                store.uploads().observeForAccount(permissionId),
+                                held,
+                                database.workIdentityDao().observeFingerprints(),
+                            ) { uploads, remoteEpubShas, fingerprints ->
+                                driveUploadTarget(
+                                    permissionId = permissionId,
+                                    offerSince = maxOf(connectedAt, selectionAt ?: 0L),
+                                    uploads = uploads,
+                                    remoteEpubShas = remoteEpubShas,
+                                    fingerprints = fingerprints,
+                                    selectionSettled = selectionAt != null,
+                                )
+                            }.flowOn(Dispatchers.Default)
+                        }
+                    }
+            }
+        }.distinctUntilChanged()
+
+    /** Queues [books] for the active account, and only when it is still the one the caller saw. */
+    override suspend fun enqueueUploads(accountKey: String, books: List<Book>, expectedOfferSince: Long?): Set<String> {
+        if (!hasStore() || books.isEmpty()) return emptySet()
+        val active = store.accounts().active() ?: return emptySet()
+        if (accountPeerId(active.permissionId) != accountKey) return emptySet()
+        val queued = epubTransfers.queueBooks(active.permissionId, books.map { it.url }, expectedOfferSince)
+        if (queued.isEmpty()) return queued
+        // Fingerprinting the books takes a while, and the reader may have turned metered
+        // transfers off meanwhile. An empty queue reschedules nothing, so the allowance
+        // read above would schedule this work for mobile data.
+        val current = store.accounts().active() ?: return queued
+        if (accountPeerId(current.permissionId) != accountKey) return queued
+        appendEpubUploadsWork(current.meteredTransfers)
+        return queued
     }
 
     override suspend fun deactivate() {
@@ -655,7 +720,9 @@ internal class DriveLibrarySync(
      * fileless stubs carrying reading history or reader-authored overrides /
      * series / shelf state are kept and seeded with Drive `work_alias` rows
      * before server peer cleanup. Any previously active Drive account is
-     * transitioned to `PAUSED` with all of its state preserved intact.
+     * transitioned to `PAUSED` with all of its state preserved intact, except
+     * for the EPUB upload selection, which a switch resets so the new account
+     * is asked before anything goes up (ADR-0078).
      *
      * @param confirmedDisconnectServer `false` when the reader has not been asked
      *   about a main server: activation then fails with
@@ -693,14 +760,20 @@ internal class DriveLibrarySync(
                 }
             }
             db.withTransaction {
+                val previousPrimary = db.accounts().primary()
                 db.accounts().pauseAllActive()
                 db.accounts().clearPendingSwitches()
                 val existing = db.accounts().get(permissionId)
+                // ADR-0078: every switch, including back to an account used before, asks for a
+                // fresh selection. Reconnecting the account that was already primary keeps the
+                // reader's last answer.
+                val keepsSelection = previousPrimary == null || previousPrimary.permissionId == permissionId
                 val updated = existing?.copy(
                     email = email,
                     state = DriveAccount.STATE_ACTIVE,
                     connectedAt = now,
                     lastError = null,
+                    uploadSelectionAt = existing.uploadSelectionAt.takeIf { keepsSelection },
                 ) ?: DriveAccount(
                     permissionId = permissionId,
                     email = email,

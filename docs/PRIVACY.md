@@ -611,9 +611,22 @@ Drive scopes:
   overrides, size-capped custom covers, series membership and ordering,
   Vocabulary Builder entries and review history, and reading sessions.
 - `https://www.googleapis.com/auth/drive.file` — for an app-created
-  **Liseur** folder in your Drive holding only the `.epub` files you
-  explicitly choose in **Upload EPUB files**. EPUB upload is opt-in, and
-  Liseur cannot access unrelated files in your Google Drive.
+  **Liseur** folder in your Drive holding only the `.epub` files you agree
+  to send. EPUB upload is opt-in, and Liseur cannot access unrelated files
+  in your Google Drive.
+
+An EPUB leaves your device for that folder only after you agree to send
+it, in one of three ways. **Upload EPUB files** in Settings lists the
+EPUBs on this device and uploads the ones you tick. The offer shown when
+a book lands on the device asks about that one book and uploads it if
+you say yes; tapping **Upload to server** in a book's menu authorizes
+that one book. If you answer **Always send** on that offer, or pick
+**Send automatically** under **Books added on this device** in Settings,
+books added afterwards are uploaded without being asked and without
+needing to be selected in **Upload EPUB files**.
+**Send automatically** does nothing until you have answered **Upload EPUB
+files** once for the connected Google account, so connecting an account
+sends no book by itself, and books already on the device stay out of it.
 
 Reading layout settings, cached sentence translations, whole-book
 translations, chapter recaps and server or API credentials are never

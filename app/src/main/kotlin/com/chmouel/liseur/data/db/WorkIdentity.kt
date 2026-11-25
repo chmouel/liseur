@@ -180,6 +180,20 @@ interface WorkIdentityDao {
     @Query("SELECT * FROM book_fingerprint WHERE book_url = :bookUrl")
     fun observeFingerprint(bookUrl: String): Flow<BookFingerprintRow?>
 
+    /**
+     * Cached fingerprints a reindexed file has not aged out: the same
+     * modification-time test `BookFingerprintStore.of` trusts. Joined to
+     * `books` so the flow re-emits when a book's file is rewritten in place.
+     */
+    @Query(
+        """
+        SELECT book_fingerprint.* FROM book_fingerprint
+        INNER JOIN books ON books.url = book_fingerprint.book_url
+        WHERE books.file_modified_at IS book_fingerprint.file_modified_at
+        """,
+    )
+    fun observeFingerprints(): Flow<List<BookFingerprintRow>>
+
     @Upsert
     suspend fun upsert(row: BookFingerprintRow)
 

@@ -34,9 +34,12 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -70,6 +73,10 @@ class DriveAccountControllerTest {
     private val uploadsCancelled = AtomicInteger(0)
     private var nowMs = 1_000L
 
+    /** Runs inside the transfer manager between fingerprinting a book and writing its row. */
+    @Volatile
+    private var beforeQueueWrite: suspend () -> Unit = {}
+
     @Before
     fun setUp() {
         CredentialCipher.keyForTesting =
@@ -82,6 +89,7 @@ class DriveAccountControllerTest {
         uploadsScheduled.set(0)
         uploadsCancelled.set(0)
         nowMs = 1_000L
+        beforeQueueWrite = {}
 
         val removal = BookRemoval(
             bookDao = liseurDb.bookDao(),
@@ -140,6 +148,7 @@ class DriveAccountControllerTest {
             onResumeActive = { resumedActive.incrementAndGet() },
             scheduleEpubUploadsWork = { _ -> uploadsScheduled.incrementAndGet() },
             cancelEpubUploadsWork = { uploadsCancelled.incrementAndGet() },
+            beforeQueueWrite = { beforeQueueWrite() },
             deviceIdGenerator = { "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee" },
             openStore = { driveDb },
             authClient = fakeAuth,
@@ -172,6 +181,19 @@ class DriveAccountControllerTest {
         assertEquals(DriveAccount.STATE_ACTIVE, state.account?.state)
         assertEquals(0, fakeApi.writeCalls)
         assertEquals(1, resumedActive.get())
+    }
+
+    @Test
+    fun `first connect asks for the upload selection before anything goes up`() = runTest {
+        seedLocalLibrary(books = 1, notes = 0, sessions = 0)
+        fakeAuth.nextAuthorize = DriveAuthResult.Authorized("tok-a")
+        fakeApi.aboutByToken["tok-a"] = DriveUserAbout("perm-A", "alice@example.com")
+        controller.beginConnect()
+
+        controller.confirmPendingSwitch()
+
+        assertNull(driveDb.accounts().get("perm-A")?.uploadSelectionAt)
+        assertTrue(controller.uiState.first().uploadPickerVisible)
     }
 
     @Test
@@ -325,6 +347,64 @@ class DriveAccountControllerTest {
         assertEquals("bob@example.com", stateB.account?.email)
         assertEquals(0, stateB.pendingUploadsCount)
         assertEquals(0, stateB.unresolvedConflictsCount)
+    }
+
+    /** Account B has its own selection, so A's answer cannot cover it. */
+    @Test
+    fun `an account switch asks for the new account's upload selection`() = runTest {
+        fakeAuth.nextAuthorize = DriveAuthResult.Authorized("tok-a")
+        fakeApi.aboutByToken["tok-a"] = DriveUserAbout("perm-A", "alice@example.com")
+        controller.beginConnect()
+        nowMs = 1_000L
+        controller.confirmUploadSelection(emptySet())
+        controller.closeUploadPicker()
+        assertFalse(controller.uiState.first().uploadPickerVisible)
+
+        nowMs = 2_000L
+        fakeAuth.nextAuthorize = DriveAuthResult.Authorized("tok-b")
+        fakeApi.aboutByToken["tok-b"] = DriveUserAbout("perm-B", "bob@example.com")
+        controller.beginConnect(switchAccount = true)
+        controller.confirmPendingSwitch()
+
+        assertTrue(controller.uiState.first().uploadPickerVisible)
+        assertNull(driveDb.accounts().get("perm-B")?.uploadSelectionAt)
+        assertEquals(1_000L, driveDb.accounts().get("perm-A")?.uploadSelectionAt)
+    }
+
+    /** ADR-0078: resuming an account used before is still a switch, so it asks for its selection again. */
+    @Test
+    fun `switching back to an account asks for its upload selection again`() = runTest {
+        fakeAuth.nextAuthorize = DriveAuthResult.Authorized("tok-a")
+        fakeApi.aboutByToken["tok-a"] = DriveUserAbout("perm-A", "alice@example.com")
+        controller.beginConnect()
+        nowMs = 1_000L
+        controller.confirmUploadSelection(emptySet())
+        controller.closeUploadPicker()
+
+        nowMs = 2_000L
+        fakeAuth.nextAuthorize = DriveAuthResult.Authorized("tok-b")
+        fakeApi.aboutByToken["tok-b"] = DriveUserAbout("perm-B", "bob@example.com")
+        controller.beginConnect(switchAccount = true)
+        controller.confirmPendingSwitch()
+        nowMs = 3_000L
+        controller.confirmUploadSelection(emptySet())
+        controller.closeUploadPicker()
+        assertFalse(controller.uiState.first().uploadPickerVisible)
+
+        nowMs = 4_000L
+        fakeAuth.nextAuthorize = DriveAuthResult.Authorized("tok-a-again")
+        fakeApi.aboutByToken["tok-a-again"] = DriveUserAbout("perm-A", "alice@example.com")
+        controller.beginConnect(switchAccount = true)
+        controller.confirmPendingSwitch()
+
+        assertTrue(controller.uiState.first().uploadPickerVisible)
+        assertNull(driveDb.accounts().get("perm-A")?.uploadSelectionAt)
+        assertEquals(3_000L, driveDb.accounts().get("perm-B")?.uploadSelectionAt)
+        // Until it is answered, no policy (ALWAYS included) offers anything for this account.
+        val target = requireNotNull(
+            driveSync.uploadTarget.first { it?.accountKey == DriveLibrarySync.accountPeerId("perm-A") },
+        )
+        assertFalse(target.selectionSettled)
     }
 
     @Test
@@ -1163,6 +1243,120 @@ class DriveAccountControllerTest {
         assertTrue(driveDb.uploads().pendingForAccount("perm-A").isEmpty())
     }
 
+    @Test
+    fun `confirming the picker records when the reader answered`() = runTest {
+        fakeAuth.nextAuthorize = DriveAuthResult.Authorized("tok-a")
+        fakeApi.aboutByToken["tok-a"] = DriveUserAbout("perm-A", "alice@example.com")
+        controller.beginConnect()
+
+        nowMs = 5_000L
+        controller.confirmUploadSelection(emptySet())
+
+        assertEquals(5_000L, driveDb.accounts().get("perm-A")?.uploadSelectionAt)
+    }
+
+    /**
+     * Leaving Settings cancels the screen's scope. An answer the reader already gave must
+     * still write its queue and schedule the worker that drains it.
+     */
+    @Test
+    fun `an accepted upload selection outlives the screen that asked for it`() = runTest {
+        fakeAuth.nextAuthorize = DriveAuthResult.Authorized("tok-a")
+        fakeApi.aboutByToken["tok-a"] = DriveUserAbout("perm-A", "alice@example.com")
+        controller.beginConnect()
+        val book = Book(
+            url = "file:///kept.epub",
+            title = "Kept",
+            author = "Author",
+            coverPath = null,
+            source = null,
+            addedAt = 100L,
+            lastOpenedAt = null,
+            localUri = "file:///kept.epub",
+            downloadState = DownloadState.DOWNLOADED,
+        )
+        liseurDb.bookDao().upsert(book)
+        liseurDb.workIdentityDao().upsert(
+            com.chmouel.liseur.data.db.BookFingerprintRow(book.url, "3".repeat(64), "md5-3", 1_000L, null, 1L),
+        )
+        val started = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        beforeQueueWrite = {
+            started.complete(Unit)
+            release.await()
+        }
+
+        withContext(Dispatchers.Default) {
+            withTimeout(10_000) {
+                val screen = launch { controller.submitUploadSelection(setOf(book.url)) }
+                started.await()
+                // The reader leaves Settings while the selected book is still being queued.
+                screen.cancelAndJoin()
+                release.complete(Unit)
+                while (driveDb.uploads().pendingForAccount("perm-A").isEmpty()) delay(5)
+                while (uploadsScheduled.get() == 0) delay(5)
+            }
+        }
+        beforeQueueWrite = {}
+
+        assertEquals(1_000L, driveDb.accounts().get("perm-A")?.uploadSelectionAt)
+        assertEquals(listOf(book.url), driveDb.uploads().pendingForAccount("perm-A").map { it.bookUrl })
+        assertEquals(1, uploadsScheduled.get())
+    }
+
+    @Test
+    fun `an upload selection finishing after an account switch leaves the new account alone`() = runTest {
+        fakeAuth.nextAuthorize = DriveAuthResult.Authorized("tok-a")
+        fakeApi.aboutByToken["tok-a"] = DriveUserAbout("perm-A", "alice@example.com")
+        controller.beginConnect()
+        val book = Book(
+            url = "file:///slow.epub",
+            title = "Slow",
+            author = "Author",
+            coverPath = null,
+            source = null,
+            addedAt = 100L,
+            lastOpenedAt = null,
+            localUri = "file:///slow.epub",
+            downloadState = DownloadState.DOWNLOADED,
+        )
+        liseurDb.bookDao().upsert(book)
+        liseurDb.workIdentityDao().upsert(
+            com.chmouel.liseur.data.db.BookFingerprintRow(book.url, "4".repeat(64), "md5-4", 1_000L, null, 1L),
+        )
+        val started = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        beforeQueueWrite = {
+            started.complete(Unit)
+            release.await()
+        }
+
+        var scheduledAfterSwitch = 0
+        var cancelledAfterSwitch = 0
+        withContext(Dispatchers.Default) {
+            withTimeout(10_000) {
+                controller.submitUploadSelection(setOf(book.url))
+                started.await()
+                beforeQueueWrite = {}
+                // The reader switches to B while A's answer is still queueing its book.
+                fakeAuth.nextAuthorize = DriveAuthResult.Authorized("tok-b")
+                fakeApi.aboutByToken["tok-b"] = DriveUserAbout("perm-B", "bob@example.com")
+                controller.beginConnect(switchAccount = true)
+                controller.confirmPendingSwitch()
+                scheduledAfterSwitch = uploadsScheduled.get()
+                cancelledAfterSwitch = uploadsCancelled.get()
+                release.complete(Unit)
+                while (driveDb.uploads().pendingForAccount("perm-A").isEmpty()) delay(5)
+                delay(50)
+            }
+        }
+
+        assertEquals(listOf(book.url), driveDb.uploads().pendingForAccount("perm-A").map { it.bookUrl })
+        assertTrue(controller.uiState.first().uploadPickerVisible)
+        assertEquals(scheduledAfterSwitch, uploadsScheduled.get())
+        assertEquals(cancelledAfterSwitch, uploadsCancelled.get())
+    }
+
     private class FakeDriveRemoteApi : DriveRemoteApi {
         val aboutByToken = mutableMapOf<String, DriveUserAbout>()
         var writeCalls = 0
@@ -1288,15 +1482,25 @@ class DriveAccountControllerTest {
         ): SetupResult = result
     }
 
+    /** Nothing in the library is still an answer: it is what lets Ask and Always work later. */
     @Test
-    fun `the upload picker can confirm an empty selection only when it drops queued books`() {
-        fun candidate(url: String, state: String?) = DriveUploadCandidate(
-            bookUrl = url, title = url, author = null, sizeBytes = 1L, sha256 = null, uploadState = state,
+    fun `confirming an empty picker records the answer and queues nothing`() = runTest {
+        fakeAuth.nextAuthorize = DriveAuthResult.Authorized("tok-a")
+        fakeApi.aboutByToken["tok-a"] = DriveUserAbout("perm-A", "alice@example.com")
+        controller.beginConnect()
+        val picker = controller.uiState.first()
+        assertTrue(picker.uploadPickerVisible)
+        assertTrue(picker.uploadCandidates.isEmpty())
+
+        nowMs = 7_000L
+        controller.confirmUploadSelection(emptySet())
+
+        assertEquals(7_000L, driveDb.accounts().get("perm-A")?.uploadSelectionAt)
+        assertTrue(driveDb.uploads().forAccount("perm-A").isEmpty())
+        val target = requireNotNull(
+            driveSync.uploadTarget.first { it?.accountKey == DriveLibrarySync.accountPeerId("perm-A") },
         )
-        val queued = listOf(candidate("a", DriveUpload.STATE_PENDING), candidate("b", null))
-        assertTrue(canConfirmUploadSelection(queued, emptySet()))
-        assertTrue(canConfirmUploadSelection(listOf(candidate("f", DriveUpload.STATE_FAILED)), emptySet()))
-        assertFalse(canConfirmUploadSelection(listOf(candidate("u", DriveUpload.STATE_UPLOADED), candidate("n", null)), emptySet()))
-        assertTrue(canConfirmUploadSelection(listOf(candidate("n", null)), setOf("n")))
+        assertTrue(target.selectionSettled)
+        assertEquals(7_000L, target.offerSince)
     }
 }

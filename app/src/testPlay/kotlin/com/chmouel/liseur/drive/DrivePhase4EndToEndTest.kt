@@ -1004,6 +1004,66 @@ class DrivePhase4EndToEndTest {
         assertNull(deviceA.liseurDb.annotationDao().byId("ann-after-delete"))
     }
 
+    /**
+     * A deletion that lands after the automatic offer's final PUT must not erase the
+     * suppression: the file it created is trashed, but the row stays SUPPRESSED so no later
+     * automatic offer sends the deleted edition up again.
+     */
+    @Test
+    fun `a Drive deletion racing the final upload PUT keeps the automatic row suppressed`() = runTest {
+        deviceA.connect()
+        deviceA.driveDb.accounts().setUploadSelectionAt(PERM_ID, 1_100L)
+        val epubBytes = "EPUB-AUTO-DELETED-DURING-FINAL-PUT".toByteArray()
+        val book = seedBook(deviceA, "auto-delete-race.epub", "9780000000001", "Race", "Author", customBytes = epubBytes)
+        val sha = BookFingerprints.of(ByteArrayInputStream(epubBytes)).sha256
+        val peer = DriveLibrarySync.accountPeerId(PERM_ID)
+        // An older Drive copy of these bytes exists when the automatic offer starts uploading.
+        deviceA.driveDb.files().upsert(
+            DriveFile(
+                permissionId = PERM_ID,
+                fileId = "file-old-auto",
+                name = "race.epub",
+                kind = DriveFile.KIND_EPUB,
+                sha256 = sha,
+                trashed = false,
+            ),
+        )
+        assertEquals(
+            setOf(book.url),
+            deviceA.driveSync.enqueueUploads(peer, listOf(book), expectedOfferSince = 1_100L),
+        )
+
+        var removed = false
+        driveServer.onUploadResumableFinalPut = {
+            if (!removed) {
+                removed = true
+                // The reader's deletion of the old copy is processed while the PUT returns.
+                deviceA.driveSync.catalogSync.handleDriveEpubRemoved(PERM_ID, "file-old-auto") {
+                    "0000000000001-0000-dev"
+                }
+            }
+        }
+        val summary = try {
+            deviceA.epubTransfers.uploadPending()
+        } finally {
+            driveServer.onUploadResumableFinalPut = null
+        }
+
+        assertEquals(0, summary.uploadedCount)
+        // Cleanup trashed the file this upload created...
+        assertTrue(driveServer.epubFilesSnapshot().single().trashed)
+        // ...but the durable suppression survives it.
+        val row = requireNotNull(deviceA.driveDb.uploads().get(PERM_ID, sha))
+        assertEquals(DriveUpload.STATE_SUPPRESSED, row.state)
+        assertTrue(row.autoSelected)
+        assertNull(row.fileId)
+        assertNull(row.sessionUri)
+
+        // Another automatic offer is still refused, so no selection is needed to keep it away.
+        assertTrue(deviceA.driveSync.enqueueUploads(peer, listOf(book), expectedOfferSince = 1_100L).isEmpty())
+        assertEquals(DriveUpload.STATE_SUPPRESSED, deviceA.driveDb.uploads().get(PERM_ID, sha)!!.state)
+    }
+
     @Test
     fun `library deletion lifecycle separates Remove download, Delete from synced library, and Drive-side EPUB trash`() = runTest {
         val deviceC = createDevice("dev-c", File(tempDir, "c"))

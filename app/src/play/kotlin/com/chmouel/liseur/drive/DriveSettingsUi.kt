@@ -305,7 +305,7 @@ internal fun DriveSettingsSection(controller: DriveAccountController) {
                 scope.launch { controller.setMeteredTransfers(allowMetered = !unmeteredOnly) }
             },
             onConfirm = { selected ->
-                scope.launch { controller.confirmUploadSelection(selected) }
+                controller.submitUploadSelection(selected)
             },
             onDismiss = { controller.closeUploadPicker() },
         )
@@ -957,12 +957,10 @@ private fun DriveAccountSwitchDialog(
     )
 }
 
-/** An empty selection still has to be confirmable when it drops books already queued. */
-internal fun canConfirmUploadSelection(
-    candidates: List<DriveUploadCandidate>,
-    selectedUrls: Set<String>,
-): Boolean = selectedUrls.isNotEmpty() || candidates.any { it.uploadState != null && !it.isUploaded }
-
+/**
+ * An empty selection is an answer too: it records the cutoff the offer leaves
+ * older books to, even when there is nothing in the library or nothing queued.
+ */
 @Composable
 private fun DriveUploadFilesDialog(
     candidates: List<DriveUploadCandidate>,
@@ -1119,10 +1117,7 @@ private fun DriveUploadFilesDialog(
             }
         },
         confirmButton = {
-            Button(
-                onClick = { onConfirm(selectedUrls) },
-                enabled = canConfirmUploadSelection(candidates, selectedUrls),
-            ) {
+            Button(onClick = { onConfirm(selectedUrls) }) {
                 Text(stringResource(R.string.drive_sync_upload_epubs_confirm))
             }
         },

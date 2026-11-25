@@ -13,6 +13,7 @@ import com.chmouel.liseur.data.library.BookFingerprintStore
 import com.chmouel.liseur.data.library.BookRemoval
 import com.chmouel.liseur.data.library.openableUri
 import com.chmouel.liseur.domain.BookFingerprints
+import com.chmouel.liseur.sync.LibraryUploadTarget
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
@@ -142,7 +143,7 @@ internal class DriveEpubTransferManager(
                 sizeBytes = size.coerceAtLeast(0L),
                 sha256 = sha,
                 uploadState = when (upload?.state) {
-                    DriveUpload.STATE_CANCELLED -> null
+                    DriveUpload.STATE_CANCELLED, DriveUpload.STATE_SUPPRESSED -> null
                     DriveUpload.STATE_REQUEUE -> DriveUpload.STATE_PENDING
                     else -> upload?.state
                 },
@@ -155,75 +156,177 @@ internal class DriveEpubTransferManager(
      * selected local books are queued, and any not-yet-uploaded entry the reader
      * left unchecked is dropped with its staged copy. Already-uploaded editions are
      * preserved without re-uploading.
+     *
+     * [selectionAt] is the answer this call reconciles. It is written in the same
+     * transaction as the rows the answer drops, so a worker that starts while the
+     * selected books are still being queued never finds the new cutoff over a queue
+     * that still holds a book the answer left out. It also travels with each row
+     * write below, so an answer the reader has replaced meanwhile cannot put a row
+     * back.
      */
     suspend fun queueSelectedBooks(
         permissionId: String,
         selectedBookUrls: Set<String>,
+        selectionAt: Long? = null,
     ): Int = withContext(Dispatchers.IO) {
         val now = clock()
-        for (upload in uploads.forAccount(permissionId)) {
-            if (upload.state == DriveUpload.STATE_UPLOADED || upload.state == DriveUpload.STATE_CANCELLED) continue
-            if (upload.bookUrl in selectedBookUrls) continue
-            // Every transition is conditional on the state just read, so a concurrent cleanup or
-            // upload that moved the row on is never overwritten from this stale copy.
-            deselect(permissionId, upload, now)
-            discardStaged(permissionId, upload.sha256)
+        val dropped = store.withTransaction {
+            selectionAt?.let { accounts.setUploadSelectionAt(permissionId, it) }
+            buildList {
+                for (upload in uploads.forAccount(permissionId)) {
+                    if (upload.state == DriveUpload.STATE_UPLOADED || upload.state == DriveUpload.STATE_CANCELLED ||
+                        upload.state == DriveUpload.STATE_SUPPRESSED
+                    ) {
+                        continue
+                    }
+                    if (upload.bookUrl in selectedBookUrls) continue
+                    // Every transition is conditional on the state just read, so a concurrent cleanup or
+                    // upload that moved the row on is never overwritten from this stale copy.
+                    deselect(permissionId, upload, now)
+                    add(upload.sha256)
+                }
+            }
         }
+        for (sha256 in dropped) discardStaged(permissionId, sha256)
         var queued = 0
         for (bookUrl in selectedBookUrls) {
-            val book = books.getByUrl(bookUrl) ?: continue
-            if (book.openableUrl == null) continue
-            val fp = fingerprintStore.of(book) ?: identities.fingerprint(book.url)?.fingerprint ?: continue
-            val sha = fp.sha256.lowercase(Locale.ROOT)
-            val peerId = DriveLibrarySync.accountPeerId(permissionId)
-            val alias = identities.alias(book.url, peerId)
-            if (alias?.confidence == WorkAlias.REJECTED) {
-                identities.upsert(alias.copy(confidence = WorkAlias.HIGH, confirmed = true, seeded = false))
-            }
-            beforeQueueWrite()
-            // One transaction: an upload that completes between the read and the write must not be
-            // downgraded to PENDING, nor have its finished session restored.
-            val wasQueued = store.withTransaction {
-                val existing = uploads.get(permissionId, sha)
-                if (existing?.state == DriveUpload.STATE_UPLOADED && !existing.fileId.isNullOrBlank()) {
-                    return@withTransaction false
-                }
-                // Re-selecting a cancelled edition never adopts its old session or file, which cleanup
-                // may already be trashing: cleanup finishes first, then turns the row into a fresh upload.
-                // The fresh upload reads the copy selected now, which may be another library row of
-                // the same bytes; the old session and file stay on the row for cleanup.
-                if (existing?.state == DriveUpload.STATE_REQUEUE) {
-                    uploads.retainRequeueSource(permissionId, sha, book.url, fp.size.coerceAtLeast(0L), now)
-                    return@withTransaction true
-                }
-                if (existing?.state == DriveUpload.STATE_CANCELLED) {
-                    if (uploads.requeueWithSource(permissionId, sha, book.url, fp.size.coerceAtLeast(0L), now) > 0) {
-                        return@withTransaction true
-                    }
-                }
-                val reuse = existing?.takeIf {
-                    it.state == DriveUpload.STATE_PENDING || it.state == DriveUpload.STATE_UPLOADING ||
-                        it.state == DriveUpload.STATE_FAILED
-                }
-                uploads.upsert(
-                    DriveUpload(
-                        permissionId = permissionId,
-                        sha256 = sha,
-                        bookUrl = book.url,
-                        sizeBytes = fp.size.coerceAtLeast(0L),
-                        state = DriveUpload.STATE_PENDING,
-                        sessionUri = reuse?.sessionUri,
-                        bytesSent = reuse?.bytesSent ?: 0L,
-                        fileId = null,
-                        selectedAt = reuse?.selectedAt ?: now,
-                        updatedAt = now,
-                    ),
-                )
-                true
-            }
-            if (wasQueued) queued++
+            if (queueBook(permissionId, bookUrl, now, requireActive = false, expectedSelection = selectionAt)) queued++
         }
         queued
+    }
+
+    /**
+     * Queues [bookUrls] without touching the rest of the selection, as the
+     * per-book offer must. Returns the book URLs that gained a row.
+     *
+     * [expectedOfferSince] is the cutoff the caller decided the offer under: rows
+     * are skipped if the reader has answered the picker since, because their
+     * answer covers books this call was computed before knowing about.
+     */
+    suspend fun queueBooks(
+        permissionId: String,
+        bookUrls: Collection<String>,
+        expectedOfferSince: Long? = null,
+    ): Set<String> = withContext(Dispatchers.IO) {
+        val now = clock()
+        bookUrls.filterTo(mutableSetOf()) { bookUrl ->
+            queueBook(permissionId, bookUrl, now, requireActive = true, expectedOfferSince = expectedOfferSince)
+        }
+    }
+
+    /**
+     * Writes one PENDING row for [bookUrl]. With [requireActive] the write is
+     * skipped unless [permissionId] is still the active account, so a paused or
+     * switching account never gains work.
+     */
+    private suspend fun queueBook(
+        permissionId: String,
+        bookUrl: String,
+        now: Long,
+        requireActive: Boolean,
+        expectedOfferSince: Long? = null,
+        expectedSelection: Long? = null,
+    ): Boolean {
+        // The cutoff tells this request apart from the automatic offer: a reader asking
+        // for one book by hand carries none.
+        val automatic = expectedOfferSince != null
+        val book = books.getByUrl(bookUrl) ?: return false
+        if (book.openableUrl == null) return false
+        val fp = fingerprintStore.of(book) ?: identities.fingerprint(book.url)?.fingerprint ?: return false
+        val sha = fp.sha256.lowercase(Locale.ROOT)
+        val peerId = DriveLibrarySync.accountPeerId(permissionId)
+        val alias = identities.alias(book.url, peerId)
+        if (alias?.confidence == WorkAlias.REJECTED) {
+            // A rejected work match is the reader's answer about these bytes. Only a
+            // request they made by hand overrides it; an automatic offer must leave it
+            // rejected, or the upload and the sync that follows would use the identity
+            // they turned down.
+            if (automatic) return false
+            identities.upsert(alias.copy(confidence = WorkAlias.HIGH, confirmed = true, seeded = false))
+        }
+        beforeQueueWrite()
+        // One transaction: an upload that completes between the read and the write must not be
+        // downgraded to PENDING, nor have its finished session restored.
+        return store.withTransaction {
+            if (requireActive && accounts.active()?.permissionId != permissionId) {
+                return@withTransaction false
+            }
+            // The picker may have been answered again while this book was still being
+            // fingerprinted. That answer is the reader's last word on these bytes.
+            if (expectedSelection != null && accounts.get(permissionId)?.uploadSelectionAt != expectedSelection) {
+                return@withTransaction false
+            }
+            // The picker may have been answered while this row was being prepared, and that
+            // answer covers these bytes by hand: a cutoff written since then wins.
+            if (expectedOfferSince != null && settledAt(permissionId) != expectedOfferSince) {
+                return@withTransaction false
+            }
+            val existing = uploads.get(permissionId, sha)
+            if (existing?.state == DriveUpload.STATE_UPLOADED && !existing.fileId.isNullOrBlank()) {
+                return@withTransaction false
+            }
+            // The offer's snapshot can miss a row written since. Those two states only
+            // move when the reader asks for the edition again, so an automatic offer
+            // never overwrites them; a per-book request does.
+            if (automatic &&
+                (existing?.state == DriveUpload.STATE_SUPPRESSED || existing?.state == DriveUpload.STATE_FAILED)
+            ) {
+                return@withTransaction false
+            }
+            // Re-selecting a cancelled edition never adopts its old session or file, which cleanup
+            // may already be trashing: cleanup finishes first, then turns the row into a fresh upload.
+            // The fresh upload reads the copy selected now, which may be another library row of
+            // the same bytes; the old session and file stay on the row for cleanup.
+            // Every branch that keeps the row has to date the selection the same way: an answer
+            // asked for by hand is a selection made now, which also releases a row kept across an
+            // account switch from a picker answer that is still missing.
+            val selectedAt = now.takeUnless { automatic }
+            if (existing?.state == DriveUpload.STATE_REQUEUE) {
+                uploads.retainRequeueSource(permissionId, sha, book.url, fp.size.coerceAtLeast(0L), selectedAt, now)
+                return@withTransaction true
+            }
+            if (existing?.state == DriveUpload.STATE_CANCELLED) {
+                if (uploads.requeueWithSource(permissionId, sha, book.url, fp.size.coerceAtLeast(0L), selectedAt, now) > 0) {
+                    return@withTransaction true
+                }
+            }
+            // A suppressed row can still hold what its cancelled upload left in Drive; cleanup
+            // runs first there too, instead of the fresh row dropping the obligation.
+            if (existing?.state == DriveUpload.STATE_SUPPRESSED) {
+                if (uploads.requeueSuppressed(permissionId, sha, book.url, fp.size.coerceAtLeast(0L), selectedAt, now) > 0) {
+                    return@withTransaction true
+                }
+            }
+            val reuse = existing?.takeIf {
+                it.state == DriveUpload.STATE_PENDING || it.state == DriveUpload.STATE_UPLOADING ||
+                    it.state == DriveUpload.STATE_FAILED
+            }
+            uploads.upsert(
+                DriveUpload(
+                    permissionId = permissionId,
+                    sha256 = sha,
+                    bookUrl = book.url,
+                    sizeBytes = fp.size.coerceAtLeast(0L),
+                    state = DriveUpload.STATE_PENDING,
+                    sessionUri = reuse?.sessionUri,
+                    bytesSent = reuse?.bytesSent ?: 0L,
+                    fileId = null,
+                    selectedAt = selectedAt ?: reuse?.selectedAt ?: now,
+                    updatedAt = now,
+                    // An automatic row keeps its mark until the reader asks for the edition
+                    // by hand; a hand-picked one is never cancellable by a Drive deletion.
+                    autoSelected = if (automatic) reuse?.autoSelected ?: true else false,
+                ),
+            )
+            true
+        }
+    }
+
+    /** The cutoff the upload offer is decided under: the account's last picker answer or connection. */
+    private suspend fun settledAt(permissionId: String): Long? {
+        val account = accounts.get(permissionId) ?: return null
+        val selection = account.uploadSelectionAt ?: return null
+        return maxOf(account.connectedAt, selection)
     }
 
     /**
@@ -257,7 +360,12 @@ internal class DriveEpubTransferManager(
         var clean = true
         var requeued = false
         for (upload in uploads.forAccount(permissionId)) {
-            if (upload.state != DriveUpload.STATE_CANCELLED && upload.state != DriveUpload.STATE_REQUEUE) continue
+            val cleanupOnly = upload.state == DriveUpload.STATE_CANCELLED || upload.state == DriveUpload.STATE_REQUEUE
+            // A suppressed row stays suppressed; only what its cancelled upload left behind is
+            // cleaned up, so it never becomes a queue entry again.
+            val suppressed = upload.state == DriveUpload.STATE_SUPPRESSED &&
+                (upload.fileId != null || upload.sessionUri != null)
+            if (!cleanupOnly && !suppressed) continue
             // A cancelled worker's request may still be running: until it returns, an unfinished
             // session can yet complete, so its obligation stays.
             if (upload.fileId == null && upload.sessionUri?.let { isSessionInFlight(it) } == true) {
@@ -305,6 +413,10 @@ internal class DriveEpubTransferManager(
             }
             // Conditional on the current state: the reader may have re-selected or deselected
             // the edition while the session was probed or the file trashed.
+            if (suppressed) {
+                uploads.clearSuppressedCleanup(permissionId, upload.sha256, upload.sessionUri, fileId, clock())
+                continue
+            }
             if (uploads.deleteIfCancelled(permissionId, upload.sha256, upload.sessionUri, fileId) == 0 &&
                 uploads.requeueAfterCleanup(permissionId, upload.sha256, upload.sessionUri, fileId, clock()) > 0
             ) {
@@ -335,14 +447,15 @@ internal class DriveEpubTransferManager(
         var retriedAuth = false
         var initialCleanupDone = false
         while (true) {
-            if (!isActive(permissionId)) return DriveEpubUploadSummary()
+            val account = accounts.get(permissionId) ?: return DriveEpubUploadSummary()
+            if (account.state != DriveAccount.STATE_ACTIVE) return DriveEpubUploadSummary()
             var pending: List<DriveUpload> = emptyList()
             try {
                 if (!initialCleanupDone) {
                     trashCancelledUploads(permissionId, accessToken)
                     initialCleanupDone = true
                 }
-                pending = uploads.pendingForAccount(permissionId)
+                pending = uploads.pendingForAccount(permissionId).filterNot { heldByUnansweredSelection(account, it) }
                 if (pending.isEmpty()) {
                     // Cleanup-only work still asks to be retried until every cancelled copy is gone.
                     val cleanup = trashCancelledUploads(permissionId, accessToken)
@@ -596,16 +709,25 @@ internal class DriveEpubTransferManager(
                     store.withTransaction {
                         val existing = uploads.get(permissionId, sha)
                         val requeued = existing?.state == DriveUpload.STATE_REQUEUE
+                        // A deletion's SUPPRESSED must outlive the file this request created, or the
+                        // next automatic offer would send the deleted edition up again.
+                        val suppressed = existing?.state == DriveUpload.STATE_SUPPRESSED
+                        val kept = existing?.takeIf { requeued || suppressed }
                         uploads.upsert(
                             DriveUpload(
                                 permissionId = permissionId,
                                 sha256 = sha,
-                                bookUrl = if (requeued) existing!!.bookUrl else item.bookUrl,
-                                sizeBytes = if (requeued) existing!!.sizeBytes else totalBytes,
-                                state = if (requeued) DriveUpload.STATE_REQUEUE else DriveUpload.STATE_CANCELLED,
+                                bookUrl = kept?.bookUrl ?: item.bookUrl,
+                                sizeBytes = kept?.sizeBytes ?: totalBytes,
+                                state = when {
+                                    requeued -> DriveUpload.STATE_REQUEUE
+                                    suppressed -> DriveUpload.STATE_SUPPRESSED
+                                    else -> DriveUpload.STATE_CANCELLED
+                                },
                                 fileId = remoteFile.id,
                                 selectedAt = clock(),
                                 updatedAt = clock(),
+                                autoSelected = suppressed && existing.autoSelected,
                             ),
                         )
                     }
@@ -685,6 +807,15 @@ internal class DriveEpubTransferManager(
 
     private suspend fun isActive(permissionId: String): Boolean =
         accounts.get(permissionId)?.state == DriveAccount.STATE_ACTIVE
+
+    /**
+     * A queue kept for an account the reader switched away from waits for the answer
+     * its next picker gives. Only rows selected under this activation (by hand or by
+     * the picker that just settled it) run while the answer is missing, so a process
+     * restart cannot send the old selection up either.
+     */
+    private fun heldByUnansweredSelection(account: DriveAccount, upload: DriveUpload): Boolean =
+        account.uploadSelectionAt == null && upload.selectedAt < account.connectedAt
 
     private suspend fun currentQueuedUpload(
         permissionId: String,
@@ -999,4 +1130,55 @@ internal class DriveEpubTransferManager(
             }
         }
     }
+}
+
+/**
+ * What the main-side upload offer needs to know about the `drive_upload` queue
+ * and the live Drive files a catalog edition advertises, expressed in local book
+ * URLs.
+ *
+ * Rows are matched by fingerprint first and by book URL second, as
+ * [DriveEpubTransferManager.listUploadCandidates] does; a CANCELLED row is no
+ * row, so a deselected book can be offered again by hand. An UPLOADED row for
+ * another edition holds nothing, because the book's current bytes were never
+ * sent. SUPPRESSED and FAILED rows are neither uploading nor held: they only
+ * keep the automatic offer away until the reader asks again.
+ */
+internal fun driveUploadTarget(
+    permissionId: String,
+    offerSince: Long,
+    uploads: List<DriveUpload>,
+    remoteEpubShas: Collection<String>,
+    fingerprints: List<BookFingerprintRow>,
+    selectionSettled: Boolean = true,
+): LibraryUploadTarget {
+    val bySha = uploads.associateBy { it.sha256.lowercase(Locale.ROOT) }
+    val byBookUrl = uploads.associateBy { it.bookUrl }
+    val remote = remoteEpubShas.mapTo(mutableSetOf()) { it.lowercase(Locale.ROOT) }
+    val queued = mutableSetOf<String>()
+    val held = mutableSetOf<String>()
+    val withheld = mutableSetOf<String>()
+    for (fingerprint in fingerprints) {
+        val sha = fingerprint.sha256.lowercase(Locale.ROOT)
+        val row = bySha[sha] ?: byBookUrl[fingerprint.bookUrl]
+        when {
+            row == null || row.state == DriveUpload.STATE_CANCELLED -> Unit
+            row.state == DriveUpload.STATE_UPLOADED ->
+                if (row.sha256.equals(sha, ignoreCase = true)) held += fingerprint.bookUrl
+            row.state == DriveUpload.STATE_SUPPRESSED || row.state == DriveUpload.STATE_FAILED ->
+                // A row found by book URL alone speaks only for the bytes it holds:
+                // another edition at the same location was never deleted or failed.
+                if (row.sha256.equals(sha, ignoreCase = true)) withheld += fingerprint.bookUrl
+            else -> queued += fingerprint.bookUrl
+        }
+        if (sha in remote) held += fingerprint.bookUrl
+    }
+    return LibraryUploadTarget(
+        accountKey = DriveLibrarySync.accountPeerId(permissionId),
+        selectionSettled = selectionSettled,
+        offerSince = offerSince,
+        queued = queued,
+        held = held,
+        withheld = withheld,
+    )
 }
