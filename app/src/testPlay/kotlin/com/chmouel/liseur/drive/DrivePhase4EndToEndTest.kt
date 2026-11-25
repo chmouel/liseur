@@ -986,7 +986,7 @@ class DrivePhase4EndToEndTest {
         assertNotNull(deviceB.liseurDb.bookDao().getByUrl(stubB))
         // The retained copy stays unlinked: later syncs neither relink it nor publish its edits.
         assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
-        assertNull(deviceB.liseurDb.workIdentityDao().alias(stubB, DriveLibrarySync.accountPeerId(PERM_ID)))
+        assertEquals(com.chmouel.liseur.data.db.WorkAlias.REJECTED, deviceB.liseurDb.workIdentityDao().alias(stubB, DriveLibrarySync.accountPeerId(PERM_ID))?.confidence)
         deviceB.liseurDb.annotationDao().upsert(
             BookAnnotation(
                 id = "ann-after-delete", bookId = stubB, kind = AnnotationKind.NOTE.name,
@@ -995,7 +995,7 @@ class DrivePhase4EndToEndTest {
             ),
         )
         assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
-        assertNull(deviceB.liseurDb.workIdentityDao().alias(stubB, DriveLibrarySync.accountPeerId(PERM_ID)))
+        assertEquals(com.chmouel.liseur.data.db.WorkAlias.REJECTED, deviceB.liseurDb.workIdentityDao().alias(stubB, DriveLibrarySync.accountPeerId(PERM_ID))?.confidence)
         assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
         assertNull(deviceA.liseurDb.annotationDao().byId("ann-after-delete"))
     }
@@ -1141,7 +1141,7 @@ class DrivePhase4EndToEndTest {
 
         assertTrue(deviceA.driveSync.deleteFromSyncedLibrary(first))
 
-        assertNull(deviceA.liseurDb.workIdentityDao().alias(second.url, peer))
+        assertEquals(com.chmouel.liseur.data.db.WorkAlias.REJECTED, deviceA.liseurDb.workIdentityDao().alias(second.url, peer)?.confidence)
         assertNotNull(deviceA.liseurDb.bookDao().getByUrl(second.url))
         assertNotNull(deviceA.liseurDb.bookDao().getByUrl(first.url))
     }
