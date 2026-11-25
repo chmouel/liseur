@@ -66,7 +66,10 @@ fun interface KosyncPointerSource {
  * belongs. Where a server carries positions itself, a second source for
  * the same book is a conflict the reader can neither see nor resolve,
  * so a peer that outlived the server it was paired with stays quiet
- * rather than syncing on its own authority.
+ * rather than syncing on its own authority. With nothing connected at
+ * all the same question is asked of the external library-sync backend
+ * (ADR-0078): Drive keeps the pairing it found and carries no
+ * positions of its own for kosync's documents to disagree with.
  *
  * kosync names a book by KOReader's partial MD5 of the file, so only a
  * book whose bytes are on this device can be spoken about, and the same
@@ -107,6 +110,14 @@ class KosyncPositionSync(
      * responsible for.
      */
     private val connectedServer: suspend () -> RemoteServer?,
+    /**
+     * Whether a flavor-provided library-sync backend is the active
+     * source.
+     *
+     * Asked only when no server is connected: switching to Drive retires
+     * the Custom row and keeps the pairing, which is still the reader's.
+     */
+    private val externalLibrarySyncActive: suspend () -> Boolean = { false },
     private val client: KosyncClient = KosyncClient(),
     private val pointers: KosyncPointerSource = KosyncPointerSource { _, _, _ -> null },
     private val reporting: SyncReporting = SyncReporting(),
@@ -311,7 +322,8 @@ class KosyncPositionSync(
     )
 
     private suspend fun account(): Account? {
-        val server = connectedServer()?.takeIf { it.kind.hostsKosyncPeer } ?: return null
+        val server = connectedServer()
+        if (!hostsPairing(server)) return null
         val peer = kosyncDao.get() ?: return null
         val credentials = peer.credentials ?: return null
         return Account(
@@ -320,14 +332,23 @@ class KosyncPositionSync(
             peerId = peer.accountKey,
             connectionStamp = peer.addedAt,
             login = peer.username,
-            hasCatalog = server.catalogUrl != null,
+            hasCatalog = server?.catalogUrl != null,
         )
     }
+
+    /**
+     * Whether what is connected may host this pairing. Nothing
+     * connected answers for the backend that took its place, if one
+     * did.
+     */
+    private suspend fun hostsPairing(server: RemoteServer?): Boolean =
+        if (server == null) externalLibrarySyncActive() else server.kind.hostsKosyncPeer
 
     // -- The run ----------------------------------------------------------
 
     private suspend fun run(book: String?): SyncOutcome {
-        val server = connectedServer()?.takeIf { it.kind.hostsKosyncPeer } ?: run {
+        val server = connectedServer()
+        if (!hostsPairing(server)) {
             reporting.report(PositionSyncStatus.Idle, peerId)
             return SyncOutcome.NotApplicable
         }
@@ -352,7 +373,7 @@ class KosyncPositionSync(
             peerId = peer.accountKey,
             connectionStamp = peer.addedAt,
             login = peer.username,
-            hasCatalog = server.catalogUrl != null,
+            hasCatalog = server?.catalogUrl != null,
         )
 
         reporting.report(PositionSyncStatus.Syncing, peerId)

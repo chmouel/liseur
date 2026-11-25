@@ -113,6 +113,37 @@ class KosyncPositionSyncTest {
     }
 
     /**
+     * Switching to Drive retires the Custom row and keeps the pairing, so
+     * the book is left without its server's name for it and Drive has no
+     * position to disagree with: the pairing goes on speaking.
+     */
+    @Test
+    fun `a pairing kept by a switch to Drive keeps syncing`() = runTest {
+        pair()
+        db.bookDao().upsert(book(remoteUuid = null))
+        server.enqueue(progress(0.6))
+
+        val kept = sync(connectedKind = null, librarySyncActive = true)
+        assertEquals("http://127.0.0.1:${server.port}", kept.dialledAddress())
+        assertEquals(SyncOutcome.Success, kept.syncAll(null))
+
+        assertEquals(0.6, db.readingProgressDao().get(BOOK)?.totalProgression ?: 0.0, 0.0001)
+    }
+
+    /**
+     * The same row with nothing active behind it is a pairing stranded
+     * by an account switch, a crash, or a restore: it stays quiet.
+     */
+    @Test
+    fun `a pairing stranded without a backend stays quiet`() = runTest {
+        pair()
+        db.bookDao().upsert(book(remoteUuid = null))
+
+        assertEquals(SyncOutcome.NotApplicable, sync(connectedKind = null).syncAll(null))
+        assertEquals(0, server.requestCount)
+    }
+
+    /**
      * Not just the run: the answers the reader is shown come from the
      * same test, so an ineligible pairing reports no position rather
      * than one it has no business fetching.
@@ -1030,6 +1061,7 @@ class KosyncPositionSyncTest {
         online: Boolean = true,
         connectedKind: ServerKind? = ServerKind.CUSTOM,
         catalogUrl: String? = "https://books.example",
+        librarySyncActive: Boolean = false,
         pointers: KosyncPointerSource = KosyncPointerSource { _, _, _ -> null },
         inTransaction: suspend (suspend () -> Unit) -> Unit = { work -> db.withTransaction { work() } },
     ): KosyncPositionSync {
@@ -1063,6 +1095,7 @@ class KosyncPositionSyncTest {
                 }
             },
             networkAvailability = { online },
+            externalLibrarySyncActive = { librarySyncActive },
             pointers = pointers,
             now = { NOW },
             inTransaction = inTransaction,
