@@ -56,11 +56,11 @@ class BookRemoval(
     /** Whether a reading tracker holds a choice about the book, which keeps a duplicate. */
     private val trackerKeeps: suspend (String) -> Boolean = { false },
 ) {
-    suspend fun deleteByUrls(bookUrls: List<String>) {
+    suspend fun deleteByUrls(bookUrls: List<String>, preserveReadingHistory: Boolean = false) {
         if (bookUrls.isEmpty()) return
         var removedSessions = false
         transaction {
-            removedSessions = forget(bookUrls)
+            removedSessions = forget(bookUrls, preserveReadingHistory)
         }
         if (removedSessions) onReadingHistoryRemoved()
     }
@@ -426,11 +426,13 @@ class BookRemoval(
      * worse than useless: the book coming back would push every mark
      * again as if it were new.
      */
-    private suspend fun forget(bookUrls: List<String>): Boolean {
+    private suspend fun forget(bookUrls: List<String>, preserveReadingHistory: Boolean = false): Boolean {
         var removedSessions = false
         bookUrls.distinct().chunked(SQLITE_URL_BATCH_SIZE).forEach { batch ->
-            if (batch.any { sessionDao.countForBook(it) > 0 }) removedSessions = true
-            sessionDao.deleteForBooks(batch)
+            if (!preserveReadingHistory) {
+                if (batch.any { sessionDao.countForBook(it) > 0 }) removedSessions = true
+                sessionDao.deleteForBooks(batch)
+            }
             peerStateDao.forgetBooks(batch)
             if (evaluationDao != null) batch.forEach { retainEvaluation(it) }
             identityDao.forgetFingerprints(batch)

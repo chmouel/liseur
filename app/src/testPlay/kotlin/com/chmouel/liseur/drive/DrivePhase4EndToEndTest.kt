@@ -1053,6 +1053,10 @@ class DrivePhase4EndToEndTest {
             assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
             assertNotNull(deviceA.liseurDb.bookDao().getByUrl(bookA.url))
             assertFalse(driveServer.epubFilesSnapshot().single().trashed)
+            deviceB.liseurDb.readingSessionDao().insert(
+                ReadingSession(bookUrl = stubB, startedAt = 1_000L, endedAt = 61_000L,
+                    lastCheckpointAt = 61_000L, durationMs = 60_000L),
+            )
 
             // 2. "Delete from synced library" on A -> durable catalog tombstone + Drive EPUB trashed!
             assertTrue(deviceA.driveSync.deleteFromSyncedLibrary(bookA))
@@ -1060,18 +1064,21 @@ class DrivePhase4EndToEndTest {
             assertTrue(driveServer.epubFilesSnapshot().single().trashed)
             // Device A keeps its local file and unlinks from Drive.
             assertNotNull(deviceA.liseurDb.bookDao().getByUrl(bookA.url))
-            assertNull(deviceA.liseurDb.workIdentityDao().alias(bookA.url, DriveLibrarySync.accountPeerId(PERM_ID)))
+            assertEquals(com.chmouel.liseur.data.db.WorkAlias.REJECTED,
+                deviceA.liseurDb.workIdentityDao().alias(bookA.url, DriveLibrarySync.accountPeerId(PERM_ID))?.confidence)
 
             // Device B pulls catalog `del` -> removes `drive:` stub while KEEPING its annotation!
             assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
             assertNull(deviceB.liseurDb.bookDao().getByUrl(stubB))
             assertNotNull(deviceB.liseurDb.annotationDao().byId("ann-keep-me"))
+            assertEquals(1, deviceB.liseurDb.readingSessionDao().countForBook(stubB))
 
             // Device C (has local file) pulls catalog `del` -> keeps local file & book row, unlinks from Drive,
             // and subsequent sync does NOT resurrect the deleted book!
             assertEquals(SyncOutcome.Success, deviceC.changeEngine.sync().outcome)
             assertNotNull(deviceC.liseurDb.bookDao().getByUrl(bookC.url))
-            assertNull(deviceC.liseurDb.workIdentityDao().alias(bookC.url, DriveLibrarySync.accountPeerId(PERM_ID)))
+            assertEquals(com.chmouel.liseur.data.db.WorkAlias.REJECTED,
+                deviceC.liseurDb.workIdentityDao().alias(bookC.url, DriveLibrarySync.accountPeerId(PERM_ID))?.confidence)
             assertEquals(SyncOutcome.Success, deviceC.changeEngine.sync().outcome)
             assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
             assertNull(deviceB.liseurDb.bookDao().getByUrl(stubB)) // Never resurrected!
