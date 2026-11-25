@@ -965,7 +965,7 @@ class DriveLibrarySyncTest {
         assertTrue(driveSync.deleteFromSyncedLibrary(local))
 
         assertNotNull(liseurDb.bookDao().getByUrl(local.url))
-        assertNull(liseurDb.workIdentityDao().alias(local.url, peerA))
+        assertEquals(WorkAlias.REJECTED, liseurDb.workIdentityDao().alias(local.url, peerA)?.confidence)
         assertNotNull(liseurDb.bookDao().getByUrl(shared.url))
         assertNotNull(liseurDb.workIdentityDao().alias(shared.url, peerB))
         assertEquals(1, liseurDb.readingSessionDao().countForBook(shared.url))

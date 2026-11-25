@@ -679,7 +679,8 @@ internal class DriveCatalogSync(
     ): Boolean {
         if (book.browseServerId != null) return false
         val peerId = DriveLibrarySync.accountPeerId(permissionId)
-        val alias = workIdentity.resolveBook(permissionId, book, computeFingerprintIfMissing = false)
+        val alias = identities.alias(book.url, peerId)?.takeIf { it.usable }
+            ?: workIdentity.resolveBook(permissionId, book, computeFingerprintIfMissing = false)
         val rawWorkKey = alias?.workId
             ?: book.url.takeIf { it.startsWith(DriveWorkIdentity.DRIVE_BOOK_URL_PREFIX) }
                 ?.removePrefix(DriveWorkIdentity.DRIVE_BOOK_URL_PREFIX)
