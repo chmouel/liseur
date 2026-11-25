@@ -488,9 +488,12 @@ snapshot, `R.seq = snapshot.throughSeq`):
    `origin_seq = R.seq`, `anc(L) := R.anc`, and `res_refs(L) := R.resRefs ∪
    ({R.fp} if R.op == "resolve" else ∅)`.
 2. **Agreement (`R.fp == L`, OR both `L` and `R` are deletions (`del`, or a
-   `del` paired with a `resolve` whose `outcome` is `"delete"`; two **distinct**
-   `op: "resolve"` records never agree here — they are routed to the
-   incoming-resolution rule in Step 3 first), OR both `L` and `R` are live
+   `del` paired with a `resolve` whose `outcome` is `"delete"`) and neither
+   `fp` is in the other's `anc` (two **distinct** `op: "resolve"` records never
+   agree here — they are routed to the incoming-resolution rule in Step 3
+   first; a delete-resolution replayed after a local reset that descends from
+   it is not agreement, it is Stale in Step 5 because `R.fp ∈ anc(L)`, so the
+   reset keeps its upload debt and `published_fp` does not move), OR both `L` and `R` are live
    `put`s with equal `contentFp` (two devices that made the same edit, or
    merged to the same body, each minted their own `putFp`, §1.3) and neither
    `fp` is in the other's `anc`, OR `R.op == "resolve" && R.outcome ==
@@ -594,9 +597,20 @@ snapshot, `R.seq = snapshot.throughSeq`):
    covered conflicts before ignoring the body.)
 6. **Concurrent divergence (Conflict):**
    - Both `L` and `R` live `put` → open `EDIT_EDIT` in `drive_conflict` (keep
-     local row in `liseur.db`, store `R.body` in `drive_conflict.remote_json`).
+     local row in `liseur.db`, store the complete remote record envelope `R`
+     (`op`, `fp`, `hlc`, `deviceId`, `seq`, `anc`, `resRefs`, `body`) in
+     `drive_conflict.remote_json`, never `R.body` alone). Step 0 keeps `R.anc`
+     and `R.resRefs` out of `anc(L)` and `res_refs(L)` while the conflict is
+     open, so the stored envelope is their only copy.
    - One live `put`, one `del` → open `DELETE_EDIT` in `drive_conflict` (surface
-     **Keep edited note** / **Delete note**).
+     **Keep edited note** / **Delete note**), storing `R` the same way.
+   - **Resolving a conflict locally** mints `op: "resolve"` with `anc :=
+     cap64({L, R.fp} ∪ anc(L) ∪ R.anc)` and `resRefs := res_refs(L) ∪
+     R.resRefs`, where `R` is read from the stored envelope, so a restart
+     between opening and resolving loses neither parent's resolution bridges
+     and a settled conflict does not reopen after compaction. A
+     `drive_conflict` row whose `remote_json` holds only a body is never
+     written.
 
 ### 3.2 Two-Database Commit & Crash-Recovery Matrix
 
@@ -793,8 +807,14 @@ with outcome `delete`) when it reaches those records:
   `catalog` pass, every held record whose `workKey` now has a local `books`
   row (for `drive:<workKey>` or an alias target) is run through §3.1 as an
   incoming `R` built from the stored version, against whatever the restored
-  book already has locally (`L = none` if nothing). Tx 1 applies it, Tx 2
-  clears `held`. Nothing in this path creates a `books` row, so arriving
+  book already has locally (`L = none` if nothing). A held `position` record
+  belongs to another device's wire key (`<workKey>/<deviceId>`), so §3.1 alone
+  would see it as unseen; its row write instead runs §4.5 for that device
+  (`reconcileReadingState` and the explicit-choice reconciliation against
+  `sync_peer_state(book_url, drive:<permissionId>/<deviceId>)`, a missing row
+  meaning no baseline), so a newer local reading state on the restored book is
+  compared, not overwritten, and a disagreement raises the same position
+  prompt. Tx 1 applies it, Tx 2 clears `held`. Nothing in this path creates a `books` row, so arriving
   history never returns the book to the shelf; only the reader (or a
   later catalog version that §3.1 accepts) does that. Snapshots carry the
   authors' latest records, so a device rebuilt from snapshots re-holds them.
@@ -1113,6 +1133,14 @@ with outcome `delete`) when it reaches those records:
     ?: reading_progress.updated_at`)
   - `updatedAt`: `Long` (epoch ms)
 - **Merge / Conflict rule:**
+  - **Exact anchors.** When the record's `editionSha` equals the local
+    edition's and its `locatorJson` is an exact anchor, pass
+    `exactPositionAgreement = ExactLocatorAnchor.agreement(local locatorJson,
+    remote locatorJson)` to every `reconcileReadingState` call, as the
+    liseur-sync path does. Otherwise pass `null` (percentage tolerance).
+    Without it two distinct exact anchors 0.2 percentage points apart read as
+    `InSync` and a short reading move is acknowledged without applying the
+    locator.
   - On pull of device `X`'s record, run `reconcileReadingState(...)` using
     local `reading_progress` and the **per-device** row
     `sync_peer_state(book_url, drive:<permissionId>/<X>)`. Its `agreed_*` is
@@ -1358,7 +1386,7 @@ with outcome `delete`) when it reaches those records:
   `annotation_sync.acked_fingerprint = "DELETED"`. Book removal via
   `BookRemoval.forget` does NOT emit annotation `del`s.
 - **Conflict rule:** Reader-resolved via Section 3.1 (`EDIT_EDIT` keeps local
-  in `annotations` and remote in `drive_conflict.remote_json`; `DELETE_EDIT`
+  in `annotations` and the remote envelope in `drive_conflict.remote_json`; `DELETE_EDIT`
   prompts **Keep edited note** / **Delete note**). Closed via `op: "resolve"`
   (`outcome: "put"` or `"delete"`).
 - **Room mapping (`liseur.db`):**
@@ -2187,3 +2215,7 @@ order and must end in the same state.
 | C28 | A rating (and separately a `review`, and a metadata `title` override) is applied remotely: Tx 1 commits and the process crashes before Tx 2. After restart, before recovery runs, the reader clears the rating or resets the override. Variant: the reader clears the field, then sets it again before recovery. | Recovery sees `row.revision > acked_revision` with `value == null` (or `title_override = 0`) and mints `delFp(d, k, h)` with `sent_json.vfp` first in `anc`; `body_json` is `NULL` and the tombstone is owed. Replay of `R` is Stale, a `del` is published, and the override is not restored from fallback metadata. A put with a null value is never built. In the variant the final value is a put with a fresh `putFp` and `sent_json.vfp` in `anc`. |
 | C29 | A and B agree at 40% with `finishedOverride = "automatic"` and `ReadingStatus.READING`. A sets an explicit `reading` choice without moving, and B pulls. Then A clears it back to `automatic` without moving, and B pulls. Variants: the same for `paused`; B has set its own different choice before pulling; a fresh device with no baseline pulls A's record. | The position and status are equal, so `reconcileReadingState` returns `InSync`, but the choice is reconciled separately: B adopts `reading`, then `automatic`, raises `status_revision`, and sets `agreed_status_choice` and `acked_status_revision` only after applying it. B never acknowledges a status revision it did not apply. In the variant where B changed its own choice, the choices conflict and `persistPendingStatus` raises one prompt, with the baseline unchanged. The fresh device adopts A's choice (clean local side) without a prompt. |
 | C30 | An annotation note of about 1.5 MiB is edited next to 50 other dirty records, in the same and in other domains, then synced. Variants: the reader shortens the note; the reader deletes the annotation; a local conflict resolution keeps the oversized body. Ancestry variant: a record whose `resRefs` alone exceed 1 MiB, then the reader shortens its body, and separately deletes it. | The 50 records publish in ordinary batches and no cursor stalls. The oversized record is neither truncated nor dropped and the local row is unchanged. No `seq` is allocated for it, `published_fp` keeps its old value, and the run reports it as withheld. Peers keep the last version they received. The shortened note publishes normally with the withheld `fp` in `anc`, and the deletion of the 1.5 MiB note publishes a normal `del`, because the overflow was body-only. A snapshot never holds the withheld version. In the ancestry variant the shortened body and the `del` inherit the same `resRefs`, so both are oversized too: each is withheld without a `seq`, stays owed and is reported, the local row (including the deletion) is unchanged, peers keep the last version they received, and the 50 other records still publish. The oversized resolution stays `RESOLVING`, and a later edit that fits publishes alone and moves the conflict to `RESOLVED` locally. |
+| C31 | A resolves a `DELETE_EDIT` on annotation K by deleting, minting resolution `Q`. A then publishes a new series order `P` and resets the book locally, giving local delete `D` with `Q` in `anc(D)`, and `D` is not yet uploaded. Replay `Q` before `D` uploads, as a crash replay or a second pull would. Repeat with `Q` as a plain `del` and `D` its descendant, and with `D` uploaded first. | `Q ∈ anc(D)` so `Q` is Stale (§3.1 Step 5), not Agreement: `L` stays `D`, `published_fp` is unchanged and `D` is still owed. `D` uploads and peers still on `P` receive the reset. Two unrelated concurrent deletes still reach Agreement. |
+| C32 | B holds `EDIT_EDIT` on annotation K against A's remote record `R` whose `resRefs = {r1}` and `anc = {a1}`, with `r1` settled earlier. B restarts, then resolves the conflict, and the record is later compacted. Variant: `DELETE_EDIT`. | `drive_conflict.remote_json` holds the whole envelope of `R`. The `resolve` carries `anc ⊇ {L, R.fp, a1}` and `resRefs = res_refs(L) ∪ {r1}`, so a peer that only knows `r1`'s branch does not reopen a conflict after compaction. |
+| C33 | The reader deletes book K from the synced library, and a snapshot holds A's `position` record for K. B's restored book holds a local reading state at 60%, newer than its baseline with A (40%). The reader restores K. Variants: no baseline row (fresh device, one prompt allowed); the same percentages with a different explicit choice. | The held record is materialized through §4.5 against the per-device row, never as `Unseen`. A's 40% is compared with the local 60%: B keeps its state (`Push`) or raises the position prompt on a real conflict, and the explicit choice follows the C29 rule. No position is silently overwritten. |
+| C34 | A and B share edition E, and the record's `locatorJson` is an exact anchor. A moves from 50.0% to 50.2% onto a different passage (different `href`, selector or text). Variants: same anchor with different percentages; no exact anchor on the remote record; a different `editionSha`. | `ExactLocatorAnchor.agreement` decides `exactPositionAgreement`: the moved anchor is not `InSync`, B applies the locator and acknowledges only after applying it. The same anchor at different percentages is `InSync`. Without an exact remote anchor, or on another edition, `null` selects the percentage tolerance. |
