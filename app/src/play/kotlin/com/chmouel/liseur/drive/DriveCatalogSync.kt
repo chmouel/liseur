@@ -577,7 +577,9 @@ internal class DriveCatalogSync(
             alias.editionSha?.lowercase(Locale.ROOT)?.let(shas::add)
             targets[book.url] = book to alias.workId
         }
-        selected?.let { targets[it.first.url] = it }
+        selected?.let { (book, workId) ->
+            books.getByUrl(book.url)?.let { targets[book.url] = it to workId }
+        }
         // The canonical drive:<workKey> stub may exist without an alias.
         val stubUrl = DriveWorkIdentity.driveBookUrl(canonical)
         if (stubUrl !in targets) {
