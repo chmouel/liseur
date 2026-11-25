@@ -1573,27 +1573,10 @@ internal class DriveVocabularySync(
             } else if (localWord != null) {
                 val bodyMap = DriveWireCodec.encodeVocabWordBody(localWord.toWireBody())
                 val currentFp = DriveCanonicalJson.contentFp(bodyMap)
-                if (currentFp == sync.ackedFingerprint && existing?.publishedFp != currentFp) {
-                    val mergedAnc = mergeAncestors(
-                        existing?.ancestorsList().orEmpty(),
-                        listOfNotNull(existing?.versionFp),
-                        exclude = currentFp,
-                    )
-                    wordUpdates.add(
-                        DriveRecordState(
-                            permissionId = permissionId,
-                            domain = DriveWireCodec.DOMAIN_VOCAB_WORD,
-                            recordKey = recordKey,
-                            versionFp = currentFp,
-                            versionOp = DriveRecordState.OP_PUT,
-                            publishedFp = currentFp,
-                            contentFp = currentFp,
-                            ancestorsJson = DriveCanonicalJson.encode(mergedAnc),
-                            resRefsJson = "[]",
-                            lastHlc = existing?.lastHlc.orEmpty(),
-                            bodyJson = DriveCanonicalJson.encode(bodyMap),
-                        ),
-                    )
+                if (currentFp == sync.ackedFingerprint && existing?.versionOp == DriveRecordState.OP_PUT &&
+                    existing.contentFp == currentFp && existing.publishedFp != existing.versionFp
+                ) {
+                    wordUpdates.add(existing.copy(publishedFp = existing.versionFp))
                 } else if (currentFp != sync.ackedFingerprint &&
                     (existing == null || (existing.versionFp != sync.ackedFingerprint && sync.ackedFingerprint !in existing.ancestorsList()))
                 ) {
