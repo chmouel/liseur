@@ -1748,7 +1748,7 @@ internal object DriveWireCodec {
         "hlc" to resolution.hlc,
     )
 
-    private fun parseWireRecords(array: JSONArray?): List<DriveWireRecord> {
+    internal fun parseWireRecords(array: JSONArray?): List<DriveWireRecord> {
         if (array == null) return emptyList()
         return buildList(array.length()) {
             for (i in 0 until array.length()) {
