@@ -48,6 +48,8 @@ interface LibrarySyncBackend {
     /** Whether this backend appears first in the Book server type picker. */
     val supportsBookServerOption: Boolean get() = false
 
+    val settingsFocusKey: String? get() = null
+
     /** Short connected-account summary shown on the Settings > Book server row when active. */
     @Composable
     fun connectedSummary(): String? = null

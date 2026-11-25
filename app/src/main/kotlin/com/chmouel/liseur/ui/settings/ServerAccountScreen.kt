@@ -111,6 +111,7 @@ import com.chmouel.liseur.data.remote.ServerKind
 import com.chmouel.liseur.data.remote.SyncIdentity
 import com.chmouel.liseur.data.remote.SyncReport
 import com.chmouel.liseur.data.settings.UploadPolicy
+import com.chmouel.liseur.ui.settings.search.SettingsFocus
 import com.chmouel.liseur.ui.BusyIndicator
 import com.chmouel.liseur.ui.LocalEInk
 import com.chmouel.liseur.ui.contentWidthCap
@@ -174,6 +175,14 @@ fun ServerAccountScreen(
     }
     var pickingDriveKind by rememberSaveable { mutableStateOf(false) }
     var driveSwitchRequested by rememberSaveable { mutableStateOf(false) }
+    val settingsFocus = SettingsFocus.key
+    LaunchedEffect(settingsFocus, librarySync.settingsFocusKey) {
+        if (settingsFocus != null && settingsFocus == librarySync.settingsFocusKey && librarySync.supportsBookServerOption) {
+            driveSwitchRequested = true
+            driveSelected = true
+            if (state.editingAddress) onCancelEditAddress()
+        }
+    }
     LaunchedEffect(state.server, state.serverLoaded, driveActive, driveSwitchRequested) {
         driveSwitchRequested = nextSwitchRequested(
             requested = driveSwitchRequested,
