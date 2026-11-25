@@ -819,6 +819,38 @@ class DriveAccountControllerTest {
     }
 
     @Test
+    fun `a stale switch marker does not undo a later disconnect`() = runTest {
+        fakeAuth.nextAuthorize = DriveAuthResult.Authorized("tok-a")
+        fakeApi.aboutByToken["tok-a"] = DriveUserAbout("perm-A", "alice@example.com")
+        controller.beginConnect()
+
+        nowMs = 2_000L
+        fakeAuth.nextAuthorize = DriveAuthResult.Authorized("tok-b")
+        fakeApi.aboutByToken["tok-b"] = DriveUserAbout("perm-B", "bob@example.com")
+        controller.beginConnect(switchAccount = true)
+        assertEquals(
+            DriveAccount.STATE_PAUSED,
+            driveDb.accounts().get("perm-A")?.state,
+        )
+
+        // A transition that runs while the restore is queued clears the marker:
+        // the reader disconnects, which is why startup must not bring A back.
+        controller.disconnect()
+        assertNull(driveDb.accounts().get("perm-A")?.pendingSwitchPreviousState)
+
+        val resumed = AtomicInteger(0)
+        val restarted = restartSync(resumed)
+        val restored = restarted.restoreAccountState(
+            "perm-A",
+            DriveAccount.STATE_ACTIVE,
+        )
+
+        assertFalse(restored)
+        assertEquals(DriveAccount.STATE_PAUSED, driveDb.accounts().get("perm-A")?.state)
+        assertEquals(0, resumed.get())
+    }
+
+    @Test
     fun `an account Drive reports without an email keeps a blank hint and is named by permission id`() = runTest {
         fakeAuth.nextAuthorize = DriveAuthResult.Authorized("tok-a")
         fakeApi.aboutByToken["tok-a"] = DriveUserAbout("perm-A", "")
