@@ -100,6 +100,30 @@ class DrivePhase3EndToEndTest {
     }
 
     @Test
+    fun `newer catalog metadata cannot restore cleared edition availability`() = runTest {
+        deviceB.connect()
+        val key = "isbn:123"
+        val oldClock = "0017450000000-0001-dev-a"
+        val clearClock = "0017450000000-0002-dev-a"
+        val laterClock = "0017450000000-0003-dev-b"
+        val edition = DriveCatalogEdition("a".repeat(64), 42L, "file-1", "book.epub", 100L, oldClock)
+        val body = DriveCatalogBody(key, "Book", null, emptyList(), listOf(edition), null, null, 1L, null, 1L)
+        suspend fun apply(value: DriveCatalogBody, hlc: String) {
+            deviceB.catalogSync.applyRemoteRecord(
+                PERM_ID, DriveWireCodec.putRecord(DriveWireCodec.DOMAIN_CATALOG, key, hlc, DriveWireCodec.encodeCatalogBody(value)),
+                "dev-a", 1L,
+            )
+        }
+        apply(body, oldClock)
+        apply(body.copy(editions = listOf(edition.copy(driveFileId = null, fileName = null, uploadedAt = null, availabilityHlc = clearClock))), clearClock)
+        apply(body.copy(title = "Updated title"), laterClock)
+        val state = requireNotNull(deviceB.driveDb.recordStates().get(PERM_ID, DriveWireCodec.DOMAIN_CATALOG, key))
+        val merged = requireNotNull(DriveWireCodec.decodeCatalogBody(org.json.JSONObject(state.bodyJson)))
+        assertEquals(clearClock, merged.editions.single().availabilityHlc)
+        assertNull(merged.editions.single().driveFileId)
+    }
+
+    @Test
     fun `catalog tombstone preserves other accounts and rejects an older put`() = runTest {
         deviceB.connect()
         val book = peakBook("retained")

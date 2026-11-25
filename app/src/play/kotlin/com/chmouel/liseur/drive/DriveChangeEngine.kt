@@ -745,11 +745,7 @@ internal class DriveChangeEngine(
 
         // Step 2: collect dirty records from Phase 3 domains.
         val aliasRecords = workIdentity.collectDirtyRecords(permissionId)
-        val catalogRecords = if (bookUrlFilter == null) {
-            catalogSync.collectDirtyRecords(permissionId) { nextHlc(permissionId) }
-        } else {
-            emptyList()
-        }
+        val catalogRecords = catalogSync.collectDirtyRecords(permissionId, bookUrlFilter) { nextHlc(permissionId) }
         val posBundle = positionSync.collectDirtyRecords(
             permissionId = permissionId,
             deviceId = localDeviceId,
