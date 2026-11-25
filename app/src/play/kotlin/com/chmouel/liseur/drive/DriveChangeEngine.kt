@@ -643,7 +643,7 @@ internal class DriveChangeEngine(
             DriveWireCodec.DOMAIN_WORK_ALIAS ->
                 workIdentity.applyRemoteRecord(permissionId, record, remoteDeviceId, remoteSeq) { nextHlc(permissionId) }
             DriveWireCodec.DOMAIN_CATALOG ->
-                catalogSync.applyRemoteRecord(permissionId, record, remoteDeviceId, remoteSeq)
+                catalogSync.applyRemoteRecord(permissionId, record, remoteDeviceId, remoteSeq) { nextHlc(permissionId) }
             DriveWireCodec.DOMAIN_POSITION ->
                 positionSync.applyRemotePosition(
                     permissionId = permissionId,
