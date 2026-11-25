@@ -769,9 +769,11 @@ internal class DriveCompactor(
                     seq = lastAuthored.seq.takeIf { state.domain in SEQ_CARRYING_DOMAINS },
                     observed = observed,
                 )
-                val coveredReview = record.body != null && state.domain == DriveWireCodec.DOMAIN_VOCAB_REVIEW &&
-                    reviewCoveredByDelete(record.body, localDeviceId, lastAuthored.seq, deleteBoundaries)
-                if (!coveredReview) {
+                val deletedWord = state.domain == DriveWireCodec.DOMAIN_VOCAB_WORD &&
+                    state.versionOp == DriveRecordState.OP_DEL && record.op == DriveRecordState.OP_PUT
+                val coveredChild = record.body != null &&
+                    childCoveredByDelete(state.domain, record.body, localDeviceId, lastAuthored.seq, deleteBoundaries)
+                if (!deletedWord && !coveredChild) {
                     records.add(record)
                     nextAuthoredByDomain.getOrPut(state.domain) { linkedMapOf() }[state.recordKey] =
                         lastAuthored.copy(record = record)
@@ -796,15 +798,14 @@ internal class DriveCompactor(
                     val body = state.bodyJson?.let { raw ->
                         runCatching { JSONObject(raw) }.getOrNull()
                     }
-                    val coveredReview = body != null &&
-                        state.domain == DriveWireCodec.DOMAIN_VOCAB_REVIEW &&
-                        reviewCoveredByDelete(body, localDeviceId, localSeq, deleteBoundaries)
+                    val coveredChild = body != null &&
+                        childCoveredByDelete(state.domain, body, localDeviceId, localSeq, deleteBoundaries)
                     val wordBoundary = if (state.domain == DriveWireCodec.DOMAIN_VOCAB_WORD) {
                         deleteBoundaries[state.recordKey]?.takeIf { it.isNotEmpty() }
                     } else {
                         null
                     }
-                    body?.takeUnless { coveredReview }?.let {
+                    body?.takeUnless { coveredChild }?.let {
                         DriveWireRecord(
                             d = state.domain,
                             k = state.recordKey,
@@ -917,16 +918,21 @@ internal class DriveCompactor(
         }
     }
 
-    /** A review the word's applied delete had observed must not be resurrected through a snapshot. */
-    private fun reviewCoveredByDelete(
+    private fun childCoveredByDelete(
+        domain: String,
         body: JSONObject,
         localDeviceId: String,
         localSeq: Long?,
         deleteBoundaries: Map<String, Map<String, Long>>,
     ): Boolean {
-        val review = DriveWireCodec.decodeVocabReviewBody(body) ?: return false
-        val boundary = deleteBoundaries[DriveVocabularySync.wordKey(review.language, review.normalized)]
-            ?: return false
+        val wordKey = when (domain) {
+            DriveWireCodec.DOMAIN_VOCAB_REVIEW -> DriveWireCodec.decodeVocabReviewBody(body)?.let {
+                DriveVocabularySync.wordKey(it.language, it.normalized)
+            }
+            DriveWireCodec.DOMAIN_VOCAB_OCCURRENCE -> DriveWireCodec.decodeVocabOccurrenceBody(body)?.wordKey
+            else -> null
+        } ?: return false
+        val boundary = deleteBoundaries[wordKey] ?: return false
         return DriveVocabularySync.boundaryCovers(boundary, localDeviceId, localSeq)
     }
 
