@@ -323,10 +323,9 @@ internal class DriveChangeEngine(
             epubs.forEach { epub ->
                 indexRemoteFile(permissionId, epub)
             }
-            // Reconcile previously indexed non-trashed EPUBs absent from the complete listing
-            // so expired-token rescans never miss Drive-side deletions.
+            // Retrying a trashed file completes library updates interrupted after the Drive transaction.
             for (indexed in files.byKind(permissionId, DriveFile.KIND_EPUB)) {
-                if (!indexed.trashed && indexed.fileId !in presentEpubIds) {
+                if (indexed.fileId !in presentEpubIds) {
                     missingEpubFileIds.add(indexed.fileId)
                 }
             }
