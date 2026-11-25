@@ -1649,6 +1649,7 @@ class DrivePhase3EndToEndTest {
 
         // EPUB is deleted directly in Drive AND B's pageToken expires before B syncs again.
         driveServer.deleteFile("token-ok", uploadedFileId)
+        deviceB.driveDb.files().setTrashed(PERM_ID, uploadedFileId, true)
         driveServer.expireNextPageToken = true
 
         assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
