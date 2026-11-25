@@ -6,6 +6,67 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class DriveConflictUiGroupTest {
+    private fun account(
+        state: String = DriveAccount.STATE_ACTIVE,
+        lastError: String? = null,
+    ) = DriveAccount(
+        permissionId = "perm-1",
+        email = "reader@example.com",
+        state = state,
+        connectedAt = 1000L,
+        lastSuccessAt = 2000L,
+        lastError = lastError,
+    )
+
+    @Test
+    fun `resolveDriveUiConnectionState maps all Drive UI states explicitly`() {
+        assertEquals(
+            DriveUiConnectionState.DISCONNECTED,
+            resolveDriveUiConnectionState(DriveSettingsUiState()),
+        )
+        assertEquals(
+            DriveUiConnectionState.CONNECTING,
+            resolveDriveUiConnectionState(DriveSettingsUiState(busy = true)),
+        )
+        assertEquals(
+            DriveUiConnectionState.ACTIVE,
+            resolveDriveUiConnectionState(DriveSettingsUiState(account = account())),
+        )
+        assertEquals(
+            DriveUiConnectionState.SYNCING,
+            resolveDriveUiConnectionState(DriveSettingsUiState(account = account(), syncingNow = true)),
+        )
+        assertEquals(
+            DriveUiConnectionState.PAUSED,
+            resolveDriveUiConnectionState(
+                DriveSettingsUiState(account = account(state = DriveAccount.STATE_PAUSED)),
+            ),
+        )
+        assertEquals(
+            DriveUiConnectionState.ERROR,
+            resolveDriveUiConnectionState(
+                DriveSettingsUiState(account = account(state = DriveAccount.STATE_NEEDS_RECONNECT)),
+            ),
+        )
+        assertEquals(
+            DriveUiConnectionState.ERROR,
+            resolveDriveUiConnectionState(
+                DriveSettingsUiState(account = account(), errorMessage = "Sync failed"),
+            ),
+        )
+        assertEquals(
+            DriveUiConnectionState.PAUSED,
+            resolveDriveUiConnectionState(
+                DriveSettingsUiState(
+                    account = account(
+                        state = DriveAccount.STATE_PAUSED,
+                        lastError = "paused intentionally",
+                    ),
+                ),
+            ),
+        )
+    }
+
     private fun conflict(domain: String, kind: String) = DriveConflict(
         permissionId = "p",
         conflictId = "c-$domain-$kind",

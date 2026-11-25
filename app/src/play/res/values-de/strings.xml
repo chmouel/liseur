@@ -155,9 +155,12 @@
     <string name="hardcover_conflict_stale">Der Wert in Liseur hat sich inzwischen geändert. Prüfe ihn und wähle erneut.</string>
     <string name="hardcover_review_public_note">Öffentlich. Wird auch als deine Hardcover-Rezension veröffentlicht.</string>
     <string name="drive_sync_settings_summary">Bibliothek und Lesefortschritt mit Google Drive synchronisieren</string>
+    <string name="drive_welcome_connect_library_hint">Google Drive, Calibre, BookOrbit, OPDS und viele weitere.</string>
     <string name="drive_sync_intro">Halte Katalog und Lesefortschritt über deine Google-Drive-App-Daten geräteübergreifend synchron. Ausgewählte EPUB-Dateien werden in einem Liseur-Ordner in Drive gespeichert.</string>
     <string name="drive_sync_status_active">Aktiv</string>
     <string name="drive_sync_status_paused">Pausiert</string>
+    <string name="drive_sync_status_syncing">Synchronisiert</string>
+    <string name="drive_sync_status_error">Fehler</string>
     <string name="drive_sync_status_needs_reconnect">Erneute Verbindung nötig</string>
     <string name="drive_sync_account_summary">%1$s · %2$s</string>
     <string name="drive_sync_status_label">Status</string>
@@ -169,6 +172,9 @@
     <string name="drive_sync_connect">Google Drive verbinden</string>
     <string name="drive_sync_reconnect">Erneut verbinden</string>
     <string name="drive_sync_disconnect">Trennen</string>
+    <string name="drive_sync_disconnect_title">Google Drive trennen?</string>
+    <string name="drive_sync_disconnect_body">Die Synchronisierung auf diesem Gerät wird pausiert. Deine lokalen Bücher, Notizen und Lesefortschritte bleiben erhalten.</string>
+    <string name="drive_sync_paused_detail">Die Synchronisierung auf diesem Gerät ist pausiert. Verbinde dich erneut, um Bibliothek und Lesefortschritt weiter zu synchronisieren.</string>
     <string name="drive_sync_switch_account">Konto wechseln</string>
     <string name="drive_sync_connecting">Verbinde mit Google Drive…</string>
     <string name="drive_sync_needs_reconnect_detail">Die Google-Drive-Autorisierung ist abgelaufen oder wurde widerrufen. Verbinde dich erneut, um die Synchronisierung fortzusetzen.</string>

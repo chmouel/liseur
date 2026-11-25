@@ -1052,6 +1052,10 @@ fun LibraryScreen(
                         openingSample = openingSample,
                         onConnectServer = onConnectServer,
                         onRestoreBackup = onRestoreBackup,
+                        librarySync = (LocalContext.current.applicationContext as? LiseurApplication)
+                            ?.container
+                            ?.librarySync
+                            ?: com.chmouel.liseur.sync.LibrarySyncBackend.None,
                         modifier = fillAboveBar,
                     )
 

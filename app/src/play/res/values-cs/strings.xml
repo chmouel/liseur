@@ -161,9 +161,12 @@
     <string name="hardcover_conflict_stale">Hodnota v Liseuru se mezitím změnila. Zkontrolujte ji a vyberte znovu.</string>
     <string name="hardcover_review_public_note">Veřejné. Zveřejňuje se také jako vaše recenze na Hardcoveru.</string>
     <string name="drive_sync_settings_summary">Synchronizovat knihovnu a postup čtení s Google Drive</string>
+    <string name="drive_welcome_connect_library_hint">Disk Google, Calibre, BookOrbit, OPDS a mnoho dalších.</string>
     <string name="drive_sync_intro">Udržujte katalog a postup čtení synchronizované napříč zařízeními pomocí dat aplikací na Google Drive. Vybrané soubory EPUB se ukládají do složky Liseur na Disku.</string>
     <string name="drive_sync_status_active">Aktivní</string>
     <string name="drive_sync_status_paused">Pozastaveno</string>
+    <string name="drive_sync_status_syncing">Synchronizuje se</string>
+    <string name="drive_sync_status_error">Chyba</string>
     <string name="drive_sync_status_needs_reconnect">Nutné znovu připojit</string>
     <string name="drive_sync_account_summary">%1$s · %2$s</string>
     <string name="drive_sync_status_label">Stav</string>
@@ -175,6 +178,9 @@
     <string name="drive_sync_connect">Připojit Google Drive</string>
     <string name="drive_sync_reconnect">Znovu připojit</string>
     <string name="drive_sync_disconnect">Odpojit</string>
+    <string name="drive_sync_disconnect_title">Odpojit Disk Google?</string>
+    <string name="drive_sync_disconnect_body">Synchronizace na tomto zařízení se pozastaví. Vaše místní knihy, poznámky a postup čtení zůstanou zachovány.</string>
+    <string name="drive_sync_paused_detail">Synchronizace na tomto zařízení je pozastavena. Znovu se připojte, abyste pokračovali v synchronizaci knihovny a postupu čtení.</string>
     <string name="drive_sync_switch_account">Přepnout účet</string>
     <string name="drive_sync_connecting">Připojování ke Google Drive…</string>
     <string name="drive_sync_needs_reconnect_detail">Autorizace Google Drive vypršela nebo byla odvolána. Pro pokračování v synchronizaci se znovu připojte.</string>
