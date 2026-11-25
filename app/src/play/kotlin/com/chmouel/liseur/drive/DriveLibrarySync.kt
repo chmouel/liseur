@@ -218,14 +218,23 @@ internal class DriveLibrarySync(
             if (state == DriveAccount.STATE_ACTIVE && remoteAccount.current() != null) {
                 return@withSwitchLock false
             }
-            store.withTransaction {
+            val applied = store.withTransaction {
+                // The marker can be gone or changed by a transition that ran while
+                // this restore was queued: a disconnect clears it, and a newer
+                // switch writes its own. Restoring a stale marker would undo that
+                // transition, so only a still-matching marker is acted on.
+                val current = store.accounts().get(permissionId)
+                if (current?.pendingSwitchPreviousState != state) {
+                    return@withTransaction false
+                }
                 if (state == DriveAccount.STATE_ACTIVE) {
                     store.accounts().pauseAllActive()
                 }
                 store.accounts().setState(permissionId, state)
                 store.accounts().clearPendingSwitches()
+                true
             }
-            state == DriveAccount.STATE_ACTIVE
+            applied && state == DriveAccount.STATE_ACTIVE
         }
         if (restoredActive) onResumeActive()
         return restoredActive
