@@ -2030,6 +2030,87 @@ class DrivePhase6CompactionAndResilienceTest {
     }
 
     @Test
+    fun `snapshot does not restore an authored word after another device deletes it`() = runTest {
+        val devA = createDevice(deviceId = "dev-a", compactionDeltaThreshold = 2)
+        val devB = createDevice(deviceId = "dev-b")
+        devA.connect()
+        devB.connect()
+        val book = seedBook(devA, "deleted-word.epub", "9780451524936", "Book", "Author")
+        val repoA = VocabularyRepository(devA.liseurDb)
+        val repoB = VocabularyRepository(devB.liseurDb)
+        repoA.collect(VocabularyLookup("lumière", "fr", null), "light", "en", now = 1_746_000_000_000L)
+        assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
+        assertEquals(SyncOutcome.Success, devB.changeEngine.sync().outcome)
+        repoB.deleteWord(devB.liseurDb.vocabularyDao().findWord("lumière", "fr")!!.id)
+        assertEquals(SyncOutcome.Success, devB.changeEngine.sync().outcome)
+        assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
+        val wordKey = DriveVocabularySync.wordKey("fr", "lumière")
+        assertEquals(
+            DriveRecordState.OP_DEL,
+            devA.driveDb.recordStates().get(PERM_ID, DriveWireCodec.DOMAIN_VOCAB_WORD, wordKey)!!.versionOp,
+        )
+
+        repeat(3) { syncWithNewNoteUntilSnapshotAdvances(devA, book.url, "deleted-word-$it") }
+        val snapshot = restartedCompactionState(devA).snapshot!!
+        val records = snapshot.parts.flatMap {
+            DriveWireCodec.decodeSnapshotPart(server.rawBytes(it.fileId)!!.toString(Charsets.UTF_8)).records
+        }
+        assertTrue(records.none { it.d == DriveWireCodec.DOMAIN_VOCAB_WORD && it.k == wordKey && it.op == DriveRecordState.OP_PUT })
+    }
+
+    @Test
+    fun `snapshot omits covered authored occurrences but keeps later ones after remote agreement`() = runTest {
+        val devA = createDevice(deviceId = "dev-a", compactionDeltaThreshold = 2)
+        devA.connect()
+        val book = seedBook(devA, "occurrences.epub", "9780451524936", "Book", "Author")
+        val wordId = VocabularyRepository(devA.liseurDb).collect(
+            VocabularyLookup("mine", "fr", null), "mine", "en", now = 1_746_000_000_000L,
+        )!!
+        suspend fun addOccurrence(location: String) {
+            devA.liseurDb.vocabularyDao().insertOccurrence(
+                VocabularyOccurrence(
+                    wordId = wordId, bookUrl = book.url, bookTitle = "Book", locationKey = location,
+                    locator = """{"href":"ch01.xhtml"}""", sentence = location,
+                    lastSeenAt = 1_746_000_000_000L, encounters = 1,
+                ),
+            )
+            assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
+        }
+        addOccurrence("ch01#p1")
+        val covered = devA.driveDb.recordStates().forDomain(PERM_ID, DriveWireCodec.DOMAIN_VOCAB_OCCURRENCE).single()
+        val coveredSeq = requireNotNull(covered.originSeq)
+        addOccurrence("ch01#p2")
+        val occurrences = devA.driveDb.recordStates().forDomain(PERM_ID, DriveWireCodec.DOMAIN_VOCAB_OCCURRENCE)
+        val later = occurrences.single { it.recordKey != covered.recordKey }
+        assertTrue(later.originSeq!! > coveredSeq)
+        for (state in occurrences) {
+            val body = DriveWireCodec.decodeVocabOccurrenceBody(JSONObject(state.bodyJson!!))!!
+            val remote = DriveWireCodec.putRecord(
+                domain = state.domain, key = state.recordKey, hlc = "0017469999999-0000-dev-b",
+                bodyMap = DriveWireCodec.encodeVocabOccurrenceBody(body),
+            )
+            assertTrue(devA.driveSync.vocabularySync.applyRemoteOccurrence(PERM_ID, remote, "dev-b", 100L))
+            assertEquals(remote.fp, devA.driveDb.recordStates().get(PERM_ID, state.domain, state.recordKey)!!.versionFp)
+        }
+        val wordKey = DriveVocabularySync.wordKey("fr", "mine")
+        val wordState = devA.driveDb.recordStates().get(PERM_ID, DriveWireCodec.DOMAIN_VOCAB_WORD, wordKey)!!
+        val wordBody = DriveWireCodec.decodeVocabWordBody(JSONObject(wordState.bodyJson!!))!!
+        val wordRecord = DriveWireCodec.putRecord(
+            domain = DriveWireCodec.DOMAIN_VOCAB_WORD, key = wordKey, hlc = "0017469999999-0001-dev-b",
+            bodyMap = DriveWireCodec.encodeVocabWordBody(wordBody),
+        ).copy(observed = mapOf("dev-a" to coveredSeq))
+        devA.driveSync.vocabularySync.applyRemoteWord(PERM_ID, wordRecord, "dev-b", 101L)
+
+        repeat(3) { syncWithNewNoteUntilSnapshotAdvances(devA, book.url, "covered-occurrence-$it") }
+        val snapshot = restartedCompactionState(devA).snapshot!!
+        val records = snapshot.parts.flatMap {
+            DriveWireCodec.decodeSnapshotPart(server.rawBytes(it.fileId)!!.toString(Charsets.UTF_8)).records
+        }.filter { it.d == DriveWireCodec.DOMAIN_VOCAB_OCCURRENCE }.map { it.k }.toSet()
+        assertFalse("covered occurrence in snapshot: $records", covered.recordKey in records)
+        assertTrue(later.recordKey in records)
+    }
+
+    @Test
     fun `snapshot keeps the exact local publication seq when agreement replaced provenance with a remote origin, even after outbox pruning`() = runTest {
         val devA = createDevice(deviceId = "dev-a", compactionDeltaThreshold = 2)
         devA.connect()
