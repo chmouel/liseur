@@ -1574,7 +1574,7 @@ internal class DriveVocabularySync(
                 val bodyMap = DriveWireCodec.encodeVocabWordBody(localWord.toWireBody())
                 val currentFp = DriveCanonicalJson.contentFp(bodyMap)
                 if (currentFp != sync.ackedFingerprint &&
-                    (existing == null || (existing.versionFp != sync.ackedFingerprint && sync.ackedFingerprint !in existing.ancestorsList()))
+                    (existing == null || existing.contentFp != sync.ackedFingerprint)
                 ) {
                     val mergedAnc = mergeAncestors(
                         listOf(sync.ackedFingerprint),
