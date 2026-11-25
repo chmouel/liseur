@@ -827,7 +827,7 @@ class DrivePhase3EndToEndTest {
 
     private suspend fun DeviceHarness.addBook(book: Book, sha: String) {
         liseurDb.bookDao().upsert(book)
-        liseurDb.workIdentityDao().upsert(BookFingerprintRow(book.url, sha, "md5-$sha", 10L, sha.hashCode().toLong(), 1L))
+        liseurDb.workIdentityDao().upsert(BookFingerprintRow(book.url, sha, "md5-$sha", 10L, book.fileModifiedAt, 1L))
     }
 
     private suspend fun DeviceHarness.read(bookUrl: String, progression: Double, at: Long) {
@@ -1011,6 +1011,7 @@ class DrivePhase3EndToEndTest {
         deviceA.read(book.url, 0.55, 2_000L)
         val first = deviceA.collectPeaks().records.single { it.d == DriveWireCodec.DOMAIN_FURTHEST }
         val retry = deviceA.collectPeaks().records.single { it.d == DriveWireCodec.DOMAIN_FURTHEST }
+        assertEquals(DriveCanonicalJson.putFp(requireNotNull(first.body), first.hlc), first.fp)
         assertEquals(first.peakSeq(), retry.peakSeq())
         assertEquals(first.fp, retry.fp)
         assertEquals(first.hlc, retry.hlc)
