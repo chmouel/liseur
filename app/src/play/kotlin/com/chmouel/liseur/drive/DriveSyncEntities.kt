@@ -221,7 +221,7 @@ data class DriveConflict(
     @ColumnInfo(name = "remote_json") val remoteJson: String? = null,
     @ColumnInfo(name = "remote_device_id") val remoteDeviceId: String,
     @ColumnInfo(name = "remote_hlc") val remoteHlc: String,
-    /** Wire `op` of the remote record, so it can be applied later. Null on rows opened before schema 3. */
+    /** Wire `op` of the remote record; null on rows opened before schema 4. */
     @ColumnInfo(name = "remote_op") val remoteOp: String? = null,
     @ColumnInfo(name = "remote_seq") val remoteSeq: Long? = null,
     /** Remote `anc` as a JSON array, kept until a referenced resolution arrives. */

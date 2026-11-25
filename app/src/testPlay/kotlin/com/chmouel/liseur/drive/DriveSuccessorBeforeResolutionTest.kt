@@ -7,6 +7,7 @@ import kotlinx.coroutines.test.runTest
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -77,6 +78,27 @@ class DriveSuccessorBeforeResolutionTest {
             db.conflicts().upsert(c.copy(state = DriveConflict.STATE_RESOLVED, choice = s.choice, resolutionFp = s.resolutionFp, resolvedAt = s.resolvedAt))
         }
         return result
+    }
+
+    @Test
+    fun `oversized recovered resolution does not consume a sequence`() = runTest {
+        db.accounts().upsert(DriveAccount(perm, "reader@example.com", DriveAccount.STATE_ACTIVE, 1L))
+        val oversized = res1.copy(body = body("x".repeat(DriveWireCodec.MAX_BATCH_BYTES)))
+        assertFalse(DriveConflictEngine.freezeRecoveredResolutionOutbox(db, perm, "dev-a", oversized, resHlc, 1L))
+        assertEquals(1L, db.accounts().get(perm)?.nextSeq)
+        assertTrue(db.outbox().forAccount(perm).isEmpty())
+    }
+
+    @Test
+    fun `later parked successor from same writer wins after ancestry compaction`() = runTest {
+        val initial = localAt(e1, "edit-A")
+        val early = succ.copy(fp = fp("early"), body = body("early"), anc = emptyList(), resRefs = listOf(res1Fp))
+        val late = succ.copy(fp = fp("late"), body = body("late"), anc = emptyList(), resRefs = listOf(res1Fp))
+        deliver(initial, early, "dev-c", 2L)
+        deliver(initial, late, "dev-c", 70L)
+        val result = deliver(initial, res1, "dev-c", 1L)
+        assertEquals(late.fp, result.updatedRecordState?.versionFp)
+        assertTrue(db.conflicts().unsettledForRecord(perm, domain, key).isEmpty())
     }
 
     @Test
