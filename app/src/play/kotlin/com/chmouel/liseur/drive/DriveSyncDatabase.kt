@@ -30,7 +30,7 @@ import androidx.sqlite.execSQL
         DriveSessionAck::class,
         DriveUpload::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = true,
 )
 abstract class DriveSyncDatabase : RoomDatabase() {
@@ -53,11 +53,16 @@ abstract class DriveSyncDatabase : RoomDatabase() {
         val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(connection: SQLiteConnection) {
                 connection.execSQL("ALTER TABLE drive_account ADD COLUMN pending_switch_previous_state TEXT")
+            }
+        }
+
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(connection: SQLiteConnection) {
                 connection.execSQL("ALTER TABLE drive_outbox ADD COLUMN ack_metadata_json TEXT")
             }
         }
 
-        val MIGRATIONS: Array<Migration> get() = arrayOf(MIGRATION_1_2)
+        val MIGRATIONS: Array<Migration> get() = arrayOf(MIGRATION_1_2, MIGRATION_2_3)
 
         fun open(context: Context): DriveSyncDatabase =
             Room.databaseBuilder(context.applicationContext, DriveSyncDatabase::class.java, NAME)

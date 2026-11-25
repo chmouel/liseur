@@ -45,7 +45,7 @@ class DriveSyncMigrationTest {
                     "VALUES ('perm-1', 7, 'batch-1', '{}', 'BUILT', NULL, 1000)",
             )
         }
-        helper.runMigrationsAndValidate(OUTBOX_DB, 2, true, *DriveSyncDatabase.MIGRATIONS).use { db ->
+        helper.runMigrationsAndValidate(OUTBOX_DB, 3, true, *DriveSyncDatabase.MIGRATIONS).use { db ->
             db.query("SELECT batch_id, state, created_at, ack_metadata_json FROM drive_outbox WHERE seq = 7").use {
                 assertTrue(it.moveToFirst())
                 assertEquals("batch-1", it.getString(0))
@@ -56,8 +56,24 @@ class DriveSyncMigrationTest {
         }
     }
 
+    @Test
+    fun `existing version two outbox gains ack metadata`() {
+        helper.createDatabase(V2_OUTBOX_DB, 2).use { old ->
+            old.execSQL("INSERT INTO drive_outbox (permission_id, seq, batch_id, payload, state, file_id, created_at) " +
+                "VALUES ('perm-1', 8, 'batch-2', '{}', 'BUILT', NULL, 1001)")
+        }
+        helper.runMigrationsAndValidate(V2_OUTBOX_DB, 3, true, *DriveSyncDatabase.MIGRATIONS).use { db ->
+            db.query("SELECT batch_id, ack_metadata_json FROM drive_outbox WHERE seq = 8").use {
+                assertTrue(it.moveToFirst())
+                assertEquals("batch-2", it.getString(0))
+                assertTrue(it.isNull(1))
+            }
+        }
+    }
+
     private companion object {
         const val ACCOUNTS_DB = "drive-sync-migration-accounts.db"
         const val OUTBOX_DB = "drive-sync-migration-outbox.db"
+        const val V2_OUTBOX_DB = "drive-sync-migration-v2-outbox.db"
     }
 }
