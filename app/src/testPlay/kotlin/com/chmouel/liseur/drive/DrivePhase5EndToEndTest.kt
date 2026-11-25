@@ -1083,6 +1083,23 @@ class DrivePhase5EndToEndTest {
     }
 
     @Test
+    fun `unchanged vocabulary sync retains its published version`() = runTest {
+        deviceA.connect(PERM_A, "a@example.com")
+        VocabularyRepository(deviceA.liseurDb).collect(
+            VocabularyLookup("nuit", "fr", null), "night", "en", 1_745_900_000_000L,
+        )!!
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        val key = DriveVocabularySync.wordKey("fr", "nuit")
+        val before = deviceA.driveDb.recordStates().get(PERM_A, DriveWireCodec.DOMAIN_VOCAB_WORD, key)!!
+
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        val after = deviceA.driveDb.recordStates().get(PERM_A, DriveWireCodec.DOMAIN_VOCAB_WORD, key)!!
+        assertEquals(before.versionFp, after.versionFp)
+        assertEquals(before.publishedFp, after.publishedFp)
+        assertEquals(before.contentFp, after.contentFp)
+    }
+
+    @Test
     fun `a word deleted after a crash between its pull transactions stays deleted on replay`() = runTest {
         deviceA.connect(PERM_A, "a@example.com")
         deviceB.connect(PERM_A, "a@example.com")
