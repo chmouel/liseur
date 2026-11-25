@@ -110,7 +110,9 @@ jobs:
         uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6
 
       - name: Lint
-        run: ./gradlew lintFossDebug lintPlayDebug --console=plain
+        run: |
+          ./gradlew lintFossDebug --no-daemon --max-workers=1 -Dorg.gradle.jvmargs="-Xmx5120m -Dfile.encoding=UTF-8" --console=plain
+          ./gradlew lintPlayDebug --no-daemon --max-workers=1 -Dorg.gradle.jvmargs="-Xmx5120m -Dfile.encoding=UTF-8" --console=plain
 
       - name: Upload lint reports
         if: always()
@@ -147,7 +149,9 @@ jobs:
       # is cut. Unsigned without a keystore, which is fine: the point is
       # that it builds and shrinks.
       - name: Assemble release APKs
-        run: ./gradlew assembleFossRelease assemblePlayRelease --console=plain
+        run: |
+          ./gradlew assembleFossRelease --no-daemon --max-workers=1 -Dorg.gradle.jvmargs="-Xmx5120m -Dfile.encoding=UTF-8" --console=plain
+          ./gradlew assemblePlayRelease --no-daemon --max-workers=1 -Dorg.gradle.jvmargs="-Xmx5120m -Dfile.encoding=UTF-8" --console=plain
 
       - name: Upload debug APK
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
