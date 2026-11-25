@@ -71,6 +71,7 @@ internal class DriveEpubTransferManager(
     private val catalogSync: DriveCatalogSync,
     private val fingerprintStore: BookFingerprintStore,
     private val acquireToken: suspend (staleToken: String?) -> SilentTokenResult,
+    private val nextHlc: suspend (permissionId: String) -> String,
     private val onCatalogAvailabilityChanged: suspend () -> Unit = {},
     private val booksDirProvider: () -> File = { File(context.applicationContext.filesDir, "books").apply { mkdirs() } },
     private val openBookStream: (Book) -> InputStream? = { book -> openDefaultStream(context.applicationContext, book) },
@@ -495,7 +496,7 @@ internal class DriveEpubTransferManager(
                         return DriveEpubDownloadOutcome.PermanentFailure("Google Drive sync is not active")
                 }
             } catch (e: DriveNotFoundException) {
-                catalogSync.handleDriveEpubRemoved(permissionId, fileId)
+                catalogSync.handleDriveEpubRemoved(permissionId, fileId) { nextHlc(permissionId) }
                 books.setDownloadState(bookUrl, DownloadState.FAILED, null)
                 return DriveEpubDownloadOutcome.PermanentFailure("EPUB file was removed from Google Drive")
             } catch (e: DriveQuotaException) {

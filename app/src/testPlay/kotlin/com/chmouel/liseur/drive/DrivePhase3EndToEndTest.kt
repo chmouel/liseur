@@ -544,6 +544,7 @@ class DrivePhase3EndToEndTest {
             workIdentity = deviceA.workIdentity,
             catalogSync = deviceA.catalogSync,
             fingerprintStore = BookFingerprintStore(context, deviceA.liseurDb.workIdentityDao()),
+            nextHlc = { perm -> deviceA.changeEngine.nextHlc(perm) },
             acquireToken = {
                 calls++
                 if (calls == 1) {
@@ -1752,10 +1753,19 @@ class DrivePhase3EndToEndTest {
         val firstFileId = deviceA.driveDb.uploads().get(PERM_ID, fp.sha256)!!.fileId!!
         // Ensure A has a startPageToken for incremental changes.list.
         assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        val workKey = requireNotNull(deviceA.liseurDb.workIdentityDao().alias(bookA.url, DriveLibrarySync.accountPeerId(PERM_ID))).workId
+        val before = requireNotNull(deviceA.driveDb.recordStates().get(PERM_ID, DriveWireCodec.DOMAIN_CATALOG, workKey))
+        val beforeEdition = requireNotNull(DriveWireCodec.decodeCatalogBody(org.json.JSONObject(requireNotNull(before.bodyJson)))).editions.single()
 
         // Reader deletes the EPUB directly in Google Drive, then Device A syncs.
         driveServer.deleteFile("token-ok", firstFileId)
         assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        val after = requireNotNull(deviceA.driveDb.recordStates().get(PERM_ID, DriveWireCodec.DOMAIN_CATALOG, workKey))
+        val afterEdition = requireNotNull(DriveWireCodec.decodeCatalogBody(org.json.JSONObject(requireNotNull(after.bodyJson)))).editions.single()
+        assertNull(afterEdition.driveFileId)
+        assertNull(afterEdition.fileName)
+        assertTrue(requireNotNull(afterEdition.availabilityHlc) > requireNotNull(beforeEdition.availabilityHlc))
+        assertEquals(DriveCanonicalJson.putFp(org.json.JSONObject(after.bodyJson), after.lastHlc), after.versionFp)
 
         // Upload row MUST be invalidated (not UPLOADED and NOT auto-queued for re-upload).
         assertNull(deviceA.driveDb.uploads().get(PERM_ID, fp.sha256))
@@ -2189,6 +2199,7 @@ class DrivePhase3EndToEndTest {
             workIdentity = workIdentity,
             catalogSync = catalogSync,
             fingerprintStore = fpStore,
+            nextHlc = { perm -> engineRef.nextHlc(perm) },
             acquireToken = { stale -> driveSync.accountController.acquireSilentAccessToken(stale) },
             onCatalogAvailabilityChanged = { engineRef.sync() },
             booksDirProvider = { booksDir.apply { mkdirs() } },

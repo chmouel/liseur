@@ -498,7 +498,7 @@ internal class DriveCatalogSync(
      * the catalog entry and all local reading history while invalidating any
      * matching `UPLOADED` queue entry so the reader may explicitly re-select it.
      */
-    suspend fun handleDriveEpubRemoved(permissionId: String, fileId: String) {
+    suspend fun handleDriveEpubRemoved(permissionId: String, fileId: String, nextHlc: suspend () -> String) {
         val removedHref = downloadHrefFor(fileId)
         val statesToUpdate = mutableListOf<DriveRecordState>()
         val stubUpdates = linkedMapOf<String, String?>()
@@ -513,12 +513,14 @@ internal class DriveCatalogSync(
                 val bodyJson = state.bodyJson ?: continue
                 val body = runCatching { DriveWireCodec.decodeCatalogBody(JSONObject(bodyJson)) }.getOrNull() ?: continue
                 if (body.editions.none { it.driveFileId == fileId }) continue
+                val hlc = nextHlc()
                 val updatedEditions = body.editions.map { ed ->
-                    if (ed.driveFileId == fileId) ed.copy(driveFileId = null, uploadedAt = null) else ed
+                    if (ed.driveFileId == fileId) ed.copy(driveFileId = null, fileName = null, uploadedAt = null, availabilityHlc = hlc) else ed
                 }
                 val updatedBody = body.copy(editions = updatedEditions, updatedAt = clock())
                 val map = DriveWireCodec.encodeCatalogBody(updatedBody)
-                val fp = DriveCanonicalJson.contentFp(map)
+                val contentFp = DriveCanonicalJson.contentFp(map)
+                val fp = DriveCanonicalJson.putFp(map, hlc)
                 val uploaded = updatedEditions.firstOrNull { ed ->
                     val fid = ed.driveFileId
                     !fid.isNullOrBlank() && driveFiles.get(permissionId, fid)?.trashed != true
@@ -529,7 +531,12 @@ internal class DriveCatalogSync(
                     state.copy(
                         versionFp = fp,
                         publishedFp = null, // republish cleared availability
-                        contentFp = fp,
+                        contentFp = contentFp,
+                        ancestorsJson = DriveCanonicalJson.encode(
+                            (listOf(state.versionFp) + DriveWorkIdentity.decodeStringArray(state.ancestorsJson))
+                                .distinct().take(DriveWireCodec.MAX_ANCESTORS),
+                        ),
+                        lastHlc = hlc,
                         bodyJson = DriveCanonicalJson.encode(map),
                     ),
                 )
@@ -551,7 +558,14 @@ internal class DriveCatalogSync(
             }
             for (book in books.allOnce()) {
                 if (book.url !in handledUrls && book.localUri == null && book.downloadHref == removedHref) {
-                    books.upsert(book.copy(downloadHref = null))
+                    val key = book.url.removePrefix(DriveWorkIdentity.DRIVE_BOOK_URL_PREFIX)
+                    val body = recordStates.get(permissionId, DriveWireCodec.DOMAIN_CATALOG, key)?.bodyJson
+                        ?.let { runCatching { DriveWireCodec.decodeCatalogBody(JSONObject(it)) }.getOrNull() }
+                    val replacement = body?.editions?.firstOrNull { ed ->
+                        val fid = ed.driveFileId
+                        !fid.isNullOrBlank() && fid != fileId && driveFiles.get(permissionId, fid)?.trashed != true
+                    }?.driveFileId?.let(::downloadHrefFor)
+                    books.upsert(book.copy(downloadHref = replacement))
                 }
             }
         }
