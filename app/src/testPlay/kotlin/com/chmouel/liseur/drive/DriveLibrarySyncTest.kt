@@ -638,6 +638,9 @@ class DriveLibrarySyncTest {
         try {
             assertTrue(container.librarySync is DriveLibrarySync)
             assertEquals(DriveLibrarySync.PEER_ID, container.librarySync.positionPeer?.peerId)
+            // No Drive sync pipeline exists yet, so the production backend must not
+            // advertise the book-server option that promises one.
+            assertFalse(container.librarySync.supportsBookServerOption)
             assertFalse(container.librarySync.isActive())
             assertFalse(container.librarySync.active.first())
             container.librarySync.resume()

@@ -7,6 +7,7 @@ import android.content.Intent
 import androidx.room.Room
 import androidx.room.withTransaction
 import androidx.test.core.app.ApplicationProvider
+import com.chmouel.liseur.R
 import com.chmouel.liseur.data.calibre.CredentialCipher
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.BookAnnotation
@@ -58,6 +59,7 @@ class DriveAccountControllerTest {
     private lateinit var fakeAuth: FakeDriveAuthClient
     private lateinit var fakeApi: FakeDriveRemoteApi
     private lateinit var controller: DriveAccountController
+    private lateinit var switchCoordinator: LibrarySyncSwitchCoordinator
 
     private val workersStopped = AtomicInteger(0)
     private val resumedActive = AtomicInteger(0)
@@ -87,6 +89,7 @@ class DriveAccountControllerTest {
             inTransaction = { work -> liseurDb.withTransaction { work() } },
         )
         val switchCoordinator = LibrarySyncSwitchCoordinator()
+        this.switchCoordinator = switchCoordinator
         lateinit var syncRef: DriveLibrarySync
         remoteAccount = RemoteAccountRepository(
             dao = liseurDb.remoteServerDao(),
@@ -695,7 +698,7 @@ class DriveAccountControllerTest {
         val afterCancel = controller.uiState.first()
         assertFalse(afterCancel.busy)
         assertNull(afterCancel.pendingAuthIntent)
-        assertNull(afterCancel.errorMessage)
+        assertNull(afterCancel.errorMessageRes)
 
         // Subsequent beginConnect succeeds and activates the account.
         fakeAuth.authorizeHandler = null
@@ -733,6 +736,223 @@ class DriveAccountControllerTest {
         assertNull(driveDb.accounts().get("perm-B"))
         assertEquals(0, fakeApi.writeCalls)
     }
+
+    @Test
+    fun `a cancel interrupted while restoring account A leaves the confirmation retryable`() = runTest {
+        fakeAuth.nextAuthorize = DriveAuthResult.Authorized("tok-a")
+        fakeApi.aboutByToken["tok-a"] = DriveUserAbout("perm-A", "alice@example.com")
+        controller.beginConnect()
+
+        nowMs = 2_000L
+        fakeAuth.nextAuthorize = DriveAuthResult.Authorized("tok-b")
+        fakeApi.aboutByToken["tok-b"] = DriveUserAbout("perm-B", "bob@example.com")
+        controller.beginConnect(switchAccount = true)
+        assertEquals(DriveAccount.STATE_PAUSED, driveDb.accounts().get("perm-A")?.state)
+
+        // Leaving settings cancels the scope running the restore halfway through it.
+        val switching = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val holder = launch(Dispatchers.Default) {
+            switchCoordinator.withSwitchLock {
+                switching.complete(Unit)
+                release.await()
+            }
+        }
+        switching.await()
+        val cancel = launch(Dispatchers.Default) { controller.cancelPendingSwitch() }
+        kotlinx.coroutines.withContext(Dispatchers.Default) { kotlinx.coroutines.delay(100) }
+        assertFalse(cancel.isCompleted)
+        cancel.cancelAndJoin()
+        release.complete(Unit)
+        holder.join()
+
+        // Account A is still paused, but the confirmation survived so the reader can retry.
+        assertEquals(DriveAccount.STATE_PAUSED, driveDb.accounts().get("perm-A")?.state)
+        assertNotNull(controller.uiState.first().pendingConfirmation)
+
+        controller.cancelPendingSwitch()
+        assertEquals(DriveAccount.STATE_ACTIVE, driveDb.accounts().get("perm-A")?.state)
+        assertNull(controller.uiState.first().pendingConfirmation)
+    }
+
+    @Test
+    fun `a switch abandoned to process death is recovered on the next start`() = runTest {
+        fakeAuth.nextAuthorize = DriveAuthResult.Authorized("tok-a")
+        fakeApi.aboutByToken["tok-a"] = DriveUserAbout("perm-A", "alice@example.com")
+        controller.beginConnect()
+
+        nowMs = 2_000L
+        fakeAuth.nextAuthorize = DriveAuthResult.Authorized("tok-b")
+        fakeApi.aboutByToken["tok-b"] = DriveUserAbout("perm-B", "bob@example.com")
+        controller.beginConnect(switchAccount = true)
+
+        val abandoned = requireNotNull(driveDb.accounts().get("perm-A"))
+        assertEquals(DriveAccount.STATE_PAUSED, abandoned.state)
+        assertEquals(DriveAccount.STATE_ACTIVE, abandoned.pendingSwitchPreviousState)
+        assertNull(driveDb.accounts().get("perm-B"))
+
+        val resumed = AtomicInteger(0)
+        val restarted = restartSync(resumed)
+        restarted.resume()
+        awaitState("perm-A", DriveAccount.STATE_ACTIVE)
+
+        assertNull(driveDb.accounts().get("perm-A")?.pendingSwitchPreviousState)
+        assertEquals(1, resumed.get())
+    }
+
+    @Test
+    fun `an intentional disconnect is not undone by the next start`() = runTest {
+        fakeAuth.nextAuthorize = DriveAuthResult.Authorized("tok-a")
+        fakeApi.aboutByToken["tok-a"] = DriveUserAbout("perm-A", "alice@example.com")
+        controller.beginConnect()
+        controller.disconnect()
+
+        assertEquals(DriveAccount.STATE_PAUSED, driveDb.accounts().get("perm-A")?.state)
+        assertNull(driveDb.accounts().get("perm-A")?.pendingSwitchPreviousState)
+
+        val resumed = AtomicInteger(0)
+        restartSync(resumed).resume()
+        kotlinx.coroutines.withContext(Dispatchers.Default) { kotlinx.coroutines.delay(200) }
+
+        assertEquals(DriveAccount.STATE_PAUSED, driveDb.accounts().get("perm-A")?.state)
+        assertEquals(0, resumed.get())
+    }
+
+    @Test
+    fun `an account Drive reports without an email keeps a blank hint and is named by permission id`() = runTest {
+        fakeAuth.nextAuthorize = DriveAuthResult.Authorized("tok-a")
+        fakeApi.aboutByToken["tok-a"] = DriveUserAbout("perm-A", "")
+        controller.beginConnect()
+
+        val active = requireNotNull(driveDb.accounts().active())
+        assertEquals("", active.email)
+        assertEquals("perm-A", active.displayName)
+
+        // Silent refresh must not name a Google account that does not exist.
+        fakeAuth.nextSilent = DriveAuthResult.Authorized("tok-fresh")
+        fakeApi.aboutByToken["tok-fresh"] = DriveUserAbout("perm-A", "")
+        assertEquals(SilentTokenResult.Token("tok-fresh", "perm-A"), controller.acquireSilentAccessToken())
+        assertNull(fakeAuth.lastAccountEmail)
+    }
+
+    @Test
+    fun `an unconfirmed switch names the target by permission id when Drive omits its email`() = runTest {
+        fakeAuth.nextAuthorize = DriveAuthResult.Authorized("tok-a")
+        fakeApi.aboutByToken["tok-a"] = DriveUserAbout("perm-A", "alice@example.com")
+        controller.beginConnect()
+
+        nowMs = 2_000L
+        fakeAuth.nextAuthorize = DriveAuthResult.Authorized("tok-b")
+        fakeApi.aboutByToken["tok-b"] = DriveUserAbout("perm-B", "")
+        controller.beginConnect(switchAccount = true)
+
+        val pending = requireNotNull(controller.uiState.first().pendingConfirmation)
+        assertEquals("", pending.targetEmail)
+        assertEquals("perm-B", pending.targetDisplayName)
+
+        controller.confirmPendingSwitch()
+        val activeB = requireNotNull(driveDb.accounts().active())
+        assertEquals("perm-B", activeB.permissionId)
+        assertEquals("", activeB.email)
+        assertEquals("perm-B", activeB.displayName)
+    }
+
+    @Test
+    fun `confirmation counts only the sessions Drive will upload`() = runTest {
+        seedLocalLibrary(books = 1, notes = 0, sessions = 1)
+        // Imported sittings stay local, and one that cannot say where in the book
+        // it happened is never uploaded.
+        liseurDb.readingSessionDao().insert(
+            ReadingSession(
+                bookUrl = "file:///book-0.epub",
+                startedAt = 5_000L,
+                endedAt = 5_100L,
+                lastCheckpointAt = 5_100L,
+                durationMs = 100L,
+                startProgression = 0.3,
+                endProgression = 0.4,
+                importedAt = 9_000L,
+            ),
+        )
+        liseurDb.readingSessionDao().insert(
+            ReadingSession(
+                bookUrl = "file:///book-0.epub",
+                startedAt = 6_000L,
+                endedAt = 6_100L,
+                lastCheckpointAt = 6_100L,
+                durationMs = 100L,
+            ),
+        )
+        fakeAuth.nextAuthorize = DriveAuthResult.Authorized("tok-a")
+        fakeApi.aboutByToken["tok-a"] = DriveUserAbout("perm-A", "alice@example.com")
+
+        controller.beginConnect()
+
+        assertEquals(1, requireNotNull(controller.uiState.first().pendingConfirmation).localSummary.readingSessionsCount)
+    }
+
+    @Test
+    fun `disposing interactive flow with a pending confirmation cancels the switch and restores account A`() = runTest {
+        fakeAuth.nextAuthorize = DriveAuthResult.Authorized("tok-a")
+        fakeApi.aboutByToken["tok-a"] = DriveUserAbout("perm-A", "alice@example.com")
+        controller.beginConnect()
+
+        nowMs = 2_000L
+        fakeAuth.nextAuthorize = DriveAuthResult.Authorized("tok-b")
+        fakeApi.aboutByToken["tok-b"] = DriveUserAbout("perm-B", "bob@example.com")
+        controller.beginConnect(switchAccount = true)
+        assertEquals(DriveAccount.STATE_PAUSED, driveDb.accounts().get("perm-A")?.state)
+        assertNotNull(controller.uiState.first().pendingConfirmation)
+
+        controller.abandonInteractiveFlow(this)
+        awaitState("perm-A", DriveAccount.STATE_ACTIVE)
+
+        assertEquals(DriveAccount.STATE_ACTIVE, driveDb.accounts().get("perm-A")?.state)
+        assertNull(driveDb.accounts().get("perm-A")?.pendingSwitchPreviousState)
+        assertNull(controller.uiState.first().pendingConfirmation)
+        assertNull(driveDb.accounts().get("perm-B"))
+    }
+
+    @Test
+    fun `controller errors emit translatable string resource ids`() = runTest {
+        fakeAuth.nextAuthorize = DriveAuthResult.NeedsResolution(pendingIntent = null)
+        controller.beginConnect()
+        assertEquals(R.string.drive_sync_error_sign_in_prompt, controller.uiState.first().errorMessageRes)
+
+        fakeAuth.nextAuthorize = DriveAuthResult.Failed("boom")
+        controller.beginConnect()
+        assertEquals(R.string.drive_sync_error_auth_failed, controller.uiState.first().errorMessageRes)
+
+        fakeAuth.nextAuthorize = DriveAuthResult.Authorized("tok-expired")
+        controller.beginConnect()
+        assertEquals(R.string.drive_sync_error_token_rejected, controller.uiState.first().errorMessageRes)
+
+        controller.clearError()
+        assertNull(controller.uiState.first().errorMessageRes)
+    }
+
+    private suspend fun awaitState(permissionId: String, state: String) {
+        kotlinx.coroutines.withContext(Dispatchers.Default) {
+            kotlinx.coroutines.withTimeout(5_000) {
+                while (driveDb.accounts().get(permissionId)?.state != state) {
+                    kotlinx.coroutines.delay(10)
+                }
+            }
+        }
+    }
+
+    /** A second backend over the same `drive_sync.db`, as a process restart would open. */
+    private fun restartSync(resumed: AtomicInteger) = DriveLibrarySync(
+        context = context,
+        database = liseurDb,
+        remoteAccount = remoteAccount,
+        switchCoordinator = switchCoordinator,
+        onResumeActive = { resumed.incrementAndGet() },
+        openStore = { driveDb },
+        authClient = fakeAuth,
+        driveApi = fakeApi,
+        clock = { nowMs },
+    )
 
     private suspend fun seedLocalLibrary(books: Int, notes: Int, sessions: Int) {
         repeat(books) { i ->

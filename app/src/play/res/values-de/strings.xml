@@ -154,5 +154,59 @@
     <string name="hardcover_conflict_review_too_long">Diese Hardcover-Rezension ist zu lang, um in Liseur übernommen zu werden.</string>
     <string name="hardcover_conflict_stale">Der Wert in Liseur hat sich inzwischen geändert. Prüfe ihn und wähle erneut.</string>
     <string name="hardcover_review_public_note">Öffentlich. Wird auch als deine Hardcover-Rezension veröffentlicht.</string>
+    <string name="drive_sync_settings_summary">Bibliothek, Notizen und Lesefortschritt mit Google Drive synchronisieren</string>
+    <string name="drive_sync_intro">Halte Katalog, Notizen, Vokabeln, Lesesitzungen und Lesefortschritt über deine Google-Drive-App-Daten geräteübergreifend synchron. Ausgewählte EPUB-Dateien werden in einem Liseur-Ordner in Drive gespeichert.</string>
+    <string name="drive_sync_status_active">Aktiv</string>
+    <string name="drive_sync_status_paused">Pausiert</string>
+    <string name="drive_sync_status_needs_reconnect">Erneute Verbindung nötig</string>
+    <string name="drive_sync_account_summary">%1$s · %2$s</string>
+    <string name="drive_sync_status_label">Status</string>
+    <string name="drive_sync_last_sync_label">Zuletzt synchronisiert</string>
+    <string name="drive_sync_last_sync_never">Nie</string>
+    <string name="drive_sync_pending_uploads_label">Ausstehende EPUB-Uploads</string>
+    <string name="drive_sync_conflicts_label">Ungelöste Konflikte</string>
+    <string name="drive_sync_none">Keine</string>
+    <string name="drive_sync_connect">Google Drive verbinden</string>
+    <string name="drive_sync_reconnect">Erneut verbinden</string>
+    <string name="drive_sync_disconnect">Trennen</string>
+    <string name="drive_sync_switch_account">Konto wechseln</string>
+    <string name="drive_sync_connecting">Verbinde mit Google Drive…</string>
+    <string name="drive_sync_needs_reconnect_detail">Die Google-Drive-Autorisierung ist abgelaufen oder wurde widerrufen. Verbinde dich erneut, um die Synchronisierung fortzusetzen.</string>
+    <string name="drive_sync_switch_title">Mit %1$s synchronisieren?</string>
+    <string name="drive_sync_switch_body_summary">Liseur synchronisiert deine lokale Bibliothek mit %1$s: %2$s, %3$s, %4$s und %5$s.</string>
+    <string name="drive_sync_switch_body_keep_previous">Dein bisheriges Konto (%1$s) bleibt auf diesem Gerät pausiert und sein Synchronisierungsfortschritt bleibt erhalten.</string>
+    <string name="drive_sync_switch_body_disconnect_server">Dein aktueller Buchserver wird getrennt. Heruntergeladene Bücher, der Leseverlauf und reine Stöberkataloge bleiben erhalten.</string>
+    <string name="drive_sync_switch_confirm">Mit diesem Konto synchronisieren</string>
+    <string name="drive_sync_switch_cancel">Abbrechen</string>
     <string name="drive_sync_use_instead">Stattdessen Google Drive verwenden</string>
+    <string name="drive_sync_error_sign_in_prompt">Google Play-Dienste konnten die Anmeldung nicht öffnen.</string>
+    <string name="drive_sync_error_auth_incomplete">Die Google-Drive-Autorisierung wurde nicht abgeschlossen.</string>
+    <string name="drive_sync_error_auth_failed">Google Drive konnte nicht autorisiert werden.</string>
+    <string name="drive_sync_error_token_rejected">Google Drive hat das Autorisierungstoken abgelehnt.</string>
+    <string name="drive_sync_error_unreachable">Google Drive war nicht erreichbar. Prüfe deine Verbindung und versuche es erneut.</string>
+    <string name="drive_sync_error_activate_failed">Das Google-Drive-Konto konnte nicht aktiviert werden.</string>
+    <plurals name="drive_sync_books_count">
+        <item quantity="one">%d Buch</item>
+        <item quantity="other">%d Bücher</item>
+    </plurals>
+    <plurals name="drive_sync_notes_count">
+        <item quantity="one">%d Notiz</item>
+        <item quantity="other">%d Notizen</item>
+    </plurals>
+    <plurals name="drive_sync_sessions_count">
+        <item quantity="one">%d Lesesitzung</item>
+        <item quantity="other">%d Lesesitzungen</item>
+    </plurals>
+    <plurals name="drive_sync_vocabulary_count">
+        <item quantity="one">%d gespeichertes Wort</item>
+        <item quantity="other">%d gespeicherte Wörter</item>
+    </plurals>
+    <plurals name="drive_sync_pending_uploads_count">
+        <item quantity="one">%d Upload ausstehend</item>
+        <item quantity="other">%d Uploads ausstehend</item>
+    </plurals>
+    <plurals name="drive_sync_conflicts_count">
+        <item quantity="one">%d ungelöster Konflikt</item>
+        <item quantity="other">%d ungelöste Konflikte</item>
+    </plurals>
 </resources>
