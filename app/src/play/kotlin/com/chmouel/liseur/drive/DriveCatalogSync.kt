@@ -63,12 +63,10 @@ internal class DriveCatalogSync(
         nextHlc: suspend () -> String,
     ): List<DriveWireRecord> {
         val out = mutableListOf<DriveWireRecord>()
-        val deletedWorkKeys = mutableSetOf<String>()
 
         // 1. Emit any unpublished durable `catalog` deletion tombstones first.
         for (state in recordStates.forDomain(permissionId, DriveWireCodec.DOMAIN_CATALOG)) {
             if (state.versionOp != DriveRecordState.OP_DEL) continue
-            deletedWorkKeys.add(state.recordKey)
             if (state.publishedFp == state.versionFp) continue
             out.add(
                 DriveWireCodec.delRecord(
@@ -117,10 +115,8 @@ internal class DriveCatalogSync(
         }
 
         for ((workKey, entries) in grouped) {
-            if (workKey in deletedWorkKeys) continue
             val primaryBook = entries.firstOrNull { it.first.openableUrl != null }?.first ?: entries.first().first
             val existingState = recordStates.get(permissionId, DriveWireCodec.DOMAIN_CATALOG, workKey)
-            if (existingState?.versionOp == DriveRecordState.OP_DEL) continue
             val existingBody = existingState?.bodyJson?.let {
                 runCatching { DriveWireCodec.decodeCatalogBody(JSONObject(it)) }.getOrNull()
             }
@@ -603,7 +599,7 @@ internal class DriveCatalogSync(
             }
         }
         if (remoteOnlyUrls.isNotEmpty()) {
-            removal.deleteByUrls(remoteOnlyUrls)
+            removal.deleteByUrls(remoteOnlyUrls, preserveReadingHistory = true)
         }
         if (unlinks.isNotEmpty() || sharedStubs.isNotEmpty()) {
             database.withTransaction {
