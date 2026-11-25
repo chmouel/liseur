@@ -308,18 +308,10 @@ internal class DriveLibrarySync(
         if (!hasStore()) return
         scope.launch {
             runCatching {
-<<<<<<< HEAD
                 if (!recoverAbandonedSwitches()) {
-                    val active = store.accounts().active() ?: return@runCatching
-                    onResumeActive()
-                    if (store.uploads().pendingForAccount(active.permissionId).isNotEmpty()) {
-                        scheduleEpubUploadsWork(active.meteredTransfers)
-                    }
+                    if (store.accounts().active() == null) return@runCatching
+                    resumeActiveWork()
                 }
-=======
-                if (store.accounts().active() == null) return@runCatching
-                resumeActiveWork()
->>>>>>> a30e70bd2 (feat: Add Google Drive sync support for Google Play builds)
             }
         }
     }
@@ -601,8 +593,7 @@ internal class DriveLibrarySync(
             }
             applied && state == DriveAccount.STATE_ACTIVE
         }
-<<<<<<< HEAD
-        if (restoredActive) onResumeActive()
+        if (restoredActive) resumeActiveWork()
         return restoredActive
     }
 
@@ -621,9 +612,6 @@ internal class DriveLibrarySync(
             store.accounts().pauseAllActive()
             store.accounts().markPendingSwitch(previous.permissionId, previous.state)
         }
-=======
-        if (restoredActive) resumeActiveWork()
->>>>>>> a30e70bd2 (feat: Add Google Drive sync support for Google Play builds)
     }
 
     internal fun notifyActivated() {
