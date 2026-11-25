@@ -378,7 +378,10 @@ class HomeQuotes internal constructor(
             ?.let(::ceilingLocator)
             ?.let { json -> runCatching { Locator.fromJSON(JSONObject(json)) }.getOrNull() }
         val found = try {
-            opener().withPublication(url) { publication -> QuoteScanner.walk(publication, point, until = place) }
+            val extracted = opener().withPublication(url) { publication ->
+                QuoteScanner.extract(publication, point, until = place)
+            }
+            extracted?.let(QuoteScanner::score).orEmpty()
         } catch (e: CancellationException) {
             throw e
         } catch (e: IOException) {
@@ -508,7 +511,13 @@ internal data class FoundLine(
 internal object QuoteScanner {
     private const val CONTEXT = 40
 
-    private class Block(val text: String, val locator: Locator, val path: String?, val end: Double)
+    internal class Block(val text: String, val locator: Locator, val path: String?, val end: Double)
+
+    internal class Extracted(
+        val blocks: List<Block>,
+        val language: String?,
+        val titles: Map<String, String>,
+    )
 
     /**
      * Walks a book's text up to [readPoint], and no further than [until].
@@ -518,8 +527,12 @@ internal object QuoteScanner {
      * ceiling, so the walk can stop at that chapter and say no more than
      * the reader has read.
      */
-    suspend fun walk(publication: Publication, readPoint: Double, until: Locator? = null): List<FoundLine> {
-        val iterator = publication.content()?.iterator() ?: return emptyList()
+    suspend fun walk(publication: Publication, readPoint: Double, until: Locator? = null): List<FoundLine> =
+        extract(publication, readPoint, until)?.let(::score).orEmpty()
+
+    /** Reads the text blocks up to [readPoint] so the publication can be closed before scoring. */
+    suspend fun extract(publication: Publication, readPoint: Double, until: Locator? = null): Extracted? {
+        val iterator = publication.content()?.iterator() ?: return null
         val whole = readPoint >= 1.0
         val spine = publication.readingOrder.map { ResourceAddress.canonicalPath(it.url().toString()) }
         val stop = until?.let { locator ->
@@ -555,14 +568,21 @@ internal object QuoteScanner {
                 ?.takeIf { it.first.isNotEmpty() }
         }
         if (whole) held?.let { (text, locator) -> blocks += Block(text, locator, pathOf(locator), 1.0) }
+        return Extracted(
+            blocks = blocks,
+            language = publication.metadata.languages.firstOrNull(),
+            titles = chapterTitles(publication),
+        )
+    }
+
+    fun score(extracted: Extracted): List<FoundLine> {
+        val blocks = extracted.blocks
         val paragraphs = blocks.mapIndexed { index, block ->
             val edge = index == 0 || index == blocks.lastIndex ||
                 blocks[index - 1].path != block.path || blocks[index + 1].path != block.path
             QuoteParagraph(block.text, chapterEdge = edge)
         }
-        val language = publication.metadata.languages.firstOrNull()
-        val titles = chapterTitles(publication)
-        return MemorableLines.find(paragraphs, language).map { line ->
+        return MemorableLines.find(paragraphs, extracted.language).map { line ->
             val block = blocks[line.paragraph]
             val locator = block.locator.copy(
                 text = Locator.Text(
@@ -575,7 +595,7 @@ internal object QuoteScanner {
                 text = line.text,
                 locatorJson = locator.toJSON().toString(),
                 totalProgression = block.end,
-                chapter = block.path?.let(titles::get) ?: block.locator.title?.takeIf(String::isNotBlank),
+                chapter = block.path?.let(extracted.titles::get) ?: block.locator.title?.takeIf(String::isNotBlank),
                 score = line.score,
             )
         }
