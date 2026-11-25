@@ -35,6 +35,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import javax.crypto.KeyGenerator
+import kotlin.time.Duration.Companion.minutes
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import mockwebserver3.Dispatcher
@@ -370,7 +371,7 @@ class DrivePhase7ScaleAndComplianceTest {
     }
 
     @Test
-    fun `large catalog of 250 books and 300 sessions with multiple compactions bounds HTTP requests and appDataFolder file count`() = runTest {
+    fun `large catalog of 250 books and 300 sessions with multiple compactions bounds HTTP requests and appDataFolder file count`() = runTest(timeout = 3.minutes) {
         val server = InstrumentedFakeDriveServer()
         val devA = createDevice(
             deviceId = "dev-a",
