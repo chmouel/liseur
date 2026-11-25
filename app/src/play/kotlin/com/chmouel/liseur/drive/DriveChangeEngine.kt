@@ -332,7 +332,7 @@ internal class DriveChangeEngine(
             }
         }
         for (missingFileId in missingEpubFileIds) {
-            catalogSync.handleDriveEpubRemoved(permissionId, missingFileId)
+            catalogSync.handleDriveEpubRemoved(permissionId, missingFileId) { nextHlc(permissionId) }
         }
 
         // Step 4: read remote manifests, snapshots, and apply contiguous deltas.
@@ -371,7 +371,7 @@ internal class DriveChangeEngine(
                     if (existing != null) {
                         files.setTrashed(permissionId, change.fileId, true)
                         if (existing.kind == DriveFile.KIND_EPUB) {
-                            catalogSync.handleDriveEpubRemoved(permissionId, change.fileId)
+                            catalogSync.handleDriveEpubRemoved(permissionId, change.fileId) { nextHlc(permissionId) }
                         }
                     }
                     continue
