@@ -100,6 +100,32 @@ class DrivePhase3EndToEndTest {
     }
 
     @Test
+    fun `catalog tombstone preserves other accounts and rejects an older put`() = runTest {
+        deviceB.connect()
+        val book = peakBook("retained")
+        deviceB.liseurDb.bookDao().upsert(book)
+        val aliases = deviceB.liseurDb.workIdentityDao()
+        val peer = DriveLibrarySync.accountPeerId(PERM_ID)
+        val otherPeer = DriveLibrarySync.accountPeerId("other-account")
+        val key = "isbn:123"
+        aliases.upsert(com.chmouel.liseur.data.db.WorkAlias(book.url, peer, key, "high", confirmed = true, resolvedAt = 1L))
+        aliases.upsert(com.chmouel.liseur.data.db.WorkAlias(book.url, otherPeer, key, "high", confirmed = true, resolvedAt = 1L))
+        val hlc = "0017450000000-0002-dev-a"
+        val deletion = DriveWireRecord(
+            d = DriveWireCodec.DOMAIN_CATALOG, k = key, op = DriveRecordState.OP_DEL,
+            hlc = hlc, fp = DriveCanonicalJson.delFp(DriveWireCodec.DOMAIN_CATALOG, key, hlc),
+        )
+        deviceB.catalogSync.applyRemoteRecord(PERM_ID, deletion, "dev-a", 2L)
+        assertNull(aliases.alias(book.url, peer))
+        assertNotNull(aliases.alias(book.url, otherPeer))
+        val body = DriveCatalogBody(key, "The Hobbit", null, emptyList(), emptyList(), null, null, 1L, null, 1L)
+        val older = DriveWireCodec.putRecord(DriveWireCodec.DOMAIN_CATALOG, key, "0017450000000-0001-dev-a", DriveWireCodec.encodeCatalogBody(body))
+        deviceB.catalogSync.applyRemoteRecord(PERM_ID, older, "dev-a", 1L)
+        assertNull(deviceB.liseurDb.bookDao().getByUrl("drive:$key"))
+        assertEquals(DriveRecordState.OP_DEL, deviceB.driveDb.recordStates().get(PERM_ID, DriveWireCodec.DOMAIN_CATALOG, key)?.versionOp)
+    }
+
+    @Test
     fun `two-device spine syncs whole catalog, uploads selected EPUB, downloads with SHA-256, and converges positions`() = runTest {
         deviceA.connect()
         deviceB.connect()

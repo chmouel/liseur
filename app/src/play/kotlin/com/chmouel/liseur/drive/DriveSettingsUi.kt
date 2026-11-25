@@ -321,6 +321,7 @@ internal fun DriveSettingsSection(controller: DriveAccountController) {
             }
 
             val errorText = state.errorMessageRes?.let { stringResource(it) }
+                ?: state.errorMessage?.takeIf { it.isNotBlank() }
                 ?: state.account?.lastError?.takeIf {
                     state.account?.state != DriveAccount.STATE_NEEDS_RECONNECT
                 }
