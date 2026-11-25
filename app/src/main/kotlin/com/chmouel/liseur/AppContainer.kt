@@ -802,6 +802,7 @@ class AppContainer(
             device = { deviceIdentity.current() },
             finishedState = finishedState,
             connectedServer = { database.remoteServerDao().get() },
+            externalLibrarySyncActive = { librarySync.isActive() },
             pointers = KosyncProgressPointer(database.bookDao()),
             reporting = syncReporting,
             networkAvailability = networkAvailability,
