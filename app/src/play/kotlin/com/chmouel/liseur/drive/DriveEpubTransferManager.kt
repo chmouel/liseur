@@ -8,6 +8,7 @@ import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.BookFingerprintRow
 import com.chmouel.liseur.data.db.DownloadState
 import com.chmouel.liseur.data.db.LiseurDatabase
+import com.chmouel.liseur.data.db.WorkAlias
 import com.chmouel.liseur.data.library.BookFingerprintStore
 import com.chmouel.liseur.data.library.BookRemoval
 import com.chmouel.liseur.data.library.openableUri
@@ -156,6 +157,11 @@ internal class DriveEpubTransferManager(
             if (book.openableUrl == null) continue
             val fp = fingerprintStore.of(book) ?: identities.fingerprint(book.url)?.fingerprint ?: continue
             val sha = fp.sha256.lowercase(Locale.ROOT)
+            val peerId = DriveLibrarySync.accountPeerId(permissionId)
+            val alias = identities.alias(book.url, peerId)
+            if (alias?.confidence == WorkAlias.REJECTED) {
+                identities.upsert(alias.copy(confidence = WorkAlias.HIGH, confirmed = true, seeded = false))
+            }
             val existing = uploads.get(permissionId, sha)
             if (existing?.state == DriveUpload.STATE_UPLOADED && !existing.fileId.isNullOrBlank()) {
                 continue

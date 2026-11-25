@@ -274,8 +274,10 @@ internal class DriveCatalogSync(
                     val book = books.getByUrl(alias.bookUrl) ?: continue
                     if (book.url.startsWith(DriveWorkIdentity.DRIVE_BOOK_URL_PREFIX) && book.localUri == null) {
                         books.deleteByUrls(listOf(book.url))
+                        identities.deleteAliasIfStale(book.url, peerId, alias.workId)
+                    } else {
+                        identities.upsert(alias.copy(confidence = WorkAlias.REJECTED, confirmed = false))
                     }
-                    identities.deleteAliasIfStale(book.url, peerId, alias.workId)
                 }
             }
             store.withTransaction {
