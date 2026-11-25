@@ -6,11 +6,13 @@ import java.net.InetAddress
 import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeoutOrNull
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
 import okhttp3.ResponseBody.Companion.asResponseBody
@@ -583,6 +585,50 @@ class DriveRestClientTest {
         assertEquals(1, seen.size)
         val failure = runCatching { seen.single().body.source().readByte() }.exceptionOrNull()
         assertTrue("response body must be closed, got $failure", failure is IllegalStateException)
+    }
+
+    @Test
+    fun `cancelling a download after body copying starts stops the copy before EOF`() {
+        val bodySize = 64 * 1024
+        server.enqueue(
+            MockResponse.Builder()
+                .code(200)
+                .body(okio.Buffer().write(ByteArray(bodySize)))
+                .throttleBody(1024, 100, TimeUnit.MILLISECONDS)
+                .build(),
+        )
+        val progress = mutableListOf<Long>()
+        val copyingStarted = CountDownLatch(1)
+
+        kotlinx.coroutines.runBlocking {
+            val job = launch(kotlinx.coroutines.Dispatchers.Default) {
+                client.downloadResumable(
+                    accessToken = "tok",
+                    fileId = "f-slow",
+                    destination = ByteArrayOutputStream(),
+                    startOffset = 0L,
+                    onRestartFromZero = {},
+                    onProgress = {
+                        progress += it
+                        copyingStarted.countDown()
+                    },
+                )
+            }
+            assertTrue("body copying must begin", copyingStarted.await(5, TimeUnit.SECONDS))
+            assertTrue(job.isActive)
+            val joined = withTimeoutOrNull(5_000) { job.cancelAndJoin() }
+            assertNotNull(
+                "copy must stop promptly on cancellation, at ${progress.lastOrNull()} of $bodySize bytes",
+                joined,
+            )
+            assertTrue("a cancelled download must not complete successfully", job.isCancelled)
+        }
+
+        val copied = progress.lastOrNull() ?: 0L
+        val reportsAtCancel = progress.size
+        Thread.sleep(200)
+        assertTrue("copy must stop before EOF, copied $copied of $bodySize bytes", copied < bodySize)
+        assertEquals("no progress may be reported after cancellation", reportsAtCancel, progress.size)
     }
 
     @Test
