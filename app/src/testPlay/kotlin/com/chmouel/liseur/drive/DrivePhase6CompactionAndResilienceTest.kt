@@ -62,6 +62,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.json.JSONObject
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
@@ -1985,6 +1986,50 @@ class DrivePhase6CompactionAndResilienceTest {
     }
 
     @Test
+    fun `independent equivalent catalog versions survive cross-pulls and repeated compaction`() = runTest {
+        val devA = createDevice(deviceId = "dev-a", compactionDeltaThreshold = 2)
+        val devB = createDevice(deviceId = "dev-b", compactionDeltaThreshold = 2)
+        devA.connect()
+        devB.connect()
+        val bookA = seedBook(devA, "same.epub", "9780451524936", "Same", "Author")
+        val bookB = seedBook(devB, "same.epub", "9780451524936", "Same", "Author")
+
+        server.hideOtherDeviceDeltasFor("dev-a")
+        assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
+        server.hideOtherDeviceDeltasFor("dev-b")
+        assertEquals(SyncOutcome.Success, devB.changeEngine.sync().outcome)
+        val stateA = devA.driveDb.recordStates().forDomain(PERM_ID, DriveWireCodec.DOMAIN_CATALOG).single()
+        val stateB = devB.driveDb.recordStates().forDomain(PERM_ID, DriveWireCodec.DOMAIN_CATALOG).single()
+        val workKey = stateA.recordKey
+        assertEquals(workKey, stateB.recordKey)
+        assertEquals(stateA.contentFp, stateB.contentFp)
+        assertNotEquals(stateA.versionFp, stateB.versionFp)
+
+        server.unhideAll()
+        assertEquals(SyncOutcome.Success, devA.changeEngine.sync(forceManifestRescan = true).outcome)
+        assertEquals(SyncOutcome.Success, devB.changeEngine.sync(forceManifestRescan = true).outcome)
+        assertEquals(stateB.versionFp, devA.driveDb.recordStates().get(PERM_ID, DriveWireCodec.DOMAIN_CATALOG, workKey)!!.versionFp)
+        assertEquals(stateA.versionFp, devB.driveDb.recordStates().get(PERM_ID, DriveWireCodec.DOMAIN_CATALOG, workKey)!!.versionFp)
+
+        repeat(3) { syncWithNewNoteUntilSnapshotAdvances(devA, bookA.url, "equivalent-a-$it") }
+        repeat(3) { syncWithNewNoteUntilSnapshotAdvances(devB, bookB.url, "equivalent-b-$it") }
+        assertTrue(devA.driveDb.outbox().forAccount(PERM_ID).none { it.seq == 1L })
+        assertTrue(devB.driveDb.outbox().forAccount(PERM_ID).none { it.seq == 1L })
+        for ((device, original) in listOf(devA to stateA, devB to stateB)) {
+            val snapshot = restartedCompactionState(device).snapshot!!
+            val catalog = snapshot.parts.flatMap {
+                DriveWireCodec.decodeSnapshotPart(server.rawBytes(it.fileId)!!.toString(Charsets.UTF_8)).records
+            }.single { it.d == DriveWireCodec.DOMAIN_CATALOG && it.k == workKey }
+            assertEquals(original.versionFp, catalog.fp)
+        }
+
+        val devC = createDevice(deviceId = "dev-c")
+        devC.connect()
+        assertEquals(SyncOutcome.Success, devC.changeEngine.sync().outcome)
+        assertNotNull(devC.liseurDb.bookDao().allOnce().find { it.title == "Same" })
+    }
+
+    @Test
     fun `snapshot keeps the exact local publication seq when agreement replaced provenance with a remote origin, even after outbox pruning`() = runTest {
         val devA = createDevice(deviceId = "dev-a", compactionDeltaThreshold = 2)
         devA.connect()
@@ -2111,9 +2156,26 @@ class DrivePhase6CompactionAndResilienceTest {
         assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
         repoA.collect(lookup, "light", "en", now = baseTime + 120 * day)
         assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
+        val wordKey = DriveVocabularySync.wordKey("fr", "lumière")
+        val authored = devA.driveDb.recordStates().get(PERM_ID, DriveWireCodec.DOMAIN_VOCAB_WORD, wordKey)!!
+        val body = DriveWireCodec.decodeVocabWordBody(JSONObject(authored.bodyJson!!))!!
+        val equivalent = DriveWireCodec.putRecord(
+            domain = DriveWireCodec.DOMAIN_VOCAB_WORD,
+            key = wordKey,
+            hlc = "0017469999999-0000-dev-b",
+            bodyMap = DriveWireCodec.encodeVocabWordBody(body),
+        )
+        devA.driveSync.vocabularySync.applyRemoteWord(PERM_ID, equivalent, "dev-b", 100L)
+        assertEquals(equivalent.fp, devA.driveDb.recordStates().get(PERM_ID, DriveWireCodec.DOMAIN_VOCAB_WORD, wordKey)!!.versionFp)
+        assertNotEquals(authored.versionFp, equivalent.fp)
         repeat(3) { syncWithNewNoteUntilSnapshotAdvances(devA, book.url, "rp$it") }
         server.unhideAll()
-        assertNotNull(restartedCompactionState(devA).previousSnapshot)
+        val state = restartedCompactionState(devA)
+        assertNotNull(state.previousSnapshot)
+        val snapshotWord = state.snapshot!!.parts.flatMap {
+            DriveWireCodec.decodeSnapshotPart(server.rawBytes(it.fileId)!!.toString(Charsets.UTF_8)).records
+        }.single { it.d == DriveWireCodec.DOMAIN_VOCAB_WORD && it.k == wordKey }
+        assertTrue((snapshotWord.observed?.get("dev-b") ?: 0L) > 0L)
 
         val devC = createDevice(deviceId = "dev-c")
         devC.connect()
