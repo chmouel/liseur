@@ -1,0 +1,1 @@
+The position sent to KOReader now lands where you actually are in EPUB books: very long chapters, text in CDATA sections, non-UTF-8 chapters and lines after a tab no longer shift it, and chapters too long to measure are skipped rather than guessed. Scanning large libraries for Home quotes no longer runs out of memory.
