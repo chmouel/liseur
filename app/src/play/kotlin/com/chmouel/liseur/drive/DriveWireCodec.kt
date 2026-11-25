@@ -1187,7 +1187,7 @@ internal object DriveWireCodec {
         domain = domain,
         key = key,
         hlc = hlc,
-        fp = DriveCanonicalJson.contentFp(bodyMap),
+        fp = DriveCanonicalJson.putFp(bodyMap, hlc),
         bodyMap = bodyMap,
         ancestors = ancestors,
         resRefs = resRefs,
