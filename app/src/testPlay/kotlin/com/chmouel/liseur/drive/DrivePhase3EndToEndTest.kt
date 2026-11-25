@@ -1788,6 +1788,31 @@ class DrivePhase3EndToEndTest {
     }
 
     @Test
+    fun `a supported paused domain replays indexed deltas without new Drive changes`() = runTest {
+        deviceB.connect()
+        val key = "isbn:replay"
+        val hlc = "0017450000000-0001-dev-other"
+        val body = DriveCatalogBody(key, "Replay", null, emptyList(), emptyList(), null, null, 1L, null, 1L)
+        val record = DriveWireCodec.putRecord(DriveWireCodec.DOMAIN_CATALOG, key, hlc, DriveWireCodec.encodeCatalogBody(body))
+        val batch = DriveDeltaBatch(batchId = DriveCanonicalJson.batchId("dev-other", 1L), deviceId = "dev-other", seq = 1L,
+            createdHlc = hlc, domains = mapOf(DriveWireCodec.DOMAIN_CATALOG to 1), records = listOf(record))
+        driveServer.uploadAppDataJsonBatch("token-ok", DriveWireCodec.deltaFileName("dev-other", 1L),
+            DriveWireCodec.encodeDeltaBatch(batch).toByteArray(), DriveWireCodec.deltaAppProperties("dev-other", 1L, batch.batchId))
+        deviceB.changeEngine.sync(forceManifestRescan = true)
+        assertNotNull(deviceB.liseurDb.bookDao().getByUrl("drive:$key"))
+        deviceB.liseurDb.bookDao().deleteByUrls(listOf("drive:$key"))
+        deviceB.liseurDb.workIdentityDao().forgetAliases(listOf("drive:$key"))
+        deviceB.driveDb.recordStates().delete(PERM_ID, DriveWireCodec.DOMAIN_CATALOG, key)
+        deviceB.driveDb.cursors().upsert(DriveCursor(PERM_ID, "dev-other", DriveWireCodec.DOMAIN_CATALOG, 0L, 1))
+
+        deviceB.changeEngine.sync()
+        assertNotNull(deviceB.liseurDb.bookDao().getByUrl("drive:$key"))
+        val cursor = requireNotNull(deviceB.driveDb.cursors().get(PERM_ID, "dev-other", DriveWireCodec.DOMAIN_CATALOG))
+        assertNull(cursor.pausedSchemaVersion)
+        assertEquals(1L, cursor.appliedSeq)
+    }
+
+    @Test
     fun `unsupported schemaVersion pauses remote device stream and surfaces upgrade notice without corrupting local state`() = runTest {
         deviceA.connect()
 

@@ -359,8 +359,6 @@ internal class DriveChangeEngine(
     ): Int {
         var pageToken: String? = startToken
         var newStartPageToken: String? = null
-        val changedManifestFileIds = linkedSetOf<String>()
-        val changedDevices = linkedSetOf<String>()
 
         while (pageToken != null) {
             val page = driveApi.listChanges(accessToken, pageToken)
@@ -378,17 +376,6 @@ internal class DriveChangeEngine(
                 }
                 val indexed = indexRemoteFile(permissionId, file) ?: continue
                 when (indexed.kind) {
-                    DriveFile.KIND_MANIFEST -> {
-                        if (indexed.deviceId != null && indexed.deviceId != localDeviceId) {
-                            changedManifestFileIds.add(indexed.fileId)
-                            changedDevices.add(indexed.deviceId)
-                        }
-                    }
-                    DriveFile.KIND_DELTA -> {
-                        if (indexed.deviceId != null && indexed.deviceId != localDeviceId) {
-                            changedDevices.add(indexed.deviceId)
-                        }
-                    }
                     DriveFile.KIND_FOLDER -> {
                         val allFolders = files.byKind(permissionId, DriveFile.KIND_FOLDER)
                             .filter { !it.trashed }
@@ -405,16 +392,7 @@ internal class DriveChangeEngine(
             }
         }
 
-        val applied = if (changedDevices.isNotEmpty() || changedManifestFileIds.isNotEmpty()) {
-            processDiscoveredRemoteDevices(
-                permissionId = permissionId,
-                localDeviceId = localDeviceId,
-                accessToken = accessToken,
-                deviceFilter = changedDevices.takeIf { it.isNotEmpty() },
-            )
-        } else {
-            0
-        }
+        val applied = processDiscoveredRemoteDevices(permissionId, localDeviceId, accessToken)
 
         newStartPageToken?.let { accounts.updateStartPageToken(permissionId, it) }
         return applied
@@ -424,7 +402,6 @@ internal class DriveChangeEngine(
         permissionId: String,
         localDeviceId: String,
         accessToken: String,
-        deviceFilter: Set<String>? = null,
     ): Int {
         var appliedCount = 0
 
@@ -437,10 +414,10 @@ internal class DriveChangeEngine(
             .mapNotNull { it.deviceId }
             .toSet()
         val remoteDeviceIds = (manifestsByDevice.keys + deltaDeviceIds)
-            .filter { deviceFilter == null || it in deviceFilter }
             .sorted()
 
         for (remoteDeviceId in remoteDeviceIds) {
+            clearSupportedDomainPauses(permissionId, remoteDeviceId)
             val manifestFile = manifestsByDevice[remoteDeviceId]
             var manifest: DriveManifest? = null
 
@@ -530,13 +507,17 @@ internal class DriveChangeEngine(
                     DriveSchemaCheck.Supported -> Unit
                 }
 
-                val pausedDomains = cursors.forDevice(permissionId, remoteDeviceId)
+                val deviceCursors = cursors.forDevice(permissionId, remoteDeviceId)
+                val pausedDomains = deviceCursors
                     .filter { it.pausedSchemaVersion != null }
                     .map { it.domain }
                     .toSet()
 
                 val orderedRecords = batch.records
-                    .filter { it.d !in pausedDomains && it.d in DriveWireCodec.SUPPORTED_DOMAIN_VERSIONS }
+                    .filter { record ->
+                        record.d !in pausedDomains && record.d in DriveWireCodec.SUPPORTED_DOMAIN_VERSIONS &&
+                            seq > (deviceCursors.firstOrNull { it.domain == record.d }?.appliedSeq ?: 0L)
+                    }
                     .sortedBy { DriveWireCodec.domainRank(it.d) }
 
                 for (record in orderedRecords) {
@@ -611,13 +592,17 @@ internal class DriveChangeEngine(
             allRecords.addAll(part.records)
         }
 
-        val pausedDomains = cursors.forDevice(permissionId, remoteDeviceId)
+        val deviceCursors = cursors.forDevice(permissionId, remoteDeviceId)
+        val pausedDomains = deviceCursors
             .filter { it.pausedSchemaVersion != null }
             .map { it.domain }
             .toSet()
 
         val ordered = allRecords
-            .filter { it.d !in pausedDomains && it.d in DriveWireCodec.SUPPORTED_DOMAIN_VERSIONS }
+            .filter { record ->
+                record.d !in pausedDomains && record.d in DriveWireCodec.SUPPORTED_DOMAIN_VERSIONS &&
+                    snapshot.throughSeq > (deviceCursors.firstOrNull { it.domain == record.d }?.appliedSeq ?: 0L)
+            }
             .sortedBy { DriveWireCodec.domainRank(it.d) }
         for (record in ordered) {
             applySingleRecord(
@@ -1013,15 +998,21 @@ internal class DriveChangeEngine(
     }
 
     private suspend fun currentDeviceSeq(permissionId: String, remoteDeviceId: String): Long {
-        val deviceCursors = cursors.forDevice(permissionId, remoteDeviceId)
-            .filter { it.domain != DriveWireCodec.STREAM_PAUSE_DOMAIN && it.pausedSchemaVersion == null }
-        return deviceCursors.maxOfOrNull { it.appliedSeq } ?: 0L
+        return minAppliedSeq(permissionId, remoteDeviceId)
     }
 
     private suspend fun minAppliedSeq(permissionId: String, remoteDeviceId: String): Long {
-        val deviceCursors = cursors.forDevice(permissionId, remoteDeviceId)
-            .filter { it.domain != DriveWireCodec.STREAM_PAUSE_DOMAIN && it.pausedSchemaVersion == null }
-        if (deviceCursors.isEmpty()) return 0L
-        return deviceCursors.minOf { it.appliedSeq }
+        val deviceCursors = cursors.forDevice(permissionId, remoteDeviceId).associateBy { it.domain }
+        return DriveWireCodec.SUPPORTED_DOMAIN_VERSIONS.keys
+            .filter { deviceCursors[it]?.pausedSchemaVersion == null }
+            .minOfOrNull { deviceCursors[it]?.appliedSeq ?: 0L } ?: 0L
+    }
+
+    private suspend fun clearSupportedDomainPauses(permissionId: String, remoteDeviceId: String) {
+        for (cursor in cursors.forDevice(permissionId, remoteDeviceId)) {
+            val paused = cursor.pausedSchemaVersion ?: continue
+            val supported = DriveWireCodec.SUPPORTED_DOMAIN_VERSIONS[cursor.domain] ?: continue
+            if (paused <= supported) cursors.upsert(cursor.copy(pausedSchemaVersion = null))
+        }
     }
 }
