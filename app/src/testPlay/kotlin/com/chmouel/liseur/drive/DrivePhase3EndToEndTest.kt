@@ -680,6 +680,7 @@ class DrivePhase3EndToEndTest {
             fileTitle = "The Hobbit",
             fileAuthor = "J.R.R. Tolkien",
             fileMetadataChecked = true,
+            fileModifiedAt = addedAt / 1_000L,
             workId = "urn:isbn:$isbn",
         )
         val older = edition("hobbit-older.epub", 1_000L)
