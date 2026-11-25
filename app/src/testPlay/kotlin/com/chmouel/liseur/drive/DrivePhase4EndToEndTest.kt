@@ -1398,7 +1398,7 @@ class DrivePhase4EndToEndTest {
             ),
             remoteDeviceId = "dev-b",
             remoteSeq = 1L,
-        )
+        ) { deviceA.changeEngine.nextHlc(PERM_ID) }
 
         assertEquals(DriveUpload.STATE_CANCELLED, deviceA.driveDb.uploads().get(PERM_ID, sha)!!.state)
         deviceA.epubTransfers.uploadPending()
