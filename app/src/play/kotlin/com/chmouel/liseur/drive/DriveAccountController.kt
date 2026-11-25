@@ -462,6 +462,7 @@ internal class DriveAccountController(
                 pendingAccessToken = null
                 ephemeral.value = EphemeralState()
                 driveSync.notifyActivated()
+                presentInitialUploadSelection()
             } catch (e: CancellationException) {
                 ephemeral.value = ephemeral.value.copy(busy = false)
                 throw e
@@ -555,6 +556,15 @@ internal class DriveAccountController(
         ephemeral.value = ephemeral.value.copy(uploadPickerVisible = false)
     }
 
+    /**
+     * Asks for the selection ADR-0078 requires before the first EPUB goes up on a newly
+     * activated account; the offer stays off until it is answered.
+     */
+    private suspend fun presentInitialUploadSelection() {
+        val active = if (driveSync.hasStore()) driveSync.store.accounts().active() else null
+        if (active != null && active.uploadSelectionAt == null) openUploadPicker()
+    }
+
     /** Updates whether bulk EPUB transfers may use metered mobile networks (default: unmetered only). */
     suspend fun setMeteredTransfers(allowMetered: Boolean) {
         if (!driveSync.hasStore()) return
@@ -568,15 +578,35 @@ internal class DriveAccountController(
     /** Reconciles the upload queue with the picker selection and schedules the bulk upload worker. */
     suspend fun confirmUploadSelection(selectedBookUrls: Set<String>) {
         if (!driveSync.hasStore()) return
-        val active = driveSync.store.accounts().active() ?: return
-        val queued = driveSync.epubTransfers.queueSelectedBooks(active.permissionId, selectedBookUrls)
-        ephemeral.value = ephemeral.value.copy(uploadPickerVisible = false)
-        if (queued > 0 || driveSync.store.uploads().workCount(active.permissionId) > 0) {
-            // Also covers cleanup of uploads just cancelled: the replaced worker resolves their sessions.
-            driveSync.triggerEpubUploads(active.meteredTransfers)
-        } else {
-            driveSync.cancelEpubUploads()
+        val (generation, active) = transitionMutex.withLock {
+            accountGeneration to driveSync.store.accounts().active()
         }
+        if (active == null) return
+        // The cutoff and the rows the answer drops are one write, so an ALWAYS emission holding
+        // the old cutoff cannot pair with rows the picker is about to deselect, and a worker
+        // starting in between cannot upload a book this answer left out.
+        val queued = driveSync.epubTransfers.queueSelectedBooks(active.permissionId, selectedBookUrls, clock())
+        // Fingerprinting can outlast an account switch. The answer's rows belong to its own
+        // account and stay written, but the picker and the shared worker now belong to the next one.
+        transitionMutex.withLock {
+            if (generation != accountGeneration) return
+            ephemeral.value = ephemeral.value.copy(uploadPickerVisible = false)
+            if (queued > 0 || driveSync.store.uploads().workCount(active.permissionId) > 0) {
+                // Also covers cleanup of uploads just cancelled: the replaced worker resolves their sessions.
+                driveSync.triggerEpubUploads(active.meteredTransfers)
+            } else {
+                driveSync.cancelEpubUploads()
+            }
+        }
+    }
+
+    /**
+     * Takes the picker's answer off the settings screen's hands. The write, the
+     * fingerprinting and the worker it schedules run on [driveSync.scope], because
+     * leaving Settings mid-way must not drop a selection the reader already made.
+     */
+    fun submitUploadSelection(selectedBookUrls: Set<String>) {
+        driveSync.scope.launch { confirmUploadSelection(selectedBookUrls) }
     }
 
     /** Opens the Play-only Conflict Resolution dialog. */
@@ -1025,6 +1055,7 @@ internal class DriveAccountController(
             pendingAccessToken = null
             ephemeral.value = EphemeralState()
             driveSync.notifyActivated()
+            presentInitialUploadSelection()
         } catch (e: CancellationException) {
             throw e
         } catch (e: MainServerConnectedException) {

@@ -35,6 +35,13 @@ object LibrarySyncBackendFactory {
             scheduleEpubUploadsWork = { allowMetered ->
                 DriveSyncWorkers.enqueueEpubUploads(appContext, allowMetered = allowMetered)
             },
+            appendEpubUploadsWork = { allowMetered ->
+                DriveSyncWorkers.enqueueEpubUploads(
+                    appContext,
+                    allowMetered = allowMetered,
+                    policy = androidx.work.ExistingWorkPolicy.APPEND_OR_REPLACE,
+                )
+            },
             cancelEpubUploadsWork = {
                 DriveSyncWorkers.cancelEpubUploads(appContext)
             },

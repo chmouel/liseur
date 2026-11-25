@@ -291,6 +291,20 @@ fun ServerAccountScreen(
                         )
                     }
                     librarySync.SettingsSection()
+                    // Drive is the active upload destination, so the same
+                    // device-wide policy decides what a new book does.
+                    if (driveActive) {
+                        ServerSection(
+                            title = stringResource(R.string.upload_policy),
+                        ) {
+                            Text(
+                                text = stringResource(R.string.upload_policy_summary),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            UploadPolicyChoice(selected = state.uploadPolicy, onSelected = onSetUploadPolicy)
+                        }
+                    }
                 } else if (server == null || state.editingAddress) {
                     if (server == null && state.lostToRestore) {
                         Notice(

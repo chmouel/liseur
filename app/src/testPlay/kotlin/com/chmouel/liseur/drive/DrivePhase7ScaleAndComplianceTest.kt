@@ -353,8 +353,11 @@ class DrivePhase7ScaleAndComplianceTest {
         assertEquals("Keep this note even if Drive file is trashed", devC.liseurDb.annotationDao().byId("ann-hobbit-1")?.note)
         assertEquals(1, devC.liseurDb.readingSessionDao().closedForBackup().count { it.bookUrl == stub1Url })
 
-        // Device A invalidates its UPLOADED queue entry without auto-reuploading so the user can explicitly re-select.
-        assertNull(devA.driveDb.uploads().get(PERM_A, fp1.sha256.lowercase(Locale.ROOT)))
+        // Device A suppresses its UPLOADED queue entry without auto-reuploading so the user can explicitly re-select.
+        assertEquals(
+            DriveUpload.STATE_SUPPRESSED,
+            devA.driveDb.uploads().get(PERM_A, fp1.sha256.lowercase(Locale.ROOT))?.state,
+        )
 
         // 3. User permanently deletes Book 2's EPUB directly in Google Drive (`removed = true`).
         server.permanentlyDeleteFileOnDrive(fileId2)
@@ -747,7 +750,15 @@ class DrivePhase7ScaleAndComplianceTest {
         )
         assertEquals("Account B Drive must remain untouched after returning to A", accountBWritesBeforeReturn, serverB.writeCallCount.get())
 
-        // Account A's preserved pending EPUB upload queue drains cleanly into Account A's Liseur/ folder!
+        // Account A's preserved queue is held until its fresh picker answer, then drains
+        // into Account A's Liseur/ folder.
+        assertNull(devMain.driveDb.accounts().get(PERM_A)?.uploadSelectionAt)
+        assertEquals(0, devMain.epubTransfers.uploadPending().uploadedCount)
+        assertEquals(1, devMain.driveDb.uploads().pendingForAccount(PERM_A).size)
+        assertEquals(0, serverA.liseurFolderCount())
+
+        controller.confirmUploadSelection(setOf(book1.url))
+
         val resumeUploadSummary = devMain.epubTransfers.uploadPending()
         assertEquals(1, resumeUploadSummary.uploadedCount)
         assertTrue(devMain.driveDb.uploads().pendingForAccount(PERM_A).isEmpty())

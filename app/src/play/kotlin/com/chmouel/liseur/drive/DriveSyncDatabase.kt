@@ -30,7 +30,7 @@ import androidx.sqlite.execSQL
         DriveSessionAck::class,
         DriveUpload::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = true,
 )
 abstract class DriveSyncDatabase : RoomDatabase() {
@@ -75,7 +75,25 @@ abstract class DriveSyncDatabase : RoomDatabase() {
             }
         }
 
-        val MIGRATIONS: Array<Migration> get() = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+        /**
+         * Adds the picker-confirmation time the upload offer leaves older books to, and
+         * marks every queue row already there as picked by hand: none came from the offer.
+         *
+         * The upgrade itself is the cutoff: no account knew of this answer before,
+         * so every book already on the device stays out of the automatic offer.
+         */
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL("ALTER TABLE drive_account ADD COLUMN upload_selection_at INTEGER")
+                connection.execSQL(
+                    "UPDATE drive_account " +
+                        "SET upload_selection_at = CAST(strftime('%s', 'now') AS INTEGER) * 1000",
+                )
+                connection.execSQL("ALTER TABLE drive_upload ADD COLUMN auto_selected INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
+        val MIGRATIONS: Array<Migration> get() = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
 
         fun open(context: Context): DriveSyncDatabase =
             Room.databaseBuilder(context.applicationContext, DriveSyncDatabase::class.java, NAME)

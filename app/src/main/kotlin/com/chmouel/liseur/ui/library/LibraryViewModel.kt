@@ -84,12 +84,16 @@ import com.chmouel.liseur.domain.worthShowing
 import com.chmouel.liseur.readaloud.PausedListening
 import com.chmouel.liseur.readaloud.PausedReadAloud
 import com.chmouel.liseur.readaloud.ReadAloudFeature
+import com.chmouel.liseur.sync.LibrarySyncBackend
+import com.chmouel.liseur.sync.LibraryUploadTarget
 import com.chmouel.liseur.sync.PositionSyncCoordinator
 import com.chmouel.liseur.sync.SyncScope
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -286,13 +290,15 @@ data class LibraryUiState(
      */
     val serverDeletesWholeBook: Boolean = false,
     /**
-     * Whether a book the reader added here can be sent up to the server.
-     * True only where the account holds the permission and the server is
-     * one that takes uploads at all.
+     * Whether a book the reader added here can be sent up to the active
+     * upload destination: the connected server, or the active library-sync
+     * backend when it takes EPUB uploads (ADR-0078).
      */
     val canUploadToServer: Boolean = false,
-    /** Books on their way up to the server right now, by URL. */
+    /** Books on their way up right now, by URL. */
     val uploading: Set<String> = emptySet(),
+    /** Books the active library-sync backend already has or is getting, by URL. */
+    val uploadHeld: Set<String> = emptySet(),
     /**
      * What this server would not take, by book URL.
      *
@@ -625,6 +631,14 @@ class LibraryViewModel(
      * kosync pairing in play (ADR-0078).
      */
     externalLibrarySyncActive: Flow<Boolean> = flowOf(false),
+    /** Flavor-provided backend that can take EPUB uploads while it is the active source (ADR-0078). */
+    private val librarySync: LibrarySyncBackend = LibrarySyncBackend.None,
+    /**
+     * The app scope, for uploads the reader has already accepted: closing
+     * the library while a book is still being fingerprinted must not cancel
+     * the write that holds their answer.
+     */
+    private val appScope: CoroutineScope,
     /** Books whose translations the account could be asked to clear (ADR-0050). */
     accountTranslationBookUrls: Flow<Set<String>> = flowOf(emptySet()),
     /** Records the account's clear of a book's translations; whether there was one to record. */
@@ -952,6 +966,7 @@ class LibraryViewModel(
                 ratedBooks,
                 listeningShelf,
                 externalLibrarySyncActive,
+                librarySync.uploadTarget,
             ) { values -> values },
             _searchQuery,
             _isSearchActive,
@@ -981,6 +996,7 @@ class LibraryViewModel(
             @Suppress("UNCHECKED_CAST")
             val rated = (baseValues[15] as List<String>).toSet()
             val listening = baseValues[16] as ListeningShelf
+            val uploadTarget = baseValues[18] as LibraryUploadTarget?
 
             @Suppress("UNCHECKED_CAST")
             val readAtList = baseValues[7] as List<BookReadAt>
@@ -1016,6 +1032,19 @@ class LibraryViewModel(
             val refusedRows = baseValues[10] as Map<String, RefusedBytes>
             val partialDismissedFor = baseValues[11] as String?
             val refused = refusedRows.filterValues { it.stillApplies }.keys
+
+            val destination = uploadDestination(server, router, uploadTarget)
+            // A server destination relies on its own refusals; Drive has none,
+            // and instead leaves out what it already has or was told to keep.
+            val refusedForUpload =
+                when (destination) {
+                    is UploadDestination.LibrarySync ->
+                        uploadTarget?.notOffered(books) { librarySync.ownsBook(it) } ?: emptySet()
+                    else -> refused
+                }
+            val uploadHeld =
+                uploadTarget?.alreadyTaken(books) { librarySync.ownsBook(it) } ?: emptySet()
+            val uploadingUrls = uploading + (uploadTarget?.queued ?: emptySet())
 
             val onTheShelf = books.filter { !it.archived }
             val allShelves = onTheShelf.groupedIntoSeries(progressions, overrides)
@@ -1158,8 +1187,9 @@ class LibraryViewModel(
                     canDeleteFrom(server, router) &&
                         server?.kind == ServerKind.LISEUR_SYNC,
                 serverDeletesWholeBook = server?.kind == ServerKind.BOOKORBIT,
-                canUploadToServer = canUploadTo(server, router),
-                uploading = uploading,
+                canUploadToServer = destination != null,
+                uploading = uploadingUrls,
+                uploadHeld = uploadHeld,
                 // Kept whether or not it still suppresses the offer: the
                 // per-book sheet is the surface that outlives a
                 // snackbar, and a reader coming back to a book to ask
@@ -1177,8 +1207,8 @@ class LibraryViewModel(
                         emptyList()
                     } else {
                         books
-                            .awaitingUpload(canUploadTo(server, router), refused)
-                            .filterNot { it.url in uploading || it.url in answered }
+                            .awaitingUpload(destination != null, refusedForUpload)
+                            .filterNot { it.url in uploadingUrls || it.url in answered }
                     },
                 canResetSharedSeries = server?.kind == ServerKind.LISEUR_SYNC && server.canAdmin,
                 canRenameSeries =
@@ -1453,25 +1483,53 @@ class LibraryViewModel(
                 appSettings.settings,
                 account.server,
                 refusedByServer,
-            ) { books, settings, server, refused ->
-                server to
+                librarySync.uploadTarget,
+            ) { books, settings, server, refused, target ->
+                val destination = uploadDestination(server, router, target)
+                val refusedForUpload =
+                    when (destination) {
+                        is UploadDestination.LibrarySync ->
+                            target?.notOffered(books) { librarySync.ownsBook(it) } ?: emptySet()
+                        else -> refused.filterValues { it.stillApplies }.keys
+                    }
+                destination to
                     booksToSendUp(
                         books,
                         settings.uploadPolicy,
-                        canUploadTo(server, router),
-                        refused.filterValues { it.stillApplies }.keys,
+                        destination != null,
+                        refusedForUpload,
                     )
-            }.collect { (server, pending) ->
-                pending.forEach {
-                    uploads.enqueue(it, accountKey = server?.accountKey)
-                    prompts.answer(it.url)
-                    // Sending without asking used to be sending without
-                    // saying, which is how a book could fail to arrive
-                    // with nothing on screen ever having suggested it
-                    // was on its way. Best-effort, and deliberately so:
-                    // whether anyone is looking at the shelf to be told
-                    // must not decide whether the book goes up.
-                    _sentUp.tryEmit(it)
+            }.collect { (destination, pending) ->
+                when (destination) {
+                    null -> Unit
+                    is UploadDestination.Server ->
+                        pending.forEach {
+                            uploads.enqueue(it, accountKey = destination.accountKey)
+                            prompts.answer(it.url)
+                            // Sending without asking used to be sending without
+                            // saying, which is how a book could fail to arrive
+                            // with nothing on screen ever having suggested it
+                            // was on its way. Best-effort, and deliberately so:
+                            // whether anyone is looking at the shelf to be told
+                            // must not decide whether the book goes up.
+                            _sentUp.tryEmit(it)
+                        }
+                    is UploadDestination.LibrarySync -> {
+                        // Drop what this process already answered: an emission
+                        // computed before the row was written would otherwise
+                        // say "sending" twice.
+                        val toSend = pending.filterNot { prompts.wasAnswered(it.url) }
+                        if (toSend.isEmpty()) return@collect
+                        // The cutoff this emission was decided under: a picker answer
+                        // landing meanwhile decides these books by hand instead.
+                        val queued = enqueueUploads(destination.target, toSend, destination.target.offerSince)
+                        // Only the books that really gained a row were sent: a refused
+                        // one keeps its offer, and nothing claims to be on its way.
+                        toSend.filter { it.url in queued }.forEach {
+                            prompts.answer(it.url)
+                            _sentUp.tryEmit(it)
+                        }
+                    }
                 }
             }
         }
@@ -2135,15 +2193,37 @@ class LibraryViewModel(
 
     private fun send(books: List<Book>) {
         if (books.isEmpty()) return
-        viewModelScope.launch {
-            val server = account.current()
-            books.forEach { book ->
-                server?.let { refusals.clear(book.url, it.accountKey) }
-                uploads.enqueue(book, accountKey = server?.accountKey, manual = true)
-                prompts.answer(book.url)
+        appScope.launch {
+            val destination = uploadDestination(account.current(), router, librarySync.uploadTarget.first())
+            when (destination) {
+                null -> Unit
+                is UploadDestination.Server ->
+                    books.forEach { book ->
+                        refusals.clear(book.url, destination.accountKey)
+                        uploads.enqueue(book, accountKey = destination.accountKey, manual = true)
+                        prompts.answer(book.url)
+                    }
+                is UploadDestination.LibrarySync -> {
+                    val queued = enqueueUploads(destination.target, books)
+                    books.filter { it.url in queued }.forEach { prompts.answer(it.url) }
+                }
             }
         }
     }
+
+    /**
+     * Queues [books] for [target], answering the book URLs that really gained a row.
+     *
+     * On the app scope: fingerprinting comes first, so a reader who leaves the library
+     * mid-write must not cancel it and leave queued rows with no worker behind them.
+     */
+    private suspend fun enqueueUploads(
+        target: LibraryUploadTarget,
+        books: List<Book>,
+        expectedOfferSince: Long? = null,
+    ): Set<String> = appScope.async {
+        librarySync.enqueueUploads(target.accountKey, books, expectedOfferSince)
+    }.await()
 
     /**
      * Accepts the offer and stops it being made again.
@@ -2202,6 +2282,8 @@ class LibraryViewModel(
                         refusals = container.database.uploadRefusalDao(),
                         kosyncPeer = container.kosyncAccount.peer,
                         externalLibrarySyncActive = container.librarySync.active,
+                        librarySync = container.librarySync,
+                        appScope = container.applicationScope,
                         accountTranslationBookUrls = container.accountTranslationClears.observeBooks(),
                         requestAccountTranslationClear = container::requestAccountTranslationClear,
                         readingSessions = container.database.readingSessionDao().observeAll(),

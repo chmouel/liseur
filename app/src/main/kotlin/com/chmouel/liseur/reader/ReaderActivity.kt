@@ -63,7 +63,9 @@ import org.readium.r2.shared.publication.ReadingProgression as PublicationReadin
 import com.chmouel.liseur.ui.UploadBookOfferDialog
 import com.chmouel.liseur.ui.launch.LaunchRequests
 import com.chmouel.liseur.ui.library.UploadDecision
-import com.chmouel.liseur.ui.library.canUploadTo
+import com.chmouel.liseur.ui.library.UploadDestination
+import com.chmouel.liseur.ui.library.notOffered
+import com.chmouel.liseur.ui.library.uploadDestination
 import com.chmouel.liseur.ui.library.uploadOnOpen
 import com.chmouel.liseur.ui.theme.LiseurTheme
 import com.chmouel.liseur.ui.theme.SystemBarIcons
@@ -77,10 +79,12 @@ import com.chmouel.liseur.ui.WidthClass
 import com.chmouel.liseur.ui.widthClass
 import com.chmouel.liseur.ui.ProvideEInk
 import com.chmouel.liseur.ui.isEInkDevice
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
 import org.readium.r2.shared.util.AbsoluteUrl
 import org.readium.r2.shared.util.toAbsoluteUrl
@@ -148,8 +152,8 @@ class ReaderActivity : FragmentActivity() {
     /** A just-shelved book waiting for the reader to answer for it. */
     private var pendingOffer by mutableStateOf<Book?>(null)
 
-    /** The account [pendingOffer] was asked about, so a later yes goes there or nowhere. */
-    private var offerAccount: String? = null
+    /** Where [pendingOffer] was asked about, so a later yes goes there or nowhere. */
+    private var offerDestination: UploadDestination? = null
 
     /** The title of a book on its way up, while the note about it shows. */
     private var sendingNote by mutableStateOf<String?>(null)
@@ -354,7 +358,7 @@ class ReaderActivity : FragmentActivity() {
                         pendingOffer?.let { book ->
                             UploadBookOfferDialog(
                                 title = book.title,
-                                onSend = { sendUp(book, offerAccount); pendingOffer = null },
+                                onSend = { sendUp(book, offerDestination); pendingOffer = null },
                                 onAlways = { sendUpAlways(book); pendingOffer = null },
                                 onDismiss = { declineUpload(book); pendingOffer = null },
                             )
@@ -855,21 +859,36 @@ class ReaderActivity : FragmentActivity() {
     private suspend fun decideUpload(book: Book) {
         val policy = container.appSettings.settings.first().uploadPolicy
         val server = container.remoteAccount.current()
-        val canUpload = canUploadTo(server, container.remoteRouter)
+        val libraryTarget =
+            if (server == null) container.librarySync.uploadTarget.first() else null
+        val destination = uploadDestination(server, container.remoteRouter, libraryTarget)
+        // Offer nothing a destination would refuse: for Drive that is a book it
+        // already has, is already getting, owns, or was added before the last
+        // time the reader answered.
+        val refused =
+            when (destination) {
+                is UploadDestination.LibrarySync ->
+                    destination.target.notOffered(listOf(book), container.librarySync::ownsBook)
+                else -> emptySet()
+            }
         when (
             uploadOnOpen(
                 book = book,
                 policy = policy,
-                canUpload = canUpload,
+                canUpload = destination != null,
                 alreadyAnswered = container.uploadPrompts.wasAnswered(book.url),
+                refused = refused,
             )
         ) {
-            UploadDecision.SEND -> sendUp(book, server?.accountKey)
+            UploadDecision.SEND ->
+                // Automatic consent carries the cutoff it was decided under, so a
+                // picker answer landing meanwhile still decides these bytes.
+                sendUp(book, destination, (destination as? UploadDestination.LibrarySync)?.target?.offerSince)
             // Held rather than shown: the reader tapped a book to read
             // it, so the book gets the screen first. The composition
             // raises this once the publication is actually up.
             UploadDecision.ASK -> {
-                offerAccount = server?.accountKey
+                offerDestination = destination
                 pendingOffer = book
             }
             UploadDecision.NOTHING -> Unit
@@ -940,11 +959,41 @@ class ReaderActivity : FragmentActivity() {
         },
     )
 
-    private fun sendUp(book: Book, accountKey: String?) {
-        // The worker drops the job if another account is connected by
-        // the time it runs.
-        container.bookUploads.enqueue(book, accountKey = accountKey)
-        container.uploadPrompts.answer(book.url)
+    /**
+     * Sends [book] up, either because the policy asks for it by itself
+     * ([expectedOfferSince] is then the cutoff that decision was made
+     * under) or because the reader asked for this book by hand (null).
+     */
+    private fun sendUp(book: Book, destination: UploadDestination?, expectedOfferSince: Long? = null) {
+        when (destination) {
+            // The worker drops the job if another account is connected by
+            // the time it runs.
+            is UploadDestination.Server -> {
+                container.bookUploads.enqueue(book, accountKey = destination.accountKey)
+                container.uploadPrompts.answer(book.url)
+                noteSentUp(book)
+            }
+            is UploadDestination.LibrarySync ->
+                // On the app scope: leaving the book while it is being
+                // fingerprinted must not cancel the write that holds the
+                // answer the reader just gave.
+                container.launchAppWide {
+                    val queued = container.librarySync.enqueueUploads(
+                        destination.target.accountKey,
+                        listOf(book),
+                        expectedOfferSince,
+                    )
+                    if (book.url !in queued) return@launchAppWide
+                    container.uploadPrompts.answer(book.url)
+                    withContext(Dispatchers.Main) {
+                        if (!isFinishing && !isDestroyed) noteSentUp(book)
+                    }
+                }
+            null -> Unit
+        }
+    }
+
+    private fun noteSentUp(book: Book) {
         // "Sending", not "sent": this is queued work that may wait for a
         // network and may retry, and the note should not claim an
         // arrival it has no way of knowing about.
@@ -955,7 +1004,7 @@ class ReaderActivity : FragmentActivity() {
         lifecycleScope.launch {
             container.appSettings.setUploadPolicy(UploadPolicy.ALWAYS)
         }
-        sendUp(book, offerAccount)
+        sendUp(book, offerDestination)
     }
 
     private fun declineUpload(book: Book) {

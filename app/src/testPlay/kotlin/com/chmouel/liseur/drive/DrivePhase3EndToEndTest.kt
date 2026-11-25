@@ -52,6 +52,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -617,6 +618,114 @@ class DrivePhase3EndToEndTest {
         assertEquals(2, calls)
         assertTrue(driveServer.liseurFolders.isEmpty())
         assertTrue(deviceA.driveDb.uploads().get(PERM_ID, fp.sha256)!!.state != DriveUpload.STATE_UPLOADED)
+    }
+
+    /**
+     * A switch away and back drops the picker answer but keeps the queue: what is
+     * still waiting there goes up only once the new answer has reconciled it, even
+     * in a worker that starts after the process restarted.
+     */
+    @Test
+    fun `a queue kept across an account switch waits for the new picker answer`() = runTest {
+        deviceA.connect()
+        val epubBytes = "EPUB-SWITCH-BACK-QUEUE".toByteArray()
+        val bookFile = File(tempDir, "switch-back.epub").apply { writeBytes(epubBytes) }
+        val fp = BookFingerprints.of(ByteArrayInputStream(epubBytes))
+        val book = Book(
+            url = bookFile.toURI().toString(), title = "Switch Back", author = "Author",
+            coverPath = null, source = null, addedAt = 1_000L, lastOpenedAt = null,
+            localUri = bookFile.toURI().toString(), downloadState = DownloadState.DOWNLOADED,
+            sizeBytes = fp.size, fileTitle = "Switch Back", fileAuthor = "Author", fileMetadataChecked = true,
+        )
+        deviceA.liseurDb.bookDao().upsert(book)
+        deviceA.liseurDb.workIdentityDao().upsert(BookFingerprintRow(book.url, fp.sha256, fp.partialMd5, fp.size, bookFile.lastModified(), 1L))
+        assertEquals(setOf(book.url), deviceA.epubTransfers.queueBooks(PERM_ID, listOf(book.url)))
+
+        // The queue was written under A's previous answer, before this activation.
+        val kept = requireNotNull(deviceA.driveDb.uploads().get(PERM_ID, fp.sha256))
+        deviceA.driveDb.uploads().upsert(kept.copy(selectedAt = 1L, updatedAt = 1L))
+
+        val switchedAt = 2_000L
+        deviceA.driveSync.activateAccount("perm-b", "b@example.com", now = switchedAt)
+        deviceA.driveSync.activateAccount(PERM_ID, "reader@example.com", now = switchedAt + 1_000L)
+        assertNull(deviceA.driveDb.accounts().get(PERM_ID)?.uploadSelectionAt)
+
+        assertEquals(0, deviceA.epubTransfers.uploadPending().uploadedCount)
+        assertTrue(driveServer.liseurFolders.isEmpty())
+        assertEquals(DriveUpload.STATE_PENDING, deviceA.driveDb.uploads().get(PERM_ID, fp.sha256)!!.state)
+
+        // A book the reader asks for by hand is consent under this activation too.
+        val askedBytes = "EPUB-ASKED-BY-HAND".toByteArray()
+        val askedFile = File(tempDir, "asked.epub").apply { writeBytes(askedBytes) }
+        val askedFp = BookFingerprints.of(ByteArrayInputStream(askedBytes))
+        val asked = book.copy(
+            url = askedFile.toURI().toString(),
+            title = "Asked",
+            localUri = askedFile.toURI().toString(),
+            sizeBytes = askedFp.size,
+        )
+        deviceA.liseurDb.bookDao().upsert(asked)
+        deviceA.liseurDb.workIdentityDao().upsert(
+            BookFingerprintRow(asked.url, askedFp.sha256, askedFp.partialMd5, askedFp.size, askedFile.lastModified(), 1L),
+        )
+        assertEquals(setOf(asked.url), deviceA.epubTransfers.queueBooks(PERM_ID, listOf(asked.url)))
+        assertEquals(1, deviceA.epubTransfers.uploadPending().uploadedCount)
+        assertEquals(DriveUpload.STATE_UPLOADED, deviceA.driveDb.uploads().get(PERM_ID, askedFp.sha256)!!.state)
+        assertEquals(DriveUpload.STATE_PENDING, deviceA.driveDb.uploads().get(PERM_ID, fp.sha256)!!.state)
+
+        // The picker answer reconciles the kept queue with the new selection.
+        assertEquals(1, deviceA.epubTransfers.queueSelectedBooks(PERM_ID, setOf(book.url), switchedAt + 2_000L))
+        assertEquals(1, deviceA.epubTransfers.uploadPending().uploadedCount)
+        assertEquals(DriveUpload.STATE_UPLOADED, deviceA.driveDb.uploads().get(PERM_ID, fp.sha256)!!.state)
+    }
+
+    /**
+     * An edition asked for by hand is consent under the activation it was asked in, even
+     * while cleanup still owes the account the cancelled upload of its bytes.
+     */
+    @Test
+    fun `an edition asked for by hand after a switch uploads with its cleanup still pending`() = runTest {
+        deviceA.connect()
+        val epubBytes = "EPUB-ASKED-AFTER-SWITCH".toByteArray()
+        val bookFile = File(tempDir, "asked-after-switch.epub").apply { writeBytes(epubBytes) }
+        val fp = BookFingerprints.of(ByteArrayInputStream(epubBytes))
+        val book = Book(
+            url = bookFile.toURI().toString(), title = "Asked After Switch", author = "Author",
+            coverPath = null, source = null, addedAt = 1_000L, lastOpenedAt = null,
+            localUri = bookFile.toURI().toString(), downloadState = DownloadState.DOWNLOADED,
+            sizeBytes = fp.size, fileTitle = "Asked After Switch", fileAuthor = "Author", fileMetadataChecked = true,
+        )
+        deviceA.liseurDb.bookDao().upsert(book)
+        deviceA.liseurDb.workIdentityDao().upsert(
+            BookFingerprintRow(book.url, fp.sha256, fp.partialMd5, fp.size, bookFile.lastModified(), 1L),
+        )
+        // Cleanup still owes the account the cancelled upload of these bytes.
+        deviceA.driveDb.uploads().upsert(
+            DriveUpload(
+                permissionId = PERM_ID,
+                sha256 = fp.sha256,
+                bookUrl = book.url,
+                sizeBytes = fp.size,
+                state = DriveUpload.STATE_CANCELLED,
+                selectedAt = 1L,
+                updatedAt = 1L,
+            ),
+        )
+
+        val switchedAt = 2_000L
+        deviceA.driveSync.activateAccount("perm-b", "b@example.com", now = switchedAt)
+        deviceA.driveSync.activateAccount(PERM_ID, "reader@example.com", now = switchedAt + 1_000L)
+        assertNull(deviceA.driveDb.accounts().get(PERM_ID)?.uploadSelectionAt)
+
+        // Asking for it by hand selects it under this activation; cleanup keeps its obligation.
+        assertEquals(setOf(book.url), deviceA.epubTransfers.queueBooks(PERM_ID, listOf(book.url)))
+        val requeued = deviceA.driveDb.uploads().get(PERM_ID, fp.sha256)!!
+        assertEquals(DriveUpload.STATE_REQUEUE, requeued.state)
+        assertTrue(requeued.selectedAt >= switchedAt + 1_000L)
+
+        // Cleanup turns the obligation into a fresh upload, which the missing answer no longer holds.
+        assertEquals(1, deviceA.epubTransfers.uploadPending().uploadedCount)
+        assertEquals(DriveUpload.STATE_UPLOADED, deviceA.driveDb.uploads().get(PERM_ID, fp.sha256)!!.state)
     }
 
     @Test
@@ -1824,8 +1933,11 @@ class DrivePhase3EndToEndTest {
         assertTrue(requireNotNull(afterEdition.availabilityHlc) > requireNotNull(beforeEdition.availabilityHlc))
         assertEquals(DriveCanonicalJson.putFp(org.json.JSONObject(after.bodyJson), after.lastHlc), after.versionFp)
 
-        // Upload row MUST be invalidated (not UPLOADED and NOT auto-queued for re-upload).
-        assertNull(deviceA.driveDb.uploads().get(PERM_ID, fp.sha256))
+        // The queue row becomes a suppression: not UPLOADED, not queued, and the shelf's
+        // automatic offer leaves it alone until the reader asks again.
+        val suppressedRow = requireNotNull(deviceA.driveDb.uploads().get(PERM_ID, fp.sha256))
+        assertEquals(DriveUpload.STATE_SUPPRESSED, suppressedRow.state)
+        assertNull(suppressedRow.fileId)
         assertTrue(deviceA.driveDb.uploads().pendingForAccount(PERM_ID).isEmpty())
         val candidateAfterDelete = deviceA.epubTransfers.listUploadCandidates(PERM_ID).single()
         assertFalse(candidateAfterDelete.isUploaded)
@@ -1837,6 +1949,44 @@ class DrivePhase3EndToEndTest {
         assertEquals(1, reuploadSummary.uploadedCount)
         val secondFileId = deviceA.driveDb.uploads().get(PERM_ID, fp.sha256)!!.fileId!!
         assertTrue(secondFileId != firstFileId)
+        assertEquals(DriveUpload.STATE_UPLOADED, deviceA.driveDb.uploads().get(PERM_ID, fp.sha256)!!.state)
+    }
+
+    /** A restart must not resurrect what the reader deleted in Drive, whatever the policy. */
+    @Test
+    fun `a Drive-deleted EPUB stays suppressed across a restart`() = runTest {
+        deviceA.connect()
+
+        val epubBytes = "EPUB-STAY-DELETED".toByteArray()
+        val bookFile = File(tempDir, "stay-deleted.epub").apply { writeBytes(epubBytes) }
+        val fp = BookFingerprints.of(ByteArrayInputStream(epubBytes))
+        val book = Book(
+            url = bookFile.toURI().toString(), title = "Stay Deleted", author = "Author",
+            coverPath = null, source = null, addedAt = 1_000L, lastOpenedAt = null,
+            localUri = bookFile.toURI().toString(), downloadState = DownloadState.DOWNLOADED,
+            sizeBytes = fp.size, fileTitle = "Stay Deleted", fileAuthor = "Author", fileMetadataChecked = true,
+        )
+        deviceA.liseurDb.bookDao().upsert(book)
+        deviceA.liseurDb.workIdentityDao().upsert(
+            BookFingerprintRow(book.url, fp.sha256, fp.partialMd5, fp.size, bookFile.lastModified(), 1L),
+        )
+        assertEquals(1, deviceA.epubTransfers.queueSelectedBooks(PERM_ID, setOf(book.url)))
+        assertEquals(1, deviceA.epubTransfers.uploadPending().uploadedCount)
+        val fileId = deviceA.driveDb.uploads().get(PERM_ID, fp.sha256)!!.fileId!!
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+
+        driveServer.deleteFile("token-ok", fileId)
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+
+        // After a restart the target still withholds the book, so no policy offers it again.
+        val target = requireNotNull(deviceA.driveSync.uploadTarget.first { it != null })
+        assertTrue(book.url in target.withheld)
+        assertTrue(target.queued.isEmpty())
+
+        // Asking again by hand clears the suppression and uploads fresh bytes.
+        assertEquals(setOf(book.url), deviceA.epubTransfers.queueBooks(PERM_ID, listOf(book.url)))
+        assertEquals(1, deviceA.epubTransfers.uploadPending().uploadedCount)
+        assertNotEquals(fileId, deviceA.driveDb.uploads().get(PERM_ID, fp.sha256)!!.fileId)
     }
 
     @Test

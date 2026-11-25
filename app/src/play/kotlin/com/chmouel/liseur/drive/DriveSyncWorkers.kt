@@ -79,7 +79,8 @@ class DriveEpubUploadWorker(
         return when {
             summary.needsReconnect -> Result.failure()
             summary.retryableFailure -> Result.retry()
-            summary.failedCount > 0 && summary.uploadedCount == 0 -> Result.failure()
+            // Per-book failures stay in the queue: a drained run lets an appended request
+            // for the next book run instead of being skipped with this one.
             else -> Result.success()
         }
     }
@@ -231,10 +232,14 @@ internal object DriveSyncWorkers {
         )
     }
 
-    fun enqueueEpubUploads(context: Context, allowMetered: Boolean) {
+    fun enqueueEpubUploads(
+        context: Context,
+        allowMetered: Boolean,
+        policy: ExistingWorkPolicy = ExistingWorkPolicy.REPLACE,
+    ) {
         WorkManager.getInstance(context.applicationContext).enqueueUniqueWork(
             EPUB_UPLOAD_WORK_NAME,
-            ExistingWorkPolicy.REPLACE,
+            policy,
             buildEpubUploadRequest(allowMetered = allowMetered),
         )
     }

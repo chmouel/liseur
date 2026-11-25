@@ -9,6 +9,32 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 
 /**
+ * What a flavor-provided backend already knows about sending books up, in the
+ * terms the library's upload offer is decided in.
+ *
+ * Book URLs rather than books, because the shelf already holds the books and
+ * the rules about which of them may go up (archived, hidden, owned elsewhere)
+ * live on the main side. [queued], [held] and [withheld] answer the three
+ * questions the main side cannot: what this backend is already sending, what it
+ * already has, and what it must not send again on its own.
+ *
+ * [selectionSettled] is false until the reader has answered this account's
+ * initial selection, which the backend answers before anything goes up by
+ * itself (ADR-0078). [offerSince] is when they last settled it, either by
+ * connecting or by confirming the picker; books added before it are left to
+ * the backend's own selection.
+ */
+data class LibraryUploadTarget(
+    val accountKey: String,
+    val selectionSettled: Boolean = true,
+    val offerSince: Long = 0L,
+    val queued: Set<String> = emptySet(),
+    val held: Set<String> = emptySet(),
+    /** Books this backend deleted or failed on, which only a new request may send. */
+    val withheld: Set<String> = emptySet(),
+)
+
+/**
  * Flavor-registered automatic library-sync backend outside `ServerKind`.
  *
  * Mutually exclusive with the main `RemoteServer` (`id = 1`) automatic sync
@@ -33,6 +59,20 @@ interface LibrarySyncBackend {
 
     /** Whether [book] is a remote catalog entry owned by this external sync backend. */
     fun ownsBook(book: Book): Boolean = false
+
+    /** What this backend knows about EPUB uploads for the active account; null while unsupported or inactive. */
+    val uploadTarget: Flow<LibraryUploadTarget?> get() = flowOf(null)
+
+    /**
+     * Queues [books] under [accountKey]; answers the book URLs newly queued, so a
+     * caller acknowledges only the books that really went up for sending.
+     *
+     * [expectedOfferSince] carries the cutoff the caller decided under, so a
+     * backend can drop the write when the reader has answered its selection
+     * since; a per-book request made by the reader passes null to ignore it.
+     */
+    suspend fun enqueueUploads(accountKey: String, books: List<Book>, expectedOfferSince: Long? = null): Set<String> =
+        emptySet()
 
     /** Whether [book]'s file can be fetched again from this backend's active account. */
     suspend fun canDownloadAgain(book: Book): Boolean = false

@@ -867,8 +867,8 @@ internal class DriveCatalogSync(
     /**
      * Marks a Drive-side EPUB file unavailable when `changes.list` or a full
      * bootstrap rescan reports it removed or trashed in Google Drive, retaining
-     * the catalog entry and all local reading history while invalidating any
-     * matching `UPLOADED` queue entry so the reader may explicitly re-select it.
+     * the catalog entry and all local reading history while suppressing that
+     * edition for the account so only an explicit re-selection sends it up again.
      */
     suspend fun handleDriveEpubRemoved(permissionId: String, fileId: String, nextHlc: suspend () -> String) {
         val removedHref = downloadHrefFor(fileId)
@@ -876,16 +876,19 @@ internal class DriveCatalogSync(
         val stubUpdates = linkedMapOf<String, String?>()
 
         store.withTransaction {
+            val removedSha = driveFiles.get(permissionId, fileId)?.sha256?.lowercase(Locale.ROOT)
+            var removedEditionSha: String? = null
             driveFiles.setTrashed(permissionId, fileId, true)
-            // Invalidate matching UPLOADED queue entry without auto-reuploading so
-            // queueSelectedBooks() lets the reader explicitly re-select and re-upload it.
-            uploads.deleteUploadedByFileId(permissionId, fileId)
+            // Keep the row as a suppression instead of deleting it: a re-added or re-read book
+            // must not upload itself again on the next launch. Re-selecting it by hand clears it.
+            uploads.suppressUploadedByFileId(permissionId, fileId, clock())
             val states = recordStates.forDomain(permissionId, DriveWireCodec.DOMAIN_CATALOG)
             for (state in states) {
                 if (state.versionOp == DriveRecordState.OP_DEL) continue
                 val bodyJson = state.bodyJson ?: continue
                 val body = runCatching { DriveWireCodec.decodeCatalogBody(JSONObject(bodyJson)) }.getOrNull() ?: continue
-                if (body.editions.none { it.driveFileId == fileId }) continue
+                removedEditionSha = (body.editions.firstOrNull { it.driveFileId == fileId } ?: continue)
+                    .sha256.lowercase(Locale.ROOT)
                 val hlc = nextHlc()
                 val updatedEditions = body.editions.map { ed ->
                     if (ed.driveFileId == fileId) ed.copy(driveFileId = null, fileName = null, uploadedAt = null, availabilityHlc = hlc) else ed
@@ -917,6 +920,9 @@ internal class DriveCatalogSync(
             for (updatedState in statesToUpdate) {
                 recordStates.upsert(updatedState)
             }
+            // A book held only by another device's upload has no queue row here, so the deleted
+            // edition needs one of its own or the automatic offer would send its bytes up again.
+            (removedSha ?: removedEditionSha)?.let { uploads.suppressEdition(permissionId, it, clock()) }
         }
 
         database.withTransaction {
@@ -981,20 +987,8 @@ internal class DriveCatalogSync(
      * File IDs that live catalog editions publish per SHA-256. An indexed EPUB nobody
      * advertises may be an unfinished or cancelled upload, so it is never reused.
      */
-    suspend fun advertisedEpubFileIds(permissionId: String): Map<String, Set<String>> {
-        val out = linkedMapOf<String, MutableSet<String>>()
-        for (state in recordStates.forDomain(permissionId, DriveWireCodec.DOMAIN_CATALOG)) {
-            if (state.versionOp == DriveRecordState.OP_DEL) continue
-            val body = state.bodyJson?.let {
-                runCatching { DriveWireCodec.decodeCatalogBody(JSONObject(it)) }.getOrNull()
-            } ?: continue
-            for (ed in body.editions) {
-                val fid = ed.driveFileId?.takeIf { it.isNotBlank() } ?: continue
-                out.getOrPut(ed.sha256.lowercase(Locale.ROOT)) { linkedSetOf() }.add(fid)
-            }
-        }
-        return out
-    }
+    suspend fun advertisedEpubFileIds(permissionId: String): Map<String, Set<String>> =
+        catalogAdvertisedEpubFileIds(recordStates.forDomain(permissionId, DriveWireCodec.DOMAIN_CATALOG))
 
     /**
      * A row with no file that no server owns: a `drive:` stub or a stub preserved
@@ -1190,4 +1184,37 @@ private data class TombstonePayload(
             )
         }
     }
+}
+
+/**
+ * File IDs catalog editions publish per SHA-256 in [catalogStates].
+ *
+ * An indexed EPUB nobody advertises may be an unfinished or cancelled upload.
+ */
+internal fun catalogAdvertisedEpubFileIds(catalogStates: List<DriveRecordState>): Map<String, Set<String>> {
+    val out = linkedMapOf<String, MutableSet<String>>()
+    for (state in catalogStates) {
+        if (state.versionOp == DriveRecordState.OP_DEL) continue
+        val body = state.bodyJson?.let {
+            runCatching { DriveWireCodec.decodeCatalogBody(JSONObject(it)) }.getOrNull()
+        } ?: continue
+        for (ed in body.editions) {
+            val fid = ed.driveFileId?.takeIf { it.isNotBlank() } ?: continue
+            out.getOrPut(ed.sha256.lowercase(Locale.ROOT)) { linkedSetOf() }.add(fid)
+        }
+    }
+    return out
+}
+
+/**
+ * SHA-256 of the EPUBs other devices can download: live Drive [files] an advertised
+ * catalog edition points at. A live file nothing advertises is left out, because
+ * holding it would keep a book no other device can fetch out of the offer.
+ */
+internal fun heldEpubSha256s(files: List<DriveFile>, catalogStates: List<DriveRecordState>): Set<String> {
+    val advertised = catalogAdvertisedEpubFileIds(catalogStates).values.flatMapTo(mutableSetOf()) { it }
+    return files
+        .asSequence()
+        .filter { it.fileId in advertised }
+        .mapNotNullTo(mutableSetOf()) { it.sha256?.lowercase(Locale.ROOT) }
 }

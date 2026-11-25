@@ -3,6 +3,7 @@ package com.chmouel.liseur.drive
 import androidx.room.testing.MigrationTestHelper
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -97,10 +98,31 @@ class DriveSyncMigrationTest {
         }
     }
 
+    /** An upgraded account must not upload what the picker never listed for it. */
+    @Test
+    fun `accounts gain the upgrade as their upload selection time`() {
+        helper.createDatabase(UPLOAD_SELECTION_DB, 4).use { old ->
+            old.execSQL(
+                "INSERT INTO drive_account (permission_id, email, state, connected_at) " +
+                    "VALUES ('perm-a', 'alice@example.com', 'ACTIVE', 100)",
+            )
+        }
+        helper.runMigrationsAndValidate(UPLOAD_SELECTION_DB, 5, true, *DriveSyncDatabase.MIGRATIONS).use { db ->
+            db.query("SELECT email, state, upload_selection_at FROM drive_account").use {
+                assertTrue(it.moveToFirst())
+                assertEquals("alice@example.com", it.getString(0))
+                assertEquals(DriveAccount.STATE_ACTIVE, it.getString(1))
+                assertFalse(it.isNull(2))
+                assertTrue(it.getLong(2) > 1_000_000_000_000L)
+            }
+        }
+    }
+
     private companion object {
         const val ACCOUNTS_DB = "drive-sync-migration-accounts.db"
         const val OUTBOX_DB = "drive-sync-migration-outbox.db"
         const val CONFLICTS_DB = "drive-sync-migration-conflicts.db"
         const val V2_OUTBOX_DB = "drive-sync-migration-v2-outbox.db"
+        const val UPLOAD_SELECTION_DB = "drive-sync-migration-upload-selection.db"
     }
 }

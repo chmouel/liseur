@@ -1450,6 +1450,7 @@ private fun LibraryRoute(
                 serverDeleteNeedsReconnect = state.serverDeleteNeedsReconnect,
                 canUploadToServer = state.canUploadToServer,
                 uploading = book.url in state.uploading,
+                uploadHeld = book.url in state.uploadHeld,
                 refusal = state.refusedUploads[book.url],
                 onDismiss = { seriesSheetBook = null },
                 onDownload = { viewModel.download(book); seriesSheetBook = null },
