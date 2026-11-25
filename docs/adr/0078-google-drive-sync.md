@@ -76,7 +76,8 @@ Identifiers:
   `drive:<permissionId>/<deviceId>` in `sync_peer_state`
   (`docs/DRIVE_SYNC.md` §4.5). Existing per-peer sync tables keep their
   schema except `vocabulary_staged_review`, which gains `state`,
-  `origin_device_id` and `origin_seq` in migration 84→85 (see
+  `origin_device_id` and `origin_seq`, and `sync_peer_state`, which gains
+  the nullable `agreed_status_choice`, both in migration 84→85 (see
   Consequences).
 - `deviceId`: lowercase UUIDv4 generated once per install in
   `drive_install`. It is never taken from `DeviceIdentity`.
@@ -327,7 +328,7 @@ Then evaluate in order:
 | Case | Condition | Result |
 |---|---|---|
 | 0. Unseen | `L == none` | Apply `R` silently; set `L := R.fp`, `version_op := R.op`, `published_fp := R.fp`, `anc(L) := R.anc`, `res_refs(L) := R.resRefs ∪ ({R.fp} if R.op == "resolve" else ∅)`. |
-| 1. Agreement | `R.fp == L`, OR both `L` and `R` are deletions (`del`, or a `del` paired with a `resolve` whose `outcome` is `"delete"` — two **distinct** `op: "resolve"` records never agree here and are routed to Case 2 first), OR both `L` and `R` are live `put`s with equal `contentFp` and neither `fp` in the other's `anc` (two devices that made the same edit or merged to the same body each minted their own `putFp`), OR (`R.op == "resolve" && R.outcome == "put"` and committed `liseur.db` row already matches `contentFp(R.body)` with matching per-peer ack after crash recovery) | No data conflict: merge `anc(L) := anc(L) ∪ R.anc` and `res_refs(L) := res_refs(L) ∪ R.resRefs`; for concurrent deletes keep deleted and adopt the higher-HLC `delFp` (or `R.fp` if `R.op == "resolve"`) together with that `del`'s own `restore` and `observed` (a losing delete's payloads are discarded, never copied beside the winning `fp`, so every delivery order yields the same causal boundary); for concurrent equal-body puts adopt the higher `(hlc, fp)` and keep the other in `anc(L)`; for resolved-body replay agreement adopt `L := R.fp`, `version_op := "resolve"`, and add `R.fp` to `res_refs(L)`; set `published_fp := L` (for equal-body puts, only when `R` is adopted; a retained local `L` is still owed). (Any incoming `op: "resolve"` side effects were already completed by the mandatory pre-step before cursor advancement.) |
+| 1. Agreement | `R.fp == L`, OR both `L` and `R` are deletions (`del`, or a `del` paired with a `resolve` whose `outcome` is `"delete"`) and neither `fp` is in the other's `anc` (an ancestor-related pair goes on to Cases 2–4, so a delete-resolution replayed after a local reset that descends from it is Stale and the reset stays owed; two **distinct** `op: "resolve"` records never agree here and are routed to Case 2 first), OR both `L` and `R` are live `put`s with equal `contentFp` and neither `fp` in the other's `anc` (two devices that made the same edit or merged to the same body each minted their own `putFp`), OR (`R.op == "resolve" && R.outcome == "put"` and committed `liseur.db` row already matches `contentFp(R.body)` with matching per-peer ack after crash recovery) | No data conflict: merge `anc(L) := anc(L) ∪ R.anc` and `res_refs(L) := res_refs(L) ∪ R.resRefs`; for concurrent deletes keep deleted and adopt the higher-HLC `delFp` (or `R.fp` if `R.op == "resolve"`) together with that `del`'s own `restore` and `observed` (a losing delete's payloads are discarded, never copied beside the winning `fp`, so every delivery order yields the same causal boundary); for concurrent equal-body puts adopt the higher `(hlc, fp)` and keep the other in `anc(L)`; for resolved-body replay agreement adopt `L := R.fp`, `version_op := "resolve"`, and add `R.fp` to `res_refs(L)`; set `published_fp := L` (for equal-body puts, only when `R` is adopted; a retained local `L` is still owed). (Any incoming `op: "resolve"` side effects were already completed by the mandatory pre-step before cursor advancement.) |
 | 2. Incoming resolution | `R.op == "resolve"` | Run the resolution rule below (the mandatory pre-step has already persisted `drive_resolution` and closed covered `OPEN` conflicts). |
 | 3. Causal supersession | (No `OPEN` conflict on `(d, k)` and `L` is not retired by any `drive_resolution`, AND (`L ∈ R.anc` OR `L` was applied unmodified from `R.deviceId` at `origin_seq(L) < R.seq`)), OR (`∃` winning `res ∈ drive_resolution` for `(d, k)` with `L ∈ res.resolvedFps` **AND `res.resolutionFp ∈ R.resRefs`** — never merely `R.hlc >= res.hlc`) | **Fast-forward silently:** apply `R` (including a remote `del` on an untouched copy), close any `OPEN` conflict covered by `res.resolvedFps` on resolution-bridged supersession, set `L := R.fp`, `version_op := R.op`, `published_fp := R.fp`, merge `anc(L) := {L} ∪ anc(L) ∪ R.anc` and `res_refs(L) := res_refs(L) ∪ R.resRefs`. |
 | 4. Stale | `R.fp ∈ anc(L)` OR `∃ res ∈ drive_resolution` with `R.fp ∈ res.resolvedFps` | Ignore `R`'s body (already superseded or retired by a completed resolution; any incoming `op: "resolve"` side effects were already persisted by the mandatory pre-step). |
@@ -341,8 +342,13 @@ Then evaluate in order:
   closed by this choice), `resRefs` (inherited winning resolution fps),
   and `hlc`:
   - `EDIT_EDIT`: both versions are preserved until resolved; the local
-    row stays in `liseur.db`, and the remote body is stored in
-    `drive_conflict.remote_json`.
+    row stays in `liseur.db`, and the complete remote record envelope
+    (`op`, `fp`, `hlc`, `deviceId`, `seq`, `anc`, `resRefs`, `body`) is
+    stored in `drive_conflict.remote_json`, because Step 0 keeps the remote
+    `anc` and `resRefs` out of local state while the conflict is open. The
+    resolution inherits both parents: `anc := cap64({L, R.fp} ∪ anc(L) ∪
+    R.anc)` and `resRefs := res_refs(L) ∪ R.resRefs`, so a restart before
+    resolving loses no resolution bridge.
   - `DELETE_EDIT`: the reader chooses **Keep edited note**
     (`op: "resolve", outcome: "put", body: <edited>`) or **Delete note**
     (`op: "resolve", outcome: "delete", body: null`).
@@ -846,7 +852,11 @@ surviving delta applies the snapshot, which is idempotent.
    only to `drive_record_state` (`held = 1`, with body, op and lineage), so
    no cursor stalls and no update is discarded. When the reader later
    restores the book, each held record is applied through the same cases
-   against what the book already has. Nothing in this path creates a
+   against what the book already has; a held `position` record, which
+   belongs to another device's wire key, is written through the position
+   merge (`docs/DRIVE_SYNC.md` §4.5) against that device's baseline row, so
+   a newer local reading state is compared and a disagreement raises the
+   usual position prompt. Nothing in this path creates a
    `books` row, so arriving history never returns the book to the shelf
    (`BookAnnotation` has no foreign key to `books`, so hidden annotations
    are safe). If the
@@ -878,7 +888,7 @@ restored device gets its own `deviceId`.
 | `drive_authored_record` | `(permission_id, domain, record_key, seq)` | `op`, `hlc`, `fp`, `anc_json`, `res_refs_json`, `body_json`, `observed_json`, `restore_json`, `revives_json` (including `delRecord`), `first_seq` (original publication seq, for `vocabOccurrence` / `vocabReview`), `origin_device_id`, `origin_seq` (the republished child's own provenance, wire `origin`; `NULL` on a first publication) |
 | `drive_record_state` | `(permission_id, domain, record_key)` | `version_fp`, `version_op` (a `vocabReview` row with `del` and `body_json = NULL` is the ID-only undo tombstone kept when an undo arrives before its `put`, which carries no `language` or `normalized`; the later `put` consults it and is stored `UNDONE`), `published_fp`, `content_fp`, `last_synced_revision`, `origin_device_id`, `origin_seq`, `ancestors_json`, `res_refs_json`, `last_hlc`, `body_json`, `observed_json`, `restore_json` and `del_json` (`vocabWord` only: a `del`, or a revival while its originating delete is the one in force; `del_json` holds that delete's `fp`, `hlc`, `anc` and `resRefs`), `held` (version recorded but not applied to `liseur.db`: book tombstoned, or `vocabOccurrence` child of an absent or tombstoned word), `acked_receipt_id` |
 | `drive_resolution` | `(permission_id, domain, record_key, resolution_fp)` | `resolved_fps_json`, `outcome` (`put` / `delete`), `hlc`, `author_device_id`, `created_at` |
-| `drive_conflict` | `(permission_id, conflict_id)` | `domain`, `record_key`, `book_url`, `kind`, `local_fp`, `remote_fp`, `remote_json`, `remote_device_id`, `remote_hlc`, `state` (OPEN / RESOLVING / RESOLVED), `choice`, `resolution_json` (the exact `op: "resolve"` record, written before the choice is applied), `resolution_fp`, `opened_at`, `resolved_at` |
+| `drive_conflict` | `(permission_id, conflict_id)` | `domain`, `record_key`, `book_url`, `kind`, `local_fp`, `remote_fp`, `remote_json` (the complete remote envelope, not only its body), `remote_device_id`, `remote_hlc`, `state` (OPEN / RESOLVING / RESOLVED), `choice`, `resolution_json` (the exact `op: "resolve"` record, written before the choice is applied), `resolution_fp`, `opened_at`, `resolved_at` |
 | `drive_peak_candidate` | `(permission_id, work_id, edition, origin, seq)` | `progression`, `payload_json` (newer lower-progression peaks kept until a reset floor or a dominating peak removes them; `docs/DRIVE_SYNC.md` §4.6) |
 | `drive_session_ack` | `(permission_id, remote_session_id)` | `batch_seq`, `acked_at` |
 | `drive_upload` | `(permission_id, sha256)` | `book_url`, `size_bytes`, `state`, `session_uri`, `bytes_sent`, `file_id`, `selected_at`, `updated_at` |
@@ -1123,8 +1133,9 @@ Mutual exclusion invariant: never both `remote_server.id = 1` and a
   `UNDONE`), `origin_device_id TEXT` and `origin_seq INTEGER` to
   `vocabulary_staged_review`. That table was created in 83→84 for
   liseur-sync and released, so existing rows become `STAGED` with `NULL`
-  provenance. The migration also creates the empty `drive_apply_receipt`
-  table. No other existing table changes. The Drive protocol is
+  provenance. It also adds the nullable `agreed_status_choice TEXT` to
+  `sync_peer_state` (`NULL` for every existing row). The migration also
+  creates the empty `drive_apply_receipt` table. No other existing table changes. The Drive protocol is
   unreleased, so no Drive data needs migrating, but existing liseur-sync
   staging rows do.
 - Backup restore no longer duplicates device ids or sessions, because
