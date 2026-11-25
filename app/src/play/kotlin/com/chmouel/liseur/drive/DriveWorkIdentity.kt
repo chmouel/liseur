@@ -53,6 +53,7 @@ internal class DriveWorkIdentity(
         permissionId: String,
         book: Book,
         computeFingerprintIfMissing: Boolean = true,
+        aliasesByKey: Map<String, List<WorkAlias>>? = null,
     ): WorkAlias? {
         val peerId = DriveLibrarySync.accountPeerId(permissionId)
         val existing = identities.alias(book.url, peerId)
@@ -106,7 +107,7 @@ internal class DriveWorkIdentity(
             val localSha = fpRow.sha256.lowercase(Locale.ROOT)
             val identifierKey = canonicalWorkKey(permissionId, deriveLocalWorkKey(book, metadataRows, fpRow))
             // A shared ISBN/dc identifier on an unrelated file is not proof of the same work.
-            val canonical = if (contradictsSharedKey(permissionId, book, localSha, identifierKey)) {
+            val canonical = if (contradictsSharedKey(permissionId, book, localSha, identifierKey, aliasesByKey)) {
                 canonicalWorkKey(permissionId, "sha:$localSha")
             } else {
                 identifierKey
@@ -161,12 +162,13 @@ internal class DriveWorkIdentity(
         book: Book,
         localSha: String,
         key: String,
+        aliasesByKey: Map<String, List<WorkAlias>>? = null,
     ): Boolean {
         if (key.startsWith("sha:")) return false
         val localTa = bookTitleAuthor(book) ?: return false
         val peerId = DriveLibrarySync.accountPeerId(permissionId)
         val merges = loadMergeMap(permissionId)
-        for (alias in identities.aliasesFor(peerId)) {
+        for (alias in aliasesByKey?.get(key) ?: if (aliasesByKey == null) identities.aliasesFor(peerId) else emptyList()) {
             if (alias.bookUrl == book.url || !alias.usable) continue
             if (resolveCanonical(alias.workId, merges) != key) continue
             val other = books.getByUrl(alias.bookUrl) ?: continue
@@ -199,10 +201,19 @@ internal class DriveWorkIdentity(
      */
     suspend fun resolveAllLocalBooks(permissionId: String) {
         replayPendingAliasEffects(permissionId)
+        val merges = loadMergeMap(permissionId)
+        val peerId = DriveLibrarySync.accountPeerId(permissionId)
+        val aliasesByKey = identities.aliasesFor(peerId).groupBy { resolveCanonical(it.workId, merges) }
+            .mapValues { it.value.toMutableList() }.toMutableMap()
         for (book in books.allOnce()) {
             if (book.browseServerId != null) continue
             if (book.url.startsWith(DRIVE_BOOK_URL_PREFIX)) continue
-            resolveBook(permissionId, book, computeFingerprintIfMissing = false)
+            val alias = resolveBook(permissionId, book, computeFingerprintIfMissing = false, aliasesByKey = aliasesByKey)
+            if (alias != null) {
+                val group = aliasesByKey.getOrPut(resolveCanonical(alias.workId, merges)) { mutableListOf() }
+                group.removeAll { it.bookUrl == alias.bookUrl }
+                group.add(alias)
+            }
         }
     }
 
@@ -520,8 +531,14 @@ internal class DriveWorkIdentity(
     private fun candidateRejectionKey(bookUrl: String, candidate: String): String =
         DriveCanonicalJson.sha256Hex(DriveCanonicalJson.encode(listOf(bookUrl, candidate)))
 
-    private suspend fun isCandidateRejected(permissionId: String, bookUrl: String, candidate: String): Boolean =
-        recordStates.get(permissionId, DOMAIN_REJECTED_CANDIDATE, candidateRejectionKey(bookUrl, candidate)) != null
+    private suspend fun isCandidateRejected(permissionId: String, bookUrl: String, candidate: String): Boolean {
+        val merges = loadMergeMap(permissionId)
+        val canonical = resolveCanonical(candidate, merges)
+        val equivalent = merges.keys.filter { resolveCanonical(it, merges) == canonical } + canonical
+        return equivalent.any {
+            recordStates.get(permissionId, DOMAIN_REJECTED_CANDIDATE, candidateRejectionKey(bookUrl, it)) != null
+        }
+    }
 
     /**
      * Completes `liseur.db` effects of a confirm/reject whose wire record is already durable.
@@ -560,13 +577,22 @@ internal class DriveWorkIdentity(
                             },
                         )
                     }
+                    identities.clearAmbiguity(effect.bookUrl, peerId)
                 }
                 is PendingAliasEffect.Reject -> {
                     val alias = identities.alias(effect.bookUrl, peerId)
                     if (alias != null && alias.awaitingAnswer) identities.reject(effect.bookUrl, peerId)
+                    val localKey = alias?.confirmedWorkKey()?.let { resolveCanonical(it, merges) }
+                    val rejected = if (localKey == resolveCanonical(effect.a, merges)) effect.b else effect.a
+                    val ambiguity = identities.ambiguitiesFor(peerId).firstOrNull { it.bookUrl == effect.bookUrl }
+                    val remaining = ambiguity?.candidates.orEmpty().filter {
+                        resolveCanonical(it, merges) != resolveCanonical(rejected, merges)
+                    }
+                    if (alias?.awaitingAnswer != true && ambiguity != null && remaining.any { resolveCanonical(it, merges) != localKey }) {
+                        identities.upsert(ambiguity.copy(workIds = remaining.joinToString("\n")))
+                    } else identities.clearAmbiguity(effect.bookUrl, peerId)
                 }
             }
-            identities.clearAmbiguity(effect.bookUrl, peerId)
         }
     }
 

@@ -149,6 +149,35 @@ class DriveWorkIdentityTest {
     }
 
     @Test
+    fun `rejecting a confirmed pair preserves unrelated candidates`() = runTest {
+        val perm = "perm-1"
+        val book = localBook("file:///confirmed.epub", "Emma", "Jane Austen")
+        val peer = DriveLibrarySync.accountPeerId(perm)
+        liseurDb.bookDao().upsert(book)
+        liseurDb.workIdentityDao().upsert(WorkAlias(book.url, peer, "sha:aaa", WorkAlias.HIGH, confirmed = true, resolvedAt = 1L))
+        identity.detectAmbiguousTitleAuthorMatch(perm, "isbn:bbb", "Emma", "Jane Austen")
+        identity.detectAmbiguousTitleAuthorMatch(perm, "isbn:ccc", "Emma", "Jane Austen")
+        identity.rejectMerge(perm, book.url, "sha:aaa", "isbn:bbb", "0017450000000-0001-dev-a")
+        assertEquals(listOf("isbn:ccc"), identity.pendingMatches(perm).map { it.candidateWorkKey })
+    }
+
+    @Test
+    fun `candidate rejection survives a remote work merge`() = runTest {
+        val perm = "perm-1"
+        val book = localBook("file:///choice-merge.epub", "Emma", "Jane Austen")
+        liseurDb.bookDao().upsert(book)
+        identity.detectAmbiguousTitleAuthorMatch(perm, "sha:bbb", "Emma", "Jane Austen")
+        identity.rejectMerge(perm, book.url, "", "sha:bbb", "0017450000000-0001-dev-a")
+        val merge = DriveWireCodec.putRecord(
+            DriveWireCodec.DOMAIN_WORK_ALIAS, "merge:sha:bbb", "0017450000000-0002-dev-a",
+            DriveWireCodec.encodeWorkAliasBody(DriveWorkAliasBody.Merge("sha:bbb", "isbn:aaa", 1L)),
+        )
+        identity.applyRemoteRecord(perm, merge, "dev-a", 1L)
+        assertFalse(identity.detectAmbiguousTitleAuthorMatch(perm, "isbn:aaa", "Emma", "Jane Austen"))
+        assertTrue(identity.pendingMatches(perm).isEmpty())
+    }
+
+    @Test
     fun `rejecting one unconfirmed candidate preserves the other`() = runTest {
         val perm = "perm-1"
         val book = localBook("file:///choice.epub", "Emma", "Jane Austen")
