@@ -488,7 +488,7 @@ class DrivePhase3EndToEndTest {
             DriveWireCodec.delRecord(DriveWireCodec.DOMAIN_CATALOG, key, "0017450000500-0001-dev-b"),
             "dev-b",
             1L,
-        )
+        ) { deviceA.changeEngine.nextHlc(PERM_ID) }
 
         val state = deviceA.driveDb.recordStates().get(PERM_ID, DriveWireCodec.DOMAIN_CATALOG, key)!!
         assertEquals("0017450000500-0001-dev-b", state.lastHlc)
