@@ -109,6 +109,24 @@ class DrivePhase3EndToEndTest {
     }
 
     @Test
+    fun `replaying removed edition restores another available download`() = runTest {
+        deviceB.connect()
+        val key = "isbn:replay-edition"
+        val hlc = "0017450000000-0001-dev-a"
+        val first = DriveCatalogEdition("a".repeat(64), 42L, "file-1", "one.epub", 100L, hlc)
+        val second = DriveCatalogEdition("b".repeat(64), 43L, "file-2", "two.epub", 101L, hlc)
+        val body = DriveCatalogBody(key, "Book", null, emptyList(), listOf(first, second), null, null, 1L, null, 1L)
+        val record = DriveWireCodec.putRecord(DriveWireCodec.DOMAIN_CATALOG, key, hlc, DriveWireCodec.encodeCatalogBody(body))
+        deviceB.catalogSync.applyRemoteRecord(PERM_ID, record, "dev-a", 1L) { deviceB.changeEngine.nextHlc(PERM_ID) }
+        val stub = "drive:$key"
+        deviceB.catalogSync.handleDriveEpubRemoved(PERM_ID, "file-1") { deviceB.changeEngine.nextHlc(PERM_ID) }
+        val row = requireNotNull(deviceB.liseurDb.bookDao().getByUrl(stub))
+        deviceB.liseurDb.bookDao().upsert(row.copy(downloadHref = DriveCatalogSync.downloadHrefFor("file-1")))
+        deviceB.catalogSync.handleDriveEpubRemoved(PERM_ID, "file-1") { deviceB.changeEngine.nextHlc(PERM_ID) }
+        assertEquals(DriveCatalogSync.downloadHrefFor("file-2"), deviceB.liseurDb.bookDao().getByUrl(stub)?.downloadHref)
+    }
+
+    @Test
     fun `newer catalog metadata cannot restore cleared edition availability`() = runTest {
         deviceB.connect()
         val key = "isbn:123"
