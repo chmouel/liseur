@@ -771,9 +771,11 @@ internal class DriveCompactor(
                 )
                 val deletedWord = state.domain == DriveWireCodec.DOMAIN_VOCAB_WORD &&
                     state.versionOp == DriveRecordState.OP_DEL && record.op == DriveRecordState.OP_PUT
+                val readdedCatalog = state.domain == DriveWireCodec.DOMAIN_CATALOG &&
+                    state.versionOp == DriveRecordState.OP_PUT && record.op == DriveRecordState.OP_DEL
                 val coveredChild = record.body != null &&
                     childCoveredByDelete(state.domain, record.body, localDeviceId, lastAuthored.seq, deleteBoundaries)
-                if (!deletedWord && !coveredChild) {
+                if (!deletedWord && !readdedCatalog && !coveredChild) {
                     records.add(record)
                     nextAuthoredByDomain.getOrPut(state.domain) { linkedMapOf() }[state.recordKey] =
                         lastAuthored.copy(record = record)
