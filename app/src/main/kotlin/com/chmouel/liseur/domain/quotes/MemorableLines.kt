@@ -45,22 +45,22 @@ object MemorableLines {
         val words = Lexicon.of(lang)
         val locale = lang?.let(Locale::forLanguageTag) ?: Locale.ROOT
         val wordIterator = BreakIterator.getWordInstance(locale)
+        val sentenceIterator = BreakIterator.getSentenceInstance(locale)
         val counts = HashMap<String, Int>()
         var total = 0
-        val split = paragraphs.map { paragraph ->
+        for (paragraph in paragraphs) {
             for (token in tokens(paragraph.text, wordIterator)) {
                 if (token.isContentWord() && !token.isProperLike(lang)) {
                     counts.merge(token.lowercase(locale), 1, Int::plus)
                     total++
                 }
             }
-            sentences(paragraph.text, locale)
         }
         val rarity = Rarity(counts, total)
         val lines = ArrayList<MemorableLine>()
-        split.forEachIndexed { index, sentences ->
-            val paragraph = paragraphs[index]
+        paragraphs.forEachIndexed { index, paragraph ->
             if (BOILERPLATE.containsMatchIn(paragraph.text)) return@forEachIndexed
+            val sentences = sentences(paragraph.text, sentenceIterator)
             sentences.forEachIndexed { at, range ->
                 val next = sentences.getOrNull(at + 1)
                 val connected = next != null && next.last - range.first + 1 <= SWEET_SPOT.last &&
@@ -196,8 +196,7 @@ object MemorableLines {
     }
 
     /** Sentence ranges in [text], inclusive, trimmed of surrounding space. */
-    internal fun sentences(text: String, locale: Locale): List<IntRange> {
-        val iterator = BreakIterator.getSentenceInstance(locale)
+    internal fun sentences(text: String, iterator: BreakIterator): List<IntRange> {
         iterator.setText(text)
         val ranges = ArrayList<IntRange>()
         var start = iterator.first()
