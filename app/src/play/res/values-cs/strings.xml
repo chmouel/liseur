@@ -160,8 +160,8 @@
     <string name="hardcover_conflict_review_too_long">Tato recenze z Hardcoveru je příliš dlouhá na to, aby ji šlo přenést do Liseuru.</string>
     <string name="hardcover_conflict_stale">Hodnota v Liseuru se mezitím změnila. Zkontrolujte ji a vyberte znovu.</string>
     <string name="hardcover_review_public_note">Veřejné. Zveřejňuje se také jako vaše recenze na Hardcoveru.</string>
-    <string name="drive_sync_settings_summary">Synchronizovat knihovnu, poznámky a postup čtení s Google Drive</string>
-    <string name="drive_sync_intro">Udržujte katalog, poznámky, slovníček, čtenářská sezení a postup čtení synchronizované napříč zařízeními pomocí dat aplikací na Google Drive. Vybrané soubory EPUB se ukládají do složky Liseur na Disku.</string>
+    <string name="drive_sync_settings_summary">Synchronizovat knihovnu a postup čtení s Google Drive</string>
+    <string name="drive_sync_intro">Udržujte katalog a postup čtení synchronizované napříč zařízeními pomocí dat aplikací na Google Drive. Vybrané soubory EPUB se ukládají do složky Liseur na Disku.</string>
     <string name="drive_sync_status_active">Aktivní</string>
     <string name="drive_sync_status_paused">Pozastaveno</string>
     <string name="drive_sync_status_needs_reconnect">Nutné znovu připojit</string>

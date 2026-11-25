@@ -154,8 +154,8 @@
     <string name="hardcover_conflict_review_too_long">Questa recensione di Hardcover è troppo lunga per essere importata in Liseur.</string>
     <string name="hardcover_conflict_stale">Il valore di Liseur è cambiato nel frattempo. Controllalo e scegli di nuovo.</string>
     <string name="hardcover_review_public_note">Pubblica. Pubblicata anche come tua recensione su Hardcover.</string>
-    <string name="drive_sync_settings_summary">Sincronizza libreria, note e avanzamento di lettura con Google Drive</string>
-    <string name="drive_sync_intro">Mantieni catalogo, note, vocabolario, sessioni di lettura e avanzamento di lettura sincronizzati tra i dispositivi usando i dati dell\'app su Google Drive. I file EPUB selezionati vengono salvati in una cartella Liseur su Drive.</string>
+    <string name="drive_sync_settings_summary">Sincronizza libreria e avanzamento di lettura con Google Drive</string>
+    <string name="drive_sync_intro">Mantieni catalogo e avanzamento di lettura sincronizzati tra i dispositivi usando i dati dell\'app su Google Drive. I file EPUB selezionati vengono salvati in una cartella Liseur su Drive.</string>
     <string name="drive_sync_status_active">Attiva</string>
     <string name="drive_sync_status_paused">In pausa</string>
     <string name="drive_sync_status_needs_reconnect">Riconnessione necessaria</string>

@@ -162,8 +162,8 @@
     <string name="hardcover_conflict_stale">Liseur\'s value changed meanwhile. Check it and choose again.</string>
     <string name="hardcover_review_public_note">Public. Also published as your Hardcover review.</string>
     <string name="drive_sync_title" translatable="false">Google Drive</string>
-    <string name="drive_sync_settings_summary">Sync your library, notes, and reading progress with Google Drive</string>
-    <string name="drive_sync_intro">Keep your catalog, notes, vocabulary, reading sessions, and reading progress in sync across devices using your Google Drive app data. Selected EPUB files are stored in a Liseur folder in Drive.</string>
+    <string name="drive_sync_settings_summary">Sync your library and reading progress with Google Drive</string>
+    <string name="drive_sync_intro">Keep your catalog and reading progress in sync across devices using Google Drive app data. Selected EPUB files are stored in a Liseur folder in Drive.</string>
     <string name="drive_sync_status_active">Active</string>
     <string name="drive_sync_status_paused">Paused</string>
     <string name="drive_sync_status_needs_reconnect">Reconnect needed</string>
@@ -221,7 +221,7 @@
     <string name="drive_sync_syncing">Syncing with Google Drive…</string>
     <string name="drive_sync_upload_epubs">Upload EPUB files</string>
     <string name="drive_sync_upload_epubs_title">Upload EPUB files</string>
-    <string name="drive_sync_upload_epubs_intro">Choose which locally available EPUB files to upload to your Google Drive Liseur folder. Your catalog, notes, and reading progress already sync for your whole library.</string>
+    <string name="drive_sync_upload_epubs_intro">Choose which locally available EPUB files to upload to your Google Drive Liseur folder. Your catalog and reading progress already sync for your whole library.</string>
     <string name="drive_sync_upload_epubs_empty">No locally available EPUB files found on this device.</string>
     <string name="drive_sync_upload_epubs_select_all">Select all</string>
     <string name="drive_sync_upload_epubs_clear">Clear</string>

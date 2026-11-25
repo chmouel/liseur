@@ -154,8 +154,8 @@
     <string name="hardcover_conflict_review_too_long">Diese Hardcover-Rezension ist zu lang, um in Liseur übernommen zu werden.</string>
     <string name="hardcover_conflict_stale">Der Wert in Liseur hat sich inzwischen geändert. Prüfe ihn und wähle erneut.</string>
     <string name="hardcover_review_public_note">Öffentlich. Wird auch als deine Hardcover-Rezension veröffentlicht.</string>
-    <string name="drive_sync_settings_summary">Bibliothek, Notizen und Lesefortschritt mit Google Drive synchronisieren</string>
-    <string name="drive_sync_intro">Halte Katalog, Notizen, Vokabeln, Lesesitzungen und Lesefortschritt über deine Google-Drive-App-Daten geräteübergreifend synchron. Ausgewählte EPUB-Dateien werden in einem Liseur-Ordner in Drive gespeichert.</string>
+    <string name="drive_sync_settings_summary">Bibliothek und Lesefortschritt mit Google Drive synchronisieren</string>
+    <string name="drive_sync_intro">Halte Katalog und Lesefortschritt über deine Google-Drive-App-Daten geräteübergreifend synchron. Ausgewählte EPUB-Dateien werden in einem Liseur-Ordner in Drive gespeichert.</string>
     <string name="drive_sync_status_active">Aktiv</string>
     <string name="drive_sync_status_paused">Pausiert</string>
     <string name="drive_sync_status_needs_reconnect">Erneute Verbindung nötig</string>
