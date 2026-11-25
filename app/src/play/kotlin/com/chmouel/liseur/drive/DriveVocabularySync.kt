@@ -104,7 +104,8 @@ internal class DriveVocabularySync(
 
             val dirty = state == null ||
                 state.versionOp != DriveRecordState.OP_PUT ||
-                state.publishedFp != contentFp ||
+                state.publishedFp != state.versionFp ||
+                state.contentFp != contentFp ||
                 sync?.ackedFingerprint != contentFp
 
             if (dirty) {
@@ -216,7 +217,9 @@ internal class DriveVocabularySync(
             val bodyMap = DriveWireCodec.encodeVocabOccurrenceBody(body)
             val contentFp = DriveCanonicalJson.contentFp(bodyMap)
             val state = allOccStates[occRecordKey]
-            if (state == null || state.versionOp != DriveRecordState.OP_PUT || state.publishedFp != contentFp) {
+            if (state == null || state.versionOp != DriveRecordState.OP_PUT ||
+                state.publishedFp != state.versionFp || state.contentFp != contentFp
+            ) {
                 val hlc = nextHlc()
                 val ancestors = buildAncestors(state, null, exclude = contentFp)
                 occRecords.add(
@@ -423,7 +426,7 @@ internal class DriveVocabularySync(
                                 (existingSync ?: VocabularyWordSync(peerId, ack.language, ack.normalized)).copy(
                                     syncedWordId = currentWord.id,
                                     lifecycle = VocabularyWordSync.SYNCED,
-                                    ackedFingerprint = ack.recordFp,
+                                    ackedFingerprint = DriveCanonicalJson.contentFp(JSONObject(requireNotNull(ack.baseJson))),
                                     ackedBaseJson = ack.baseJson,
                                 ),
                             )
@@ -492,7 +495,7 @@ internal class DriveVocabularySync(
                             versionFp = record.fp,
                             versionOp = record.op,
                             publishedFp = record.fp,
-                            contentFp = if (record.op == DriveRecordState.OP_PUT) record.fp else null,
+                            contentFp = if (record.op == DriveRecordState.OP_PUT) record.body?.let(DriveCanonicalJson::contentFp) else null,
                             lastSyncedRevision = existing?.lastSyncedRevision,
                             originDeviceId = null,
                             originSeq = if (record.d == DriveWireCodec.DOMAIN_VOCAB_REVIEW ||
@@ -577,7 +580,6 @@ internal class DriveVocabularySync(
                 var resultFp = record.fp
                 var resultContentFp = remoteContentFp
                 var resultBodyJson = remoteCanonicalJson
-                var ignoredUnpublishedLocalDelete = false
 
                 // Transaction 1: liseur.db word insert/merge + staged reviews + schedule reconcile + ack.
                 database.withTransaction {
@@ -596,7 +598,6 @@ internal class DriveVocabularySync(
                             existingState.versionFp == record.fp ||
                             sync?.ackedFingerprint == remoteContentFp
                         if (deletedAfterApply) {
-                            ignoredUnpublishedLocalDelete = true
                             return@withTransaction
                         }
                         val baseline = remoteBody.baseline
@@ -693,8 +694,6 @@ internal class DriveVocabularySync(
                         }
                     }
                 }
-
-                if (ignoredUnpublishedLocalDelete) return
 
                 // Transaction 2: drive_sync.db causal state.
                 store.withTransaction {
@@ -867,7 +866,8 @@ internal class DriveVocabularySync(
                         val occFp = DriveCanonicalJson.contentFp(occBodyMap)
                         val occState = allOccStates[occurrenceRecordKey(recordKey, occKey)]
                         occState == null ||
-                            occState.publishedFp != occFp ||
+                            occState.publishedFp != occState.versionFp ||
+                            occState.contentFp != occFp ||
                             !observedByDeleter(occState.originDeviceId, occState.originSeq)
                     }
                 }
