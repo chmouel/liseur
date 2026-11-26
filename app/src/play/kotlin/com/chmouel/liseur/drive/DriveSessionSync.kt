@@ -213,10 +213,8 @@ internal class DriveSessionSync(
      * Applies an incoming remote `session` record idempotently (`INSERT OR IGNORE`
      * on `remote_session_id` with non-null `origin_device_id` and `imported_at = NULL`).
      *
-     * Returns `true` when the session was applied, ignored as malformed/non-put, or dropped
-     * because its catalog work has been durably deleted; returns `false` (deferred) when
-     * `workKey` does not yet resolve to a local book so [DriveChangeEngine] retains the
-     * `session` cursor and replays once the catalog entry is imported.
+     * Returns `false` when the work has neither a local book nor a catalog tombstone,
+     * so the session replays after the catalog entry arrives.
      */
     suspend fun applyRemoteRecord(
         permissionId: String,
@@ -230,15 +228,11 @@ internal class DriveSessionSync(
 
         val canonicalWorkKey = workIdentity.canonicalWorkKey(permissionId, body.workKey)
         val targetBookUrl = findBookUrlForWorkKey(permissionId, canonicalWorkKey)
-        if (targetBookUrl == null) {
-            val catalogState = recordStates.get(permissionId, DriveWireCodec.DOMAIN_CATALOG, canonicalWorkKey)
-                ?: if (body.workKey != canonicalWorkKey) {
-                    recordStates.get(permissionId, DriveWireCodec.DOMAIN_CATALOG, body.workKey)
-                } else {
-                    null
-                }
-            return catalogState?.versionOp == DriveRecordState.OP_DEL
-        }
+            ?: if (workIdentity.hasDeletedCatalogEntry(permissionId, body.workKey)) {
+                DriveWorkIdentity.driveBookUrl(canonicalWorkKey)
+            } else {
+                return false
+            }
         val authorDeviceId = body.originDeviceId.ifBlank { remoteDeviceId }
 
         // Transaction 1: liseur.db idempotent insert (INSERT OR IGNORE on UNIQUE remote_session_id).

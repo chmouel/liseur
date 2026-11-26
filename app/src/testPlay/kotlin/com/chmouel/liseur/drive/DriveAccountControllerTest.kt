@@ -276,6 +276,7 @@ class DriveAccountControllerTest {
                 conflictId = "c-1",
                 domain = "annotation",
                 recordKey = "note-1",
+                bookUrl = "file:///book-0.epub",
                 kind = DriveConflict.KIND_EDIT_EDIT,
                 localFp = "fp1",
                 remoteFp = "fp2",

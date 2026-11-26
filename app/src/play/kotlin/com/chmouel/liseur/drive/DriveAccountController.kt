@@ -213,7 +213,8 @@ internal class DriveAccountController(
                                 driveSync.workIdentity.pendingMatches(primary.permissionId)
                             }.getOrDefault(emptyList())
                             val conflictGroups = runCatching {
-                                buildConflictUiGroups(openConflicts)
+                                // A conflict parked for a work with no book has nothing to show yet.
+                                buildConflictUiGroups(openConflicts.filter { it.bookUrl != null })
                             }.getOrDefault(emptyList())
                             StoreSnapshot(
                                 account = primary,

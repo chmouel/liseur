@@ -254,15 +254,97 @@ internal class DriveWorkIdentity(
      * cursor so the record replays once the catalog creates the book.
      */
     suspend fun awaitsCatalogEntry(permissionId: String, rawWorkKey: String): Boolean {
-        val canonical = canonicalWorkKey(permissionId, rawWorkKey)
+        val merges = loadMergeMap(permissionId)
+        val canonical = resolveCanonical(rawWorkKey, merges)
+        return !hasLocalBook(permissionId, canonical, merges) &&
+            catalogHead(permissionId, canonical, merges) == null
+    }
+
+    /**
+     * True when [rawWorkKey] already resolves to a local `books` row, directly or through
+     * an equivalent catalog key. Retained records for such a work can be materialized.
+     */
+    suspend fun hasLocalBookFor(permissionId: String, rawWorkKey: String): Boolean {
+        val merges = loadMergeMap(permissionId)
+        return hasLocalBook(permissionId, resolveCanonical(rawWorkKey, merges), merges)
+    }
+
+    private suspend fun hasLocalBook(
+        permissionId: String,
+        canonical: String,
+        merges: Map<String, String>,
+    ): Boolean {
         val peerId = DriveLibrarySync.accountPeerId(permissionId)
-        val hasLocalBook = identities.aliasesFor(peerId).any {
-            it.usable && canonicalWorkKey(permissionId, it.workId) == canonical && books.getByUrl(it.bookUrl) != null
+        return identities.aliasesFor(peerId).any {
+            it.usable && resolveCanonical(it.workId, merges) == canonical && books.getByUrl(it.bookUrl) != null
         } || books.getByUrl(driveBookUrl(canonical)) != null
-        if (hasLocalBook) return false
-        return listOf(canonical, rawWorkKey).distinct().all {
-            recordStates.get(permissionId, DriveWireCodec.DOMAIN_CATALOG, it) == null
+    }
+
+    /**
+     * Re-points history retained under the synthetic `drive:<workKey>` key onto the book that
+     * now represents the same work.
+     *
+     * A work whose catalog tombstone arrived before its records keeps its marks, agreements and
+     * sessions under `drive:<workKey>`. When the book comes back bound to another URL — matched
+     * to a local file or to a server copy by the usual edition policy rather than landing on the
+     * synthetic one — that history would otherwise stay attached to a key no book answers to.
+     * The rows keep their identifiers, so deduplication and later edits are unaffected.
+     */
+    suspend fun reattachHiddenHistory(permissionId: String) {
+        val prefix = DRIVE_BOOK_URL_PREFIX
+        val annotations = database.annotationDao()
+        val agreements = database.annotationSyncDao()
+        val sessions = database.readingSessionDao()
+        val hiddenKeys = (annotations.bookKeysWithPrefix(prefix) +
+            agreements.bookKeysWithPrefix(prefix) +
+            sessions.bookKeysWithPrefix(prefix)).toSet()
+        if (hiddenKeys.isEmpty()) return
+        database.withTransaction {
+            for (hidden in hiddenKeys) {
+                // A book still answering to this key keeps its history where it is.
+                if (books.getByUrl(hidden) != null) continue
+                val target = liveBookUrlFor(permissionId, hidden.removePrefix(prefix)) ?: continue
+                if (target == hidden) continue
+                annotations.moveBook(hidden, target)
+                agreements.moveBook(hidden, target)
+                sessions.moveBook(hidden, target)
+            }
         }
+    }
+
+    internal suspend fun liveBookUrlFor(permissionId: String, rawWorkKey: String): String? {
+        val merges = loadMergeMap(permissionId)
+        val canonical = resolveCanonical(rawWorkKey, merges)
+        val peerId = DriveLibrarySync.accountPeerId(permissionId)
+        val matched = identities.aliasesFor(peerId)
+            .filter { it.usable && resolveCanonical(it.workId, merges) == canonical }
+            .mapNotNull { books.getByUrl(it.bookUrl)?.url }
+        return matched.firstOrNull { !it.startsWith(DRIVE_BOOK_URL_PREFIX) }
+            ?: matched.firstOrNull()
+            ?: books.getByUrl(driveBookUrl(canonical))?.url
+    }
+
+    suspend fun hasDeletedCatalogEntry(permissionId: String, rawWorkKey: String): Boolean {
+        val merges = loadMergeMap(permissionId)
+        val canonical = resolveCanonical(rawWorkKey, merges)
+        val state = catalogHead(permissionId, canonical, merges) ?: return false
+        return state.versionOp == DriveRecordState.OP_DEL ||
+            state.versionOp == DriveRecordState.OP_RESOLVE &&
+            store.resolutions().get(permissionId, DriveWireCodec.DOMAIN_CATALOG, state.recordKey, state.versionFp)
+                ?.outcome == DriveResolution.OUTCOME_DELETE
+    }
+
+    private suspend fun catalogHead(
+        permissionId: String,
+        canonical: String,
+        merges: Map<String, String>,
+    ): DriveRecordState? {
+        val heads = (listOf(canonical) + merges.keys
+            .filter { it != canonical && resolveCanonical(it, merges) == canonical })
+            .mapNotNull { recordStates.get(permissionId, DriveWireCodec.DOMAIN_CATALOG, it) }
+        val ancestors = heads.flatMap { decodeStringArray(it.ancestorsJson) }.toSet()
+        return heads.filterNot { it.versionFp in ancestors }
+            .maxWithOrNull(compareBy({ it.lastHlc }, { it.versionFp }))
     }
 
     /** Returns true if the reader has already rejected matching [keyA] with [keyB]. */

@@ -140,6 +140,14 @@ interface ReadingSessionDao {
     )
     suspend fun localSessionsForBookSync(bookUrl: String): List<ReadingSession>
 
+    /** Book keys starting with [prefix], to find sessions retained under a synthetic key. */
+    @Query("SELECT DISTINCT book_url FROM reading_sessions WHERE book_url LIKE :prefix || '%'")
+    suspend fun bookKeysWithPrefix(prefix: String): List<String>
+
+    /** Re-points the sessions retained for a work onto the book that now represents it. */
+    @Query("UPDATE reading_sessions SET book_url = :to WHERE book_url = :from")
+    suspend fun moveBook(from: String, to: String)
+
     /**
      * Stores the total reached by an open session and moves its checkpoint
      * forward.

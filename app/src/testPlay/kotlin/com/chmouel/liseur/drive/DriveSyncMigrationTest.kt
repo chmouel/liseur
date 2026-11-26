@@ -118,11 +118,34 @@ class DriveSyncMigrationTest {
         }
     }
 
+    /** History retained before the held marker existed was materialized, never retained. */
+    @Test
+    fun `record state gains the held marker as not held`() {
+        helper.createDatabase(HELD_DB, 5).use { old ->
+            old.execSQL(
+                "INSERT INTO drive_record_state (permission_id, domain, record_key, version_fp, version_op, " +
+                    "published_fp, content_fp, last_synced_revision, origin_device_id, origin_seq, " +
+                    "ancestors_json, res_refs_json, last_hlc, body_json) " +
+                    "VALUES ('perm-a', 'series', 'isbn:1', 'fp-1', 'put', 'fp-1', 'cfp-1', NULL, 'dev-a', 3, " +
+                    "'[]', '[]', '001', '{\"workKey\":\"isbn:1\"}')",
+            )
+        }
+        helper.runMigrationsAndValidate(HELD_DB, 6, true, *DriveSyncDatabase.MIGRATIONS).use { db ->
+            db.query("SELECT version_op, body_json, held FROM drive_record_state WHERE record_key = 'isbn:1'").use {
+                assertTrue(it.moveToFirst())
+                assertEquals(DriveRecordState.OP_PUT, it.getString(0))
+                assertEquals("{\"workKey\":\"isbn:1\"}", it.getString(1))
+                assertEquals(0, it.getInt(2))
+            }
+        }
+    }
+
     private companion object {
         const val ACCOUNTS_DB = "drive-sync-migration-accounts.db"
         const val OUTBOX_DB = "drive-sync-migration-outbox.db"
         const val CONFLICTS_DB = "drive-sync-migration-conflicts.db"
         const val V2_OUTBOX_DB = "drive-sync-migration-v2-outbox.db"
         const val UPLOAD_SELECTION_DB = "drive-sync-migration-upload-selection.db"
+        const val HELD_DB = "drive-sync-migration-held.db"
     }
 }

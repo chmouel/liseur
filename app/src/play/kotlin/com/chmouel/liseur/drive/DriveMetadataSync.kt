@@ -53,6 +53,8 @@ internal class DriveMetadataSync(
         for (state in recordStates.forDomain(permissionId, DriveWireCodec.DOMAIN_METADATA)) {
             if (state.versionOp != DriveRecordState.OP_RESOLVE) continue
             if (state.publishedFp == state.versionFp) continue
+            // A held version was not minted here: this device never owed it as a publication.
+            if (state.held) continue
             val res = resolutions.get(permissionId, DriveWireCodec.DOMAIN_METADATA, state.recordKey, state.versionFp)
                 ?: continue
             val (rawWorkKey, field) = parseRecordKey(state.recordKey) ?: continue
@@ -157,6 +159,9 @@ internal class DriveMetadataSync(
                 )
 
                 val overrideActive = isOverrideActive(book, field)
+                // Never publish over a version retained for a work that has not materialized yet:
+                // the deferred apply must reconcile against it, not replace it unseen.
+                if (existingState?.held == true) continue
                 val isOwedByRevision = revRow?.owed(syncRow) == true
                 val isUnpublishedOverride = overrideActive && existingState == null && syncRow == null
                 val isUnpublishedState = existingState != null && existingState.versionFp != existingState.publishedFp
@@ -442,8 +447,10 @@ internal class DriveMetadataSync(
 
         val canonicalWorkKey = workIdentity.canonicalWorkKey(permissionId, rawWorkKey)
         val canonicalKey = recordKey(canonicalWorkKey, field)
-        val bookUrl = findBookUrlForWorkKey(permissionId, canonicalWorkKey) ?: return true
-        val book = books.getByUrl(bookUrl) ?: return true
+        // A catalog tombstone counts as a known catalog entry, so this record is not deferred.
+        // Without a local book there is nothing to write to: retain it as held history (§4).
+        val bookUrl = findBookUrlForWorkKey(permissionId, canonicalWorkKey)
+        val book = bookUrl?.let { books.getByUrl(it) }
         val normalizedBody = when (decodedBody) {
             is DriveMetadataBody.Text -> decodedBody.copy(workKey = canonicalWorkKey)
             is DriveMetadataBody.Cover -> decodedBody.copy(workKey = canonicalWorkKey)
@@ -453,35 +460,45 @@ internal class DriveMetadataSync(
             DriveCanonicalJson.contentFp(DriveWireCodec.encodeMetadataBody(it))
         }
 
-        val revRow = overrides.revision(bookUrl, field)
-        val syncRow = overrides.state(peerId, bookUrl, field)
+        val revRow = bookUrl?.let { overrides.revision(it, field) }
+        val syncRow = bookUrl?.let { overrides.state(peerId, it, field) }
 
         // Always run revision-to-fp crash recovery BEFORE reconciling incoming record.
-        val existingState = recoverFromRevisionSync(
-            permissionId = permissionId,
-            book = book,
-            workKey = canonicalWorkKey,
-            field = field,
-            recordKey = canonicalKey,
-            revRow = revRow,
-            syncRow = syncRow,
-            nextHlc = nextHlc,
-        )
+        val existingState = if (book == null || bookUrl == null) {
+            recordStates.get(permissionId, DriveWireCodec.DOMAIN_METADATA, canonicalKey)
+        } else {
+            recoverFromRevisionSync(
+                permissionId = permissionId,
+                book = book,
+                workKey = canonicalWorkKey,
+                field = field,
+                recordKey = canonicalKey,
+                revRow = revRow,
+                syncRow = syncRow,
+                nextHlc = nextHlc,
+            )
+        }
         val existingResolutions = resolutions.forRecord(permissionId, DriveWireCodec.DOMAIN_METADATA, canonicalKey)
         val unsettledConflicts = conflicts.unsettledForRecord(permissionId, DriveWireCodec.DOMAIN_METADATA, canonicalKey)
 
-        val localView = buildLocalRecordView(
-            book = book,
-            workKey = canonicalWorkKey,
-            field = field,
-            recordKey = canonicalKey,
-            revRow = revRow,
-            syncRow = syncRow,
-            existingState = existingState,
-            existingResolutions = existingResolutions,
-            incoming = record,
-            nextHlc = nextHlc,
-        )
+        val localView = if (book == null || bookUrl == null) {
+            DriveHeldRecords.localView(existingState)
+        } else {
+            buildLocalRecordView(
+                book = book,
+                workKey = canonicalWorkKey,
+                field = field,
+                recordKey = canonicalKey,
+                revRow = revRow,
+                syncRow = syncRow,
+                // A held row is retained history, not data in this book, so nothing local matches it.
+                existingState = existingState?.takeUnless { it.held },
+                existingResolutions = existingResolutions,
+                incoming = record,
+                nextHlc = nextHlc,
+                heldReplay = existingState?.held == true,
+            )
+        }
 
         val result = DriveConflictEngine.reconcileIncoming(
             permissionId = permissionId,
@@ -513,7 +530,7 @@ internal class DriveMetadataSync(
 
         // For custom covers, download & SHA-256 verify BEFORE entering Transaction 1.
         // Retryable network/API errors propagate; null (not yet visible / hash mismatch) defers cursor advancement.
-        val downloadedCoverFile: File? = if (appliedBody is DriveMetadataBody.Cover) {
+        val downloadedCoverFile: File? = if (bookUrl != null && appliedBody is DriveMetadataBody.Cover) {
             coverCodec.downloadVerified(permissionId, accessToken, appliedBody.coverSha256)
                 ?: return false
         } else {
@@ -526,8 +543,9 @@ internal class DriveMetadataSync(
         val now = clock()
 
         // Transaction 1 (`liseur.db`): apply override + revision + atomic `metadata_override_sync` ack.
+        // A held record has no book to write to and only its causal state is retained.
         when (result.dataAction) {
-            is ReconciliationDataAction.ApplyPut -> {
+            is ReconciliationDataAction.ApplyPut -> if (book != null && bookUrl != null) {
                 val body = appliedBody ?: return true
                 database.withTransaction {
                     // The reader may have edited this field while the cover downloaded.
@@ -584,7 +602,7 @@ internal class DriveMetadataSync(
                     appliedRev = revApplied
                 }
             }
-            ReconciliationDataAction.ApplyDelete -> {
+            ReconciliationDataAction.ApplyDelete -> if (book != null && bookUrl != null) {
                 database.withTransaction {
                     if (localChangedSince(book, revRow, bookUrl, field)) {
                         staleLocal = true
@@ -652,6 +670,7 @@ internal class DriveMetadataSync(
             result.updatedRecordState?.let { updated ->
                 var persisted = if (appliedRev != null) updated.copy(lastSyncedRevision = appliedRev) else updated
                 appliedContentFp?.let { persisted = persisted.copy(contentFp = it) }
+                if (bookUrl == null) persisted = persisted.copy(held = true)
                 recordStates.upsert(persisted)
             }
         }
@@ -1100,6 +1119,7 @@ internal class DriveMetadataSync(
         existingResolutions: List<DriveResolution>,
         incoming: DriveWireRecord,
         nextHlc: suspend () -> String,
+        heldReplay: Boolean = false,
     ): LocalRecordView {
         val overrideActive = isOverrideActive(book, field)
         val liveBody = buildLocalBodyOrNull(book, workKey, field, revRow, existingState, syncRow)
@@ -1112,7 +1132,22 @@ internal class DriveMetadataSync(
         val hasPostCrashLocalEdit = postCrashAckMatchesIncoming && revRow != null && syncRow != null && revRow.revision > syncRow.ackedRevision
 
         if (existingState == null) {
-            if (!overrideActive) return LocalRecordView(versionFp = null)
+            if (!overrideActive) {
+                // An override the reader removed is a real revisioned deletion, not absent data.
+                // Replaying a retained version must see it as a competing edit instead of
+                // overwriting the removal.
+                if (heldReplay && revRow != null && revRow.revision > 0L) {
+                    return LocalRecordView(
+                        versionFp = DriveCanonicalJson.delFp(DriveWireCodec.DOMAIN_METADATA, recordKey, nextHlc()),
+                        versionOp = DriveRecordState.OP_DEL,
+                        isLivePut = false,
+                        contentFp = null,
+                        bodyJson = null,
+                        localRowMatchesContentFp = true,
+                    )
+                }
+                return LocalRecordView(versionFp = null)
+            }
             if (liveContentFp != null) {
                 return LocalRecordView(
                     versionFp = liveContentFp,

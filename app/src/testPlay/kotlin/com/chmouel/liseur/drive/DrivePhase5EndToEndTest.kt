@@ -6,7 +6,10 @@ import androidx.room.Room
 import androidx.room.withTransaction
 import androidx.test.core.app.ApplicationProvider
 import com.chmouel.liseur.data.calibre.CredentialCipher
+import com.chmouel.liseur.data.db.AnnotationSync
 import com.chmouel.liseur.data.db.Book
+import com.chmouel.liseur.data.db.BookAnnotation
+import com.chmouel.liseur.data.db.BookEvaluation
 import com.chmouel.liseur.data.db.BookFingerprintRow
 import com.chmouel.liseur.data.db.BookMetadata
 import com.chmouel.liseur.data.db.DownloadState
@@ -45,6 +48,7 @@ import java.util.concurrent.atomic.AtomicLong
 import javax.crypto.KeyGenerator
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
+import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -1007,6 +1011,529 @@ class DrivePhase5EndToEndTest {
         assertNull(deviceA.driveSync.vocabularySync.upgradeOccurrenceKeyIfNeeded(stored.copy(workId = null), "work-1"))
         assertNull(dao.occurrenceById(rowId))
     }
+
+    @Test
+    fun `session after catalog deletion remains as hidden history`() = runTest {
+        val key = "isbn:9780156027601"
+        val hlc = "0017450000000-0001-dev-a"
+        deviceA.driveDb.recordStates().upsert(
+            DriveRecordState(
+                permissionId = PERM_A,
+                domain = DriveWireCodec.DOMAIN_CATALOG,
+                recordKey = key,
+                versionFp = "deleted",
+                versionOp = DriveRecordState.OP_DEL,
+                lastHlc = hlc,
+            ),
+        )
+        val body = DriveSessionBody("session-1", key, 1000L, 2000L, 1000L, 0L, 0.0, 0.1, "dev-a")
+        val record = DriveWireCodec.putRecord(
+            DriveWireCodec.DOMAIN_SESSION, body.sessionId, hlc, DriveWireCodec.encodeSessionBody(body),
+        )
+        val identity = DriveWorkIdentity(deviceA.liseurDb, deviceA.driveDb)
+        val sync = DriveSessionSync(deviceA.liseurDb, deviceA.driveDb, identity)
+        assertTrue(sync.applyRemoteRecord(PERM_A, record, "dev-a", 1L))
+        assertTrue(sync.applyRemoteRecord(PERM_A, record, "dev-a", 1L))
+        assertNull(deviceA.liseurDb.bookDao().getByUrl("drive:$key"))
+        assertEquals("drive:$key", deviceA.liseurDb.readingSessionDao().allOnce().single().bookUrl)
+    }
+
+    @Test
+    fun `annotation after catalog deletion remains as hidden history`() = runTest {
+        val key = "isbn:9780156027601"
+        val hlc = "0017450000000-0001-dev-a"
+        deviceA.driveDb.recordStates().upsert(
+            DriveRecordState(PERM_A, DriveWireCodec.DOMAIN_CATALOG, key, "deleted", DriveRecordState.OP_DEL, lastHlc = hlc),
+        )
+        val body = DriveAnnotationBody(
+            id = "note-1", workKey = key, editionSha = null, kind = "BOOK_NOTE", locatorJson = "",
+            text = null, note = "Remember this", tint = null, chapter = null, totalProgression = null,
+            createdAt = 1000L, noteCreatedAt = 1000L, noteUpdatedAt = 1000L, updatedAt = 1000L,
+        )
+        val record = DriveWireCodec.putRecord(
+            DriveWireCodec.DOMAIN_ANNOTATION, body.id, hlc, DriveWireCodec.encodeAnnotationBody(body),
+        )
+        val identity = DriveWorkIdentity(deviceA.liseurDb, deviceA.driveDb)
+        val sync = DriveAnnotationSync(deviceA.liseurDb, deviceA.driveDb, identity)
+        assertTrue(sync.applyRemoteRecord(PERM_A, record, "dev-a", 1L) { hlc })
+        assertTrue(sync.applyRemoteRecord(PERM_A, record, "dev-a", 1L) { hlc })
+        assertNull(deviceA.liseurDb.bookDao().getByUrl("drive:$key"))
+        assertEquals("drive:$key", deviceA.liseurDb.annotationDao().byId(body.id)?.bookId)
+        assertEquals(record.fp, deviceA.driveDb.recordStates().get(PERM_A, DriveWireCodec.DOMAIN_ANNOTATION, body.id)?.versionFp)
+    }
+
+    @Test
+    fun `hidden annotation under an alias accepts a later edit`() = runTest {
+        val key = "isbn:9780156027601"
+        val alias = "sha:old"
+        val deletedAlias = "sha:older"
+        val hlc = "0017450000000-0001-dev-a"
+        val identity = DriveWorkIdentity(deviceA.liseurDb, deviceA.driveDb)
+        val merge = DriveWireCodec.putRecord(
+            DriveWireCodec.DOMAIN_WORK_ALIAS, "merge:$alias", hlc,
+            DriveWireCodec.encodeWorkAliasBody(DriveWorkAliasBody.Merge(alias, key, 1L)),
+        )
+        identity.applyRemoteRecord(PERM_A, merge, "dev-a", 1L)
+        val siblingMerge = DriveWireCodec.putRecord(
+            DriveWireCodec.DOMAIN_WORK_ALIAS, "merge:$deletedAlias", hlc,
+            DriveWireCodec.encodeWorkAliasBody(DriveWorkAliasBody.Merge(deletedAlias, key, 1L)),
+        )
+        identity.applyRemoteRecord(PERM_A, siblingMerge, "dev-a", 2L)
+        deviceA.driveDb.recordStates().upsert(
+            DriveRecordState(PERM_A, DriveWireCodec.DOMAIN_CATALOG, deletedAlias, "deleted", DriveRecordState.OP_DEL, lastHlc = hlc),
+        )
+        assertFalse(identity.awaitsCatalogEntry(PERM_A, alias))
+        val body = DriveAnnotationBody(
+            id = "note-alias", workKey = alias, editionSha = null, kind = "BOOK_NOTE", locatorJson = "",
+            text = null, note = "First", tint = null, chapter = null, totalProgression = null,
+            createdAt = 1000L, noteCreatedAt = 1000L, noteUpdatedAt = 1000L, updatedAt = 1000L,
+        )
+        val first = DriveWireCodec.putRecord(
+            DriveWireCodec.DOMAIN_ANNOTATION, body.id, hlc, DriveWireCodec.encodeAnnotationBody(body),
+        )
+        val successor = DriveWireCodec.putRecord(
+            DriveWireCodec.DOMAIN_ANNOTATION, body.id, "0017450000000-0002-dev-a",
+            DriveWireCodec.encodeAnnotationBody(body.copy(note = "Second", updatedAt = 2000L)),
+            ancestors = listOf(first.fp),
+        )
+        val sync = DriveAnnotationSync(deviceA.liseurDb, deviceA.driveDb, identity)
+        assertTrue(sync.applyRemoteRecord(PERM_A, first, "dev-a", 1L) { hlc })
+        val laterMerge = DriveWireCodec.putRecord(
+            DriveWireCodec.DOMAIN_WORK_ALIAS, "merge:$key", "0017450000000-0002-dev-b",
+            DriveWireCodec.encodeWorkAliasBody(DriveWorkAliasBody.Merge(key, "dc:solaris", 2L)),
+        )
+        identity.applyRemoteRecord(PERM_A, laterMerge, "dev-b", 1L)
+        assertTrue(sync.applyRemoteRecord(PERM_A, successor, "dev-a", 2L) { hlc })
+        assertEquals("Second", deviceA.liseurDb.annotationDao().byId(body.id)?.note)
+        assertTrue(deviceA.driveDb.conflicts().unsettledForRecord(PERM_A, DriveWireCodec.DOMAIN_ANNOTATION, body.id).isEmpty())
+    }
+
+    @Test
+    fun `series after a catalog deletion is retained and materialized when the book returns`() = runTest {
+        val key = "isbn:9780156027601"
+        val hlc = "0017450000000-0001-dev-a"
+        deviceA.driveDb.recordStates().upsert(
+            DriveRecordState(PERM_A, DriveWireCodec.DOMAIN_CATALOG, key, "deleted", DriveRecordState.OP_DEL, lastHlc = hlc),
+        )
+        val identity = DriveWorkIdentity(deviceA.liseurDb, deviceA.driveDb)
+        val sync = DriveSeriesSync(deviceA.liseurDb, deviceA.driveDb, identity)
+        val body = DriveSeriesBody(
+            workKey = key,
+            seriesOverridden = true,
+            userSeriesName = "Solaris Cycle",
+            indexOverridden = true,
+            userSeriesIndex = 2.0,
+            seriesKey = "solaris cycle",
+            updatedAt = 1_000L,
+        )
+        val record = DriveWireCodec.putRecord(
+            DriveWireCodec.DOMAIN_SERIES, key, hlc, DriveWireCodec.encodeSeriesBody(body),
+        )
+
+        assertTrue(sync.applyRemoteRecord(PERM_A, record, "dev-a", 1L) { hlc })
+
+        val held = deviceA.driveDb.recordStates().get(PERM_A, DriveWireCodec.DOMAIN_SERIES, key)!!
+        assertTrue(held.held)
+        assertEquals(record.fp, held.versionFp)
+        assertNotNull(held.bodyJson)
+        assertNull(deviceA.liseurDb.bookDao().getByUrl("drive:$key"))
+
+        seedRestoredBook(deviceA, key)
+        deviceA.changeEngine.materializeHeldRecords(PERM_A, "dev-a", "token")
+
+        val restored = deviceA.liseurDb.bookDao().getByUrl("drive:$key")!!
+        assertTrue(restored.seriesOverridden)
+        assertEquals("Solaris Cycle", restored.userSeriesName)
+        assertEquals(2.0, restored.userSeriesIndex)
+        assertFalse(deviceA.driveDb.recordStates().get(PERM_A, DriveWireCodec.DOMAIN_SERIES, key)!!.held)
+    }
+
+    @Test
+    fun `evaluation after a catalog deletion is retained and materialized when the book returns`() = runTest {
+        val key = "isbn:9780156027601"
+        val hlc = "0017450000000-0001-dev-a"
+        deviceA.driveDb.recordStates().upsert(
+            DriveRecordState(PERM_A, DriveWireCodec.DOMAIN_CATALOG, key, "deleted", DriveRecordState.OP_DEL, lastHlc = hlc),
+        )
+        val identity = DriveWorkIdentity(deviceA.liseurDb, deviceA.driveDb)
+        val sync = DriveEvaluationSync(deviceA.liseurDb, deviceA.driveDb, identity)
+        val rating = DriveWireCodec.putRecord(
+            DriveWireCodec.DOMAIN_EVALUATION, "$key/rating", hlc,
+            DriveWireCodec.encodeEvaluationBody(DriveEvaluationBody(key, "rating", "9", 1_000L)),
+        )
+        val review = DriveWireCodec.putRecord(
+            DriveWireCodec.DOMAIN_EVALUATION, "$key/review", hlc,
+            DriveWireCodec.encodeEvaluationBody(DriveEvaluationBody(key, "review", "The ocean speaks", 1_000L)),
+        )
+
+        assertTrue(sync.applyRemoteRecord(PERM_A, rating, "dev-a", 1L) { hlc })
+        assertTrue(sync.applyRemoteRecord(PERM_A, review, "dev-a", 1L) { hlc })
+        assertTrue(deviceA.driveDb.recordStates().get(PERM_A, DriveWireCodec.DOMAIN_EVALUATION, "$key/rating")!!.held)
+        assertTrue(deviceA.driveDb.recordStates().get(PERM_A, DriveWireCodec.DOMAIN_EVALUATION, "$key/review")!!.held)
+
+        seedRestoredBook(deviceA, key)
+        deviceA.changeEngine.materializeHeldRecords(PERM_A, "dev-a", "token")
+
+        assertEquals("9", deviceA.liseurDb.bookEvaluationDao().get("drive:$key", "rating")?.value)
+        assertEquals("The ocean speaks", deviceA.liseurDb.bookEvaluationDao().get("drive:$key", "review")?.value)
+        assertFalse(deviceA.driveDb.recordStates().get(PERM_A, DriveWireCodec.DOMAIN_EVALUATION, "$key/rating")!!.held)
+    }
+
+    @Test
+    fun `metadata override after a catalog deletion is retained and materialized when the book returns`() = runTest {
+        val key = "isbn:9780156027601"
+        val hlc = "0017450000000-0001-dev-a"
+        deviceA.driveDb.recordStates().upsert(
+            DriveRecordState(PERM_A, DriveWireCodec.DOMAIN_CATALOG, key, "deleted", DriveRecordState.OP_DEL, lastHlc = hlc),
+        )
+        val identity = DriveWorkIdentity(deviceA.liseurDb, deviceA.driveDb)
+        val sync = deviceA.driveSync.metadataSync
+        val record = DriveWireCodec.putRecord(
+            DriveWireCodec.DOMAIN_METADATA, "$key/title", hlc,
+            DriveWireCodec.encodeMetadataBody(DriveMetadataBody.Text(key, "title", "Solaris, Revised", 1_000L)),
+        )
+
+        assertTrue(sync.applyRemoteRecord(PERM_A, "token", record, "dev-a", 1L) { hlc })
+        assertTrue(deviceA.driveDb.recordStates().get(PERM_A, DriveWireCodec.DOMAIN_METADATA, "$key/title")!!.held)
+
+        val restored = seedRestoredBook(deviceA, key)
+        deviceA.changeEngine.materializeHeldRecords(PERM_A, "dev-a", "token")
+
+        assertEquals("Solaris, Revised", deviceA.liseurDb.bookDao().getByUrl(restored.url)?.title)
+        assertFalse(deviceA.driveDb.recordStates().get(PERM_A, DriveWireCodec.DOMAIN_METADATA, "$key/title")!!.held)
+    }
+
+    @Test
+    fun `history kept under the synthetic key follows the book onto a different live url`() = runTest {
+        val key = "isbn:9780156027601"
+        val hidden = "drive:$key"
+        val live = "file:///calibre/solaris.epub"
+        deviceA.liseurDb.bookDao().upsert(restoredBook(live))
+        deviceA.liseurDb.workIdentityDao().upsert(
+            WorkAlias(
+                bookUrl = live,
+                peerId = DriveLibrarySync.accountPeerId(PERM_A),
+                workId = key,
+                confidence = "high",
+                resolvedAt = 0L,
+            ),
+        )
+        deviceA.liseurDb.annotationDao().upsert(
+            BookAnnotation(
+                id = "note-1", bookId = hidden, kind = "BOOK_NOTE", locatorJson = "",
+                note = "Remember this", createdAt = 1_000L,
+            ),
+        )
+        deviceA.liseurDb.annotationSyncDao().upsert(
+            AnnotationSync(id = "note-1", peerId = DriveLibrarySync.accountPeerId(PERM_A), bookId = hidden, workId = key),
+        )
+        deviceA.liseurDb.readingSessionDao().insert(
+            ReadingSession(
+                bookUrl = hidden, startedAt = 1_000L, endedAt = 2_000L, lastCheckpointAt = 2_000L,
+                durationMs = 1_000L, startProgression = 0.0, endProgression = 0.1,
+            ),
+        )
+
+        DriveWorkIdentity(deviceA.liseurDb, deviceA.driveDb).reattachHiddenHistory(PERM_A)
+
+        assertEquals(live, deviceA.liseurDb.annotationDao().byId("note-1")?.bookId)
+        assertEquals("Remember this", deviceA.liseurDb.annotationDao().byId("note-1")?.note)
+        assertEquals(live, deviceA.liseurDb.readingSessionDao().allOnce().single().bookUrl)
+        assertEquals(
+            live,
+            deviceA.liseurDb.annotationSyncDao().get(DriveLibrarySync.accountPeerId(PERM_A), "note-1")?.bookId,
+        )
+    }
+
+    @Test
+    fun `series held under a catalog tombstone is materialized once the work is restored`() = runTest {
+        val key = "isbn:9780156027601"
+        val firstHlc = "0017450000000-0001-dev-a"
+        val deleterHlc = "0017450000000-0002-dev-z"
+        val restorerHlc = "0017450000000-0003-dev-r"
+        val catalog = deviceA.driveSync.catalogSync
+        val series = deviceA.driveSync.seriesSync
+
+        fun catalogBody() = DriveCatalogBody(
+            workKey = key,
+            title = "Solaris",
+            author = "Stanislaw Lem",
+            identifiers = emptyList(),
+            editions = listOf(
+                DriveCatalogEdition(
+                    sha256 = "a".repeat(64),
+                    fileName = "solaris.epub",
+                    sizeBytes = 34L,
+                    driveFileId = null,
+                    uploadedAt = null,
+                    availabilityHlc = null,
+                ),
+            ),
+            fileSeriesName = null,
+            fileSeriesIndex = null,
+            addedAt = 1_000L,
+            archivedAt = null,
+            updatedAt = 1_000L,
+        )
+
+        // Another device publishes the work, so the catalog entry exists before anything else.
+        val publish = DriveWireCodec.putRecord(
+            DriveWireCodec.DOMAIN_CATALOG, key, firstHlc, DriveWireCodec.encodeCatalogBody(catalogBody()),
+        )
+        catalog.applyRemoteRecord(PERM_A, publish, "dev-a", 1L) { firstHlc }
+        assertNotNull(deviceA.liseurDb.bookDao().getByUrl("drive:$key"))
+
+        // A third device deletes it from its synced library: the tombstone supersedes the publication.
+        val deletion = DriveWireCodec.delRecord(
+            DriveWireCodec.DOMAIN_CATALOG, key, deleterHlc, ancestors = listOf(publish.fp),
+        )
+        catalog.applyRemoteRecord(PERM_A, deletion, "dev-z", 1L) { deleterHlc }
+        assertNull(deviceA.liseurDb.bookDao().getByUrl("drive:$key"))
+        assertEquals(
+            DriveRecordState.OP_DEL,
+            deviceA.driveDb.recordStates().get(PERM_A, DriveWireCodec.DOMAIN_CATALOG, key)?.versionOp,
+        )
+
+        // The series record for that work arrives after the tombstone: retained, not acknowledged and dropped.
+        val seriesBody = DriveSeriesBody(
+            workKey = key,
+            seriesOverridden = true,
+            userSeriesName = "Solaris Cycle",
+            indexOverridden = true,
+            userSeriesIndex = 2.0,
+            seriesKey = "solaris cycle",
+            updatedAt = 1_000L,
+        )
+        val seriesRecord = DriveWireCodec.putRecord(
+            DriveWireCodec.DOMAIN_SERIES, key, firstHlc, DriveWireCodec.encodeSeriesBody(seriesBody),
+        )
+        assertTrue(series.applyRemoteRecord(PERM_A, seriesRecord, "dev-a", 2L) { firstHlc })
+        val held = deviceA.driveDb.recordStates().get(PERM_A, DriveWireCodec.DOMAIN_SERIES, key)!!
+        assertTrue(held.held)
+        assertEquals(seriesRecord.fp, held.versionFp)
+        assertNotNull(held.bodyJson)
+
+        // A device that never saw the deletion re-imports the same edition, restoring the work.
+        val restore = DriveWireCodec.putRecord(
+            DriveWireCodec.DOMAIN_CATALOG, key, restorerHlc,
+            DriveWireCodec.encodeCatalogBody(catalogBody().copy(updatedAt = 3_000L)),
+            ancestors = listOf(deletion.fp),
+        )
+        catalog.applyRemoteRecord(PERM_A, restore, "dev-r", 1L) { restorerHlc }
+
+        deviceA.changeEngine.materializeHeldRecords(PERM_A, "dev-a", "token")
+
+        val restored = deviceA.liseurDb.bookDao().getByUrl("drive:$key")
+        assertNotNull(restored)
+        assertTrue(restored!!.seriesOverridden)
+        assertEquals("Solaris Cycle", restored.userSeriesName)
+        assertEquals(2.0, restored.userSeriesIndex)
+        assertFalse(deviceA.driveDb.recordStates().get(PERM_A, DriveWireCodec.DOMAIN_SERIES, key)!!.held)
+
+        // Later edits and deletes keep applying normally once the record is materialized.
+        val successor = DriveWireCodec.putRecord(
+            DriveWireCodec.DOMAIN_SERIES, key, "0017450000000-0004-dev-a",
+            DriveWireCodec.encodeSeriesBody(seriesBody.copy(userSeriesName = "Solaris Cycle II", updatedAt = 4_000L)),
+            ancestors = listOf(seriesRecord.fp),
+        )
+        assertTrue(series.applyRemoteRecord(PERM_A, successor, "dev-a", 3L) { firstHlc })
+        assertEquals("Solaris Cycle II", deviceA.liseurDb.bookDao().getByUrl("drive:$key")?.userSeriesName)
+    }
+
+    @Test
+    fun `a snapshot carrying the tombstone next to the series record retains that record`() = runTest {
+        val server = Phase5FakeDriveServer()
+        val snapshotSource = "dev-s-source"
+        val fresh = createDevice("dev-t-fresh", File(tempDir, "snap-fresh"), server)
+        try {
+            fresh.connect(PERM_A, "a@example.com")
+            val key = "isbn:9780156027601"
+            val hlc = "0017450000000-0001-dev-s-source"
+            val catalogPut = DriveWireCodec.putRecord(
+                DriveWireCodec.DOMAIN_CATALOG, key, hlc,
+                DriveWireCodec.encodeCatalogBody(
+                    DriveCatalogBody(
+                        workKey = key,
+                        title = "Solaris",
+                        author = "Stanislaw Lem",
+                        identifiers = emptyList(),
+                        editions = emptyList(),
+                        fileSeriesName = null,
+                        fileSeriesIndex = null,
+                        addedAt = 1_000L,
+                        archivedAt = null,
+                        updatedAt = 1_000L,
+                    ),
+                ),
+            )
+            val deletion = DriveWireCodec.delRecord(
+                DriveWireCodec.DOMAIN_CATALOG, key, hlc, ancestors = listOf(catalogPut.fp),
+            )
+            val seriesBody = DriveSeriesBody(
+                workKey = key,
+                seriesOverridden = true,
+                userSeriesName = "Solaris Cycle",
+                indexOverridden = true,
+                userSeriesIndex = 2.0,
+                seriesKey = "solaris cycle",
+                updatedAt = 1_000L,
+            )
+            val seriesRecord = DriveWireCodec.putRecord(
+                DriveWireCodec.DOMAIN_SERIES, key, hlc, DriveWireCodec.encodeSeriesBody(seriesBody),
+            )
+            val batch = DriveDeltaBatch(
+                batchId = "snapshot-held-part",
+                deviceId = snapshotSource,
+                seq = 1L,
+                createdHlc = hlc,
+                domains = DriveWireCodec.SUPPORTED_DOMAIN_VERSIONS,
+                records = listOf(deletion, seriesRecord),
+            )
+            val bytes = JSONObject(DriveWireCodec.encodeDeltaBatch(batch))
+                .put("throughSeq", 5L).put("partIndex", 0).put("partCount", 1)
+                .toString().toByteArray()
+            val file = server.clientFor(snapshotSource)
+                .createAppDataFile("token", "snapshot-held-part.json", "application/json", bytes, emptyMap())
+
+            fresh.changeEngine.applySnapshot(
+                PERM_A, "dev-t-fresh", snapshotSource,
+                DriveSnapshotRef(
+                    5L,
+                    listOf(
+                        DriveSnapshotPartRef(
+                            "snapshot-held-part.json",
+                            file.id,
+                            DriveCanonicalJson.sha256Hex(bytes),
+                            2,
+                            0,
+                        ),
+                    ),
+                ),
+                "token",
+            )
+
+            // The snapshot holds the tombstone, so the work has no book and the series record is retained.
+            assertNull(fresh.liseurDb.bookDao().getByUrl("drive:$key"))
+            val held = fresh.driveDb.recordStates().get(PERM_A, DriveWireCodec.DOMAIN_SERIES, key)!!
+            assertTrue(held.held)
+            assertEquals(seriesRecord.fp, held.versionFp)
+
+            // Restoring the work from a later catalog version materializes the retained history.
+            fresh.liseurDb.bookDao().upsert(restoredBook("drive:$key"))
+            fresh.changeEngine.materializeHeldRecords(PERM_A, "dev-t-fresh", "token")
+
+            val restored = fresh.liseurDb.bookDao().getByUrl("drive:$key")!!
+            assertTrue(restored.seriesOverridden)
+            assertEquals("Solaris Cycle", restored.userSeriesName)
+        } finally {
+            fresh.close()
+        }
+    }
+
+    @Test
+    fun `a rating the reader cleared is not overwritten when the retained version replays`() = runTest {
+        deviceA.connect(PERM_A, "a@example.com")
+        val key = "isbn:9780156027601"
+        val hlc = "0017450000000-0001-dev-a"
+        deviceA.driveDb.recordStates().upsert(
+            DriveRecordState(PERM_A, DriveWireCodec.DOMAIN_CATALOG, key, "deleted", DriveRecordState.OP_DEL, lastHlc = hlc),
+        )
+        val identity = DriveWorkIdentity(deviceA.liseurDb, deviceA.driveDb)
+        val sync = DriveEvaluationSync(deviceA.liseurDb, deviceA.driveDb, identity)
+        val rating = DriveWireCodec.putRecord(
+            DriveWireCodec.DOMAIN_EVALUATION, "$key/rating", hlc,
+            DriveWireCodec.encodeEvaluationBody(DriveEvaluationBody(key, "rating", "9", 1_000L)),
+        )
+        assertTrue(sync.applyRemoteRecord(PERM_A, rating, "dev-a", 1L) { hlc })
+
+        // The book comes back, and the reader clears the rating before the retained version replays.
+        seedRestoredBook(deviceA, key)
+        deviceA.liseurDb.bookEvaluationDao().upsert(
+            BookEvaluation(bookUrl = "drive:$key", field = "rating", value = null, title = "Solaris", author = "Lem", revision = 1L, updatedAt = 2_000L),
+        )
+
+        deviceA.changeEngine.materializeHeldRecords(PERM_A, "dev-a", "token")
+
+        assertNull(deviceA.liseurDb.bookEvaluationDao().get("drive:$key", "rating")?.value)
+        assertEquals(
+            1,
+            deviceA.driveDb.conflicts().unsettledForRecord(PERM_A, DriveWireCodec.DOMAIN_EVALUATION, "$key/rating").size,
+        )
+    }
+
+    @Test
+    fun `a retained rating is never published over by a local edit made before it replays`() = runTest {
+        deviceA.connect(PERM_A, "a@example.com")
+        val key = "isbn:9780156027601"
+        val hlc = "0017450000000-0001-dev-a"
+        deviceA.driveDb.recordStates().upsert(
+            DriveRecordState(PERM_A, DriveWireCodec.DOMAIN_CATALOG, key, "deleted", DriveRecordState.OP_DEL, lastHlc = hlc),
+        )
+        val identity = DriveWorkIdentity(deviceA.liseurDb, deviceA.driveDb)
+        val sync = DriveEvaluationSync(deviceA.liseurDb, deviceA.driveDb, identity)
+        val rating = DriveWireCodec.putRecord(
+            DriveWireCodec.DOMAIN_EVALUATION, "$key/rating", hlc,
+            DriveWireCodec.encodeEvaluationBody(DriveEvaluationBody(key, "rating", "9", 1_000L)),
+        )
+        assertTrue(sync.applyRemoteRecord(PERM_A, rating, "dev-a", 1L) { hlc })
+        seedRestoredBook(deviceA, key)
+        deviceA.liseurDb.bookEvaluationDao().upsert(
+            BookEvaluation(bookUrl = "drive:$key", field = "rating", value = "5", title = "Solaris", author = "Lem", revision = 2L, updatedAt = 2_000L),
+        )
+
+        val outbound = sync.collectDirtyRecords(PERM_A) { "0017450000000-0009-dev-a" }
+
+        assertTrue(outbound.records.none { it.k == "$key/rating" })
+        assertTrue(deviceA.driveDb.recordStates().get(PERM_A, DriveWireCodec.DOMAIN_EVALUATION, "$key/rating")!!.held)
+    }
+
+    @Test
+    fun `history is left alone while the synthetic key still names a live book`() = runTest {
+        val key = "isbn:9780156027601"
+        val hidden = "drive:$key"
+        val other = "file:///calibre/solaris.epub"
+        deviceA.liseurDb.bookDao().upsert(restoredBook(hidden))
+        deviceA.liseurDb.bookDao().upsert(restoredBook(other))
+        deviceA.liseurDb.workIdentityDao().upsert(
+            WorkAlias(
+                bookUrl = other,
+                peerId = DriveLibrarySync.accountPeerId(PERM_A),
+                workId = key,
+                confidence = "high",
+                resolvedAt = 0L,
+            ),
+        )
+        deviceA.liseurDb.annotationDao().upsert(
+            BookAnnotation(
+                id = "note-2", bookId = hidden, kind = "BOOK_NOTE", locatorJson = "",
+                note = "Still here", createdAt = 1_000L,
+            ),
+        )
+
+        DriveWorkIdentity(deviceA.liseurDb, deviceA.driveDb).reattachHiddenHistory(PERM_A)
+
+        assertEquals(hidden, deviceA.liseurDb.annotationDao().byId("note-2")?.bookId)
+    }
+
+    private suspend fun seedRestoredBook(device: Phase5Device, workKey: String): Book {
+        val book = restoredBook("drive:$workKey")
+        device.liseurDb.bookDao().upsert(book)
+        return book
+    }
+
+    private fun restoredBook(url: String) = Book(
+        url = url,
+        title = "Solaris",
+        author = "Stanislaw Lem",
+        coverPath = null,
+        source = null,
+        addedAt = 1_000L,
+        lastOpenedAt = null,
+        localUri = null,
+        downloadState = DownloadState.REMOTE,
+        fileTitle = "Solaris",
+        fileAuthor = "Stanislaw Lem",
+    )
 
     @Test
     fun `sessions arriving before their catalog entry are deferred and applied once catalog arrives`() = runTest {
