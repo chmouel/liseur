@@ -43,6 +43,12 @@ import java.util.concurrent.atomic.AtomicLong
 import javax.crypto.KeyGenerator
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -1986,6 +1992,206 @@ class DrivePhase4EndToEndTest {
     }
 
     @Test
+    fun `disconnect waits for an in-flight upload to unwind`() = runTest {
+        assertUploadDrained { deviceA.driveSync.deactivate() }
+    }
+
+    @Test
+    fun `a pending switch waits for an in-flight upload to unwind`() = runTest {
+        assertUploadDrained {
+            val previous = deviceA.driveDb.accounts().active()!!
+            deviceA.driveSync.pauseForPendingSwitch(previous)
+        }
+        assertEquals(DriveAccount.STATE_ACTIVE, deviceA.driveDb.accounts().get(PERM_ID)?.pendingSwitchPreviousState)
+        assertTrue(deviceA.driveSync.restoreAccountState(PERM_ID, DriveAccount.STATE_ACTIVE))
+        assertEquals(DriveUpload.STATE_UPLOADING, deviceA.driveDb.uploads().forAccount(PERM_ID).single().state)
+        val remoteId = driveServer.epubFilesSnapshot().single().id
+        assertEquals(1, deviceA.epubTransfers.uploadPending().uploadedCount)
+        assertEquals(remoteId, deviceA.driveDb.uploads().forAccount(PERM_ID).single().fileId)
+        assertEquals(1, driveServer.epubFilesSnapshot().size)
+    }
+
+    @Test
+    fun `cancelling a pending switch drains the upload before restoring the account`() = runTest {
+        deviceA.connect()
+        val book = seedBook(deviceA, "cancel-switch.epub", "9780547928319", "Cancel Switch", "Author", customBytes = "SWITCH".toByteArray())
+        assertEquals(1, deviceA.epubTransfers.queueSelectedBooks(PERM_ID, setOf(book.url)))
+        val started = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        driveServer.beforeUploadCommit = {
+            withContext(NonCancellable) {
+                started.complete(Unit)
+                release.await()
+            }
+        }
+        try {
+            withContext(Dispatchers.Default) {
+                withTimeout(10_000) {
+                    val upload = async { runCatching { deviceA.epubTransfers.uploadPending() } }
+                    try {
+                        started.await()
+                        val previous = deviceA.driveDb.accounts().active()!!
+                        val switching = async { deviceA.driveSync.pauseForPendingSwitch(previous) }
+                        while (deviceA.driveDb.accounts().active() != null) delay(1)
+                        switching.cancel()
+                        assertFalse(switching.isCompleted)
+                        release.complete(Unit)
+                        switching.join()
+                        upload.await()
+                        assertEquals(PERM_ID, deviceA.driveDb.accounts().active()?.permissionId)
+                        assertNull(deviceA.driveDb.accounts().get(PERM_ID)?.pendingSwitchPreviousState)
+                    } finally {
+                        release.complete(Unit)
+                    }
+                }
+            }
+        } finally {
+            release.complete(Unit)
+            driveServer.beforeUploadCommit = null
+        }
+    }
+
+    @Test
+    fun `direct switch asks for upload selection even if the clock moved backwards`() = runTest {
+        deviceA.driveSync.activateAccount("perm-other", "other@example.com", now = 2_000L)
+        val other = deviceA.driveDb.accounts().active()!!
+        deviceA.driveDb.accounts().upsert(other.copy(uploadSelectionAt = 2_001L))
+        deviceA.driveSync.activateAccount(PERM_ID, "reader@example.com", now = 1_000L)
+        deviceA.driveSync.activateAccount("perm-other", "other@example.com", now = 3_000L)
+        assertNull(deviceA.driveDb.accounts().get("perm-other")?.uploadSelectionAt)
+    }
+
+    @Test
+    fun `switching back after clock rollback holds old uploads until selected again`() = runTest {
+        deviceA.connect()
+        val book = seedBook(deviceA, "clock.epub", "9780547928319", "Clock", "Author", customBytes = "CLOCK".toByteArray())
+        assertEquals(1, deviceA.epubTransfers.queueSelectedBooks(PERM_ID, setOf(book.url)))
+        deviceA.driveSync.activateAccount("perm-other", "other@example.com", now = 1_100L)
+        deviceA.driveSync.pauseForPendingSwitch(deviceA.driveDb.accounts().active()!!)
+        deviceA.driveSync.activateAccount(PERM_ID, "reader@example.com", now = 1_200L)
+        assertNull(deviceA.driveDb.accounts().get(PERM_ID)?.uploadSelectionAt)
+        assertEquals(0, deviceA.epubTransfers.uploadPending().uploadedCount)
+        assertTrue(driveServer.epubFilesSnapshot().isEmpty())
+        assertEquals(setOf(book.url), deviceA.epubTransfers.queueBooks(PERM_ID, listOf(book.url)))
+        assertEquals(1, deviceA.epubTransfers.uploadPending().uploadedCount)
+    }
+
+    @Test
+    fun `confirmed switch asks for upload selection even if the clock moved backwards`() = runTest {
+        deviceA.driveSync.activateAccount("perm-other", "other@example.com", now = 2_000L)
+        val other = deviceA.driveDb.accounts().active()!!
+        deviceA.driveDb.accounts().upsert(other.copy(uploadSelectionAt = 2_001L))
+        deviceA.driveSync.activateAccount(PERM_ID, "reader@example.com", now = 1_000L)
+        deviceA.driveSync.pauseForPendingSwitch(deviceA.driveDb.accounts().active()!!)
+        deviceA.driveSync.activateAccount("perm-other", "other@example.com", now = 3_000L)
+        assertNull(deviceA.driveDb.accounts().get("perm-other")?.uploadSelectionAt)
+    }
+
+    @Test
+    fun `direct account replacement waits for an in-flight upload to unwind`() = runTest {
+        assertUploadDrained { deviceA.driveSync.activateAccount("perm-other", "other@example.com") }
+        assertEquals("perm-other", deviceA.driveDb.accounts().active()?.permissionId)
+    }
+
+    @Test
+    fun `disconnect drains an upload after its final remote progress`() = runTest {
+        assertUploadDrained(afterCommit = true) { deviceA.driveSync.deactivate() }
+    }
+
+    private suspend fun assertUploadDrained(afterCommit: Boolean = false, transition: suspend () -> Unit) {
+        deviceA.connect()
+        val book = seedBook(deviceA, "drain.epub", "9780547928319", "Drain", "Author", customBytes = "EPUB-DRAIN".toByteArray())
+        val sha = deviceA.liseurDb.workIdentityDao().fingerprint(book.url)!!.sha256
+        assertEquals(1, deviceA.epubTransfers.queueSelectedBooks(PERM_ID, setOf(book.url)))
+        val started = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val hold: suspend (String) -> Unit = {
+            withContext(NonCancellable) {
+                started.complete(Unit)
+                release.await()
+            }
+        }
+        if (afterCommit) driveServer.afterUploadFinalProgress = hold else driveServer.beforeUploadCommit = hold
+        try {
+            withContext(Dispatchers.Default) {
+                withTimeout(10_000) {
+                    val upload = async { runCatching { deviceA.epubTransfers.uploadPending() } }
+                    try {
+                        started.await()
+                        val switching = async { transition() }
+                        while (deviceA.driveDb.accounts().active()?.permissionId == PERM_ID) delay(1)
+                        assertFalse(switching.isCompleted)
+                        release.complete(Unit)
+                        switching.await()
+                        assertTrue(upload.await().exceptionOrNull() is kotlinx.coroutines.CancellationException)
+                    } finally {
+                        release.complete(Unit)
+                    }
+                }
+            }
+        } finally {
+            release.complete(Unit)
+            driveServer.beforeUploadCommit = null
+            driveServer.afterUploadFinalProgress = null
+        }
+        val remote = driveServer.epubFilesSnapshot().single()
+        val row = deviceA.driveDb.uploads().get(PERM_ID, sha)!!
+        assertEquals(DriveUpload.STATE_UPLOADING, row.state)
+        assertNotNull(row.sessionUri)
+        assertNull(row.fileId)
+        assertNull(deviceA.driveDb.files().get(PERM_ID, remote.id))
+    }
+
+    @Test
+    fun `drain waits for upload finalization after the remote request`() = runTest {
+        deviceA.connect()
+        val book = seedBook(deviceA, "finalize.epub", "9780547928319", "Finalize", "Author", customBytes = "FINALIZE".toByteArray())
+        val sha = deviceA.liseurDb.workIdentityDao().fingerprint(book.url)!!.sha256
+        assertEquals(1, deviceA.epubTransfers.queueSelectedBooks(PERM_ID, setOf(book.url)))
+        val started = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val uploadJob = CompletableDeferred<Job>()
+        val manager = DriveEpubTransferManager(
+            context = context,
+            database = deviceA.liseurDb,
+            store = deviceA.driveDb,
+            driveApi = driveServer.clientFor("dev-a"),
+            workIdentity = deviceA.driveSync.workIdentity,
+            catalogSync = deviceA.driveSync.catalogSync,
+            fingerprintStore = deviceA.driveSync.fingerprintStore,
+            nextHlc = { perm -> deviceA.changeEngine.nextHlc(perm) },
+            acquireToken = { SilentTokenResult.Token("token-dev-a", PERM_ID) },
+            stagingDirProvider = { deviceA.stagingDir },
+            afterUploadRequest = {
+                uploadJob.complete(currentCoroutineContext()[Job]!!)
+                withContext(NonCancellable) {
+                    started.complete(Unit)
+                    release.await()
+                }
+            },
+        )
+        withContext(Dispatchers.Default) {
+            withTimeout(10_000) {
+                val upload = async { runCatching { manager.uploadPending() } }
+                try {
+                    started.await()
+                    val drain = async { manager.cancelAndDrain() }
+                    while (uploadJob.await().isActive) delay(1)
+                    assertFalse(drain.isCompleted)
+                    release.complete(Unit)
+                    drain.await()
+                    assertTrue(upload.await().exceptionOrNull() is kotlinx.coroutines.CancellationException)
+                } finally {
+                    release.complete(Unit)
+                }
+            }
+        }
+        val remote = driveServer.epubFilesSnapshot().single()
+        assertNull(deviceA.driveDb.files().get(PERM_ID, remote.id))
+        assertEquals(DriveUpload.STATE_UPLOADING, deviceA.driveDb.uploads().get(PERM_ID, sha)?.state)
+    }
+
+    @Test
     fun `cleanup keeps a cancelled session whose request is still running`() = runTest {
         deviceA.connect()
         val book = seedBook(deviceA, "still-running.epub", "9780547928319", "Still Running", "Author", customBytes = "EPUB-STILL-RUNNING".toByteArray())
@@ -3849,6 +4055,9 @@ class DrivePhase4EndToEndTest {
             chunkSizeBytes: Int, openStream: () -> InputStream,
             onSessionUri: suspend (String) -> Unit, onProgress: suspend (Long, String) -> Unit,
         ): DriveRemoteFile {
+            existingSessionUri?.let { session ->
+                completedSessions[session]?.let { id -> return files.getValue(id).meta }
+            }
             val sessionUri = existingSessionUri ?: "session://${nextId("up")}"
             onSessionUri(sessionUri)
             onUploadResumableStart?.invoke(name)

@@ -31,6 +31,7 @@ import java.io.File
 import java.security.MessageDigest
 import java.util.Locale
 import java.util.UUID
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -684,10 +685,21 @@ internal class DriveLibrarySync(
      */
     internal suspend fun pauseForPendingSwitch(previous: DriveAccount) {
         if (!hasStore()) return
-        stopWorkers()
-        store.withTransaction {
-            store.accounts().pauseAllActive()
-            store.accounts().markPendingSwitch(previous.permissionId, previous.state)
+        try {
+            store.withTransaction {
+                store.accounts().pauseAllActive()
+                store.accounts().markPendingSwitch(previous.permissionId, previous.state)
+            }
+            stopWorkers()
+            if (epubTransfersLazy.isInitialized()) {
+                epubTransfers.cancelAndDrain()
+            }
+        } catch (e: CancellationException) {
+            withContext(NonCancellable) {
+                if (epubTransfersLazy.isInitialized()) epubTransfers.cancelAndDrain()
+                restoreAccountState(previous.permissionId, previous.state)
+            }
+            throw e
         }
     }
 
@@ -753,35 +765,69 @@ internal class DriveLibrarySync(
             // storage failure here leaves the existing connection untouched.
             val db = store
             db.withTransaction { ensureInstall(db, now) }
-            if (remoteAccount.current() != null) {
-                beforeServerDisconnect()
-                remoteAccount.disconnect(preserveHistoryStubs = true) { retiringServer, preservedStubs ->
-                    capturePreservedStubAliases(permissionId, retiringServer, preservedStubs, now)
+            val previous = db.accounts().active()?.takeIf { it.permissionId != permissionId }
+            try {
+                if (previous != null) {
+                    db.withTransaction {
+                        db.accounts().pauseAllActive()
+                        db.accounts().markPendingSwitch(previous.permissionId, previous.state)
+                    }
+                    stopWorkers()
+                    if (epubTransfersLazy.isInitialized()) {
+                        epubTransfers.cancelAndDrain()
+                    }
                 }
-            }
-            db.withTransaction {
-                val previousPrimary = db.accounts().primary()
-                db.accounts().pauseAllActive()
-                db.accounts().clearPendingSwitches()
-                val existing = db.accounts().get(permissionId)
-                // ADR-0078: every switch, including back to an account used before, asks for a
-                // fresh selection. Reconnecting the account that was already primary keeps the
-                // reader's last answer.
-                val keepsSelection = previousPrimary == null || previousPrimary.permissionId == permissionId
-                val updated = existing?.copy(
-                    email = email,
-                    state = DriveAccount.STATE_ACTIVE,
-                    connectedAt = now,
-                    lastError = null,
-                    uploadSelectionAt = existing.uploadSelectionAt.takeIf { keepsSelection },
-                ) ?: DriveAccount(
-                    permissionId = permissionId,
-                    email = email,
-                    state = DriveAccount.STATE_ACTIVE,
-                    connectedAt = now,
-                )
-                db.accounts().upsert(updated)
-                updated
+                if (remoteAccount.current() != null) {
+                    beforeServerDisconnect()
+                    remoteAccount.disconnect(preserveHistoryStubs = true) { retiringServer, preservedStubs ->
+                        capturePreservedStubAliases(permissionId, retiringServer, preservedStubs, now)
+                    }
+                }
+                db.withTransaction {
+                    val previousPrimary = previous ?: db.accounts().all().firstOrNull { it.pendingSwitchPreviousState != null }
+                        ?: db.accounts().primary()
+                    db.accounts().pauseAllActive()
+                    db.accounts().clearPendingSwitches()
+                    val existing = db.accounts().get(permissionId)
+                    // ADR-0078: every switch, including back to an account used before, asks for a
+                    // fresh selection. Reconnecting the account that was already primary keeps the
+                    // reader's last answer.
+                    val keepsSelection = previousPrimary == null || previousPrimary.permissionId == permissionId
+                    if (!keepsSelection) {
+                        db.uploads().holdSelectionsBefore(permissionId, now, now - 1)
+                    }
+                    val updated = existing?.copy(
+                        email = email,
+                        state = DriveAccount.STATE_ACTIVE,
+                        connectedAt = now,
+                        lastError = null,
+                        uploadSelectionAt = existing.uploadSelectionAt.takeIf { keepsSelection },
+                    ) ?: DriveAccount(
+                        permissionId = permissionId,
+                        email = email,
+                        state = DriveAccount.STATE_ACTIVE,
+                        connectedAt = now,
+                    )
+                    db.accounts().upsert(updated)
+                    updated
+                }
+            } catch (e: Throwable) {
+                if (previous != null) {
+                    withContext(NonCancellable) {
+                        if (epubTransfersLazy.isInitialized()) epubTransfers.cancelAndDrain()
+                        val restored = db.withTransaction {
+                            if (db.accounts().get(previous.permissionId)?.pendingSwitchPreviousState != previous.state) {
+                                false
+                            } else {
+                                db.accounts().setState(previous.permissionId, previous.state)
+                                db.accounts().clearPendingSwitches()
+                                true
+                            }
+                        }
+                        if (restored) resumeActiveWork()
+                    }
+                }
+                throw e
             }
         }
     }

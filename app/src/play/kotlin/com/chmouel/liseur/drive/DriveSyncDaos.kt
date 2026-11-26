@@ -394,6 +394,9 @@ interface DriveUploadDao {
     )
     suspend fun pendingForAccount(permissionId: String): List<DriveUpload>
 
+    @Query("UPDATE drive_upload SET selected_at = :before WHERE permission_id = :permissionId AND selected_at >= :activation")
+    suspend fun holdSelectionsBefore(permissionId: String, activation: Long, before: Long)
+
     /** Moves one upload from [from] to [to] only if it is still in [from]; returns rows changed. */
     @Query(
         "UPDATE drive_upload SET state = :to, updated_at = :now " +
