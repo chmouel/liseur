@@ -508,7 +508,7 @@ class DriveAccountControllerTest {
         assertTrue(afterSwitch is SilentTokenResult.TransientFailure)
         assertEquals(DriveAccount.STATE_ACTIVE, driveDb.accounts().get("perm-B")?.state)
         assertEquals(DriveAccount.STATE_PAUSED, driveDb.accounts().get("perm-A")?.state)
-        assertEquals(stoppedBeforeSwitch, workersStopped.get())
+        assertEquals(stoppedBeforeSwitch + 1, workersStopped.get())
     }
 
     @Test

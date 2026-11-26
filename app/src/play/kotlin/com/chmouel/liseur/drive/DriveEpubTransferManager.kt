@@ -25,6 +25,7 @@ import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
@@ -109,10 +110,11 @@ internal class DriveEpubTransferManager(
     }
     private val accounts get() = store.accounts()
     private val activeDownloads: MutableSet<Job> = ConcurrentHashMap.newKeySet()
+    private val activeUploads: MutableSet<Job> = ConcurrentHashMap.newKeySet()
 
-    /** Cancels in-flight downloads and waits until each has unwound, so none installs afterwards. */
+    /** Cancels transfers and waits until each has unwound. */
     suspend fun cancelAndDrain() {
-        val jobs = activeDownloads.toList()
+        val jobs = (activeDownloads + activeUploads).toList()
         jobs.forEach { it.cancel() }
         jobs.forEach { it.join() }
     }
@@ -169,7 +171,7 @@ internal class DriveEpubTransferManager(
         selectedBookUrls: Set<String>,
         selectionAt: Long? = null,
     ): Int = withContext(Dispatchers.IO) {
-        val now = clock()
+        val now = maxOf(clock(), accounts.get(permissionId)?.connectedAt ?: Long.MIN_VALUE)
         val dropped = store.withTransaction {
             selectionAt?.let { accounts.setUploadSelectionAt(permissionId, it) }
             buildList {
@@ -208,7 +210,7 @@ internal class DriveEpubTransferManager(
         bookUrls: Collection<String>,
         expectedOfferSince: Long? = null,
     ): Set<String> = withContext(Dispatchers.IO) {
-        val now = clock()
+        val now = maxOf(clock(), accounts.get(permissionId)?.connectedAt ?: Long.MIN_VALUE)
         bookUrls.filterTo(mutableSetOf()) { bookUrl ->
             queueBook(permissionId, bookUrl, now, requireActive = true, expectedOfferSince = expectedOfferSince)
         }
@@ -431,7 +433,17 @@ internal class DriveEpubTransferManager(
      * folder via resumable upload, publishing catalog media availability in
      * `drive.appdata` ONLY after upload succeeds.
      */
-    suspend fun uploadPending(): DriveEpubUploadSummary {
+    suspend fun uploadPending(): DriveEpubUploadSummary = coroutineScope {
+        val job = currentCoroutineContext()[Job]!!
+        activeUploads.add(job)
+        try {
+            uploadPendingTracked()
+        } finally {
+            activeUploads.remove(job)
+        }
+    }
+
+    private suspend fun uploadPendingTracked(): DriveEpubUploadSummary {
         val tokenResult = acquireToken(null)
         val (initialToken, permissionId) = when (tokenResult) {
             is SilentTokenResult.Token -> tokenResult.accessToken to tokenResult.permissionId
