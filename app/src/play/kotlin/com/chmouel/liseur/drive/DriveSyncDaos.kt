@@ -300,6 +300,12 @@ interface DriveResolutionDao {
 
     @Upsert
     suspend fun upsert(resolution: DriveResolution)
+
+    @Query(
+        "DELETE FROM drive_resolution WHERE permission_id = :permissionId AND domain = :domain " +
+            "AND record_key = :recordKey",
+    )
+    suspend fun deleteForRecord(permissionId: String, domain: String, recordKey: String)
 }
 
 @Dao
@@ -358,6 +364,21 @@ interface DriveConflictDao {
             "AND domain = :domain AND record_key = :recordKey AND state = 'OPEN' AND book_url IS NULL",
     )
     suspend fun attachBookUrl(permissionId: String, domain: String, recordKey: String, bookUrl: String)
+
+    @Query(
+        "SELECT * FROM drive_conflict WHERE permission_id = :permissionId AND domain = :domain " +
+            "AND record_key = :recordKey ORDER BY opened_at ASC, conflict_id ASC",
+    )
+    suspend fun forRecord(permissionId: String, domain: String, recordKey: String): List<DriveConflict>
+
+    @Query("DELETE FROM drive_conflict WHERE permission_id = :permissionId AND conflict_id = :conflictId")
+    suspend fun delete(permissionId: String, conflictId: String)
+
+    @Query(
+        "UPDATE drive_conflict SET book_url = :toBookUrl WHERE permission_id = :permissionId " +
+            "AND book_url = :fromBookUrl",
+    )
+    suspend fun moveBookUrl(permissionId: String, fromBookUrl: String, toBookUrl: String)
 
     @Query(
         "UPDATE drive_conflict SET state = 'RESOLVED', choice = :choice, resolution_fp = :resolutionFp, " +

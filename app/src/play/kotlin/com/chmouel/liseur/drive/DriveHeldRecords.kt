@@ -103,4 +103,28 @@ internal object DriveHeldRecords {
             resolvedFps = resolvedFps,
         )
     }
+
+    /**
+     * Carries over a superseded held row's ancestors and resolution refs onto the newly applied
+     * successor state so lineage retained while the book was absent is never dropped.
+     */
+    fun mergeSupersededLineage(
+        persisted: DriveRecordState,
+        heldState: DriveRecordState,
+    ): DriveRecordState {
+        val mergedAnc = (DriveWorkIdentity.decodeStringArray(persisted.ancestorsJson) +
+            listOf(heldState.versionFp) +
+            DriveWorkIdentity.decodeStringArray(heldState.ancestorsJson))
+            .distinct()
+            .filter { it != persisted.versionFp }
+            .take(DriveWireCodec.MAX_ANCESTORS)
+        val mergedResRefs = (DriveWorkIdentity.decodeStringArray(persisted.resRefsJson) +
+            DriveWorkIdentity.decodeStringArray(heldState.resRefsJson))
+            .distinct()
+            .sorted()
+        return persisted.copy(
+            ancestorsJson = DriveCanonicalJson.encode(mergedAnc),
+            resRefsJson = DriveCanonicalJson.encode(mergedResRefs),
+        )
+    }
 }

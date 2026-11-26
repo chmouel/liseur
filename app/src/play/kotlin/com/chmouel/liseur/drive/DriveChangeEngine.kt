@@ -1014,6 +1014,7 @@ internal class DriveChangeEngine(
         if (observeHlc) observeRemoteHlc(permissionId, record.hlc)
         // A malformed record is dropped, not deferred: replaying it would never make it valid.
         if (!DriveWireCodec.bodyMatchesKey(record)) return true
+        val deferredRetirements = mutableListOf<DriveRecordState>()
         if (record.d in CATALOG_GATED_DOMAINS) {
             val workKey = gatedWorkKey(record)
             if (workKey.isNotEmpty() && workIdentity.awaitsCatalogEntry(permissionId, workKey)) {
@@ -1023,11 +1024,13 @@ internal class DriveChangeEngine(
             // version that happens to arrive later, or the newer retained state is replaced unseen.
             // If that replay has to wait (a cover blob that is not downloadable yet), this record
             // waits with it instead of landing on top of the retained version.
-            if (!replayingHeld && !materializeHeldBefore(permissionId, localDeviceId, accessToken, record)) {
+            if (!replayingHeld &&
+                !materializeHeldBefore(permissionId, localDeviceId, accessToken, record, deferredRetirements)
+            ) {
                 return false
             }
         }
-        return when (record.d) {
+        val applied = when (record.d) {
             DriveWireCodec.DOMAIN_WORK_ALIAS -> {
                 workIdentity.applyRemoteRecord(permissionId, record, remoteDeviceId, remoteSeq) { nextHlc(permissionId) }
                 true
@@ -1129,6 +1132,10 @@ internal class DriveChangeEngine(
                 ) ?: true
             else -> true
         }
+        if (applied && deferredRetirements.isNotEmpty()) {
+            retireDeferredAliasHeldRows(permissionId, record, deferredRetirements)
+        }
+        return applied
     }
 
     /**
@@ -1164,13 +1171,24 @@ internal class DriveChangeEngine(
         accessToken: String,
     ) {
         val held = recordStates.heldForAccount(permissionId)
+            .filter { state ->
+                state.domain in DriveHeldRecords.HELD_DOMAINS &&
+                    DriveHeldRecords.workKeyFor(state.domain, state.recordKey).let { workKey ->
+                        workKey.isNotEmpty() && workIdentity.hasLocalBookFor(permissionId, workKey)
+                    }
+            }
         if (held.isEmpty()) return
+        val grouped = linkedMapOf<Pair<String, String>, MutableList<DriveRecordState>>()
         for (state in held) {
-            if (state.domain !in DriveHeldRecords.HELD_DOMAINS) continue
-            val workKey = DriveHeldRecords.workKeyFor(state.domain, state.recordKey)
-            if (workKey.isEmpty() || !workIdentity.hasLocalBookFor(permissionId, workKey)) continue
-            if (!replayHeldRecord(permissionId, localDeviceId, accessToken, state)) continue
-            retireHeldRowStoredUnderAnotherKey(permissionId, state)
+            val canonicalKey = canonicalResolutionKey(permissionId, state.domain, state.recordKey)
+            grouped.getOrPut(state.domain to canonicalKey) { mutableListOf() }.add(state)
+        }
+        for ((_, group) in grouped) {
+            val heads = prepareHeldGroup(permissionId, group)
+            for (prepared in heads) {
+                if (!replayHeldRecord(permissionId, localDeviceId, accessToken, prepared)) continue
+                retireHeldRowStoredUnderAnotherKey(permissionId, prepared)
+            }
         }
     }
 
@@ -1184,34 +1202,240 @@ internal class DriveChangeEngine(
         localDeviceId: String,
         accessToken: String,
         record: DriveWireRecord,
+        deferredRetirements: MutableList<DriveRecordState>,
     ): Boolean {
         if (record.d !in DriveHeldRecords.HELD_DOMAINS) return true
         val workKey = gatedWorkKey(record)
         if (workKey.isEmpty() || !workIdentity.hasLocalBookFor(permissionId, workKey)) return true
-        val canonical = workIdentity.canonicalWorkKey(permissionId, workKey)
-        val recordKey = when (record.d) {
-            DriveWireCodec.DOMAIN_SERIES -> canonical
-            else -> {
-                val field = record.body?.optString("field")?.trim()?.takeIf { it.isNotEmpty() }
-                    ?: record.k.substringAfterLast('/', "")
-                if (field.isEmpty()) return true
-                "$canonical/$field"
+        val field = if (record.d == DriveWireCodec.DOMAIN_SERIES) {
+            null
+        } else {
+            record.body?.optString("field")?.trim()?.takeIf { it.isNotEmpty() }
+                ?: record.k.substringAfterLast('/', "").takeIf { it.isNotEmpty() }
+                ?: return true
+        }
+        val heldRows = workIdentity.equivalentWorkKeys(permissionId, workKey)
+            .map { wk -> if (field == null) wk else "$wk/$field" }
+            .distinct()
+            .mapNotNull { rk -> recordStates.get(permissionId, record.d, rk)?.takeIf { it.held } }
+        if (heldRows.isEmpty()) return true
+        val canonicalKey = canonicalResolutionKey(permissionId, record.d, heldRows.first().recordKey)
+        val heads = prepareHeldGroup(permissionId, heldRows)
+        for (prepared in heads) {
+            // Whatever happens next, a competition parked while the work had no book belongs to the
+            // book it now has, or it would stay hidden and block this record's publication forever.
+            attachParkedConflicts(permissionId, prepared)
+            // A version that descends from the retained one supersedes it, so it is decided against
+            // that baseline directly and nothing has to be replayed first.
+            if (prepared.versionFp in record.anc || prepared.versionFp in record.resRefs ||
+                prepared.versionFp in record.resolvedFps
+            ) {
+                if (prepared.recordKey != canonicalKey) {
+                    deferredRetirements.add(prepared)
+                }
+                continue
+            }
+            if (!replayHeldRecord(permissionId, localDeviceId, accessToken, prepared)) return false
+            retireHeldRowStoredUnderAnotherKey(permissionId, prepared)
+        }
+        return true
+    }
+
+    /**
+     * Migrates a group of equivalent held rows onto the canonical key, deduplicates them, and
+     * collapses any held row that is already an ancestor of another held row onto the surviving
+     * head(s) so an alias-held ancestor is never replayed over its descendant.
+     */
+    private suspend fun prepareHeldGroup(
+        permissionId: String,
+        heldRows: List<DriveRecordState>,
+    ): List<DriveRecordState> {
+        val deduplicated = linkedMapOf<Pair<String, String>, DriveRecordState>()
+        for (held in heldRows) {
+            val prepared = prepareHeldStateForCanonicalKey(permissionId, held)
+            deduplicated[prepared.recordKey to prepared.versionFp] = prepared
+        }
+        val preparedRows = deduplicated.values.toList()
+        if (preparedRows.size <= 1) return preparedRows
+        val combinedAncestors = preparedRows.flatMap { row ->
+            DriveWorkIdentity.decodeStringArray(row.ancestorsJson) +
+                DriveWorkIdentity.decodeStringArray(row.resRefsJson)
+        }.toSet()
+        val (superseded, heads) = preparedRows.partition { it.versionFp in combinedAncestors }
+        if (superseded.isEmpty() || heads.isEmpty()) return preparedRows
+        val canonicalKey = canonicalResolutionKey(permissionId, heads.first().domain, heads.first().recordKey)
+        val byFp = preparedRows.associateBy { it.versionFp }
+        fun reachableAncestors(start: DriveRecordState): Set<String> {
+            val seen = linkedSetOf<String>()
+            val stack = ArrayDeque<DriveRecordState>()
+            stack.add(start)
+            while (stack.isNotEmpty()) {
+                val cur = stack.removeLast()
+                val refs = DriveWorkIdentity.decodeStringArray(cur.ancestorsJson) +
+                    DriveWorkIdentity.decodeStringArray(cur.resRefsJson)
+                for (ref in refs) {
+                    if (seen.add(ref)) {
+                        byFp[ref]?.let(stack::add)
+                    }
+                }
+            }
+            return seen
+        }
+        return store.withTransaction {
+            val updatedHeads = heads.map { head ->
+                val reachable = reachableAncestors(head)
+                var merged = head
+                for (sup in superseded) {
+                    if (sup.versionFp in reachable) {
+                        merged = DriveHeldRecords.mergeSupersededLineage(merged, sup)
+                            .copy(held = head.held)
+                    }
+                }
+                if (merged != head) {
+                    recordStates.upsert(merged)
+                }
+                merged
+            }.toMutableList()
+            for (sup in superseded) {
+                val current = recordStates.get(permissionId, sup.domain, sup.recordKey)
+                if (current != null && current.held && current.versionFp == sup.versionFp) {
+                    recordStates.delete(permissionId, sup.domain, sup.recordKey)
+                }
+            }
+            for (i in updatedHeads.indices) {
+                val head = updatedHeads[i]
+                if (head.recordKey != canonicalKey &&
+                    recordStates.get(permissionId, head.domain, canonicalKey) == null
+                ) {
+                    val moved = head.copy(recordKey = canonicalKey)
+                    recordStates.upsert(moved)
+                    recordStates.delete(permissionId, head.domain, head.recordKey)
+                    updatedHeads[i] = moved
+                }
+            }
+            updatedHeads
+        }
+    }
+
+    /**
+     * Migrates parked conflicts and resolutions (and the held row itself when the canonical key
+     * has no state yet or holds an ancestor/descendant) from a pre-merge alias key onto the
+     * current canonical record key.
+     */
+    private suspend fun prepareHeldStateForCanonicalKey(
+        permissionId: String,
+        state: DriveRecordState,
+    ): DriveRecordState {
+        val canonicalKey = canonicalResolutionKey(permissionId, state.domain, state.recordKey)
+        if (canonicalKey == state.recordKey) {
+            return recordStates.get(permissionId, state.domain, canonicalKey) ?: state
+        }
+        return store.withTransaction {
+            val oldResolutions = resolutions.forRecord(permissionId, state.domain, state.recordKey)
+            for (res in oldResolutions) {
+                resolutions.upsert(res.copy(recordKey = canonicalKey))
+            }
+            if (oldResolutions.isNotEmpty()) {
+                resolutions.deleteForRecord(permissionId, state.domain, state.recordKey)
+            }
+            migrateConflictsToCanonicalKey(permissionId, state.domain, state.recordKey, canonicalKey)
+            val canonicalState = recordStates.get(permissionId, state.domain, canonicalKey)
+            when {
+                canonicalState == null -> {
+                    val moved = state.copy(recordKey = canonicalKey)
+                    recordStates.upsert(moved)
+                    recordStates.delete(permissionId, state.domain, state.recordKey)
+                    moved
+                }
+                canonicalState.held &&
+                    (state.versionFp == canonicalState.versionFp ||
+                        isHeldAncestorOrResRef(state.versionFp, canonicalState)) -> {
+                    val merged = DriveHeldRecords.mergeSupersededLineage(canonicalState, state)
+                        .copy(held = canonicalState.held)
+                    recordStates.upsert(merged)
+                    recordStates.delete(permissionId, state.domain, state.recordKey)
+                    merged
+                }
+                canonicalState.held && isHeldAncestorOrResRef(canonicalState.versionFp, state) -> {
+                    val moved = DriveHeldRecords.mergeSupersededLineage(
+                        state.copy(recordKey = canonicalKey),
+                        canonicalState,
+                    ).copy(held = true)
+                    recordStates.upsert(moved)
+                    recordStates.delete(permissionId, state.domain, state.recordKey)
+                    moved
+                }
+                else -> state
             }
         }
-        val held = recordStates.get(permissionId, record.d, recordKey)?.takeIf { it.held } ?: return true
-        // Whatever happens next, a competition parked while the work had no book belongs to the
-        // book it now has, or it would stay hidden and block this record's publication forever.
-        attachParkedConflicts(permissionId, held)
-        // A version that descends from the retained one supersedes it, so it is decided against
-        // that baseline directly and nothing has to be replayed first.
-        if (held.versionFp in record.anc || held.versionFp in record.resRefs ||
-            held.versionFp in record.resolvedFps
-        ) {
-            return true
+    }
+
+    private fun isHeldAncestorOrResRef(versionFp: String, descendant: DriveRecordState): Boolean =
+        versionFp in DriveWorkIdentity.decodeStringArray(descendant.ancestorsJson) ||
+            versionFp in DriveWorkIdentity.decodeStringArray(descendant.resRefsJson)
+
+    private suspend fun migrateConflictsToCanonicalKey(
+        permissionId: String,
+        domain: String,
+        fromRecordKey: String,
+        canonicalKey: String,
+    ) {
+        val oldConflicts = conflicts.forRecord(permissionId, domain, fromRecordKey)
+        for (c in oldConflicts) {
+            val newId = DriveCanonicalJson.conflictId(domain, canonicalKey, c.localFp, c.remoteFp)
+            val existing = conflicts.get(permissionId, newId)
+            val keepExisting = existing != null &&
+                existing.state != DriveConflict.STATE_OPEN &&
+                conflictStateRank(existing.state) >= conflictStateRank(c.state)
+            if (keepExisting) {
+                if (existing.bookUrl == null && c.bookUrl != null) {
+                    conflicts.upsert(existing.copy(bookUrl = c.bookUrl))
+                }
+            } else {
+                conflicts.upsert(
+                    c.copy(
+                        conflictId = newId,
+                        recordKey = canonicalKey,
+                        bookUrl = c.bookUrl ?: existing?.bookUrl,
+                    ),
+                )
+            }
+            if (newId != c.conflictId) {
+                conflicts.delete(permissionId, c.conflictId)
+            }
         }
-        if (!replayHeldRecord(permissionId, localDeviceId, accessToken, held)) return false
-        retireHeldRowStoredUnderAnotherKey(permissionId, held)
-        return true
+    }
+
+    private fun conflictStateRank(state: String): Int = when (state) {
+        DriveConflict.STATE_RESOLVED -> 2
+        DriveConflict.STATE_RESOLVING -> 1
+        else -> 0
+    }
+
+    private suspend fun retireDeferredAliasHeldRows(
+        permissionId: String,
+        record: DriveWireRecord,
+        skippedRows: List<DriveRecordState>,
+    ) {
+        store.withTransaction {
+            for (skipped in skippedRows) {
+                val canonicalKey = canonicalResolutionKey(permissionId, skipped.domain, skipped.recordKey)
+                val persisted = recordStates.get(permissionId, skipped.domain, canonicalKey)
+                if (persisted != null && !persisted.held) {
+                    val supersededByPersisted = persisted.versionFp == record.fp ||
+                        persisted.versionFp == skipped.versionFp ||
+                        skipped.versionFp in DriveWorkIdentity.decodeStringArray(persisted.ancestorsJson) ||
+                        skipped.versionFp in DriveWorkIdentity.decodeStringArray(persisted.resRefsJson)
+                    if (supersededByPersisted) {
+                        recordStates.upsert(DriveHeldRecords.mergeSupersededLineage(persisted, skipped))
+                        val current = recordStates.get(permissionId, skipped.domain, skipped.recordKey)
+                        if (current != null && current.held && current.versionFp == skipped.versionFp) {
+                            recordStates.delete(permissionId, skipped.domain, skipped.recordKey)
+                        }
+                    }
+                }
+            }
+        }
     }
 
     /** Applies a retained version to whatever its work now holds locally. */
@@ -1222,8 +1446,10 @@ internal class DriveChangeEngine(
         state: DriveRecordState,
     ): Boolean {
         attachParkedConflicts(permissionId, state)
+        val canonicalKey = canonicalResolutionKey(permissionId, state.domain, state.recordKey)
         val resolution = if (state.versionOp == DriveRecordState.OP_RESOLVE) {
-            resolutions.get(permissionId, state.domain, state.recordKey, state.versionFp)
+            resolutions.get(permissionId, state.domain, canonicalKey, state.versionFp)
+                ?: resolutions.get(permissionId, state.domain, state.recordKey, state.versionFp)
         } else {
             null
         }
@@ -1249,8 +1475,12 @@ internal class DriveChangeEngine(
     private suspend fun attachParkedConflicts(permissionId: String, state: DriveRecordState) {
         val workKey = DriveHeldRecords.workKeyFor(state.domain, state.recordKey)
         if (workKey.isEmpty()) return
+        val canonicalKey = canonicalResolutionKey(permissionId, state.domain, state.recordKey)
         workIdentity.liveBookUrlFor(permissionId, workKey)?.let { bookUrl ->
-            conflicts.attachBookUrl(permissionId, state.domain, state.recordKey, bookUrl)
+            conflicts.attachBookUrl(permissionId, state.domain, canonicalKey, bookUrl)
+            if (canonicalKey != state.recordKey) {
+                conflicts.attachBookUrl(permissionId, state.domain, state.recordKey, bookUrl)
+            }
         }
     }
 

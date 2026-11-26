@@ -295,10 +295,16 @@ internal class DriveWorkIdentity(
         val annotations = database.annotationDao()
         val agreements = database.annotationSyncDao()
         val sessions = database.readingSessionDao()
+        val conflictBookKeys = (store.conflicts().openForAccount(permissionId) +
+            store.conflicts().resolvingForAccount(permissionId))
+            .mapNotNull { it.bookUrl }
+            .filter { it.startsWith(prefix) }
         val hiddenKeys = (annotations.bookKeysWithPrefix(prefix) +
             agreements.bookKeysWithPrefix(prefix) +
-            sessions.bookKeysWithPrefix(prefix)).toSet()
+            sessions.bookKeysWithPrefix(prefix) +
+            conflictBookKeys).toSet()
         if (hiddenKeys.isEmpty()) return
+        val moves = mutableListOf<Pair<String, String>>()
         database.withTransaction {
             for (hidden in hiddenKeys) {
                 // A book still answering to this key keeps its history where it is.
@@ -308,6 +314,14 @@ internal class DriveWorkIdentity(
                 annotations.moveBook(hidden, target)
                 agreements.moveBook(hidden, target)
                 sessions.moveBook(hidden, target)
+                moves.add(hidden to target)
+            }
+        }
+        if (moves.isNotEmpty()) {
+            store.withTransaction {
+                for ((hidden, target) in moves) {
+                    store.conflicts().moveBookUrl(permissionId, hidden, target)
+                }
             }
         }
     }
@@ -334,13 +348,21 @@ internal class DriveWorkIdentity(
                 ?.outcome == DriveResolution.OUTCOME_DELETE
     }
 
+    internal suspend fun equivalentWorkKeys(permissionId: String, rawWorkKey: String): List<String> {
+        val merges = loadMergeMap(permissionId)
+        val canonical = resolveCanonical(rawWorkKey, merges)
+        return equivalentWorkKeys(canonical, merges)
+    }
+
+    private fun equivalentWorkKeys(canonical: String, merges: Map<String, String>): List<String> =
+        listOf(canonical) + merges.keys.filter { it != canonical && resolveCanonical(it, merges) == canonical }
+
     private suspend fun catalogHead(
         permissionId: String,
         canonical: String,
         merges: Map<String, String>,
     ): DriveRecordState? {
-        val heads = (listOf(canonical) + merges.keys
-            .filter { it != canonical && resolveCanonical(it, merges) == canonical })
+        val heads = equivalentWorkKeys(canonical, merges)
             .mapNotNull { recordStates.get(permissionId, DriveWireCodec.DOMAIN_CATALOG, it) }
         val ancestors = heads.flatMap { decodeStringArray(it.ancestorsJson) }.toSet()
         return heads.filterNot { it.versionFp in ancestors }
