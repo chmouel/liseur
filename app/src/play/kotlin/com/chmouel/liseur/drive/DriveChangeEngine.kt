@@ -1199,6 +1199,13 @@ internal class DriveChangeEngine(
             }
         }
         val held = recordStates.get(permissionId, record.d, recordKey)?.takeIf { it.held } ?: return true
+        // A version that descends from the retained one supersedes it, so it is decided against
+        // that baseline directly and nothing has to be replayed first.
+        if (held.versionFp in record.anc || held.versionFp in record.resRefs ||
+            held.versionFp in record.resolvedFps
+        ) {
+            return true
+        }
         if (!replayHeldRecord(permissionId, localDeviceId, accessToken, held)) return false
         retireHeldRowStoredUnderAnotherKey(permissionId, held)
         return true
