@@ -1612,6 +1612,18 @@ class DrivePhase5EndToEndTest {
                 ),
             )
             assertTrue(metadataSync.applyRemoteRecord(PERM_A, "token", cover, "dev-w-fresh", 1L) { hlc })
+            // A competing cover arrives while the work still has no book, so its conflict is parked.
+            val competing = DriveWireCodec.putRecord(
+                DriveWireCodec.DOMAIN_METADATA, "$key/cover", "0017450000000-0002-dev-w-other",
+                DriveWireCodec.encodeMetadataBody(
+                    DriveMetadataBody.Cover(key, "d".repeat(64), 100, 150, 2_000L, 2_000L),
+                ),
+            )
+            assertTrue(metadataSync.applyRemoteRecord(PERM_A, "token", competing, "dev-w-other", 2L) { hlc })
+            assertEquals(
+                1,
+                fresh.driveDb.conflicts().unsettledForRecord(PERM_A, DriveWireCodec.DOMAIN_METADATA, "$key/cover").size,
+            )
             fresh.liseurDb.bookDao().upsert(restoredBook("drive:$key"))
 
             // A deletion that descends from the retained cover is its successor, not a competing version.
@@ -1653,7 +1665,14 @@ class DrivePhase5EndToEndTest {
 
             val state = fresh.driveDb.recordStates().get(PERM_A, DriveWireCodec.DOMAIN_METADATA, "$key/cover")!!
             assertFalse(state.held)
-            assertEquals(deletion.fp, state.versionFp)
+            // The parked competition now belongs to the restored book instead of staying hidden.
+            assertEquals(
+                "drive:$key",
+                fresh.driveDb.conflicts()
+                    .unsettledForRecord(PERM_A, DriveWireCodec.DOMAIN_METADATA, "$key/cover")
+                    .singleOrNull()
+                    ?.bookUrl,
+            )
         } finally {
             fresh.close()
         }

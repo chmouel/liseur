@@ -1199,6 +1199,9 @@ internal class DriveChangeEngine(
             }
         }
         val held = recordStates.get(permissionId, record.d, recordKey)?.takeIf { it.held } ?: return true
+        // Whatever happens next, a competition parked while the work had no book belongs to the
+        // book it now has, or it would stay hidden and block this record's publication forever.
+        attachParkedConflicts(permissionId, held)
         // A version that descends from the retained one supersedes it, so it is decided against
         // that baseline directly and nothing has to be replayed first.
         if (held.versionFp in record.anc || held.versionFp in record.resRefs ||
@@ -1218,13 +1221,7 @@ internal class DriveChangeEngine(
         accessToken: String,
         state: DriveRecordState,
     ): Boolean {
-        // A competition parked while the work had no book is the reader's once it has one.
-        val workKey = DriveHeldRecords.workKeyFor(state.domain, state.recordKey)
-        if (workKey.isNotEmpty()) {
-            workIdentity.liveBookUrlFor(permissionId, workKey)?.let { bookUrl ->
-                conflicts.attachBookUrl(permissionId, state.domain, state.recordKey, bookUrl)
-            }
-        }
+        attachParkedConflicts(permissionId, state)
         val resolution = if (state.versionOp == DriveRecordState.OP_RESOLVE) {
             resolutions.get(permissionId, state.domain, state.recordKey, state.versionFp)
         } else {
@@ -1246,6 +1243,15 @@ internal class DriveChangeEngine(
             observeHlc = false,
             replayingHeld = true,
         )
+    }
+
+    /** Gives conflicts parked while the work had no book the book it now has. */
+    private suspend fun attachParkedConflicts(permissionId: String, state: DriveRecordState) {
+        val workKey = DriveHeldRecords.workKeyFor(state.domain, state.recordKey)
+        if (workKey.isEmpty()) return
+        workIdentity.liveBookUrlFor(permissionId, workKey)?.let { bookUrl ->
+            conflicts.attachBookUrl(permissionId, state.domain, state.recordKey, bookUrl)
+        }
     }
 
     /**
