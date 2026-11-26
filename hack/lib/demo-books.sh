@@ -85,7 +85,7 @@ fetch_books() {
   # notes up correctly. Rebuilt every time, so a change to the fixture is on
   # the device the next time the shelf is seeded.
   note "building the notes fixture"
-  "$REPO_ROOT/hack/make-notes-book" "$CACHE_DIR/liseur_notes-fixture.epub" >/dev/null ||
+  "$REPO_ROOT/hack/reproducer/make-notes-book" "$CACHE_DIR/liseur_notes-fixture.epub" >/dev/null ||
     die "could not build the notes fixture book"
 }
 

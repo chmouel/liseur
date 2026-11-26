@@ -95,34 +95,12 @@ target wrapping them. Run `make help` for the short list. See
 - `verify-reproducible`: Builds the release APK twice from two
   independent clean checkouts and diffs them byte for byte, the check
   F-Droid's reproducible-builds requirement demands before submission.
-- `verify-wide-content`: Checks that content wider than the page is
-  measured and constrained rather than painted over the page after it
-  (issue #67). The fix is JavaScript that runs inside the book's own
-  document, and none of what it has to get right is visible from the
-  JVM. The script is lifted straight out of `WideContentFit.kt`, never a
-  copy, and run against Readium's own stylesheets in headless Chrome, in a
-  frame the size of a phone. Needs Chrome or Chromium and a prior
-  `./gradlew assembleFossDebug` (Readium's CSS is unpacked from the AAR by the
-  build), so it is a check to run by hand when that script
-  changes, not part of `make check`. `PORT=` picks another port.
-- `verify-footnotes`: The same kind of check for the notes in issue #152:
-  that a book's notes stay out of the page until they are asked for, and
-  that a marker drawn as an image is the size of the words around it. The
-  script comes out of `FootnoteLayout.kt`, and the cases run against
-  Readium's CJK stylesheets, which are what it picks for the book in the
-  issue and which nothing else here exercises. Same requirements and same
-  reasons for staying out of `make check`. `PORT=` picks another port.
-- `make-font-size-book`: Builds the local EPUB fixture for the publisher
-  absolute-font-size failure. It contains separate chapters for body,
-  descendant, relative, mixed, unstyled, and wide-table cases, and writes
-  `tmp/books/liseur_font-size-fixture.epub` by default. The fixture is for
-  manual Android validation; the desktop verification scripts do not prove
-  native text zoom.
-- `make-notes-book`: Builds the fixture book those notes are reproduced
-  with — deliberately badly behaved in the two ways the reporter's edition
-  is, and well behaved everywhere else, so a fix can be seen to leave the
-  second alone. Seeded onto the shelf by `reset-books` and `screenshots`,
-  and buildable on its own for opening by hand.
+- `reproducer/`: Manual browser/fixture reproducer and verification
+  scripts that do not belong in Gradle unit tests (`verify-wide-content`,
+  `verify-footnotes`, `verify-same-document-links`,
+  `verify-selection-layout`, `make-font-size-book`, `make-notes-book`).
+  Run by hand when touching the corresponding reader scripts or fixtures;
+  not part of `make check` or linted.
 - `icon`: Renders the adaptive launcher icon (two vector drawables)
   to a flat PNG for the F-Droid listing and the README.
 - `shelf-textures`: Draws the Shelves library style images into
