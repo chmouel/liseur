@@ -1,0 +1,1 @@
+Page navigation, account, and backup buttons stay aligned when translated labels wrap. Selecting text no longer adds unwanted spacing to justified text.
