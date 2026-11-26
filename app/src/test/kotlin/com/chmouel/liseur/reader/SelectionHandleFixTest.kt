@@ -32,27 +32,31 @@ class SelectionHandleFixTest {
     }
 
     @Test
-    fun `two non-breaking spaces lead the block, since offset one still triggers the bug`() {
-        // U+00A0, not a zero-width space: Blink's ::first-letter skips spaces
-        // and lands on the real letter, whereas a ZWSP would become the drop cap.
-        assertTrue(SelectionHandleFix.SCRIPT.contains("\\u00a0\\u00a0"))
-        assertFalse(SelectionHandleFix.SCRIPT.contains("\\u200b"))
-        assertFalse(SelectionHandleFix.SCRIPT.contains("\\200b"))
-    }
-
-    @Test
-    fun `the spaces take no room and use generated content alt text where available`() {
-        // Font size alone is not enough: letter- and word-spacing inherit as
-        // computed lengths and would give the invisible spaces a width.
+    fun `an empty bidi isolate leads the block without inserting characters`() {
         val script = SelectionHandleFix.SCRIPT
+        assertTrue(script.contains("content:\"\"!important;unicode-bidi:isolate!important;"))
         assertTrue(script.contains("font-size:0!important"))
         assertTrue(script.contains("line-height:0!important"))
         assertTrue(script.contains("letter-spacing:0!important"))
         assertTrue(script.contains("word-spacing:0!important"))
-        assertTrue(script.contains("CSS.supports(\"content\", '\"x\" / \"\"')"))
-        assertTrue(script.contains("content += ' / \"\"'"))
-        assertTrue(script.contains("+ ' !important;'"))
-        assertTrue(script.contains("content:\"\\u00a0\\u00a0\""))
+        assertFalse(script.contains("\\u00a0"))
+        assertFalse(script.contains("\\u200b"))
+    }
+
+    @Test
+    fun `safePseudo accepts normal computed letter spacing and verifies the isolate`() {
+        val script = SelectionHandleFix.SCRIPT
+        assertTrue(script.contains("style.letterSpacing === \"normal\" || zero(style.letterSpacing)"))
+        assertTrue(script.contains("style.content === '\"\"' && style.unicodeBidi === \"isolate\""))
+    }
+
+    @Test
+    fun `preserved whitespace and vertical writing modes are skipped`() {
+        val script = SelectionHandleFix.SCRIPT
+        assertTrue(script.contains("function preservesWhitespace(s)"))
+        assertTrue(script.contains("white-space-collapse"))
+        assertTrue(script.contains("if (preservesWhitespace(s) || s.writingMode !== \"horizontal-tb\") return false"))
+        assertTrue(script.contains("if (preservesWhitespace(layout) || layout.writingMode !== \"horizontal-tb\") continue"))
     }
 
     @Test
