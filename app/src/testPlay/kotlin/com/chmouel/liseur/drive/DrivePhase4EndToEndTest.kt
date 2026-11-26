@@ -2105,7 +2105,9 @@ class DrivePhase4EndToEndTest {
         assertEquals(1, deviceA.epubTransfers.queueSelectedBooks(PERM_ID, setOf(book.url)))
         val started = CompletableDeferred<Unit>()
         val release = CompletableDeferred<Unit>()
+        val heldUpload = CompletableDeferred<Job>()
         val hold: suspend (String) -> Unit = {
+            heldUpload.complete(currentCoroutineContext()[Job]!!)
             withContext(NonCancellable) {
                 started.complete(Unit)
                 release.await()
@@ -2120,6 +2122,10 @@ class DrivePhase4EndToEndTest {
                         started.await()
                         val switching = async { transition() }
                         while (deviceA.driveDb.accounts().active()?.permissionId == PERM_ID) delay(1)
+                        // The account flips before the transition cancels transfers; releasing in
+                        // between lets the upload finish instead of unwinding.
+                        val held = heldUpload.await()
+                        while (!held.isCancelled) delay(1)
                         assertFalse(switching.isCompleted)
                         release.complete(Unit)
                         switching.await()
