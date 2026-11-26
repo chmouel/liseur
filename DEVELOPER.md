@@ -300,7 +300,7 @@ WebView page/pinch zoom instead. Default `ReaderPrefs.DEFAULT_FONT_SIZE`
 is a Size slider position (~134%).
 
 ```bash
-hack/make-font-size-book
+hack/reproducer/make-font-size-book
 ```
 
 Import `tmp/books/liseur_font-size-fixture.epub` (kept off the demo
@@ -309,8 +309,8 @@ viewport, font scale. At Default typography compare `MEDIUM`,
 `ABSOLUTE-BODY`, `ABSOLUTE-DESCENDANT` at 100/150/200%: growth, reflow,
 live change, new chapter, reopen; plus a fractional value, global vs
 per-book, an advanced setting, a fixed-layout control. A saved pref or
-computed CSS is not proof. `hack/verify-wide-content` and
-`hack/verify-footnotes` cannot validate native text zoom.
+computed CSS is not proof. `hack/reproducer/verify-wide-content` and
+`hack/reproducer/verify-footnotes` cannot validate native text zoom.
 
 #### Validation record
 

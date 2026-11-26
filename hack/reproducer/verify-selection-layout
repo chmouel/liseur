@@ -6,7 +6,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-root = Path(__file__).resolve().parents[1]
+root = Path(__file__).resolve().parents[2]
 source = root / "app/src/main/kotlin/com/chmouel/liseur/reader/SelectionHandleFix.kt"
 script = re.search(r'const val SCRIPT: String = """(.*?)"""', source.read_text(), re.S)[1]
 browser = shutil.which("google-chrome-stable") or shutil.which("chromium")
