@@ -1588,6 +1588,78 @@ class DrivePhase5EndToEndTest {
     }
 
     @Test
+    fun `a successor of a retained cover is applied without waiting for its blob`() = runTest {
+        val server = Phase5FakeDriveServer()
+        val fresh = createDevice("dev-w-fresh", File(tempDir, "cover-succ"), server)
+        try {
+            fresh.connect(PERM_A, "a@example.com")
+            val key = "isbn:9780156027601"
+            val hlc = "0017450000000-0001-dev-w-fresh"
+            fresh.driveDb.recordStates().upsert(
+                DriveRecordState(PERM_A, DriveWireCodec.DOMAIN_CATALOG, key, "deleted", DriveRecordState.OP_DEL, lastHlc = hlc),
+            )
+            val identity = DriveWorkIdentity(fresh.liseurDb, fresh.driveDb)
+            val metadataSync = DriveMetadataSync(
+                fresh.liseurDb,
+                fresh.driveDb,
+                identity,
+                DriveCoverCodec(File(tempDir, "covers-w"), fresh.driveDb, server.clientFor("dev-w-fresh")),
+            )
+            val cover = DriveWireCodec.putRecord(
+                DriveWireCodec.DOMAIN_METADATA, "$key/cover", hlc,
+                DriveWireCodec.encodeMetadataBody(
+                    DriveMetadataBody.Cover(key, "c".repeat(64), 100, 150, 1_000L, 1_000L),
+                ),
+            )
+            assertTrue(metadataSync.applyRemoteRecord(PERM_A, "token", cover, "dev-w-fresh", 1L) { hlc })
+            fresh.liseurDb.bookDao().upsert(restoredBook("drive:$key"))
+
+            // A deletion that descends from the retained cover is its successor, not a competing version.
+            val deletion = DriveWireCodec.delRecord(
+                DriveWireCodec.DOMAIN_METADATA,
+                "$key/cover",
+                "0017450000000-0002-dev-w-other",
+                ancestors = listOf(cover.fp),
+            )
+            val batch = DriveDeltaBatch(
+                batchId = "snapshot-cover-succ",
+                deviceId = "dev-w-other",
+                seq = 2L,
+                createdHlc = "0017450000000-0002-dev-w-other",
+                domains = DriveWireCodec.SUPPORTED_DOMAIN_VERSIONS,
+                records = listOf(deletion),
+            )
+            val bytes = JSONObject(DriveWireCodec.encodeDeltaBatch(batch))
+                .put("throughSeq", 2L).put("partIndex", 0).put("partCount", 1)
+                .toString().toByteArray()
+            val file = server.clientFor("dev-w-other")
+                .createAppDataFile("token", "snapshot-cover-succ.json", "application/json", bytes, emptyMap())
+            fresh.changeEngine.applySnapshot(
+                PERM_A, "dev-w-fresh", "dev-w-other",
+                DriveSnapshotRef(
+                    2L,
+                    listOf(
+                        DriveSnapshotPartRef(
+                            "snapshot-cover-succ.json",
+                            file.id,
+                            DriveCanonicalJson.sha256Hex(bytes),
+                            1,
+                            0,
+                        ),
+                    ),
+                ),
+                "token",
+            )
+
+            val state = fresh.driveDb.recordStates().get(PERM_A, DriveWireCodec.DOMAIN_METADATA, "$key/cover")!!
+            assertFalse(state.held)
+            assertEquals(deletion.fp, state.versionFp)
+        } finally {
+            fresh.close()
+        }
+    }
+
+    @Test
     fun `a series the reader reset is not reinstated when the retained version replays`() = runTest {
         deviceA.connect(PERM_A, "a@example.com")
         val key = "isbn:9780156027601"
