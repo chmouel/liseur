@@ -1021,8 +1021,10 @@ internal class DriveChangeEngine(
             }
             // A book restored earlier in this run must get its retained version replayed before a
             // version that happens to arrive later, or the newer retained state is replaced unseen.
-            if (!replayingHeld) {
-                materializeHeldBefore(permissionId, localDeviceId, accessToken, record)
+            // If that replay has to wait (a cover blob that is not downloadable yet), this record
+            // waits with it instead of landing on top of the retained version.
+            if (!replayingHeld && !materializeHeldBefore(permissionId, localDeviceId, accessToken, record)) {
+                return false
             }
         }
         return when (record.d) {
@@ -1182,23 +1184,24 @@ internal class DriveChangeEngine(
         localDeviceId: String,
         accessToken: String,
         record: DriveWireRecord,
-    ) {
-        if (record.d !in DriveHeldRecords.HELD_DOMAINS) return
+    ): Boolean {
+        if (record.d !in DriveHeldRecords.HELD_DOMAINS) return true
         val workKey = gatedWorkKey(record)
-        if (workKey.isEmpty() || !workIdentity.hasLocalBookFor(permissionId, workKey)) return
+        if (workKey.isEmpty() || !workIdentity.hasLocalBookFor(permissionId, workKey)) return true
         val canonical = workIdentity.canonicalWorkKey(permissionId, workKey)
         val recordKey = when (record.d) {
             DriveWireCodec.DOMAIN_SERIES -> canonical
             else -> {
                 val field = record.body?.optString("field")?.trim()?.takeIf { it.isNotEmpty() }
                     ?: record.k.substringAfterLast('/', "")
-                if (field.isEmpty()) return
+                if (field.isEmpty()) return true
                 "$canonical/$field"
             }
         }
-        val held = recordStates.get(permissionId, record.d, recordKey)?.takeIf { it.held } ?: return
-        if (!replayHeldRecord(permissionId, localDeviceId, accessToken, held)) return
+        val held = recordStates.get(permissionId, record.d, recordKey)?.takeIf { it.held } ?: return true
+        if (!replayHeldRecord(permissionId, localDeviceId, accessToken, held)) return false
         retireHeldRowStoredUnderAnotherKey(permissionId, held)
+        return true
     }
 
     /** Applies a retained version to whatever its work now holds locally. */
