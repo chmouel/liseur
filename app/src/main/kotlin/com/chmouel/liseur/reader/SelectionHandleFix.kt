@@ -28,17 +28,8 @@ import kotlin.coroutines.cancellation.CancellationException
  * default and publishers ship soft hyphens regardless, so the fix applies
  * whatever the typography says.
  *
- * The workaround pushes the first letter of every eligible block to
- * text-content offset 2 with generated content that takes no space:
- * `::before { content: "\a0\a0"; font-size: 0 }`. Two characters, because
- * offset 1 triggers the bug as surely as offset 0. Non-breaking spaces
- * rather than zero-width spaces, because Blink's `::first-letter` skips text
- * that is only spaces (U+00A0 included) and moves on to the real first
- * letter, whereas a zero-width space *becomes* the drop cap. `font-size: 0`
- * alone does not make the spaces free: `letter-spacing` and `word-spacing`
- * inherit as computed lengths, so both are zeroed too. Pseudo content is
- * not in the DOM, so [org.readium.r2.shared.publication.Locator]s,
- * highlights and search never see it.
+ * An empty bidi isolate keeps handles at the opening word in affected
+ * WebViews without inserting spaces into a justified line.
  *
  * The rule is keyed on a per-document token in the attribute name rather
  * than written as `p::before` for two reasons. A `::before` on a block
@@ -125,13 +116,8 @@ internal object SelectionHandleFix {
 
           if (!state.styleEl || !state.styleEl.isConnected) {
             var css = document.createElement("style");
-            var content = 'content:"\u00a0\u00a0"';
-            if (window.CSS && CSS.supports &&
-                CSS.supports("content", '"x" / ""')) {
-              content += ' / ""';
-            }
             css.textContent =
-              SEL + '::before{' + content + ' !important;' +
+              SEL + '::before{content:""!important;unicode-bidi:isolate!important;' +
               'font-size:0!important;line-height:0!important;' +
               'letter-spacing:0!important;word-spacing:0!important;' +
               // An author's dormant `display: block; margin: 1em` on a
@@ -178,6 +164,13 @@ internal object SelectionHandleFix {
             "textarea": 1, "button": 1, "br": 1
           };
 
+          function preservesWhitespace(s) {
+            var collapse = s.getPropertyValue("white-space-collapse");
+            return collapse === "preserve" || collapse === "break-spaces" ||
+                   s.whiteSpace === "pre" || s.whiteSpace === "pre-wrap" ||
+                   s.whiteSpace === "break-spaces";
+          }
+
           function inlineStart(node) {
             if (node.nodeType === 3) {
               return /\S/.test(node.data) ? true : null;
@@ -185,6 +178,7 @@ internal object SelectionHandleFix {
             if (node.nodeType !== 1) return null;
             var s = getComputedStyle(node);
             if (outOfFlow(s)) return null;
+            if (preservesWhitespace(s) || s.writingMode !== "horizontal-tb") return false;
             var d = s.display;
             if (d === "contents") return startsInline(node);
             if (d.indexOf("inline") !== 0 && d.indexOf("ruby") !== 0) return false;
@@ -220,13 +214,14 @@ internal object SelectionHandleFix {
           function safePseudo(style) {
             var transparent = style.backgroundColor === "transparent" ||
                              style.backgroundColor === "rgba(0, 0, 0, 0)";
-            return style.content !== "none" && style.content !== "normal" &&
-                   style.content !== "\"\"" &&
+            // getComputedStyle serializes zero letter spacing as "normal".
+            var noLetterSpacing = style.letterSpacing === "normal" || zero(style.letterSpacing);
+            return style.content === '""' && style.unicodeBidi === "isolate" &&
                    style.display === "inline" &&
                    style.position === "static" &&
                    style.getPropertyValue("float") === "none" &&
                    zero(style.fontSize) && zero(style.lineHeight) &&
-                   zero(style.letterSpacing) && zero(style.wordSpacing) &&
+                   noLetterSpacing && zero(style.wordSpacing) &&
                    zero(style.marginTop) && zero(style.marginRight) &&
                    zero(style.marginBottom) && zero(style.marginLeft) &&
                    zero(style.paddingTop) && zero(style.paddingRight) &&
@@ -247,7 +242,10 @@ internal object SelectionHandleFix {
           var changed = installed;
           for (i = 0; i < els.length; i++) {
             var el = els[i];
-            if (!BLOCK[getComputedStyle(el).display]) continue;
+            var layout = getComputedStyle(el);
+            if (!BLOCK[layout.display]) continue;
+            // An empty inline before preserved spaces can change their justification.
+            if (preservesWhitespace(layout) || layout.writingMode !== "horizontal-tb") continue;
             var before = getComputedStyle(el, "::before").content;
             if (before !== "none" && before !== "normal") continue;
             if (startsInline(el) !== true) continue;
