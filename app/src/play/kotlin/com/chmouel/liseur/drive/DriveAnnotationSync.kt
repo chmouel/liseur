@@ -750,17 +750,34 @@ internal class DriveAnnotationSync(
             }
             val chosenContentFp = chosenBody?.let(DriveWireCodec::annotationContentFp)
             if (chosenBody != null && chosenContentFp != intentState.contentFp) return
+            val canonicalChosenFp = chosenBody?.let {
+                DriveWireCodec.annotationContentFp(it.copy(workKey = workKey.ifBlank { it.workKey }))
+            }
             val expectedAck = chosenContentFp ?: DELETED_ACK
             // Tx 1 already committed (any later reader edit stays dirty and publishes as a successor).
-            if (syncRow?.ackedFingerprint == expectedAck) return
+            if (syncRow?.ackedFingerprint == expectedAck ||
+                (canonicalChosenFp != null && syncRow?.ackedFingerprint == canonicalChosenFp)
+            ) {
+                return
+            }
             if (targetBookUrl == null) return
             // Tx 1 never ran: apply it only while the note is still as it was when the choice was made.
-            val liveContentFp = liveRow?.let { row ->
-                val sha = identities.fingerprint(row.bookId)?.sha256?.lowercase(Locale.ROOT)
-                DriveWireCodec.annotationContentFp(toWireBody(row, workKey, sha))
+            // Compare against equivalent pre-merge work keys so an alias merge between intent
+            // persistence and Tx 1 does not look like a reader edit and leave recovery stuck.
+            val candidateWorkKeys = buildSet {
+                if (workKey.isNotBlank()) addAll(workIdentity.equivalentWorkKeys(permissionId, workKey))
+                chosenBody?.workKey?.takeIf { it.isNotBlank() }?.let(::add)
+                syncRow?.workId?.takeIf { it.isNotBlank() }?.let(::add)
+                remoteBody?.workKey?.takeIf { it.isNotBlank() }?.let(::add)
             }
-            val untouched = liveContentFp == chosenContentFp ||
-                liveContentFp == conflict.localFp ||
+            val liveFps = liveRow?.let { row ->
+                val sha = identities.fingerprint(row.bookId)?.sha256?.lowercase(Locale.ROOT)
+                candidateWorkKeys.map { wk ->
+                    DriveWireCodec.annotationContentFp(toWireBody(row, wk, sha))
+                }.toSet()
+            }.orEmpty()
+            val untouched = (chosenContentFp != null && chosenContentFp in liveFps) ||
+                conflict.localFp in liveFps ||
                 (liveRow == null && chosenBody == null)
             if (!untouched) return
             commitChosen(peerId, conflict, intentResolution.outcome, chosenBody, chosenContentFp, targetBookUrl, workKey, syncRow)
@@ -802,9 +819,10 @@ internal class DriveAnnotationSync(
                     DriveWireCodec.annotationContentFp(toWireBody(row, workKey, sha))
                 }
                 val priorContentFp = existingState?.contentFp
+                val priorBaselineFp = existingState?.let { baselineContentFp(it, workKey) }
                 if (priorContentFp != null &&
                     syncRow?.ackedFingerprint == priorContentFp &&
-                    (liveRow == null || liveContentFp != priorContentFp)
+                    (liveRow == null || (liveContentFp != priorContentFp && liveContentFp != priorBaselineFp))
                 ) {
                     val priorBody = existingState.bodyJson?.let { raw ->
                         runCatching { DriveWireCodec.decodeAnnotationBody(JSONObject(raw)) }.getOrNull()
@@ -1034,17 +1052,8 @@ internal class DriveAnnotationSync(
         )
     }
 
-    private suspend fun findBookUrlForWorkKey(permissionId: String, canonicalWorkKey: String): String? {
-        val peerId = DriveLibrarySync.accountPeerId(permissionId)
-        val aliases = identities.aliasesFor(peerId)
-        val matched = aliases.filter { it.usable && workIdentity.canonicalWorkKey(permissionId, it.workId) == canonicalWorkKey }
-        if (matched.isNotEmpty()) {
-            return matched.firstOrNull { !it.bookUrl.startsWith(DriveWorkIdentity.DRIVE_BOOK_URL_PREFIX) }?.bookUrl
-                ?: matched.first().bookUrl
-        }
-        val stubUrl = DriveWorkIdentity.driveBookUrl(canonicalWorkKey)
-        return books.getByUrl(stubUrl)?.url
-    }
+    private suspend fun findBookUrlForWorkKey(permissionId: String, canonicalWorkKey: String): String? =
+        workIdentity.liveBookUrlFor(permissionId, canonicalWorkKey)
 
     internal fun toWireBody(
         annotation: BookAnnotation,

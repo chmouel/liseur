@@ -449,8 +449,8 @@ internal class DriveMetadataSync(
         val canonicalKey = recordKey(canonicalWorkKey, field)
         // A catalog tombstone counts as a known catalog entry, so this record is not deferred.
         // Without a local book there is nothing to write to: retain it as held history (§4).
-        val bookUrl = findBookUrlForWorkKey(permissionId, canonicalWorkKey)
-        val book = bookUrl?.let { books.getByUrl(it) }
+        val book = findBookUrlForWorkKey(permissionId, canonicalWorkKey)?.let { books.getByUrl(it) }
+        val bookUrl = book?.url
         val normalizedBody = when (decodedBody) {
             is DriveMetadataBody.Text -> decodedBody.copy(workKey = canonicalWorkKey)
             is DriveMetadataBody.Cover -> decodedBody.copy(workKey = canonicalWorkKey)
@@ -670,7 +670,16 @@ internal class DriveMetadataSync(
             result.updatedRecordState?.let { updated ->
                 var persisted = if (appliedRev != null) updated.copy(lastSyncedRevision = appliedRev) else updated
                 appliedContentFp?.let { persisted = persisted.copy(contentFp = it) }
-                if (bookUrl == null) persisted = persisted.copy(held = true)
+                if (bookUrl == null) {
+                    persisted = persisted.copy(held = true)
+                } else if (existingState?.held == true &&
+                    persisted.versionFp == record.fp &&
+                    (existingState.versionFp in record.anc ||
+                        existingState.versionFp in record.resRefs ||
+                        existingState.versionFp in record.resolvedFps)
+                ) {
+                    persisted = DriveHeldRecords.mergeSupersededLineage(persisted, existingState)
+                }
                 recordStates.upsert(persisted)
             }
         }
@@ -1366,17 +1375,8 @@ internal class DriveMetadataSync(
         else -> ""
     }
 
-    private suspend fun findBookUrlForWorkKey(permissionId: String, canonicalWorkKey: String): String? {
-        val peerId = DriveLibrarySync.accountPeerId(permissionId)
-        val matched = identities.aliasesFor(peerId)
-            .filter { it.usable && workIdentity.canonicalWorkKey(permissionId, it.workId) == canonicalWorkKey }
-        if (matched.isNotEmpty()) {
-            return matched.firstOrNull { !it.bookUrl.startsWith(DriveWorkIdentity.DRIVE_BOOK_URL_PREFIX) }?.bookUrl
-                ?: matched.first().bookUrl
-        }
-        val stubUrl = DriveWorkIdentity.driveBookUrl(canonicalWorkKey)
-        return books.getByUrl(stubUrl)?.url
-    }
+    private suspend fun findBookUrlForWorkKey(permissionId: String, canonicalWorkKey: String): String? =
+        workIdentity.liveBookUrlFor(permissionId, canonicalWorkKey)
 
     companion object {
         fun recordKey(workKey: String, field: String): String = "$workKey/$field"

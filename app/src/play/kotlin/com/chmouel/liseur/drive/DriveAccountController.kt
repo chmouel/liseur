@@ -213,8 +213,7 @@ internal class DriveAccountController(
                                 driveSync.workIdentity.pendingMatches(primary.permissionId)
                             }.getOrDefault(emptyList())
                             val conflictGroups = runCatching {
-                                // A conflict parked for a work with no book has nothing to show yet.
-                                buildConflictUiGroups(openConflicts.filter { it.bookUrl != null })
+                                buildConflictUiGroups(openConflicts)
                             }.getOrDefault(emptyList())
                             StoreSnapshot(
                                 account = primary,
@@ -645,10 +644,16 @@ internal class DriveAccountController(
     internal suspend fun buildConflictUiGroups(openConflicts: List<DriveConflict>): List<DriveConflictUiGroup> {
         if (openConflicts.isEmpty()) return emptyList()
         val booksByUrl = database.bookDao().allOnce().associateBy { it.url }
+        // Hide conflicts whose book does not exist locally yet (held records and hidden annotations).
+        val visibleConflicts = openConflicts.filter { conflict ->
+            val url = conflict.bookUrl ?: return@filter false
+            booksByUrl[url] != null
+        }
+        if (visibleConflicts.isEmpty()) return emptyList()
         val result = mutableListOf<DriveConflictUiGroup>()
 
-        val seriesConflicts = openConflicts.filter { it.domain == DriveWireCodec.DOMAIN_SERIES }
-        val nonSeriesConflicts = openConflicts.filter { it.domain != DriveWireCodec.DOMAIN_SERIES }
+        val seriesConflicts = visibleConflicts.filter { it.domain == DriveWireCodec.DOMAIN_SERIES }
+        val nonSeriesConflicts = visibleConflicts.filter { it.domain != DriveWireCodec.DOMAIN_SERIES }
 
         // 1. Per-record conflicts for annotation, evaluation, and metadata.
         for (conflict in nonSeriesConflicts) {

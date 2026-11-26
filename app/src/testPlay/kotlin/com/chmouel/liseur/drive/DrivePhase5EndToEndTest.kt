@@ -1854,6 +1854,746 @@ class DrivePhase5EndToEndTest {
         assertEquals(hidden, deviceA.liseurDb.annotationDao().byId("note-2")?.bookId)
     }
 
+    @Test
+    fun `stale work alias without a local book still retains series evaluation and metadata as held`() = runTest {
+        val key = "isbn:9780156027601"
+        val hlc = "0017450000000-0001-dev-a"
+        val peerId = DriveLibrarySync.accountPeerId(PERM_A)
+        // Stale usable alias whose local book row is gone, alongside a catalog tombstone.
+        deviceA.liseurDb.workIdentityDao().upsert(
+            WorkAlias(
+                bookUrl = "file:///gone/solaris.epub",
+                peerId = peerId,
+                workId = key,
+                confidence = "high",
+                resolvedAt = 0L,
+            ),
+        )
+        deviceA.driveDb.recordStates().upsert(
+            DriveRecordState(PERM_A, DriveWireCodec.DOMAIN_CATALOG, key, "deleted", DriveRecordState.OP_DEL, lastHlc = hlc),
+        )
+
+        val seriesRecord = DriveWireCodec.putRecord(
+            DriveWireCodec.DOMAIN_SERIES,
+            key,
+            hlc,
+            DriveWireCodec.encodeSeriesBody(
+                DriveSeriesBody(key, true, "Solaris Cycle", false, null, "solaris cycle", 1_000L),
+            ),
+        )
+        val evalRecord = DriveWireCodec.putRecord(
+            DriveWireCodec.DOMAIN_EVALUATION,
+            "$key/rating",
+            hlc,
+            DriveWireCodec.encodeEvaluationBody(DriveEvaluationBody(key, "rating", "9", 1_000L)),
+        )
+        val metaRecord = DriveWireCodec.putRecord(
+            DriveWireCodec.DOMAIN_METADATA,
+            "$key/title",
+            hlc,
+            DriveWireCodec.encodeMetadataBody(DriveMetadataBody.Text(key, "title", "Solaris, Revised", 1_000L)),
+        )
+
+        assertTrue(deviceA.driveSync.seriesSync.applyRemoteRecord(PERM_A, seriesRecord, "dev-a", 1L) { hlc })
+        assertTrue(deviceA.driveSync.evaluationSync.applyRemoteRecord(PERM_A, evalRecord, "dev-a", 2L) { hlc })
+        assertTrue(deviceA.driveSync.metadataSync.applyRemoteRecord(PERM_A, "token", metaRecord, "dev-a", 3L) { hlc })
+
+        assertTrue(deviceA.driveDb.recordStates().get(PERM_A, DriveWireCodec.DOMAIN_SERIES, key)!!.held)
+        assertTrue(deviceA.driveDb.recordStates().get(PERM_A, DriveWireCodec.DOMAIN_EVALUATION, "$key/rating")!!.held)
+        assertTrue(deviceA.driveDb.recordStates().get(PERM_A, DriveWireCodec.DOMAIN_METADATA, "$key/title")!!.held)
+        assertNull(deviceA.liseurDb.bookEvaluationDao().get("file:///gone/solaris.epub", "rating"))
+    }
+
+    @Test
+    fun `merged held record blocks older incoming version and migrates parked conflict and resolution`() = runTest {
+        val server = Phase5FakeDriveServer()
+        val fresh = createDevice("dev-m-fresh", File(tempDir, "merge-held"), server)
+        try {
+            fresh.connect(PERM_A, "a@example.com")
+            val alias = "sha:old"
+            val key = "isbn:9780156027601"
+            val hlc1 = "0017450000000-0001-dev-a"
+            val hlc2 = "0017450000000-0002-dev-a"
+            val hlc3 = "0017450000000-0003-dev-b"
+            fresh.driveDb.recordStates().upsert(
+                DriveRecordState(PERM_A, DriveWireCodec.DOMAIN_CATALOG, alias, "deleted", DriveRecordState.OP_DEL, lastHlc = hlc1),
+            )
+
+            fun seriesBody(workKey: String, name: String) = DriveSeriesBody(
+                workKey = workKey,
+                seriesOverridden = true,
+                userSeriesName = name,
+                indexOverridden = false,
+                userSeriesIndex = null,
+                seriesKey = name.lowercase(),
+                updatedAt = 1_000L,
+            )
+            val older = DriveWireCodec.putRecord(
+                DriveWireCodec.DOMAIN_SERIES, key, hlc1, DriveWireCodec.encodeSeriesBody(seriesBody(key, "Old Shelf")),
+            )
+            val newer = DriveWireCodec.putRecord(
+                DriveWireCodec.DOMAIN_SERIES,
+                alias,
+                hlc2,
+                DriveWireCodec.encodeSeriesBody(seriesBody(alias, "Solaris Cycle")),
+                ancestors = listOf(older.fp),
+            )
+            val competing = DriveWireCodec.putRecord(
+                DriveWireCodec.DOMAIN_SERIES,
+                alias,
+                hlc3,
+                DriveWireCodec.encodeSeriesBody(seriesBody(alias, "Competing Shelf")),
+            )
+
+            assertTrue(fresh.driveSync.seriesSync.applyRemoteRecord(PERM_A, newer, "dev-a", 1L) { hlc2 })
+            assertTrue(fresh.driveSync.seriesSync.applyRemoteRecord(PERM_A, competing, "dev-b", 1L) { hlc3 })
+            fresh.driveDb.resolutions().upsert(
+                DriveResolution(
+                    permissionId = PERM_A,
+                    domain = DriveWireCodec.DOMAIN_SERIES,
+                    recordKey = alias,
+                    resolutionFp = "res-old",
+                    resolvedFpsJson = DriveCanonicalJson.encode(listOf("fp-a", "fp-b")),
+                    outcome = DriveResolution.OUTCOME_PUT,
+                    hlc = hlc1,
+                    authorDeviceId = "dev-a",
+                    createdAt = 1_000L,
+                ),
+            )
+
+            // Merge sha:old -> isbn:9780156027601, then restore the book and deliver `older` under the canonical key.
+            fresh.driveSync.workIdentity.applyRemoteRecord(
+                PERM_A,
+                DriveWireCodec.putRecord(
+                    DriveWireCodec.DOMAIN_WORK_ALIAS,
+                    "merge:$alias",
+                    hlc3,
+                    DriveWireCodec.encodeWorkAliasBody(DriveWorkAliasBody.Merge(alias, key, 2L)),
+                ),
+                "dev-b",
+                2L,
+            )
+            fresh.liseurDb.bookDao().upsert(restoredBook("drive:$key"))
+
+            val batch = DriveDeltaBatch(
+                batchId = "snap-older-canonical",
+                deviceId = "dev-c",
+                seq = 1L,
+                createdHlc = hlc3,
+                domains = DriveWireCodec.SUPPORTED_DOMAIN_VERSIONS,
+                records = listOf(older),
+            )
+            val bytes = JSONObject(DriveWireCodec.encodeDeltaBatch(batch))
+                .put("throughSeq", 1L).put("partIndex", 0).put("partCount", 1)
+                .toString().toByteArray()
+            val file = server.clientFor("dev-c")
+                .createAppDataFile("token", "snap-older-canonical.json", "application/json", bytes, emptyMap())
+            fresh.changeEngine.applySnapshot(
+                PERM_A,
+                "dev-m-fresh",
+                "dev-c",
+                DriveSnapshotRef(
+                    1L,
+                    listOf(DriveSnapshotPartRef("snap-older-canonical.json", file.id, DriveCanonicalJson.sha256Hex(bytes), 1, 0)),
+                ),
+                "token",
+            )
+
+            assertEquals("Solaris Cycle", fresh.liseurDb.bookDao().getByUrl("drive:$key")?.userSeriesName)
+            assertNull(fresh.driveDb.recordStates().get(PERM_A, DriveWireCodec.DOMAIN_SERIES, alias))
+            assertTrue(fresh.driveDb.conflicts().unsettledForRecord(PERM_A, DriveWireCodec.DOMAIN_SERIES, alias).isEmpty())
+            val expectedConflictId = DriveCanonicalJson.conflictId(
+                DriveWireCodec.DOMAIN_SERIES,
+                key,
+                newer.fp,
+                competing.fp,
+            )
+            val migratedConflict = fresh.driveDb.conflicts().unsettledForRecord(PERM_A, DriveWireCodec.DOMAIN_SERIES, key).single()
+            assertEquals("drive:$key", migratedConflict.bookUrl)
+            assertEquals(expectedConflictId, migratedConflict.conflictId)
+            assertTrue(fresh.driveDb.resolutions().forRecord(PERM_A, DriveWireCodec.DOMAIN_SERIES, alias).isEmpty())
+            assertEquals(
+                listOf("res-old"),
+                fresh.driveDb.resolutions().forRecord(PERM_A, DriveWireCodec.DOMAIN_SERIES, key).map { it.resolutionFp },
+            )
+
+            // Replaying the competing version under the canonical key must coalesce onto the migrated conflict.
+            val replayedCompeting = competing.copy(
+                k = key,
+                body = JSONObject(DriveCanonicalJson.encode(DriveWireCodec.encodeSeriesBody(seriesBody(key, "Competing Shelf")))),
+            )
+            assertTrue(fresh.driveSync.seriesSync.applyRemoteRecord(PERM_A, replayedCompeting, "dev-b", 1L) { hlc3 })
+            val unsettledAfterReplay = fresh.driveDb.conflicts().unsettledForRecord(PERM_A, DriveWireCodec.DOMAIN_SERIES, key)
+            assertEquals(1, unsettledAfterReplay.size)
+            assertEquals(expectedConflictId, unsettledAfterReplay.single().conflictId)
+        } finally {
+            fresh.close()
+        }
+    }
+
+    @Test
+    fun `alias-held ancestor is not replayed over newer canonical-held version when successor arrives`() = runTest {
+        val server = Phase5FakeDriveServer()
+        val fresh = createDevice("dev-two-held", File(tempDir, "two-held"), server)
+        try {
+            fresh.connect(PERM_A, "a@example.com")
+            val alias = "sha:old"
+            val key = "isbn:9780156027601"
+            val hlc1 = "0017450000000-0001-dev-a"
+            val hlc2 = "0017450000000-0002-dev-a"
+            val hlc3 = "0017450000000-0003-dev-b"
+            fresh.driveDb.recordStates().upsert(
+                DriveRecordState(PERM_A, DriveWireCodec.DOMAIN_CATALOG, alias, "deleted-alias", DriveRecordState.OP_DEL, lastHlc = hlc1),
+            )
+            fresh.driveDb.recordStates().upsert(
+                DriveRecordState(PERM_A, DriveWireCodec.DOMAIN_CATALOG, key, "deleted-key", DriveRecordState.OP_DEL, lastHlc = hlc1),
+            )
+
+            fun seriesBody(workKey: String, name: String, updatedAt: Long) = DriveSeriesBody(
+                workKey = workKey,
+                seriesOverridden = true,
+                userSeriesName = name,
+                indexOverridden = false,
+                userSeriesIndex = null,
+                seriesKey = name.lowercase(),
+                updatedAt = updatedAt,
+            )
+            val heldX = DriveWireCodec.putRecord(
+                DriveWireCodec.DOMAIN_SERIES,
+                alias,
+                hlc1,
+                DriveWireCodec.encodeSeriesBody(seriesBody(alias, "Alias Series", 1_000L)),
+                ancestors = listOf("fp-root-x"),
+                resRefs = listOf("res-x"),
+            )
+            val heldY = DriveWireCodec.putRecord(
+                DriveWireCodec.DOMAIN_SERIES,
+                key,
+                hlc2,
+                DriveWireCodec.encodeSeriesBody(seriesBody(key, "Canonical Series", 2_000L)),
+                ancestors = listOf(heldX.fp),
+                resRefs = listOf("res-y"),
+            )
+            assertTrue(fresh.driveSync.seriesSync.applyRemoteRecord(PERM_A, heldX, "dev-a", 1L) { hlc1 })
+            assertTrue(fresh.driveSync.seriesSync.applyRemoteRecord(PERM_A, heldY, "dev-a", 2L) { hlc2 })
+            assertTrue(fresh.driveDb.recordStates().get(PERM_A, DriveWireCodec.DOMAIN_SERIES, alias)!!.held)
+            assertTrue(fresh.driveDb.recordStates().get(PERM_A, DriveWireCodec.DOMAIN_SERIES, key)!!.held)
+
+            // Merge alias -> canonical key, restore the book with no series override, and deliver successor R of Y.
+            fresh.driveSync.workIdentity.applyRemoteRecord(
+                PERM_A,
+                DriveWireCodec.putRecord(
+                    DriveWireCodec.DOMAIN_WORK_ALIAS,
+                    "merge:$alias",
+                    hlc2,
+                    DriveWireCodec.encodeWorkAliasBody(DriveWorkAliasBody.Merge(alias, key, 2L)),
+                ),
+                "dev-a",
+                3L,
+            )
+            fresh.liseurDb.bookDao().upsert(restoredBook("drive:$key"))
+
+            val incomingR = DriveWireCodec.putRecord(
+                DriveWireCodec.DOMAIN_SERIES,
+                key,
+                hlc3,
+                DriveWireCodec.encodeSeriesBody(seriesBody(key, "Successor Series", 3_000L)),
+                ancestors = listOf(heldY.fp),
+            )
+            val batch = DriveDeltaBatch(
+                batchId = "snap-two-held-r",
+                deviceId = "dev-b",
+                seq = 1L,
+                createdHlc = hlc3,
+                domains = DriveWireCodec.SUPPORTED_DOMAIN_VERSIONS,
+                records = listOf(incomingR),
+            )
+            val bytes = JSONObject(DriveWireCodec.encodeDeltaBatch(batch))
+                .put("throughSeq", 1L).put("partIndex", 0).put("partCount", 1)
+                .toString().toByteArray()
+            val file = server.clientFor("dev-b")
+                .createAppDataFile("token", "snap-two-held-r.json", "application/json", bytes, emptyMap())
+            fresh.changeEngine.applySnapshot(
+                PERM_A,
+                "dev-two-held",
+                "dev-b",
+                DriveSnapshotRef(
+                    1L,
+                    listOf(DriveSnapshotPartRef("snap-two-held-r.json", file.id, DriveCanonicalJson.sha256Hex(bytes), 1, 0)),
+                ),
+                "token",
+            )
+
+            assertEquals("Successor Series", fresh.liseurDb.bookDao().getByUrl("drive:$key")?.userSeriesName)
+            assertTrue(fresh.driveDb.conflicts().openForAccount(PERM_A).isEmpty())
+            assertTrue(fresh.driveDb.conflicts().unsettledForRecord(PERM_A, DriveWireCodec.DOMAIN_SERIES, key).isEmpty())
+            assertNull(fresh.driveDb.recordStates().get(PERM_A, DriveWireCodec.DOMAIN_SERIES, alias))
+            val state = fresh.driveDb.recordStates().get(PERM_A, DriveWireCodec.DOMAIN_SERIES, key)!!
+            assertFalse(state.held)
+            assertEquals(incomingR.fp, state.versionFp)
+            val ancestors = DriveWorkIdentity.decodeStringArray(state.ancestorsJson)
+            assertTrue(heldY.fp in ancestors)
+            assertTrue(heldX.fp in ancestors)
+            assertTrue("fp-root-x" in ancestors)
+            val resRefs = DriveWorkIdentity.decodeStringArray(state.resRefsJson)
+            assertTrue("res-x" in resRefs)
+            assertTrue("res-y" in resRefs)
+        } finally {
+            fresh.close()
+        }
+    }
+
+    @Test
+    fun `skipped alias-held row is retained when its incoming successor opens a conflict`() = runTest {
+        val server = Phase5FakeDriveServer()
+        val fresh = createDevice("dev-c-fresh", File(tempDir, "conflict-skip-held"), server)
+        try {
+            fresh.connect(PERM_A, "a@example.com")
+            val alias = "sha:old"
+            val key = "isbn:9780156027601"
+            val hlc1 = "0017450000000-0001-dev-a"
+            val hlc2 = "0017450000000-0002-dev-b"
+            val hlc3 = "0017450000000-0003-dev-c"
+
+            fun seriesBody(workKey: String, name: String) = DriveSeriesBody(
+                workKey = workKey,
+                seriesOverridden = true,
+                userSeriesName = name,
+                indexOverridden = false,
+                userSeriesIndex = null,
+                seriesKey = name.lowercase(),
+                updatedAt = 1_000L,
+            )
+
+            // Canonical key already has a live, materialized series override on the restored book.
+            fresh.liseurDb.bookDao().upsert(restoredBook("drive:$key"))
+            val liveCanonical = DriveWireCodec.putRecord(
+                DriveWireCodec.DOMAIN_SERIES,
+                key,
+                hlc1,
+                DriveWireCodec.encodeSeriesBody(seriesBody(key, "Canonical Live")),
+            )
+            assertTrue(fresh.driveSync.seriesSync.applyRemoteRecord(PERM_A, liveCanonical, "dev-a", 1L) { hlc1 })
+
+            // Alias key has an independent held record from a deleted work.
+            val heldAlias = DriveWireCodec.putRecord(
+                DriveWireCodec.DOMAIN_SERIES,
+                alias,
+                hlc2,
+                DriveWireCodec.encodeSeriesBody(seriesBody(alias, "Alias Held")),
+                ancestors = listOf("fp-alias-root"),
+                resRefs = listOf("res-alias"),
+            )
+            fresh.driveDb.recordStates().upsert(
+                DriveRecordState(
+                    permissionId = PERM_A,
+                    domain = DriveWireCodec.DOMAIN_SERIES,
+                    recordKey = alias,
+                    versionFp = heldAlias.fp,
+                    versionOp = DriveRecordState.OP_PUT,
+                    publishedFp = heldAlias.fp,
+                    contentFp = heldAlias.fp,
+                    originDeviceId = "dev-b",
+                    originSeq = 1L,
+                    ancestorsJson = DriveCanonicalJson.encode(heldAlias.anc),
+                    resRefsJson = DriveCanonicalJson.encode(heldAlias.resRefs),
+                    lastHlc = hlc2,
+                    bodyJson = DriveCanonicalJson.encode(heldAlias.body!!),
+                    held = true,
+                ),
+            )
+
+            // Merge alias -> canonical, then deliver a successor of heldAlias that conflicts with liveCanonical.
+            fresh.driveSync.workIdentity.applyRemoteRecord(
+                PERM_A,
+                DriveWireCodec.putRecord(
+                    DriveWireCodec.DOMAIN_WORK_ALIAS,
+                    "merge:$alias",
+                    hlc2,
+                    DriveWireCodec.encodeWorkAliasBody(DriveWorkAliasBody.Merge(alias, key, 2L)),
+                ),
+                "dev-b",
+                2L,
+            )
+
+            val successorOfAlias = DriveWireCodec.putRecord(
+                DriveWireCodec.DOMAIN_SERIES,
+                key,
+                hlc3,
+                DriveWireCodec.encodeSeriesBody(seriesBody(key, "Alias Successor")),
+                ancestors = listOf(heldAlias.fp),
+            )
+            val batch = DriveDeltaBatch(
+                batchId = "snap-conflict-skip",
+                deviceId = "dev-c",
+                seq = 1L,
+                createdHlc = hlc3,
+                domains = DriveWireCodec.SUPPORTED_DOMAIN_VERSIONS,
+                records = listOf(successorOfAlias),
+            )
+            val bytes = JSONObject(DriveWireCodec.encodeDeltaBatch(batch))
+                .put("throughSeq", 1L).put("partIndex", 0).put("partCount", 1)
+                .toString().toByteArray()
+            val file = server.clientFor("dev-c")
+                .createAppDataFile("token", "snap-conflict-skip.json", "application/json", bytes, emptyMap())
+            fresh.changeEngine.applySnapshot(
+                PERM_A,
+                "dev-c-fresh",
+                "dev-c",
+                DriveSnapshotRef(
+                    1L,
+                    listOf(DriveSnapshotPartRef("snap-conflict-skip.json", file.id, DriveCanonicalJson.sha256Hex(bytes), 1, 0)),
+                ),
+                "token",
+            )
+
+            // Successor opened a conflict instead of replacing liveCanonical, so heldAlias must stay retained.
+            assertEquals("Canonical Live", fresh.liseurDb.bookDao().getByUrl("drive:$key")?.userSeriesName)
+            assertEquals(1, fresh.driveDb.conflicts().unsettledForRecord(PERM_A, DriveWireCodec.DOMAIN_SERIES, key).size)
+            val retainedAlias = fresh.driveDb.recordStates().get(PERM_A, DriveWireCodec.DOMAIN_SERIES, alias)
+            assertNotNull(retainedAlias)
+            assertTrue(retainedAlias!!.held)
+            assertEquals(heldAlias.fp, retainedAlias.versionFp)
+        } finally {
+            fresh.close()
+        }
+    }
+
+    @Test
+    fun `hidden annotation conflict stays hidden until restored and reattaches to the live book url`() = runTest {
+        val key = "isbn:9780156027601"
+        val hidden = "drive:$key"
+        val live = "file:///calibre/solaris.epub"
+        val hlc = "0017450000000-0001-dev-a"
+        val peerId = DriveLibrarySync.accountPeerId(PERM_A)
+
+        deviceA.liseurDb.annotationDao().upsert(
+            BookAnnotation(
+                id = "note-hidden-conflict",
+                bookId = hidden,
+                kind = "BOOK_NOTE",
+                locatorJson = "",
+                note = "Local note",
+                createdAt = 1_000L,
+            ),
+        )
+        deviceA.driveDb.conflicts().upsert(
+            DriveConflict(
+                permissionId = PERM_A,
+                conflictId = "c-hidden-ann",
+                domain = DriveWireCodec.DOMAIN_ANNOTATION,
+                recordKey = "note-hidden-conflict",
+                bookUrl = hidden,
+                kind = DriveConflict.KIND_EDIT_EDIT,
+                localFp = "fp-local",
+                remoteFp = "fp-remote",
+                remoteJson = DriveCanonicalJson.encode(
+                    DriveWireCodec.encodeAnnotationBody(
+                        DriveAnnotationBody(
+                            id = "note-hidden-conflict",
+                            workKey = key,
+                            editionSha = null,
+                            kind = "BOOK_NOTE",
+                            locatorJson = "",
+                            text = null,
+                            note = "Remote note",
+                            tint = null,
+                            chapter = null,
+                            totalProgression = null,
+                            createdAt = 1_000L,
+                            noteCreatedAt = 1_000L,
+                            noteUpdatedAt = 1_000L,
+                            updatedAt = 2_000L,
+                        ),
+                    ),
+                ),
+                remoteDeviceId = "dev-b",
+                remoteHlc = hlc,
+                state = DriveConflict.STATE_OPEN,
+                openedAt = 1_000L,
+            ),
+        )
+
+        val removal = BookRemoval(
+            bookDao = deviceA.liseurDb.bookDao(),
+            sessionDao = deviceA.liseurDb.readingSessionDao(),
+            peerStateDao = deviceA.liseurDb.syncPeerStateDao(),
+            identityDao = deviceA.liseurDb.workIdentityDao(),
+            progressDao = deviceA.liseurDb.readingProgressDao(),
+            annotationDao = deviceA.liseurDb.annotationDao(),
+            annotationSyncDao = deviceA.liseurDb.annotationSyncDao(),
+            inTransaction = { work -> deviceA.liseurDb.withTransaction { work() } },
+            metadataDao = deviceA.liseurDb.bookMetadataDao(),
+            evaluationDao = deviceA.liseurDb.bookEvaluationDao(),
+        )
+        val remoteAccount = RemoteAccountRepository(
+            dao = deviceA.liseurDb.remoteServerDao(),
+            bookDao = deviceA.liseurDb.bookDao(),
+            progressDao = deviceA.liseurDb.readingProgressDao(),
+            seriesExtraDao = deviceA.liseurDb.seriesExtraDao(),
+            bookRemoval = removal,
+            inTransaction = { work -> deviceA.liseurDb.withTransaction { work() } },
+        )
+        val controller = DriveAccountController(
+            database = deviceA.liseurDb,
+            remoteAccount = remoteAccount,
+            driveSync = deviceA.driveSync,
+            authClient = alwaysAuthClient("token"),
+            driveApi = serverA.clientFor("dev-a"),
+        )
+        val beforeRestore = controller.buildConflictUiGroups(deviceA.driveDb.conflicts().openForAccount(PERM_A))
+        assertTrue(beforeRestore.isEmpty())
+
+        // Restore the book at a different local URL and reattach hidden history.
+        deviceA.liseurDb.bookDao().upsert(restoredBook(live))
+        deviceA.liseurDb.workIdentityDao().upsert(
+            WorkAlias(bookUrl = live, peerId = peerId, workId = key, confidence = "high", resolvedAt = 0L),
+        )
+        deviceA.driveSync.workIdentity.reattachHiddenHistory(PERM_A)
+
+        assertEquals(live, deviceA.driveDb.conflicts().get(PERM_A, "c-hidden-ann")?.bookUrl)
+        val afterRestore = controller.buildConflictUiGroups(deviceA.driveDb.conflicts().openForAccount(PERM_A))
+        assertEquals(1, afterRestore.size)
+        assertEquals("Solaris", afterRestore.single().bookTitle)
+    }
+
+    @Test
+    fun `reattachHiddenHistory discovers hidden urls from open and resolving conflicts alone`() = runTest {
+        val openKey = "isbn:9780156027601"
+        val resolvingKey = "isbn:9780156027602"
+        val hiddenOpen = "drive:$openKey"
+        val hiddenResolving = "drive:$resolvingKey"
+        val liveOpen = "file:///calibre/solaris.epub"
+        val liveResolving = "file:///calibre/eden.epub"
+        val hlc = "0017450000000-0001-dev-a"
+        val peerId = DriveLibrarySync.accountPeerId(PERM_A)
+
+        // No annotation, agreement, or session rows exist at either hidden `drive:` URL.
+        deviceA.driveDb.conflicts().upsert(
+            DriveConflict(
+                permissionId = PERM_A,
+                conflictId = "c-only-open",
+                domain = DriveWireCodec.DOMAIN_SERIES,
+                recordKey = openKey,
+                bookUrl = hiddenOpen,
+                kind = DriveConflict.KIND_EDIT_EDIT,
+                localFp = "fp-open-local",
+                remoteFp = "fp-open-remote",
+                remoteJson = null,
+                remoteDeviceId = "dev-b",
+                remoteHlc = hlc,
+                state = DriveConflict.STATE_OPEN,
+                openedAt = 1_000L,
+            ),
+        )
+        deviceA.driveDb.conflicts().upsert(
+            DriveConflict(
+                permissionId = PERM_A,
+                conflictId = "c-only-resolving",
+                domain = DriveWireCodec.DOMAIN_SERIES,
+                recordKey = resolvingKey,
+                bookUrl = hiddenResolving,
+                kind = DriveConflict.KIND_EDIT_EDIT,
+                localFp = "fp-res-local",
+                remoteFp = "fp-res-remote",
+                remoteJson = null,
+                remoteDeviceId = "dev-b",
+                remoteHlc = hlc,
+                state = DriveConflict.STATE_RESOLVING,
+                choice = DriveConflictChoice.KEEP_REMOTE.name,
+                resolutionFp = "res-fp-1",
+                openedAt = 1_000L,
+            ),
+        )
+
+        deviceA.liseurDb.bookDao().upsert(restoredBook(liveOpen))
+        deviceA.liseurDb.bookDao().upsert(restoredBook(liveResolving).copy(title = "Eden", fileTitle = "Eden"))
+        deviceA.liseurDb.workIdentityDao().upsert(
+            WorkAlias(bookUrl = liveOpen, peerId = peerId, workId = openKey, confidence = "high", resolvedAt = 0L),
+        )
+        deviceA.liseurDb.workIdentityDao().upsert(
+            WorkAlias(bookUrl = liveResolving, peerId = peerId, workId = resolvingKey, confidence = "high", resolvedAt = 0L),
+        )
+
+        deviceA.driveSync.workIdentity.reattachHiddenHistory(PERM_A)
+
+        val movedOpen = deviceA.driveDb.conflicts().get(PERM_A, "c-only-open")!!
+        assertEquals(liveOpen, movedOpen.bookUrl)
+        assertEquals(DriveConflict.STATE_OPEN, movedOpen.state)
+
+        val movedResolving = deviceA.driveDb.conflicts().get(PERM_A, "c-only-resolving")!!
+        assertEquals(liveResolving, movedResolving.bookUrl)
+        assertEquals(DriveConflict.STATE_RESOLVING, movedResolving.state)
+        assertEquals(DriveConflictChoice.KEEP_REMOTE.name, movedResolving.choice)
+        assertEquals("res-fp-1", movedResolving.resolutionFp)
+    }
+
+    @Test
+    fun `successor of a held record preserves held ancestors and resolution refs`() = runTest {
+        val server = Phase5FakeDriveServer()
+        val fresh = createDevice("dev-l-fresh", File(tempDir, "held-lineage"), server)
+        try {
+            fresh.connect(PERM_A, "a@example.com")
+            val key = "isbn:9780156027601"
+            val hlc1 = "0017450000000-0001-dev-a"
+            val hlc2 = "0017450000000-0002-dev-b"
+            fresh.driveDb.recordStates().upsert(
+                DriveRecordState(PERM_A, DriveWireCodec.DOMAIN_CATALOG, key, "deleted", DriveRecordState.OP_DEL, lastHlc = hlc1),
+            )
+            val heldBody = DriveSeriesBody(key, true, "First", false, null, "first", 1_000L)
+            val heldRecord = DriveWireCodec.putRecord(
+                DriveWireCodec.DOMAIN_SERIES,
+                key,
+                hlc1,
+                DriveWireCodec.encodeSeriesBody(heldBody),
+                ancestors = listOf("fp-root"),
+                resRefs = listOf("res-prior"),
+            )
+            assertTrue(fresh.driveSync.seriesSync.applyRemoteRecord(PERM_A, heldRecord, "dev-a", 1L) { hlc1 })
+
+            fresh.liseurDb.bookDao().upsert(restoredBook("drive:$key"))
+            val successor = DriveWireCodec.putRecord(
+                DriveWireCodec.DOMAIN_SERIES,
+                key,
+                hlc2,
+                DriveWireCodec.encodeSeriesBody(heldBody.copy(userSeriesName = "Second", seriesKey = "second", updatedAt = 2_000L)),
+                ancestors = listOf(heldRecord.fp),
+                resRefs = emptyList(),
+            )
+            val batch = DriveDeltaBatch(
+                batchId = "snap-succ-lineage",
+                deviceId = "dev-b",
+                seq = 2L,
+                createdHlc = hlc2,
+                domains = DriveWireCodec.SUPPORTED_DOMAIN_VERSIONS,
+                records = listOf(successor),
+            )
+            val bytes = JSONObject(DriveWireCodec.encodeDeltaBatch(batch))
+                .put("throughSeq", 2L).put("partIndex", 0).put("partCount", 1)
+                .toString().toByteArray()
+            val file = server.clientFor("dev-b")
+                .createAppDataFile("token", "snap-succ-lineage.json", "application/json", bytes, emptyMap())
+            fresh.changeEngine.applySnapshot(
+                PERM_A,
+                "dev-l-fresh",
+                "dev-b",
+                DriveSnapshotRef(
+                    2L,
+                    listOf(DriveSnapshotPartRef("snap-succ-lineage.json", file.id, DriveCanonicalJson.sha256Hex(bytes), 1, 0)),
+                ),
+                "token",
+            )
+
+            val state = fresh.driveDb.recordStates().get(PERM_A, DriveWireCodec.DOMAIN_SERIES, key)!!
+            assertFalse(state.held)
+            assertEquals(successor.fp, state.versionFp)
+            assertTrue("fp-root" in DriveWorkIdentity.decodeStringArray(state.ancestorsJson))
+            assertTrue("res-prior" in DriveWorkIdentity.decodeStringArray(state.resRefsJson))
+        } finally {
+            fresh.close()
+        }
+    }
+
+    @Test
+    fun `interrupted annotation conflict recovery finishes after a work key merge`() = runTest {
+        val alias = "sha:old"
+        val key = "isbn:9780156027601"
+        val hlc = "0017450000000-0001-dev-a"
+        val resHlc = "0017450000000-0002-dev-a"
+        val peerId = DriveLibrarySync.accountPeerId(PERM_A)
+        val bookUrl = "file:///calibre/solaris.epub"
+        deviceA.liseurDb.bookDao().upsert(restoredBook(bookUrl))
+        deviceA.liseurDb.workIdentityDao().upsert(
+            WorkAlias(bookUrl = bookUrl, peerId = peerId, workId = alias, confidence = "high", resolvedAt = 0L),
+        )
+        val localAnn = BookAnnotation(
+            id = "note-recover-merge",
+            bookId = bookUrl,
+            kind = "BOOK_NOTE",
+            locatorJson = "",
+            note = "Local version",
+            createdAt = 1_000L,
+            noteCreatedAt = 1_000L,
+            noteUpdatedAt = 1_000L,
+            updatedAt = 1_000L,
+        )
+        deviceA.liseurDb.annotationDao().upsert(localAnn)
+
+        val localBody = deviceA.driveSync.annotationSync.toWireBody(localAnn, alias, editionSha = null)
+        val localFp = DriveWireCodec.annotationContentFp(localBody)
+        val chosenBody = localBody.copy(note = "Chosen remote version", updatedAt = 2_000L)
+        val chosenBodyMap = DriveWireCodec.encodeAnnotationBody(chosenBody)
+        val chosenFp = DriveWireCodec.annotationContentFp(chosenBody)
+        val resolveFp = DriveCanonicalJson.resolveFp(
+            outcome = DriveResolution.OUTCOME_PUT,
+            resolvedFps = listOf(localFp, chosenFp),
+            hlc = resHlc,
+            body = chosenBodyMap,
+        )
+        val conflict = DriveConflict(
+            permissionId = PERM_A,
+            conflictId = "c-recover-merge",
+            domain = DriveWireCodec.DOMAIN_ANNOTATION,
+            recordKey = localAnn.id,
+            bookUrl = bookUrl,
+            kind = DriveConflict.KIND_EDIT_EDIT,
+            localFp = localFp,
+            remoteFp = chosenFp,
+            remoteJson = DriveCanonicalJson.encode(chosenBodyMap),
+            remoteDeviceId = "dev-b",
+            remoteHlc = hlc,
+            state = DriveConflict.STATE_RESOLVING,
+            choice = DriveConflictChoice.KEEP_REMOTE.name,
+            resolutionFp = resolveFp,
+            openedAt = 1_000L,
+        )
+        deviceA.driveDb.conflicts().upsert(conflict)
+        deviceA.driveDb.resolutions().upsert(
+            DriveResolution(
+                permissionId = PERM_A,
+                domain = DriveWireCodec.DOMAIN_ANNOTATION,
+                recordKey = localAnn.id,
+                resolutionFp = resolveFp,
+                resolvedFpsJson = DriveCanonicalJson.encode(listOf(localFp, chosenFp).sorted()),
+                outcome = DriveResolution.OUTCOME_PUT,
+                hlc = resHlc,
+                authorDeviceId = "dev-a",
+                createdAt = 2_000L,
+            ),
+        )
+        deviceA.driveDb.recordStates().upsert(
+            DriveRecordState(
+                permissionId = PERM_A,
+                domain = DriveWireCodec.DOMAIN_ANNOTATION,
+                recordKey = localAnn.id,
+                versionFp = resolveFp,
+                versionOp = DriveRecordState.OP_RESOLVE,
+                publishedFp = null,
+                contentFp = chosenFp,
+                lastHlc = resHlc,
+                bodyJson = DriveCanonicalJson.encode(chosenBodyMap),
+            ),
+        )
+
+        // An alias merge arrives before Tx 1 finishes.
+        deviceA.driveSync.workIdentity.applyRemoteRecord(
+            PERM_A,
+            DriveWireCodec.putRecord(
+                DriveWireCodec.DOMAIN_WORK_ALIAS,
+                "merge:$alias",
+                resHlc,
+                DriveWireCodec.encodeWorkAliasBody(DriveWorkAliasBody.Merge(alias, key, 2L)),
+            ),
+            "dev-b",
+            1L,
+        )
+
+        deviceA.driveSync.annotationSync.recoverResolvingConflict(PERM_A, conflict, "dev-a") { resHlc }
+
+        assertEquals("Chosen remote version", deviceA.liseurDb.annotationDao().byId(localAnn.id)?.note)
+        assertEquals(chosenFp, deviceA.liseurDb.annotationSyncDao().get(peerId, localAnn.id)?.ackedFingerprint)
+    }
+
     private suspend fun seedRestoredBook(device: Phase5Device, workKey: String): Book {
         val book = restoredBook("drive:$workKey")
         device.liseurDb.bookDao().upsert(book)

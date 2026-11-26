@@ -261,8 +261,8 @@ internal class DriveSeriesSync(
         val canonicalWorkKey = workIdentity.canonicalWorkKey(permissionId, rawWorkKey)
         // A catalog tombstone counts as a known catalog entry, so this record is not deferred.
         // Without a local book there is nothing to write to: retain it as held history (§4).
-        val bookUrl = findBookUrlForWorkKey(permissionId, canonicalWorkKey)
-        val book = bookUrl?.let { books.getByUrl(it) }
+        val book = findBookUrlForWorkKey(permissionId, canonicalWorkKey)?.let { books.getByUrl(it) }
+        val bookUrl = book?.url
         val normalizedBody = decodedBody?.copy(workKey = canonicalWorkKey)
         val incomingContentFp = normalizedBody?.let {
             DriveCanonicalJson.contentFp(DriveWireCodec.encodeSeriesBody(it))
@@ -353,7 +353,16 @@ internal class DriveSeriesSync(
             result.conflictToOpen?.let { conflicts.upsert(it) }
             result.updatedRecordState?.let { updated ->
                 var persisted = appliedContentFp?.let { updated.copy(contentFp = it) } ?: updated
-                if (bookUrl == null) persisted = persisted.copy(held = true)
+                if (book == null) {
+                    persisted = persisted.copy(held = true)
+                } else if (existingState?.held == true &&
+                    persisted.versionFp == record.fp &&
+                    (existingState.versionFp in record.anc ||
+                        existingState.versionFp in record.resRefs ||
+                        existingState.versionFp in record.resolvedFps)
+                ) {
+                    persisted = DriveHeldRecords.mergeSupersededLineage(persisted, existingState)
+                }
                 recordStates.upsert(persisted)
             }
         }
@@ -850,15 +859,6 @@ internal class DriveSeriesSync(
             a.userSeriesIndex == b.userSeriesIndex &&
             a.seriesKey == b.seriesKey
 
-    private suspend fun findBookUrlForWorkKey(permissionId: String, canonicalWorkKey: String): String? {
-        val peerId = DriveLibrarySync.accountPeerId(permissionId)
-        val matched = identities.aliasesFor(peerId)
-            .filter { it.usable && workIdentity.canonicalWorkKey(permissionId, it.workId) == canonicalWorkKey }
-        if (matched.isNotEmpty()) {
-            return matched.firstOrNull { !it.bookUrl.startsWith(DriveWorkIdentity.DRIVE_BOOK_URL_PREFIX) }?.bookUrl
-                ?: matched.first().bookUrl
-        }
-        val stubUrl = DriveWorkIdentity.driveBookUrl(canonicalWorkKey)
-        return books.getByUrl(stubUrl)?.url
-    }
+    private suspend fun findBookUrlForWorkKey(permissionId: String, canonicalWorkKey: String): String? =
+        workIdentity.liveBookUrlFor(permissionId, canonicalWorkKey)
 }
