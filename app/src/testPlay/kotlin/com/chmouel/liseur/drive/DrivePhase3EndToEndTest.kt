@@ -146,11 +146,12 @@ class DrivePhase3EndToEndTest {
         apply(body.copy(editions = listOf(edition.copy(driveFileId = null, fileName = null, uploadedAt = null, availabilityHlc = clearClock))), clearClock)
         apply(body.copy(title = "Updated title"), laterClock)
         val state = requireNotNull(deviceB.driveDb.recordStates().get(PERM_ID, DriveWireCodec.DOMAIN_CATALOG, key))
-        val merged = requireNotNull(DriveWireCodec.decodeCatalogBody(org.json.JSONObject(state.bodyJson)))
+        val bodyJson = requireNotNull(state.bodyJson)
+        val merged = requireNotNull(DriveWireCodec.decodeCatalogBody(org.json.JSONObject(bodyJson)))
         assertEquals(clearClock, merged.editions.single().availabilityHlc)
         assertNull(merged.editions.single().driveFileId)
-        assertEquals(DriveCanonicalJson.contentFp(org.json.JSONObject(requireNotNull(state.bodyJson))), state.contentFp)
-        assertEquals(DriveCanonicalJson.putFp(org.json.JSONObject(state.bodyJson), state.lastHlc), state.versionFp)
+        assertEquals(DriveCanonicalJson.contentFp(org.json.JSONObject(bodyJson)), state.contentFp)
+        assertEquals(DriveCanonicalJson.putFp(org.json.JSONObject(bodyJson), state.lastHlc), state.versionFp)
     }
 
     @Test
