@@ -2254,6 +2254,14 @@ class DrivePhase5EndToEndTest {
             assertNotNull(retainedAlias)
             assertTrue(retainedAlias!!.held)
             assertEquals(heldAlias.fp, retainedAlias.versionFp)
+
+            // The next sync must not ask about the older value as well: only the successor's
+            // question stays parked, and the retained row is kept for the history it carries.
+            fresh.changeEngine.materializeHeldRecords(PERM_A, "dev-c-fresh", "token")
+            assertEquals(1, fresh.driveDb.conflicts().unsettledForRecord(PERM_A, DriveWireCodec.DOMAIN_SERIES, key).size)
+            val stillRetained = fresh.driveDb.recordStates().get(PERM_A, DriveWireCodec.DOMAIN_SERIES, alias)
+            assertTrue(stillRetained?.held == true)
+            assertEquals(heldAlias.fp, stillRetained?.versionFp)
         } finally {
             fresh.close()
         }

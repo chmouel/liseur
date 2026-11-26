@@ -195,12 +195,19 @@ internal class DriveAccountController(
                         flowOf(StoreSnapshot(account = null, pausedAccounts = paused))
                     } else {
                         val peerId = DriveLibrarySync.accountPeerId(primary.permissionId)
+                        // Both work-identity counters only exist to wake the snapshot up.
+                        val workIdentityTriggers = combine(
+                            database.workIdentityDao().observeAmbiguityCount(peerId),
+                            database.workIdentityDao().observeAwaitingAnswer(peerId),
+                        ) { ambiguity, awaiting -> ambiguity to awaiting }
                         combine(
                             db.uploads().observePendingCount(primary.permissionId),
                             db.conflicts().observeOpen(primary.permissionId),
                             db.cursors().observePausedForAccount(primary.permissionId),
-                            database.workIdentityDao().observeAmbiguityCount(peerId),
-                            database.workIdentityDao().observeAwaitingAnswer(peerId),
+                            workIdentityTriggers,
+                            // Conflict cards depend on whether their book is on the shelf, so a book
+                            // being added or removed has to rebuild them on its own.
+                            database.bookDao().observeAll(),
                         ) { pendingUploads, openConflicts, pausedCursors, _, _ ->
                             val pausedLabels = pausedCursors
                                 .map { it.deviceId }
