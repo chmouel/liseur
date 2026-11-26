@@ -403,8 +403,9 @@ by one.
 `hack/release` does the whole thing: bump `versionCode` and
 `versionName`, write the F-Droid changelog, run the tests, lint and a
 release build, commit, tag and push, publish the GitHub release, and
-update the F-Droid submission. Run it from a clean, up-to-date `main`
-with nothing after it:
+update the F-Droid submission. Run it from a clean, up-to-date branch —
+`main`, or a release branch you are about to merge into it — with nothing
+after it:
 
 ```bash
 hack/release
@@ -426,8 +427,26 @@ hack/release --no-play 0.2.1 "..."   # leave Google Play out of this one
 - `-n` (`--non-interactive`, `--yes`) answers the prompts. Any run with
   nothing on stdin needs it, `--rc` included: EOF reads as no and the
   release stops without doing anything.
-- It refuses a dirty tree, being off `main`, out of sync with the remote,
-  a version that is not newer, or notes over F-Droid's 500 characters.
+- It refuses a dirty tree, a detached HEAD, a branch that is out of sync
+  with (or diverged from) `origin/<branch>`, a version that is not newer
+  than the branch's version or than the newest final tag, or notes over
+  F-Droid's 500 characters.
+- The version bump commit and the tag go to the branch you released from;
+  `main` only learns about the release when that branch is merged. The
+  tag alone is what the release workflow, F-Droid and Play consume.
+- Left unmerged, `main` keeps lagging: nightlies build it, taking their
+  version from `main` and their `versionCode` from every tag, so until the
+  branch is integrated a nightly carries older source under a higher
+  `versionCode` than the released tag. Play internal testers get that
+  older source, and F-Droid has no update path back. A squash or rebase
+  integration also leaves the final tag outside `main`'s ancestry, so
+  ancestry-based baselines (release notes, the nightly base) stop
+  recognising that release; a merge commit or a fast-forward keeps it.
+- The version must also beat the newest final tag, not just the branch's
+  own version: with branches free to lag, a stale one could otherwise
+  publish a semver-lower release under a higher `versionCode`, which
+  F-Droid's versionCode-based submission guard would wave through to
+  production.
 - Rerun with the same version to resume an interrupted run. Brief GitLab
   outages in the F-Droid step are retried; if it still fails after GitHub
   published, it prints the `hack/release --fdroid-only VERSION` command.
