@@ -1,0 +1,56 @@
+#!/usr/bin/env python3
+"""Check the reader's paragraph-start selection workaround in Chromium."""
+import re
+import shutil
+import subprocess
+import tempfile
+from pathlib import Path
+
+root = Path(__file__).resolve().parents[1]
+source = root / "app/src/main/kotlin/com/chmouel/liseur/reader/SelectionHandleFix.kt"
+script = re.search(r'const val SCRIPT: String = """(.*?)"""', source.read_text(), re.S)[1]
+browser = shutil.which("google-chrome-stable") or shutil.which("chromium")
+if not browser:
+    raise SystemExit("Chrome or Chromium is required")
+
+fixture = """<!doctype html><meta charset="utf-8"><style>
+body{font:20px serif;width:210px}p{text-align:justify}
+.indent{text-indent:1.5em}.pre{white-space:pre-wrap}
+.drop::first-letter{float:left;font-size:2em}.author::before{content:"*"}
+</style><p>I was on a conference call with several people that morning.</p>
+<p class="indent">Supercalifragilisticexpialidocious is a long first word.</p>
+<p class="drop">“I was just about to call,” she said as she opened the door.</p>
+<p lang="zh">這是用來測試中文段落在兩端對齊時是否改變文字位置的句子。</p>
+<p class="pre">  A line that starts with spaces and wraps across several lines.</p>
+<p class="verse"><span style="white-space:pre-wrap">  Preserved verse continues on this line.</span></p>
+<p class="vertical" style="writing-mode:vertical-rl">縦書きの文字列です。</p>
+<p dir="rtl">كانت هناك كلمات كثيرة في هذا السطر الطويل قبل نهاية الفقرة.</p>
+<p class="author">Publisher content</p><output></output><script>
+function glyphs() {
+  return Array.from(document.querySelectorAll('p'), p =>
+    Array.from((p.querySelector('span') || p).firstChild.data, (_, i) => {
+      const r = new Range();
+      const text = (p.querySelector('span') || p).firstChild;
+      r.setStart(text,i); r.setEnd(text,i+1);
+      const b = r.getBoundingClientRect(); return [b.x,b.y,b.width,b.height];
+    }));
+}
+const before = JSON.stringify(glyphs());
+function apply() {return SCRIPT}
+apply();
+const marked = p => p.hasAttribute(window.__liseurLead.attr);
+const ok = Array.from(document.querySelectorAll('p:not(.author):not(.pre):not(.verse):not(.vertical)')).every(marked)
+  && !marked(document.querySelector('.verse')) && !marked(document.querySelector('.vertical')) && !marked(document.querySelector('.pre')) && !marked(document.querySelector('.author')) && apply() === "stable"
+  && JSON.stringify(glyphs()) === before;
+document.querySelector('output').textContent = ok ? 'PASS' : 'FAIL';
+</script>"""
+with tempfile.TemporaryDirectory() as temp:
+    case = Path(temp) / "selection.html"
+    case.write_text(fixture.replace("return SCRIPT", "return " + script.strip()))
+    dom = subprocess.check_output([browser, "--headless", "--disable-gpu",
+                                   "--user-data-dir=" + temp + "/profile",
+                                   "--dump-dom", case.as_uri()], text=True,
+                                  stderr=subprocess.DEVNULL)
+if "<output>PASS</output>" not in dom:
+    raise SystemExit("FAIL: paragraph markers or glyph geometry changed unexpectedly")
+print("PASS: paragraph markers and glyph geometry")
