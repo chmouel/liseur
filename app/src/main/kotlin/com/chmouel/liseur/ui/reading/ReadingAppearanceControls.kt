@@ -37,9 +37,6 @@ import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -86,6 +83,8 @@ import com.chmouel.liseur.data.settings.ReaderThemeChoice
 import com.chmouel.liseur.data.settings.ReadingFont
 import com.chmouel.liseur.data.settings.fonts.UserFont
 import com.chmouel.liseur.ui.LocalEInk
+import com.chmouel.liseur.ui.Segment
+import com.chmouel.liseur.ui.SegmentedChoiceRow
 import com.chmouel.liseur.ui.widthClass
 
 /*
@@ -779,18 +778,19 @@ fun ReadingLayoutControls(
         // is deliberate: snapping it to the nearest option would change
         // the page to a setting the reader never chose, and do it
         // silently, just because they opened this sheet.
-        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+        SegmentedChoiceRow(Modifier.fillMaxWidth()) {
             val options = listOf(
                 R.string.reader_spacing_compact to 1.2,
                 R.string.reader_spacing_default to null,
                 R.string.reader_spacing_relaxed to 1.8,
             )
             options.forEachIndexed { index, (label, v) ->
-                SegmentedButton(
+                Segment(
+                    index,
+                    options.size,
                     selected = lineHeight == v,
                     enabled = enabled,
                     onClick = { onLineHeightChanged(v) },
-                    shape = SegmentedButtonDefaults.itemShape(index, options.size),
                 ) { Text(stringResource(label)) }
             }
         }
@@ -855,14 +855,15 @@ fun ReadingLayoutControls(
         // would sit there taking a tap and changing nothing.
         if (showColumns && widthClass().isAtLeastMedium) {
             ReadingSectionLabel(stringResource(R.string.reader_columns))
-            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+            SegmentedChoiceRow(Modifier.fillMaxWidth()) {
                 val options = ColumnMode.entries
                 options.forEachIndexed { index, mode ->
-                    SegmentedButton(
+                    Segment(
+                        index,
+                        options.size,
                         selected = columnMode == mode,
                         enabled = enabled,
                         onClick = { onColumnModeChanged(mode) },
-                        shape = SegmentedButtonDefaults.itemShape(index, options.size),
                     ) { Text(stringResource(mode.label)) }
                 }
             }
@@ -888,13 +889,14 @@ fun ReadingPageTurnStyleControl(
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         ReadingSectionLabel(stringResource(R.string.reader_page_turn_style))
-        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+        SegmentedChoiceRow(Modifier.fillMaxWidth()) {
             val options = PageTurnStyle.entries
             options.forEachIndexed { index, style ->
-                SegmentedButton(
+                Segment(
+                    index,
+                    options.size,
                     selected = selected == style,
                     onClick = { onSelected(style) },
-                    shape = SegmentedButtonDefaults.itemShape(index, options.size),
                 ) { Text(stringResource(style.label)) }
             }
         }
@@ -914,13 +916,14 @@ fun ReadingBrightnessEdgeControl(
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         ReadingSectionLabel(stringResource(R.string.settings_brightness_edge))
-        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+        SegmentedChoiceRow(Modifier.fillMaxWidth()) {
             val options = EdgeBrightness.entries
             options.forEachIndexed { index, option ->
-                SegmentedButton(
+                Segment(
+                    index,
+                    options.size,
                     selected = selected == option,
                     onClick = { onSelected(option) },
-                    shape = SegmentedButtonDefaults.itemShape(index, options.size),
                 ) { Text(stringResource(option.label)) }
             }
         }
@@ -964,13 +967,14 @@ fun ReadingOrientationControl(
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         ReadingSectionLabel(stringResource(R.string.settings_reader_orientation))
-        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+        SegmentedChoiceRow(Modifier.fillMaxWidth()) {
             val options = ReaderOrientation.entries
             options.forEachIndexed { index, option ->
-                SegmentedButton(
+                Segment(
+                    index,
+                    options.size,
                     selected = selected == option,
                     onClick = { onSelected(option) },
-                    shape = SegmentedButtonDefaults.itemShape(index, options.size),
                 ) { Text(stringResource(option.label)) }
             }
         }

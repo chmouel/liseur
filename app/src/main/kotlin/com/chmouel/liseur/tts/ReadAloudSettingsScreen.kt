@@ -46,9 +46,6 @@ import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
@@ -102,6 +99,8 @@ import com.chmouel.liseur.translate.BookEarlierTextRow
 import com.chmouel.liseur.translate.SharedContextHeader
 import com.chmouel.liseur.ui.LiseurModalBottomSheet
 import com.chmouel.liseur.ui.contentWidthCap
+import com.chmouel.liseur.ui.Segment
+import com.chmouel.liseur.ui.SegmentedChoiceRow
 import com.chmouel.liseur.ui.navigation.Route
 import com.chmouel.liseur.ui.settings.ConnectionRow
 import com.chmouel.liseur.ui.settings.InfoButton
@@ -309,12 +308,13 @@ private fun SentencesPerRequestRow(feature: SpeechReadAloud) {
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(top = 12.dp)) {
+        SegmentedChoiceRow(Modifier.fillMaxWidth().padding(top = 12.dp)) {
             choices.forEachIndexed { index, choice ->
-                SegmentedButton(
+                Segment(
+                    index,
+                    choices.size,
                     selected = count == choice,
                     onClick = { scope.launch { feature.setSentencesPerRequest(choice) } },
-                    shape = SegmentedButtonDefaults.itemShape(index, choices.size),
                 ) {
                     Text(choice.toString())
                 }

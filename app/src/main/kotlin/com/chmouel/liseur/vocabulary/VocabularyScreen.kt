@@ -31,9 +31,6 @@ import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -70,6 +67,8 @@ import com.chmouel.liseur.R
 import com.chmouel.liseur.container
 import com.chmouel.liseur.data.settings.AppSettings
 import com.chmouel.liseur.insights.UsageEvent
+import com.chmouel.liseur.ui.Segment
+import com.chmouel.liseur.ui.SegmentedChoiceRow
 import java.util.Locale
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -171,12 +170,13 @@ internal fun VocabularyScreen(
         },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding), horizontalAlignment = Alignment.CenterHorizontally) {
-            SingleChoiceSegmentedButtonRow(Modifier.widthIn(max = 680.dp).fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+            SegmentedChoiceRow(Modifier.widthIn(max = 680.dp).fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
                 VocabularyTab.entries.forEachIndexed { index, choice ->
-                    SegmentedButton(
+                    Segment(
+                        index,
+                        VocabularyTab.entries.size,
                         selected = tab == choice,
                         onClick = { tab = choice; selected = null },
-                        shape = SegmentedButtonDefaults.itemShape(index, VocabularyTab.entries.size),
                         icon = {},
                     ) {
                         BadgedBox(badge = {
