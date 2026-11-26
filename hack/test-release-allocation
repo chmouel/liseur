@@ -82,3 +82,156 @@ if [[ "$*" == "-u +%Y%m%d" ]]; then printf '20260102\n'; else exec /bin/date "$@
 EOF
 [[ $(next_nightly_name 1.0.1) == 1.0.1-nightly.20260102 ]]
 printf 'Release allocation and nightly retry checks passed.\n'
+
+# A final release is cut from the branch you are on, so the push has to
+# survive a branch named like a tag, and a clone whose fetch refspec only
+# covers main.
+git clone --quiet "$tmp/origin" "$tmp/branch" --branch main
+git -C "$tmp/branch" config user.name Test
+git -C "$tmp/branch" config user.email test@example.com
+git -C "$tmp/branch" config commit.gpgsign false
+cd "$tmp/branch"
+git tag v1.0.0
+git branch v1.0.0
+if git push --quiet --atomic origin v1.0.0 2>/dev/null; then
+    printf 'A short refspec matching a branch and a tag was pushed\n' >&2
+    exit 1
+fi
+if ! push_output=$(push_final_release v1.0.0 v1.0.0 2>&1); then
+    printf 'The fully qualified push failed: %s\n' "$push_output" >&2
+    exit 1
+fi
+if ! git --git-dir="$tmp/origin" rev-parse -q --verify refs/heads/v1.0.0 >/dev/null; then
+    printf 'The branch named like a tag did not reach origin\n' >&2
+    exit 1
+fi
+if ! git --git-dir="$tmp/origin" rev-parse -q --verify refs/tags/v1.0.0 >/dev/null; then
+    printf 'The tag named like a branch did not reach origin\n' >&2
+    exit 1
+fi
+
+git clone --quiet "$tmp/origin" "$tmp/restricted" --branch main
+git -C "$tmp/restricted" config user.name Test
+git -C "$tmp/restricted" config user.email test@example.com
+git -C "$tmp/restricted" config commit.gpgsign false
+git -C "$tmp/restricted" config remote.origin.fetch '+refs/heads/main:refs/remotes/origin/main'
+cd "$tmp/restricted"
+git checkout --quiet -b release-branch
+git commit --quiet --allow-empty -m 'release branch commit'
+git push --quiet origin release-branch
+# The explicit refspec, not the configured one, is what creates this ref.
+[[ $(resolve_release_branch) == release-branch ]]
+if ! git rev-parse -q --verify refs/remotes/origin/release-branch >/dev/null; then
+    printf 'A main-only fetch refspec left no origin/release-branch\n' >&2
+    exit 1
+fi
+
+git checkout --quiet --detach
+if message=$(resolve_release_branch 2>&1); then
+    printf 'A detached HEAD was released from\n' >&2
+    exit 1
+fi
+[[ "$message" == *'not a detached HEAD'* ]] || {
+    printf 'A detached HEAD was refused with: %s\n' "$message" >&2
+    exit 1
+}
+
+# --fdroid-only needs no branch: it only has tags fetched, so it still works
+# from a detached checkout and from a local branch that was never pushed.
+for tool in glab pass keytool; do
+    printf '#!/usr/bin/env bash\nexit 1\n' > "$tmp/bin/$tool"
+    chmod +x "$tmp/bin/$tool"
+done
+cd "$tmp/branch"
+git checkout --quiet --detach
+if message=$("$root/hack/release" --fdroid-only 9.9.9 2>&1); then
+    printf 'F-Droid-only from a detached HEAD unexpectedly succeeded\n' >&2
+    exit 1
+fi
+[[ "$message" == *'tag v9.9.9 does not exist on origin'* ]] || {
+    printf 'F-Droid-only from a detached HEAD stopped at: %s\n' "$message" >&2
+    exit 1
+}
+
+git checkout --quiet -b never-pushed
+if message=$("$root/hack/release" --fdroid-only 9.9.9 2>&1); then
+    printf 'F-Droid-only from an unpushed branch unexpectedly succeeded\n' >&2
+    exit 1
+fi
+[[ "$message" == *'tag v9.9.9 does not exist on origin'* ]] || {
+    printf 'F-Droid-only from an unpushed branch stopped at: %s\n' "$message" >&2
+    exit 1
+}
+
+# Branches and tags share one namespace in git rev-parse, so a branch named
+# like the release tag shadows it there. Every tag lookup in the script goes
+# through local_tag_exists for that reason.
+git init --quiet "$tmp/shadow"
+cd "$tmp/shadow"
+git config user.name Test
+git config user.email test@example.com
+git config commit.gpgsign false
+git commit --quiet --allow-empty -m initial
+git branch v1.0.0
+if ! git rev-parse -q --verify v1.0.0 >/dev/null; then
+    printf 'The unqualified lookup did not resolve the branch\n' >&2
+    exit 1
+fi
+if local_tag_exists v1.0.0; then
+    printf 'A branch was mistaken for a tag\n' >&2
+    exit 1
+fi
+# Creating the tag itself writes refs/tags/ directly, so a branch of the
+# same name is no obstacle there either.
+create_release_tag v1.0.0
+if ! local_tag_exists v1.0.0; then
+    printf 'A tag was not found by its qualified ref\n' >&2
+    exit 1
+fi
+
+# A branch that lags can be newer than its own version and still be older
+# than the newest release, which is what this guard is for.
+git init --quiet "$tmp/versions"
+cd "$tmp/versions"
+git config user.name Test
+git config user.email test@example.com
+git config commit.gpgsign false
+git commit --quiet --allow-empty -m initial
+# No tag at all must not trip set -euo pipefail, and must not refuse.
+highest=$(highest_final_tag)
+[[ -z "$highest" ]]
+check_final_version_is_newest 1.0.0
+git tag v1.0.0
+git tag v1.9.0
+git tag v1.10.0
+git tag v1.2.0-rc.1
+git tag v1.11.0-nightly.20260101
+[[ $(highest_final_tag) == v1.10.0 ]]
+check_final_version_is_newest 1.11.0
+# Equal is left to the "tag already exists" check so a rerun still resumes,
+# and the resume arm only calls this for a tag that is not yet on origin:
+# recovering 1.10.0 passes, an unpublished 1.9.0 held by an interrupted run
+# is refused once another branch has published 1.10.0.
+check_final_version_is_newest 1.10.0
+if message=$(check_final_version_is_newest 1.9.0 2>&1); then
+    printf 'A version below the newest final tag was accepted\n' >&2
+    exit 1
+fi
+[[ "$message" == *'older than v1.10.0'* ]] || {
+    printf 'An out-of-order version was refused with: %s\n' "$message" >&2
+    exit 1
+}
+
+git init --quiet "$tmp/nofinal"
+cd "$tmp/nofinal"
+git config user.name Test
+git config user.email test@example.com
+git config commit.gpgsign false
+git commit --quiet --allow-empty -m initial
+git tag v1.0.0-rc.1
+git tag v1.0.0-nightly.20260101
+highest=$(highest_final_tag)
+[[ -z "$highest" ]]
+check_final_version_is_newest 1.0.0
+
+printf 'Release branch and version guard checks passed.\n'

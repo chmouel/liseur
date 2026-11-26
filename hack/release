@@ -58,7 +58,9 @@ Usage:
 
 With no version it shows what has landed since the last release, offers
 the next major, minor and patch, and opens an editor on a changelog
-drafted from the commits.
+drafted from the commits. A final release is cut from the branch you are
+on and pushed to it, so that branch must be in sync with origin/<branch>;
+merging it into main afterwards is a separate step.
 
 Examples:
   hack/release 0.2.0 "Add in-book search and a Wiktionary lookup card."
@@ -228,7 +230,7 @@ highest_version_code() {
 
     while IFS= read -r tag; do
         [[ -n "$tag" ]] || continue
-        code=$(git show "$tag:$BUILD_FILE" 2>/dev/null |
+        code=$(git show "refs/tags/$tag:$BUILD_FILE" 2>/dev/null |
             sed -nE 's/^[[:space:]]*versionCode = ([0-9]+)$/\1/p')
         [[ "$code" =~ ^[0-9]+$ ]] || continue
         (( code > highest )) && highest=$code
@@ -399,6 +401,32 @@ github_release_is_published() {
     [[ "$is_draft" == false && "$published_at" != null ]]
 }
 
+# A final release is cut from the branch you are on; main only learns about
+# the bump commit and the tag when that branch is merged. The explicit
+# refspec, rather than a bare `git fetch origin "$branch"`, creates
+# origin/<branch> even in a single-branch clone or under a restricted fetch
+# refspec, so the ref the guards compare against is the ref just fetched.
+resolve_release_branch() {
+    local branch
+    branch=$(git branch --show-current)
+    [[ -n "$branch" ]] ||
+        die "releases must be created from a branch, not a detached HEAD"
+    git fetch --quiet origin \
+        "refs/heads/$branch:refs/remotes/origin/$branch" --tags ||
+        die "could not fetch $branch from origin"
+    git rev-parse --verify "refs/remotes/origin/$branch" >/dev/null 2>&1 ||
+        die "branch $branch does not exist on origin"
+    printf '%s\n' "$branch"
+}
+
+# Branches and tags share one namespace in `git rev-parse`, and a release
+# is cut from whatever branch you are on, so a branch named like the release
+# tag shadows it in every unqualified lookup. Every question about a local
+# tag goes through here instead.
+local_tag_exists() {
+    git rev-parse -q --verify "refs/tags/$1" >/dev/null
+}
+
 create_release_tag() {
     local tag=$1
     local commit=${2:-}
@@ -416,18 +444,35 @@ create_release_tag() {
 # The reservation and release tag must reach origin together. A competing
 # release using the same code then fails its atomic push before publishing.
 reserve_version_code() {
-    local code=$1 tag=$2 reservation="code/$1"
-    if git rev-parse -q --verify "refs/tags/$reservation" >/dev/null; then
-        [[ $(git rev-parse "$reservation^{commit}") == $(git rev-parse "$tag^{commit}") ]] ||
+    local code=$1 tag=$2 reservation="code/$1" reserved release
+    if local_tag_exists "$reservation"; then
+        reserved=$(git rev-parse "refs/tags/$reservation^{commit}")
+        release=$(git rev-parse "refs/tags/$tag^{commit}")
+        [[ "$reserved" == "$release" ]] ||
             die "versionCode $code is already reserved; fetch tags and prepare the release again"
     else
-        git -c tag.gpgSign=false tag "$reservation" "$tag^{commit}"
+        git -c tag.gpgSign=false tag "$reservation" "refs/tags/$tag^{commit}"
     fi
+}
+
+# Fully qualified refs on both sides: a branch named like an existing tag
+# would otherwise fail the push as ambiguous, and a configured push refspec
+# could send the short name somewhere other than the branch the guards just
+# checked. The destination is that same branch, so fast-forward protection
+# still applies and nothing here forces.
+push_final_release() {
+    local branch=$1 tag=$2 code=${3:-}
+    local -a refspecs=(
+        "refs/heads/$branch:refs/heads/$branch"
+        "refs/tags/$tag:refs/tags/$tag"
+    )
+    [[ -z "$code" ]] || refspecs+=("refs/tags/code/$code:refs/tags/code/$code")
+    git push --atomic origin "${refspecs[@]}"
 }
 
 tag_skips_play() {
     local tag=$1
-    [[ $(git cat-file -t "$tag") == tag ]] || return 1
+    [[ $(git cat-file -t "refs/tags/$tag") == tag ]] || return 1
     [[ $(git for-each-ref --format='%(contents)' "refs/tags/$tag" |
         sed -n '1p') == 'release:no-play' ]]
 }
@@ -441,7 +486,7 @@ ensure_local_tag_play_policy() {
         die "$tag is already on origin with a different Google Play policy"
     fi
 
-    commit=$(git rev-parse "$tag^{commit}")
+    commit=$(git rev-parse "refs/tags/$tag^{commit}")
     git tag -d "$tag" >/dev/null
     create_release_tag "$tag" "$commit"
 }
@@ -691,6 +736,35 @@ last_final_tag() {
         --exclude '*-rc.*' --exclude '*-test.*' 2>/dev/null || true
 }
 
+# The newest final tag anywhere in the refs, reachable or not. That is a
+# different question from last_final_tag, which asks what HEAD descends
+# from: a release branch cut from a lagging point must still stay ahead of
+# the newest release, whichever branch that was cut from.
+#
+# for-each-ref rather than `git tag --list | grep` so that an empty tag set
+# and a clone with no matching tags both return 0 under set -euo pipefail:
+# awk, sort and tail all succeed on empty input, so a genuine ref
+# enumeration failure still aborts the run and no `|| true` is needed.
+highest_final_tag() {
+    git for-each-ref --format='%(refname:strip=2)' refs/tags |
+        awk '/^v[0-9]+\.[0-9]+\.[0-9]+$/' |
+        sort -V | tail -n 1
+}
+
+# A release branch is free to lag behind main, and a stale one would
+# otherwise ship a semver-lower versionName under a higher versionCode,
+# which F-Droid's versionCode-only submission check lets through to users
+# as an upgrade. An equal version passes here and is then rejected by the
+# "tag already exists" check, so resuming a release still works.
+check_final_version_is_newest() {
+    local version=$1 highest
+    highest=$(highest_final_tag)
+    [[ -n "$highest" ]] || return 0
+    [[ $(printf '%s\n%s\n' "${highest#v}" "$version" |
+        sort -V | tail -n 1) == "$version" ]] ||
+        die "version $version is older than $highest, already released"
+}
+
 # The GitHub release is immutable once CI publishes it, and CI's OpenAI
 # call can fail as easily as ours. So the long notes are written here,
 # reviewed, and committed with the release; CI uses them when they are
@@ -723,15 +797,15 @@ prepare_github_notes() {
 }
 
 choose_release() {
-    local current last_tag range choice
+    local current last_tag range base newest header choice
     current=$(read_version_name)
     [[ -n "$current" ]] || die "could not read the current app version"
 
     last_tag=$(last_final_tag)
     if [[ -n "$last_tag" ]]; then
-        range="$last_tag..HEAD"
+        range="refs/tags/$last_tag..HEAD"
         printf '\nSince %s, %s ago:\n\n' "$last_tag" \
-            "$(git log -1 --format=%ar "$last_tag")"
+            "$(git log -1 --format=%ar "refs/tags/$last_tag")"
     else
         range=HEAD
         printf '\nNothing released yet. Everything so far:\n\n'
@@ -743,14 +817,29 @@ choose_release() {
 
     warn_about_stale_screenshots
 
-    choice=$(pick_one "Bump from $current" \
-        "patch ($(bump_version "$current" patch))" \
-        "minor ($(bump_version "$current" minor))" \
-        "major ($(bump_version "$current" major))") ||
+    # A branch that lags behind the newest release would otherwise offer
+    # nothing but bumps of its own version, all of which the release
+    # refuses, so bump from whichever is higher and say which.
+    base=$current
+    newest=$(highest_final_tag)
+    if [[ -n "$newest" ]]; then
+        newest=${newest#v}
+        if [[ $(printf '%s\n%s\n' "$current" "$newest" |
+            sort -V | tail -n 1) == "$newest" ]]; then
+            base=$newest
+        fi
+    fi
+    header="Bump from $base"
+    [[ "$base" == "$current" ]] || header="$header (branch is at $current)"
+
+    choice=$(pick_one "$header" \
+        "patch ($(bump_version "$base" patch))" \
+        "minor ($(bump_version "$base" minor))" \
+        "major ($(bump_version "$base" major))") ||
         die "release cancelled"
     [[ -n "$choice" ]] || die "release cancelled"
 
-    version=$(bump_version "$current" "${choice%% *}")
+    version=$(bump_version "$base" "${choice%% *}")
     printf 'Releasing %s.\n' "$version"
 
     edit_release_notes "$range"
@@ -806,13 +895,16 @@ write_rc_commit() {
 }
 
 # The main commit the newest nightly was cut from: its tag points at the
-# bump commit, whose parent is that commit.
+# bump commit, whose parent is that commit. refname:lstrip=2 rather than
+# refname:short: a branch sharing the tag's name makes the short form
+# ambiguous, git prints 'tags/v1.0.1-...' for it, and every lookup here then
+# reads refs/tags/tags/v1.0.1-... and silently finds nothing.
 last_nightly_source() {
     local tag
     tag=$(git for-each-ref --sort=-creatordate --count=1 \
-        --format='%(refname:short)' 'refs/tags/v*-nightly.*')
+        --format='%(refname:lstrip=2)' 'refs/tags/v*-nightly.*')
     [[ -n "$tag" ]] || return 0
-    git rev-parse -q --verify "$tag^{commit}^" 2>/dev/null || true
+    git rev-parse -q --verify "refs/tags/$tag^{commit}^" 2>/dev/null || true
 }
 
 # Changes are counted from the newer of the last final release and the
@@ -820,7 +912,7 @@ last_nightly_source() {
 nightly_base() {
     local final source base=""
     final=$(last_final_tag)
-    [[ -z "$final" ]] || base=$(git rev-parse "$final^{commit}")
+    [[ -z "$final" ]] || base=$(git rev-parse "refs/tags/$final^{commit}")
     source=$(last_nightly_source)
     if [[ -n "$source" ]] && git merge-base --is-ancestor "$source" HEAD; then
         if [[ -z "$base" ]] || git merge-base --is-ancestor "$base" "$source"; then
@@ -873,7 +965,7 @@ create_nightly_release() {
     [[ -z $(git status --porcelain) ]] || die "the working tree is not clean"
 
     latest=$(git for-each-ref --sort=-creatordate --count=1 \
-        --format='%(refname:short)' 'refs/tags/v*-nightly.*')
+        --format='%(refname:lstrip=2)' 'refs/tags/v*-nightly.*')
     if [[ -n "$latest" ]] && git merge-base --is-ancestor "$latest^" HEAD &&
         git diff --quiet "$latest^" HEAD -- "${NIGHTLY_PATHS[@]}"; then
         releases=$(gh api --paginate "repos/$GH_REPO/releases?per_page=100" \
@@ -1532,7 +1624,8 @@ repo_root=$(git rev-parse --show-toplevel)
 cd "$repo_root"
 [[ -f "$BUILD_FILE" ]] || die "run this script from the Liseur repository"
 
-git fetch --quiet origin main --tags
+# Tags only: --fdroid-only reaches this line and needs no branch at all.
+git fetch --quiet origin 'refs/tags/*:refs/tags/*'
 
 if [[ "$interactive" == true ]]; then
     choose_release
@@ -1552,14 +1645,14 @@ if [[ "$fdroid_only" == true ]]; then
         remote_commit=$(printf '%s\n' "$remote_tag_refs" | awk 'NR == 1 { print $1 }')
     fi
 
-    commit_sha=$(git rev-parse "$tag^{commit}" 2>/dev/null) ||
+    commit_sha=$(git rev-parse "refs/tags/$tag^{commit}" 2>/dev/null) ||
         die "tag $tag does not exist"
     [[ "$commit_sha" == "$remote_commit" ]] ||
         die "local and origin tags differ for $tag"
     github_release_is_published "$tag" ||
         die "GitHub release $tag is not published"
 
-    tag_build_file=$(git show "$tag:$BUILD_FILE")
+    tag_build_file=$(git show "refs/tags/$tag:$BUILD_FILE")
     tag_version=$(sed -nE 's/^[[:space:]]*versionName = "([^"]+)"$/\1/p' \
         <<<"$tag_build_file")
     tag_version_code=$(sed -nE 's/^[[:space:]]*versionCode = ([0-9]+)$/\1/p' \
@@ -1573,7 +1666,8 @@ if [[ "$fdroid_only" == true ]]; then
     exit
 fi
 
-[[ $(git branch --show-current) == main ]] || die "releases must be created from main"
+branch=$(resolve_release_branch)
+
 [[ -z $(git status --porcelain) ]] || die "the working tree is not clean"
 
 current_version=$(read_version_name)
@@ -1582,13 +1676,13 @@ current_version_code=$(read_version_code)
     die "could not read the current app version"
 
 local_head=$(git rev-parse HEAD)
-remote_head=$(git rev-parse origin/main)
+remote_head=$(git rev-parse "refs/remotes/origin/$branch")
 if [[ "$current_version" != "$version" ]]; then
     [[ "$local_head" == "$remote_head" ]] ||
-        die "local main is not synchronized with origin/main"
+        die "local $branch is not synchronized with origin/$branch"
 elif [[ "$local_head" != "$remote_head" ]]; then
     git merge-base --is-ancestor "$remote_head" "$local_head" ||
-        die "local main has diverged from origin/main"
+        die "local $branch has diverged from origin/$branch"
     [[ $(git rev-list --count "$remote_head..$local_head") == 1 ]] ||
         die "resume requires exactly one unpushed release commit"
     [[ $(git log -1 --format=%s) == "chore: release $tag" ]] ||
@@ -1611,7 +1705,8 @@ if [[ "$current_version" != "$version" ]]; then
         die "release notes must be at most 500 characters for F-Droid"
     [[ $(printf '%s\n%s\n' "$current_version" "$version" | sort -V | tail -n 1) == "$version" ]] ||
         die "version $version must be newer than $current_version"
-    git rev-parse "$tag" >/dev/null 2>&1 && die "tag $tag already exists"
+    check_final_version_is_newest "$version"
+    local_tag_exists "$tag" && die "tag $tag already exists"
 
     new_version_code=$(highest_version_code)
     [[ "$new_version_code" =~ ^[0-9]+$ ]] ||
@@ -1625,7 +1720,7 @@ if [[ "$current_version" != "$version" ]]; then
     previous_tag=$(last_final_tag)
     github_notes=$(mktemp)
     trap 'rm -f "${github_notes:-}"' EXIT
-    if ! prepare_github_notes "${previous_tag:+$previous_tag..}HEAD" "$github_notes"; then
+    if ! prepare_github_notes "${previous_tag:+refs/tags/$previous_tag..}HEAD" "$github_notes"; then
         rm -f "$github_notes"
         github_notes=""
     fi
@@ -1692,7 +1787,13 @@ if [[ "$current_version" != "$version" ]]; then
 else
     changelog_path="$CHANGELOG_DIR/$current_version_code.txt"
     [[ -s "$changelog_path" ]] || die "missing changelog: $changelog_path"
-    if ! git rev-parse "$tag" >/dev/null 2>&1; then
+    # An interrupted run can hold a tagged but unpublished release commit
+    # while another branch has since published something newer; only a tag
+    # already on origin is a recovery that must not be refused.
+    if ! git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; then
+        check_final_version_is_newest "$version"
+    fi
+    if ! local_tag_exists "$tag"; then
         # A release normally bumps the version and tags the commit that
         # did it. The very first one has nothing to bump: the tree
         # already declares the version being shipped, so the tag belongs
@@ -1708,7 +1809,7 @@ else
     fi
     if ! github_release_is_published "$tag"; then
         ensure_local_tag_play_policy "$tag"
-        tag_commit=$(git rev-parse "$tag^{commit}")
+        tag_commit=$(git rev-parse "refs/tags/$tag^{commit}")
         [[ "$tag_commit" == $(git rev-parse HEAD) ]] ||
             die "$tag does not point to HEAD and has no published GitHub release"
     fi
@@ -1717,16 +1818,16 @@ else
 fi
 
 if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null; then
-    git push --atomic origin main "$tag"
+    push_final_release "$branch" "$tag"
 else
     reserve_version_code "$current_version_code" "$tag"
-    if ! git push --atomic origin main "refs/tags/$tag" "refs/tags/code/$current_version_code"; then
+    if ! push_final_release "$branch" "$tag" "$current_version_code"; then
         git tag -d "code/$current_version_code" >/dev/null 2>&1 || true
-        die "could not push release and versionCode reservation; the release commit and tag remain local. Fetch origin tags, allocate a higher versionCode, then resume the release."
+        die "could not push $branch, the release tag and the versionCode reservation; the release commit and tag remain local. Fetch origin tags, allocate a higher versionCode, then resume the release."
     fi
 fi
-commit_sha=$(git rev-parse "$tag^{commit}")
-tag_build_file=$(git show "$tag:$BUILD_FILE")
+commit_sha=$(git rev-parse "refs/tags/$tag^{commit}")
+tag_build_file=$(git show "refs/tags/$tag:$BUILD_FILE")
 release_version=$(sed -nE 's/^[[:space:]]*versionName = "([^"]+)"$/\1/p' \
     <<<"$tag_build_file")
 release_version_code=$(sed -nE 's/^[[:space:]]*versionCode = ([0-9]+)$/\1/p' \
@@ -1746,4 +1847,10 @@ fi
 
 if [[ "$new_release" == true ]]; then
     printf 'Release %s is ready.\n' "$tag"
+    if [[ "$branch" != main ]]; then
+        printf '\nThe release commit is on %s; merge it into main.\n' "$branch"
+        printf 'Until it is, the nightly workflow keeps building main, so a nightly\n'
+        printf 'cut from main carries older source under a higher versionCode than %s.\n' \
+            "$tag"
+    fi
 fi
