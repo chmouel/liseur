@@ -82,6 +82,9 @@ make check   # tests, lint and builds, when a change spans them
   scripts that do not belong in Gradle unit tests under
   `hack/reproducer/` (not top-level `hack/`). They are throwaway/manual
   helpers and do not need to be linted.
+- Build segmented rows with `SegmentedChoiceRow`/`Segment` so labels that
+  wrap do not make buttons uneven. Check other side-by-side button rows
+  in Czech at a large font scale ([details](DEVELOPER.md#covers-ui-and-dependencies)).
 - Keep DEVELOPER.md tight: rules, commands and invariants. When an ADR
   already explains a decision, link it instead of restating its
   rationale, history or examples.
