@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -820,20 +822,20 @@ private fun RestoreBackupDialog(
                 Spacer(Modifier.height(18.dp))
 
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     OutlinedButton(
                         onClick = onDismiss,
                         enabled = !busy,
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.weight(1f).fillMaxHeight(),
                     ) {
                         Text(stringResource(R.string.cancel))
                     }
                     Button(
                         onClick = onConfirm,
                         enabled = !busy,
-                        modifier = Modifier.weight(1.35f),
+                        modifier = Modifier.weight(1.35f).fillMaxHeight(),
                     ) {
                         if (busy) {
                             CircularProgressIndicator(

@@ -28,9 +28,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.InputChip
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Icon
 import androidx.compose.material.icons.Icons
@@ -96,6 +93,8 @@ import com.chmouel.liseur.R
 import com.chmouel.liseur.ui.BusyBar
 import com.chmouel.liseur.ui.LocalEInk
 import com.chmouel.liseur.ui.LiseurModalBottomSheet
+import com.chmouel.liseur.ui.Segment
+import com.chmouel.liseur.ui.SegmentedChoiceRow
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.windowWidth
 import org.readium.r2.shared.publication.Locator
@@ -197,12 +196,13 @@ internal fun CodexSheet(
                 LazyColumn(Modifier.weight(1f), state = detailList, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     codexHeader(progress, controller, scanEnabled)
                     if (panes.size > 1) item(key = "codex:panes") {
-                        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
+                        SegmentedChoiceRow(Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
                             panes.forEachIndexed { index, each ->
-                                SegmentedButton(
+                                Segment(
+                                    index,
+                                    panes.size,
                                     selected = pane == each,
                                     onClick = { controller.showPane(each) },
-                                    shape = SegmentedButtonDefaults.itemShape(index, panes.size),
                                 ) {
                                     Text(
                                         stringResource(

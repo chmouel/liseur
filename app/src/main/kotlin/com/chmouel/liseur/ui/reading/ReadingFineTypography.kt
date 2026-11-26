@@ -17,9 +17,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -36,6 +33,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.intl.Locale
 import androidx.compose.ui.unit.dp
+import com.chmouel.liseur.ui.Segment
+import com.chmouel.liseur.ui.SegmentedChoiceRow
 import com.chmouel.liseur.ui.settings.search.SettingsEntries
 import com.chmouel.liseur.ui.settings.search.settingsAnchor
 import com.chmouel.liseur.R
@@ -207,13 +206,14 @@ private fun AlignmentRow(
     )
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         ReadingSectionLabel(stringResource(R.string.reader_text_align))
-        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+        SegmentedChoiceRow(Modifier.fillMaxWidth()) {
             options.forEachIndexed { index, (align, label) ->
-                SegmentedButton(
+                Segment(
+                    index,
+                    options.size,
                     selected = value == align,
                     enabled = enabled,
                     onClick = { onChanged(align) },
-                    shape = SegmentedButtonDefaults.itemShape(index, options.size),
                 ) { Text(stringResource(label)) }
             }
         }
@@ -236,13 +236,14 @@ private fun HyphensRow(
     )
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         ReadingSectionLabel(stringResource(R.string.reader_hyphens))
-        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+        SegmentedChoiceRow(Modifier.fillMaxWidth()) {
             options.forEachIndexed { index, (choice, label) ->
-                SegmentedButton(
+                Segment(
+                    index,
+                    options.size,
                     selected = value == choice,
                     enabled = enabled,
                     onClick = { onChanged(choice) },
-                    shape = SegmentedButtonDefaults.itemShape(index, options.size),
                 ) { Text(stringResource(label)) }
             }
         }

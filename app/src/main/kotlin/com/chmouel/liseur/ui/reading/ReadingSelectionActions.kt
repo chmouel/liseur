@@ -49,6 +49,8 @@ import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
 import com.chmouel.liseur.reader.annotations.*
 import com.chmouel.liseur.ui.LocalEInk
+import com.chmouel.liseur.ui.Segment
+import com.chmouel.liseur.ui.SegmentedChoiceRow
 import com.chmouel.liseur.ui.scrollEdgeCue
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
@@ -417,14 +419,14 @@ private fun SelectionActionEditor(
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 Text(stringResource(R.string.selection_show_as), style = MaterialTheme.typography.titleSmall)
                 val styles = listOf(SelectionActionStyle.ICON, SelectionActionStyle.LABEL, SelectionActionStyle.BOTH)
-                SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(top = 8.dp).height(IntrinsicSize.Min)) {
+                SegmentedChoiceRow(Modifier.fillMaxWidth().padding(top = 8.dp)) {
                     styles.forEachIndexed { index, option ->
-                        SegmentedButton(
+                        Segment(
+                            index,
+                            styles.size,
                             selected = style == option,
                             onClick = { style = option },
-                            shape = SegmentedButtonDefaults.itemShape(index, styles.size),
                             icon = {},
-                            modifier = Modifier.fillMaxHeight(),
                         ) {
                             Text(stringResource(option.label), maxLines = 2, overflow = TextOverflow.Ellipsis,
                                 textAlign = TextAlign.Center, style = MaterialTheme.typography.labelMedium)

@@ -18,9 +18,6 @@ import androidx.compose.material.icons.filled.LocalLibrary
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.LocalLibrary
 import androidx.compose.material3.Icon
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -55,6 +52,8 @@ import com.chmouel.liseur.domain.ShelfBackdrop
 import com.chmouel.liseur.domain.ShelfGrouping
 import com.chmouel.liseur.domain.ShelfTone
 import com.chmouel.liseur.ui.LiseurModalBottomSheet
+import com.chmouel.liseur.ui.Segment
+import com.chmouel.liseur.ui.SegmentedChoiceRow
 import com.chmouel.liseur.ui.launchPicker
 import com.chmouel.liseur.ui.settings.ChipRow
 import com.chmouel.liseur.ui.settings.SwitchRow
@@ -286,17 +285,18 @@ private fun StartTabToggle(startOnHome: Boolean, onChange: (Boolean) -> Unit) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(end = 8.dp),
         )
-        SingleChoiceSegmentedButtonRow {
+        SegmentedChoiceRow {
             listOf(true, false).forEachIndexed { index, home ->
                 val label = stringResource(if (home) R.string.library_style_home else R.string.library_tab_library)
-                SegmentedButton(
+                Segment(
+                    index,
+                    2,
                     selected = startOnHome == home,
                     onClick = { onChange(home) },
-                    shape = SegmentedButtonDefaults.itemShape(index, 2),
-                    icon = {},
                     modifier = Modifier
                         .width(56.dp)
                         .semantics { contentDescription = label },
+                    icon = {},
                 ) {
                     Icon(
                         imageVector = when {

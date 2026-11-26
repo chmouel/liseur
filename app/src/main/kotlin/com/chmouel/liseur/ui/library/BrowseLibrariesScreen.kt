@@ -81,9 +81,6 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -154,6 +151,8 @@ import com.chmouel.liseur.data.remote.ServerKind
 import com.chmouel.liseur.domain.displayTitle
 import com.chmouel.liseur.ui.BusyIndicator
 import com.chmouel.liseur.ui.LiseurModalBottomSheet
+import com.chmouel.liseur.ui.Segment
+import com.chmouel.liseur.ui.SegmentedChoiceRow
 import com.chmouel.liseur.ui.coverMinSize
 import com.chmouel.liseur.ui.settings.AccountError
 import com.chmouel.liseur.ui.settings.LiseurSyncSignIn
@@ -618,13 +617,14 @@ private fun BrowseConnectionScreen(
                     FieldHelp(stringResource(R.string.server_api_key_help))
                 }
                 ServerKind.LISEUR_SYNC -> {
-                    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                    SegmentedChoiceRow(Modifier.fillMaxWidth()) {
                         LiseurSyncSignIn.entries.forEachIndexed { index, way ->
-                            SegmentedButton(
+                            Segment(
+                                index,
+                                LiseurSyncSignIn.entries.size,
                                 selected = signIn == way,
-                                onClick = { signIn = way },
                                 enabled = !busy,
-                                shape = SegmentedButtonDefaults.itemShape(index, LiseurSyncSignIn.entries.size),
+                                onClick = { signIn = way },
                             ) {
                                 Text(
                                     stringResource(

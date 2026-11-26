@@ -22,11 +22,14 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -63,9 +66,6 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -111,6 +111,8 @@ import com.chmouel.liseur.data.remote.SyncReport
 import com.chmouel.liseur.data.settings.UploadPolicy
 import com.chmouel.liseur.ui.BusyIndicator
 import com.chmouel.liseur.ui.LocalEInk
+import com.chmouel.liseur.ui.Segment
+import com.chmouel.liseur.ui.SegmentedChoiceRow
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.messageRes
 import com.chmouel.liseur.ui.windowWidth
@@ -251,11 +253,20 @@ fun ServerAccountScreen(
                         ),
                         tone = NoticeTone.NEUTRAL,
                     )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        TextButton(onClick = onEditAddress) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.height(IntrinsicSize.Min),
+                    ) {
+                        TextButton(
+                            onClick = onEditAddress,
+                            modifier = Modifier.fillMaxHeight(),
+                        ) {
                             Text(stringResource(R.string.server_pair_again))
                         }
-                        TextButton(onClick = onDisconnect) {
+                        TextButton(
+                            onClick = onDisconnect,
+                            modifier = Modifier.fillMaxHeight(),
+                        ) {
                             Text(stringResource(R.string.server_disconnect))
                         }
                     }
@@ -1539,13 +1550,14 @@ private fun LiseurSyncForm(
     secretMask: VisualTransformation,
     secretToggle: @Composable () -> Unit,
 ) {
-    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+    SegmentedChoiceRow(Modifier.fillMaxWidth()) {
         LiseurSyncSignIn.entries.forEachIndexed { index, way ->
-            SegmentedButton(
+            Segment(
+                index,
+                LiseurSyncSignIn.entries.size,
                 selected = state.liseurSyncSignIn == way,
-                onClick = { onSignInChange(way) },
                 enabled = !state.connecting,
-                shape = SegmentedButtonDefaults.itemShape(index, LiseurSyncSignIn.entries.size),
+                onClick = { onSignInChange(way) },
             ) {
                 Text(
                     stringResource(

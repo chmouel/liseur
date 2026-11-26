@@ -2123,6 +2123,12 @@ separate from translation's, moved and forgotten with server edits in
   ([ADR 0071](docs/adr/0071-home-quotes-come-from-what-was-read.md)).
 - UI strings go into English and all shipped locales together.
   Russian plurals need `one`, `few`, `many`, `other`; escape apostrophes.
+- Side-by-side labels must survive longer translations (Czech "Bez animace",
+  #547). Draw segmented rows with `SegmentedChoiceRow`/`Segment`
+  (`ui/SegmentedChoiceRow.kt`); `SegmentedChoiceRowTest` fails on raw
+  Material segmented calls. For a plain `Row` of buttons, use
+  `height(IntrinsicSize.Min)` with `fillMaxHeight()` on the buttons, or hold
+  labels to one line, and check the row in Czech at a large font scale.
 - Dependencies and bundled fonts must stay FOSS and reproducible;
   `readium-lcp` is prohibited. Never remove the reproducibility dependency
   metadata or JNI debug-symbol settings.
