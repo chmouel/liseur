@@ -64,7 +64,7 @@ import com.chmouel.liseur.vocabulary.VocabularyWord
         VocabularyReviewSync::class,
         VocabularyStagedReview::class,
     ],
-    version = 85,
+    version = 86,
     autoMigrations = [AutoMigration(from = 80, to = 81)],
     exportSchema = true,
 )
@@ -113,6 +113,18 @@ abstract class LiseurDatabase : RoomDatabase() {
     abstract fun vocabularySyncDao(): VocabularySyncDao
 
     companion object {
+        val MIGRATION_85_86 = object : Migration(85, 86) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL("ALTER TABLE sync_peer_state ADD COLUMN pending_hlc TEXT")
+                connection.execSQL("ALTER TABLE sync_peer_state ADD COLUMN drive_imported_reset_revision INTEGER")
+                connection.execSQL(
+                    "UPDATE sync_peer_state SET drive_imported_reset_revision = -1 - " +
+                        "COALESCE((SELECT local_revision FROM reading_progress WHERE book_url = sync_peer_state.book_url), 0) " +
+                        "WHERE substr(peer_id, 1, 6) = 'drive:'",
+                )
+            }
+        }
+
         val MIGRATION_84_85 = object : Migration(84, 85) {
             override fun migrate(connection: SQLiteConnection) {
                 val cols = connection.columnsOf("reading_sessions")
@@ -2526,6 +2538,7 @@ abstract class LiseurDatabase : RoomDatabase() {
             MIGRATION_82_83,
             MIGRATION_83_84,
             MIGRATION_84_85,
+            MIGRATION_85_86,
         )
     }
 }

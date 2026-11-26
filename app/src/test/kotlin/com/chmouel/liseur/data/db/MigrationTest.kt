@@ -166,7 +166,7 @@ class MigrationTest {
         helper.runMigrationsAndValidate(TEST_DB, 66, true, LiseurDatabase.MIGRATION_65_66).close()
         val context = ApplicationProvider.getApplicationContext<android.app.Application>()
         val db = Room.databaseBuilder(context, LiseurDatabase::class.java, TEST_DB)
-            .addMigrations(LiseurDatabase.MIGRATION_66_67, LiseurDatabase.MIGRATION_67_68, LiseurDatabase.MIGRATION_68_69, LiseurDatabase.MIGRATION_69_70, LiseurDatabase.MIGRATION_70_71, LiseurDatabase.MIGRATION_71_72, LiseurDatabase.MIGRATION_72_73, LiseurDatabase.MIGRATION_73_74, LiseurDatabase.MIGRATION_74_75, LiseurDatabase.MIGRATION_75_76, LiseurDatabase.MIGRATION_76_77, LiseurDatabase.MIGRATION_77_78, LiseurDatabase.MIGRATION_78_79, LiseurDatabase.MIGRATION_79_80, LiseurDatabase.MIGRATION_81_82, LiseurDatabase.MIGRATION_82_83, LiseurDatabase.MIGRATION_83_84, LiseurDatabase.MIGRATION_84_85)
+            .addMigrations(LiseurDatabase.MIGRATION_66_67, LiseurDatabase.MIGRATION_67_68, LiseurDatabase.MIGRATION_68_69, LiseurDatabase.MIGRATION_69_70, LiseurDatabase.MIGRATION_70_71, LiseurDatabase.MIGRATION_71_72, LiseurDatabase.MIGRATION_72_73, LiseurDatabase.MIGRATION_73_74, LiseurDatabase.MIGRATION_74_75, LiseurDatabase.MIGRATION_75_76, LiseurDatabase.MIGRATION_76_77, LiseurDatabase.MIGRATION_77_78, LiseurDatabase.MIGRATION_78_79, LiseurDatabase.MIGRATION_79_80, LiseurDatabase.MIGRATION_81_82, LiseurDatabase.MIGRATION_82_83, LiseurDatabase.MIGRATION_83_84, LiseurDatabase.MIGRATION_84_85, LiseurDatabase.MIGRATION_85_86)
             .build()
         try {
             val dao = db.readingProgressDao()
@@ -243,7 +243,7 @@ class MigrationTest {
         helper.runMigrationsAndValidate(TEST_DB, 67, true, LiseurDatabase.MIGRATION_66_67).close()
         val context = ApplicationProvider.getApplicationContext<android.app.Application>()
         val db = Room.databaseBuilder(context, LiseurDatabase::class.java, TEST_DB)
-            .addMigrations(LiseurDatabase.MIGRATION_67_68, LiseurDatabase.MIGRATION_68_69, LiseurDatabase.MIGRATION_69_70, LiseurDatabase.MIGRATION_70_71, LiseurDatabase.MIGRATION_71_72, LiseurDatabase.MIGRATION_72_73, LiseurDatabase.MIGRATION_73_74, LiseurDatabase.MIGRATION_74_75, LiseurDatabase.MIGRATION_75_76, LiseurDatabase.MIGRATION_76_77, LiseurDatabase.MIGRATION_77_78, LiseurDatabase.MIGRATION_78_79, LiseurDatabase.MIGRATION_79_80, LiseurDatabase.MIGRATION_81_82, LiseurDatabase.MIGRATION_82_83, LiseurDatabase.MIGRATION_83_84, LiseurDatabase.MIGRATION_84_85)
+            .addMigrations(LiseurDatabase.MIGRATION_67_68, LiseurDatabase.MIGRATION_68_69, LiseurDatabase.MIGRATION_69_70, LiseurDatabase.MIGRATION_70_71, LiseurDatabase.MIGRATION_71_72, LiseurDatabase.MIGRATION_72_73, LiseurDatabase.MIGRATION_73_74, LiseurDatabase.MIGRATION_74_75, LiseurDatabase.MIGRATION_75_76, LiseurDatabase.MIGRATION_76_77, LiseurDatabase.MIGRATION_77_78, LiseurDatabase.MIGRATION_78_79, LiseurDatabase.MIGRATION_79_80, LiseurDatabase.MIGRATION_81_82, LiseurDatabase.MIGRATION_82_83, LiseurDatabase.MIGRATION_83_84, LiseurDatabase.MIGRATION_84_85, LiseurDatabase.MIGRATION_85_86)
             .allowMainThreadQueries()
             .build()
         try {
@@ -278,7 +278,7 @@ class MigrationTest {
         }
         val context = ApplicationProvider.getApplicationContext<android.app.Application>()
         val db = Room.databaseBuilder(context, LiseurDatabase::class.java, TEST_DB)
-            .addMigrations(LiseurDatabase.MIGRATION_67_68, LiseurDatabase.MIGRATION_68_69, LiseurDatabase.MIGRATION_69_70, LiseurDatabase.MIGRATION_70_71, LiseurDatabase.MIGRATION_71_72, LiseurDatabase.MIGRATION_72_73, LiseurDatabase.MIGRATION_73_74, LiseurDatabase.MIGRATION_74_75, LiseurDatabase.MIGRATION_75_76, LiseurDatabase.MIGRATION_76_77, LiseurDatabase.MIGRATION_77_78, LiseurDatabase.MIGRATION_78_79, LiseurDatabase.MIGRATION_79_80, LiseurDatabase.MIGRATION_81_82, LiseurDatabase.MIGRATION_82_83, LiseurDatabase.MIGRATION_83_84, LiseurDatabase.MIGRATION_84_85)
+            .addMigrations(LiseurDatabase.MIGRATION_67_68, LiseurDatabase.MIGRATION_68_69, LiseurDatabase.MIGRATION_69_70, LiseurDatabase.MIGRATION_70_71, LiseurDatabase.MIGRATION_71_72, LiseurDatabase.MIGRATION_72_73, LiseurDatabase.MIGRATION_73_74, LiseurDatabase.MIGRATION_74_75, LiseurDatabase.MIGRATION_75_76, LiseurDatabase.MIGRATION_76_77, LiseurDatabase.MIGRATION_77_78, LiseurDatabase.MIGRATION_78_79, LiseurDatabase.MIGRATION_79_80, LiseurDatabase.MIGRATION_81_82, LiseurDatabase.MIGRATION_82_83, LiseurDatabase.MIGRATION_83_84, LiseurDatabase.MIGRATION_84_85, LiseurDatabase.MIGRATION_85_86)
             .allowMainThreadQueries()
             .build()
         try {
@@ -1863,7 +1863,7 @@ class MigrationTest {
             LiseurDatabase.MIGRATION_77_78,
             LiseurDatabase.MIGRATION_78_79,
             LiseurDatabase.MIGRATION_79_80,
-            LiseurDatabase.MIGRATION_81_82, LiseurDatabase.MIGRATION_82_83, LiseurDatabase.MIGRATION_83_84, LiseurDatabase.MIGRATION_84_85,
+            LiseurDatabase.MIGRATION_81_82, LiseurDatabase.MIGRATION_82_83, LiseurDatabase.MIGRATION_83_84, LiseurDatabase.MIGRATION_84_85, LiseurDatabase.MIGRATION_85_86,
         ).use { db ->
             db.query(
                 "SELECT total_progression, finished_override, coverage, status_revision " +
@@ -1913,7 +1913,7 @@ class MigrationTest {
             LiseurDatabase.MIGRATION_77_78,
             LiseurDatabase.MIGRATION_78_79,
             LiseurDatabase.MIGRATION_79_80,
-            LiseurDatabase.MIGRATION_81_82, LiseurDatabase.MIGRATION_82_83, LiseurDatabase.MIGRATION_83_84, LiseurDatabase.MIGRATION_84_85,
+            LiseurDatabase.MIGRATION_81_82, LiseurDatabase.MIGRATION_82_83, LiseurDatabase.MIGRATION_83_84, LiseurDatabase.MIGRATION_84_85, LiseurDatabase.MIGRATION_85_86,
         ).use { db ->
             db.query(
                 "SELECT peak_progression, peak_revision, coverage, peak_coverage FROM reading_progress",
@@ -1936,7 +1936,7 @@ class MigrationTest {
                     "VALUES ('book:1', '{}', 1.0, 100, 1, 4)",
             )
         }
-        helper.runMigrationsAndValidate(TEST_DB, LATEST, true, LiseurDatabase.MIGRATION_77_78, LiseurDatabase.MIGRATION_78_79, LiseurDatabase.MIGRATION_79_80, LiseurDatabase.MIGRATION_81_82, LiseurDatabase.MIGRATION_82_83, LiseurDatabase.MIGRATION_83_84, LiseurDatabase.MIGRATION_84_85).use { db ->
+        helper.runMigrationsAndValidate(TEST_DB, LATEST, true, LiseurDatabase.MIGRATION_77_78, LiseurDatabase.MIGRATION_78_79, LiseurDatabase.MIGRATION_79_80, LiseurDatabase.MIGRATION_81_82, LiseurDatabase.MIGRATION_82_83, LiseurDatabase.MIGRATION_83_84, LiseurDatabase.MIGRATION_84_85, LiseurDatabase.MIGRATION_85_86).use { db ->
             db.query(
                 "SELECT status_revision, status_retired_revision FROM reading_progress",
             ).use {
@@ -1957,7 +1957,7 @@ class MigrationTest {
                     "VALUES ('book:1', 'serif', 1.2, 1.5, 1.2)",
             )
         }
-        helper.runMigrationsAndValidate(TEST_DB, LATEST, true, LiseurDatabase.MIGRATION_79_80, LiseurDatabase.MIGRATION_81_82, LiseurDatabase.MIGRATION_82_83, LiseurDatabase.MIGRATION_83_84, LiseurDatabase.MIGRATION_84_85).use { db ->
+        helper.runMigrationsAndValidate(TEST_DB, LATEST, true, LiseurDatabase.MIGRATION_79_80, LiseurDatabase.MIGRATION_81_82, LiseurDatabase.MIGRATION_82_83, LiseurDatabase.MIGRATION_83_84, LiseurDatabase.MIGRATION_84_85, LiseurDatabase.MIGRATION_85_86).use { db ->
             db.query(
                 "SELECT page_margins, top_margin, bottom_margin, sync_vertical_margins FROM book_typography",
             ).use {
@@ -2154,6 +2154,29 @@ class MigrationTest {
     }
 
     @Test
+    fun `migration 85 to 86 preserves peer state and initializes drive provenance`() {
+        helper.createDatabase(TEST_DB, 85).use { db ->
+            db.execSQL(
+                "INSERT INTO reading_progress (book_url, locator_json, updated_at, local_revision) " +
+                    "VALUES ('file:///book.epub', '{}', 1000, 7)",
+            )
+            db.execSQL(
+                "INSERT INTO sync_peer_state (book_url, peer_id, acked_revision, has_pending) " +
+                    "VALUES ('file:///book.epub', 'drive:account', 7, 1)",
+            )
+        }
+        helper.runMigrationsAndValidate(TEST_DB, 86, true, LiseurDatabase.MIGRATION_85_86).use { db ->
+            db.query("SELECT acked_revision, has_pending, pending_hlc, drive_imported_reset_revision FROM sync_peer_state").use {
+                assertTrue(it.moveToFirst())
+                assertEquals(7L, it.getLong(0))
+                assertEquals(1, it.getInt(1))
+                assertTrue(it.isNull(2))
+                assertEquals(-8L, it.getLong(3))
+            }
+        }
+    }
+
+    @Test
     fun `migration 84 to 85 adds remote session identity and origin device columns with unique index`() = runTest {
         helper.createDatabase(TEST_DB, 84).use { db ->
             db.execSQL(
@@ -2279,6 +2302,6 @@ class MigrationTest {
         const val TEST_DB = "migration-test.db"
 
         /** Kept in step with the `version` on [LiseurDatabase]. */
-        const val LATEST = 85
+        const val LATEST = 86
     }
 }

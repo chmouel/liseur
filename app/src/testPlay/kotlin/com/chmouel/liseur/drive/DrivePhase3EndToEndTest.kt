@@ -920,7 +920,8 @@ class DrivePhase3EndToEndTest {
 
         deviceB.positionSync.seedUnseededAliases(PERM_ID, "dev-b")
 
-        assertEquals(0.65, deviceB.liseurDb.readingProgressDao().get(bookB.url)!!.totalProgression!!, 0.0001)
+        assertEquals(0.20, deviceB.liseurDb.readingProgressDao().get(bookB.url)!!.totalProgression!!, 0.0001)
+        assertEquals(0.65, deviceB.positionSync.preservedConflict(bookB.url)!!.remote!!, 0.0001)
         assertTrue(deviceB.liseurDb.workIdentityDao().alias(bookB.url, DriveLibrarySync.accountPeerId(PERM_ID))!!.seeded)
     }
 
@@ -1009,6 +1010,805 @@ class DrivePhase3EndToEndTest {
     private suspend fun DeviceHarness.collectPeaks(): DrivePositionSync.OutboundBundle {
         var n = 0
         return positionSync.collectDirtyRecords(PERM_ID, deviceId) { "0000000${n++}-0000-$deviceId" }
+    }
+
+    @Test
+    fun `acknowledging our upload does not hide a concurrent remote position`() = runTest {
+        deviceA.connect()
+        deviceB.connect()
+        val bookA = peakBook("concurrent-a", "9780547928227")
+        val bookB = peakBook("concurrent-b", "9780547928227")
+        val sha = "a".repeat(64)
+        deviceA.addBook(bookA, sha)
+        deviceB.addBook(bookB, sha)
+
+        deviceA.read(bookA.url, 0.4, 1_000L)
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+
+        deviceA.read(bookA.url, 0.6, 2_000L)
+        deviceB.read(bookB.url, 0.7, 2_500L)
+        val remote = deviceA.positionSync.collectDirtyRecords(PERM_ID, deviceA.deviceId) { "9999999999999-0000-dev-a" }
+        val local = deviceB.positionSync.collectDirtyRecords(PERM_ID, deviceB.deviceId) { "9999999999999-0000-dev-b" }
+        deviceB.positionSync.acknowledgePublished(PERM_ID, local.records, local.positionAcks, local.peakAcks)
+        val remotePosition = remote.records.single { it.d == DriveWireCodec.DOMAIN_POSITION }
+        deviceB.positionSync.applyRemotePosition(PERM_ID, deviceB.deviceId, remotePosition, deviceA.deviceId, 10L)
+
+        val conflict = deviceB.positionSync.preservedConflict(bookB.url)
+        assertNotNull(conflict)
+        assertEquals(0.7, conflict!!.local!!, 0.0001)
+        assertEquals(0.6, conflict.remote!!, 0.0001)
+    }
+
+    @Test
+    fun `an agreeing pending position does not hide another writer's conflict`() = runTest {
+        deviceB.connect()
+        val book = peakBook("pending-writers", "9780547928227")
+        deviceB.addBook(book, "a".repeat(64))
+        deviceB.read(book.url, 0.4, 1_000L)
+        deviceB.workIdentity.resolveBook(PERM_ID, book)
+        val account = DriveLibrarySync.accountPeerId(PERM_ID)
+        val peers = deviceB.liseurDb.syncPeerStateDao()
+        peers.persistPending(book.url, "$account/dev-a", 0.4, "Reading", 1_000L)
+        peers.persistPending(book.url, "$account/dev-c", 0.8, "Reading", 2_000L)
+
+        val conflict = deviceB.positionSync.preservedConflict(book.url)!!
+        assertEquals(0.8, conflict.remote!!, 0.0001)
+        assertEquals("$account/dev-c", conflict.accountKey)
+        val preview = deviceB.positionSync.previewKnownBook(book.url) as com.chmouel.liseur.data.remote.PreviewOutcome.Ready
+        assertEquals(conflict.remote, preview.preview.remote)
+    }
+
+    @Test
+    fun `older position from the same writer cannot win through a merged work key`() = runTest {
+        deviceB.connect()
+        val sha = "a".repeat(64)
+        val isbn = "9780547928227"
+        val book = peakBook("merged-writer", isbn)
+        deviceB.addBook(book, sha)
+        deviceB.workIdentity.resolveBook(PERM_ID, book)
+        deviceB.workIdentity.confirmMerge(PERM_ID, book.url, "isbn:$isbn", "sha:$sha", "0000000001000-0000-dev-b")
+
+        fun record(work: String, position: Double, at: Long): DriveWireRecord {
+            val body = DrivePositionBody(
+                workKey = work, deviceId = "dev-a", editionSha = null, locatorJson = "{}",
+                totalProgression = position, status = "Reading", finishedOverride = "automatic",
+                coverage = null, unreadResetAt = null, readAt = at, updatedAt = at,
+            )
+            return DriveWireCodec.putRecord(
+                DriveWireCodec.DOMAIN_POSITION, "$work/dev-a", String.format(java.util.Locale.ROOT, "%013d-0000-dev-a", at),
+                DriveWireCodec.encodePositionBody(body),
+            )
+        }
+
+        deviceB.positionSync.applyRemotePosition(PERM_ID, "dev-b", record("isbn:$isbn", 0.8, 2_000L), "dev-a", 2L)
+        deviceB.positionSync.applyRemotePosition(PERM_ID, "dev-b", record("sha:$sha", 0.2, 1_000L), "dev-a", 1L)
+        assertEquals(0.8, deviceB.liseurDb.readingProgressDao().get(book.url)!!.totalProgression!!, 0.0001)
+    }
+
+    @Test
+    fun `another writer cannot move the local position while a conflict is waiting`() = runTest {
+        deviceB.connect()
+        val book = peakBook("pending-pull", "9780547928227")
+        deviceB.addBook(book, "a".repeat(64))
+        deviceB.read(book.url, 0.4, 1_000L)
+        val alias = requireNotNull(deviceB.workIdentity.resolveBook(PERM_ID, book))
+        val account = DriveLibrarySync.accountPeerId(PERM_ID)
+        val peers = deviceB.liseurDb.syncPeerStateDao()
+        val revision = deviceB.liseurDb.readingProgressDao().get(book.url)!!.localRevision
+        peers.persistPending(book.url, "$account/dev-a", 0.6, "Reading", 1_500L)
+        peers.settle(book.url, "$account/dev-c", revision, 0.4, "Reading", 1_000L)
+        val body = DrivePositionBody(
+            workKey = alias.workId, deviceId = "dev-c", editionSha = null, locatorJson = "{}",
+            totalProgression = 0.8, status = "Reading", finishedOverride = "automatic",
+            coverage = null, unreadResetAt = null, readAt = 2_000L, updatedAt = 2_000L,
+        )
+        val record = DriveWireCodec.putRecord(
+            DriveWireCodec.DOMAIN_POSITION, "${alias.workId}/dev-c", "0000000002000-0000-dev-c",
+            DriveWireCodec.encodePositionBody(body),
+        )
+        deviceB.positionSync.applyRemotePosition(PERM_ID, "dev-b", record, "dev-c", 1L)
+
+        assertEquals(0.4, deviceB.liseurDb.readingProgressDao().get(book.url)!!.totalProgression!!, 0.0001)
+        assertEquals(0.6, peers.get(book.url, "$account/dev-a")!!.pendingProgression!!, 0.0001)
+        assertEquals(0.8, peers.get(book.url, "$account/dev-c")!!.pendingProgression!!, 0.0001)
+    }
+
+    @Test
+    fun `an unread reset cannot move the local position while a conflict is waiting`() = runTest {
+        deviceB.connect()
+        val book = peakBook("pending-reset", "9780547928227")
+        deviceB.addBook(book, "a".repeat(64))
+        deviceB.read(book.url, 0.4, 1_000L)
+        val alias = requireNotNull(deviceB.workIdentity.resolveBook(PERM_ID, book))
+        val account = DriveLibrarySync.accountPeerId(PERM_ID)
+        val peers = deviceB.liseurDb.syncPeerStateDao()
+        val revision = deviceB.liseurDb.readingProgressDao().get(book.url)!!.localRevision
+        peers.settlePositionRevision(book.url, account, revision)
+        peers.persistPending(book.url, "$account/dev-a", 0.6, "Reading", 1_500L)
+        peers.settle(book.url, "$account/dev-c", revision, 0.4, "Reading", 1_000L)
+        val body = DrivePositionBody(
+            workKey = alias.workId, deviceId = "dev-c", editionSha = null, locatorJson = "{}",
+            totalProgression = 0.0, status = "ReadyToRead", finishedOverride = "unread",
+            coverage = null, unreadResetAt = 2_000L, readAt = 2_000L, updatedAt = 2_000L,
+        )
+        val record = DriveWireCodec.putRecord(
+            DriveWireCodec.DOMAIN_POSITION, "${alias.workId}/dev-c", "0000000002000-0000-dev-c",
+            DriveWireCodec.encodePositionBody(body),
+        )
+        deviceB.positionSync.applyRemotePosition(PERM_ID, "dev-b", record, "dev-c", 1L)
+
+        assertEquals(0.4, deviceB.liseurDb.readingProgressDao().get(book.url)!!.totalProgression!!, 0.0001)
+        assertEquals(0.6, peers.get(book.url, "$account/dev-a")!!.pendingProgression!!, 0.0001)
+        assertEquals(0.0, peers.get(book.url, "$account/dev-c")!!.pendingProgression!!, 0.0001)
+    }
+
+    @Test
+    fun `choosing furthest does not clear a newly arrived writer conflict`() = runTest {
+        deviceB.connect()
+        val book = peakBook("pending-furthest", "9780547928227")
+        deviceB.addBook(book, "a".repeat(64))
+        deviceB.read(book.url, 0.4, 1_000L)
+        val alias = requireNotNull(deviceB.workIdentity.resolveBook(PERM_ID, book))
+        val account = DriveLibrarySync.accountPeerId(PERM_ID)
+        val peers = deviceB.liseurDb.syncPeerStateDao()
+        peers.persistPending(book.url, "$account/dev-c", 0.6, "Reading", 1_500L)
+        deviceB.liseurDb.furthestPositionDao().observe(
+            com.chmouel.liseur.data.db.FurthestPosition(account, alias.workId, "", "dev-c", 0.8, 1L, "{}"),
+        )
+        val preview = (deviceB.positionSync.previewKnownBook(book.url) as com.chmouel.liseur.data.remote.PreviewOutcome.Ready).preview
+        peers.persistPending(book.url, "$account/dev-a", 0.7, "Reading", 2_000L)
+
+        assertEquals(ResolveOutcome.Done, deviceB.positionSync.takeFurthestPosition(book.url, preview.localRevision!!, preview.furthest!!))
+        assertTrue(peers.get(book.url, "$account/dev-a")!!.hasPending)
+        assertTrue(peers.get(book.url, "$account/dev-c")!!.hasPending)
+    }
+
+    @Test
+    fun `choosing a matching furthest position settles it before a backward move`() = runTest {
+        deviceB.connect()
+        val book = peakBook("settled-furthest", "9780547928227")
+        deviceB.addBook(book, "a".repeat(64))
+        deviceB.read(book.url, 0.4, 1_000L)
+        val alias = requireNotNull(deviceB.workIdentity.resolveBook(PERM_ID, book))
+        val account = DriveLibrarySync.accountPeerId(PERM_ID)
+        val peers = deviceB.liseurDb.syncPeerStateDao()
+        peers.persistPending(book.url, "$account/dev-a", 0.8, "Reading", 1_500L)
+        peers.persistPending(book.url, "$account/dev-c", 0.4, "Reading", 1_500L)
+        deviceB.liseurDb.furthestPositionDao().observe(
+            com.chmouel.liseur.data.db.FurthestPosition(account, alias.workId, "", "dev-a", 0.8, 1L, "{}"),
+        )
+        val preview = (deviceB.positionSync.previewKnownBook(book.url) as com.chmouel.liseur.data.remote.PreviewOutcome.Ready).preview
+        assertEquals(ResolveOutcome.Done, deviceB.positionSync.takeFurthestPosition(book.url, preview.localRevision!!, preview.furthest!!))
+        deviceB.read(book.url, 0.3, 2_000L)
+
+        assertFalse(peers.get(book.url, "$account/dev-a")!!.hasPending)
+        assertFalse(peers.get(book.url, "$account/dev-c")!!.hasPending)
+        assertNull(deviceB.positionSync.preservedConflict(book.url))
+        assertEquals(0.3, deviceB.liseurDb.readingProgressDao().get(book.url)!!.totalProgression!!, 0.0001)
+    }
+
+    @Test
+    fun `accepting one position settles other writers at the same place`() = runTest {
+        deviceB.connect()
+        val book = peakBook("matching-conflicts", "9780547928227")
+        deviceB.addBook(book, "a".repeat(64))
+        deviceB.read(book.url, 0.4, 1_000L)
+        deviceB.workIdentity.resolveBook(PERM_ID, book)
+        val account = DriveLibrarySync.accountPeerId(PERM_ID)
+        val peers = deviceB.liseurDb.syncPeerStateDao()
+        peers.persistPending(book.url, "$account/dev-a", 0.6, "Reading", 1_500L)
+        peers.persistPending(book.url, "$account/dev-c", 0.6, "Reading", 1_600L)
+        peers.persistPending(book.url, "$account/dev-e", 0.4, "Reading", 1_700L)
+        val preview = deviceB.positionSync.preservedConflict(book.url)!!
+
+        assertEquals(
+            ResolveOutcome.Done,
+            deviceB.positionSync.takeRemotePosition(book.url, preview.localRevision!!, expectedAccountKey = preview.accountKey),
+        )
+        deviceB.read(book.url, 0.3, 2_000L)
+        assertFalse(peers.get(book.url, "$account/dev-c")!!.hasPending)
+        assertFalse(peers.get(book.url, "$account/dev-e")!!.hasPending)
+        assertNull(deviceB.positionSync.preservedConflict(book.url))
+    }
+
+    @Test
+    fun `adopting a status does not acknowledge a position not yet uploaded`() = runTest {
+        deviceB.connect()
+        val book = peakBook("status-position-debt", "9780547928227")
+        deviceB.addBook(book, "a".repeat(64))
+        deviceB.read(book.url, 0.2, 1_000L)
+        val first = deviceB.collectPeaks()
+        deviceB.positionSync.acknowledgePublished(PERM_ID, first.records, first.positionAcks, first.peakAcks)
+        val alias = requireNotNull(deviceB.workIdentity.resolveBook(PERM_ID, book))
+
+        suspend fun receive(position: Double, choice: String, at: Long) {
+            val body = DrivePositionBody(
+                workKey = alias.workId, deviceId = "dev-a", editionSha = null, locatorJson = "{}",
+                totalProgression = position, status = "Reading", finishedOverride = choice,
+                coverage = null, unreadResetAt = null, readAt = at, updatedAt = at,
+            )
+            val record = DriveWireCodec.putRecord(
+                DriveWireCodec.DOMAIN_POSITION, "${alias.workId}/dev-a",
+                String.format(java.util.Locale.ROOT, "%013d-0000-dev-a", at), DriveWireCodec.encodePositionBody(body),
+            )
+            deviceB.positionSync.applyRemotePosition(PERM_ID, "dev-b", record, "dev-a", at)
+        }
+        receive(0.2, "automatic", 2_000L)
+        receive(0.4, "automatic", 3_000L)
+        receive(0.4, "paused", 4_000L)
+
+        assertEquals(FinishedOverride.PAUSED, deviceB.liseurDb.readingProgressDao().get(book.url)!!.override)
+        val next = deviceB.collectPeaks()
+        val position = next.records.single { it.d == DriveWireCodec.DOMAIN_POSITION }
+        assertEquals(0.4, DriveWireCodec.decodePositionBody(position.body!!)!!.totalProgression!!, 0.0001)
+    }
+
+    @Test
+    fun `a page turn during status adoption preserves the incoming position`() = runTest {
+        deviceB.connect()
+        val book = peakBook("status-race", "9780547928227")
+        deviceB.addBook(book, "a".repeat(64))
+        deviceB.read(book.url, 0.4, 1_000L)
+        val alias = requireNotNull(deviceB.workIdentity.resolveBook(PERM_ID, book))
+        val account = DriveLibrarySync.accountPeerId(PERM_ID)
+        val peers = deviceB.liseurDb.syncPeerStateDao()
+        val revision = deviceB.liseurDb.readingProgressDao().get(book.url)!!.localRevision
+        peers.settlePositionRevision(book.url, account, revision)
+        peers.settle(book.url, "$account/dev-a", revision, 0.4, "Reading", 1_000L)
+        var raced = false
+        val finished = FinishedState(
+            bookDao = deviceB.liseurDb.bookDao(),
+            progressDao = deviceB.liseurDb.readingProgressDao(),
+            inTransaction = { work ->
+                if (!raced) {
+                    raced = true
+                    deviceB.read(book.url, 0.3, 1_500L)
+                }
+                deviceB.liseurDb.withTransaction { work() }
+            },
+        )
+        val sync = DrivePositionSync(
+            database = deviceB.liseurDb,
+            storeProvider = { deviceB.driveDb },
+            workIdentityProvider = { deviceB.workIdentity },
+            finishedState = finished,
+            runSync = { SyncOutcome.Success },
+            isActive = { true },
+            activeAccount = { deviceB.driveDb.accounts().active() },
+            localDeviceId = { deviceB.deviceId },
+            nextHlc = { "0000000003000-0000-dev-b" },
+        )
+        val body = DrivePositionBody(
+            workKey = alias.workId, deviceId = "dev-a", editionSha = null, locatorJson = "{}",
+            totalProgression = 0.6, status = "Reading", finishedOverride = "paused",
+            coverage = null, unreadResetAt = null, readAt = 2_000L, updatedAt = 2_000L,
+        )
+        val record = DriveWireCodec.putRecord(
+            DriveWireCodec.DOMAIN_POSITION, "${alias.workId}/dev-a", "0000000002000-0000-dev-a",
+            DriveWireCodec.encodePositionBody(body),
+        )
+        sync.applyRemotePosition(PERM_ID, deviceB.deviceId, record, "dev-a", 1L)
+        assertEquals(0.3, deviceB.liseurDb.readingProgressDao().get(book.url)!!.totalProgression!!, 0.0001)
+        assertEquals(0.6, sync.preservedConflict(book.url)!!.remote!!, 0.0001)
+        assertEquals(record.fp, deviceB.driveDb.recordStates().get(PERM_ID, DriveWireCodec.DOMAIN_POSITION, record.k)!!.versionFp)
+    }
+
+    @Test
+    fun `fresh device accepts status when it has no local status changes`() = runTest {
+        deviceB.connect()
+        val book = peakBook("fresh-status", "9780547928227")
+        deviceB.addBook(book, "a".repeat(64))
+        val alias = requireNotNull(deviceB.workIdentity.resolveBook(PERM_ID, book))
+
+        suspend fun receive(device: String, choice: String, at: Long) {
+            val body = DrivePositionBody(
+                workKey = alias.workId, deviceId = device, editionSha = null, locatorJson = "{}",
+                totalProgression = 0.4, status = "Reading", finishedOverride = choice,
+                coverage = null, unreadResetAt = null, readAt = at, updatedAt = at,
+            )
+            val record = DriveWireCodec.putRecord(
+                DriveWireCodec.DOMAIN_POSITION, "${alias.workId}/$device",
+                String.format(java.util.Locale.ROOT, "%013d-0000-%s", at, device), DriveWireCodec.encodePositionBody(body),
+            )
+            deviceB.positionSync.applyRemotePosition(PERM_ID, "dev-b", record, device, at)
+        }
+        receive("dev-a", "automatic", 1_000L)
+        receive("dev-c", "paused", 2_000L)
+
+        assertEquals(FinishedOverride.PAUSED, deviceB.liseurDb.readingProgressDao().get(book.url)!!.override)
+    }
+
+    @Test
+    fun `the furthest pending position is offered first`() = runTest {
+        deviceB.connect()
+        val book = peakBook("furthest-pending", "9780547928227")
+        deviceB.addBook(book, "a".repeat(64))
+        deviceB.read(book.url, 0.4, 1_000L)
+        deviceB.workIdentity.resolveBook(PERM_ID, book)
+        val account = DriveLibrarySync.accountPeerId(PERM_ID)
+        val peers = deviceB.liseurDb.syncPeerStateDao()
+        peers.persistPending(book.url, "$account/dev-a", 0.2, "Reading", 1_500L)
+        peers.persistPending(book.url, "$account/dev-c", 0.8, "Reading", 2_000L)
+        val preview = deviceB.positionSync.preservedConflict(book.url)!!
+        assertEquals(0.8, preview.remote!!, 0.0001)
+        assertEquals("$account/dev-c", preview.accountKey)
+        assertTrue(peers.get(book.url, "$account/dev-a")!!.hasPending)
+    }
+
+    @Test
+    fun `keeping local clears duplicate rejected positions but preserves other choices`() = runTest {
+        deviceB.connect()
+        val book = peakBook("keep-duplicates", "9780547928227")
+        deviceB.addBook(book, "a".repeat(64))
+        deviceB.read(book.url, 0.4, 1_000L)
+        deviceB.workIdentity.resolveBook(PERM_ID, book)
+        val account = DriveLibrarySync.accountPeerId(PERM_ID)
+        val peers = deviceB.liseurDb.syncPeerStateDao()
+        peers.persistPending(book.url, "$account/dev-a", 0.8, "Reading", 1_500L)
+        peers.persistPending(book.url, "$account/dev-c", 0.8, "Reading", 1_600L)
+        peers.persistPending(book.url, "$account/dev-d", 0.6, "Reading", 1_700L)
+        peers.persistPending(book.url, "$account/dev-e", 0.4, "Reading", 1_800L)
+
+        assertEquals(ResolveOutcome.Done, deviceB.positionSync.keepLocalPosition(book.url))
+        deviceB.read(book.url, 0.3, 2_000L)
+        assertFalse(peers.get(book.url, "$account/dev-a")!!.hasPending)
+        assertFalse(peers.get(book.url, "$account/dev-c")!!.hasPending)
+        assertFalse(peers.get(book.url, "$account/dev-e")!!.hasPending)
+        assertTrue(peers.get(book.url, "$account/dev-d")!!.hasPending)
+        assertEquals(0.6, deviceB.positionSync.preservedConflict(book.url)!!.remote!!, 0.0001)
+    }
+
+    @Test
+    fun `settling an agreeing legacy conflict does not acknowledge an unsent position`() = runTest {
+        deviceB.connect()
+        val book = peakBook("legacy-delivery", "9780547928227")
+        deviceB.addBook(book, "a".repeat(64))
+        deviceB.read(book.url, 0.4, 1_000L)
+        deviceB.workIdentity.resolveBook(PERM_ID, book)
+        val account = DriveLibrarySync.accountPeerId(PERM_ID)
+        val peers = deviceB.liseurDb.syncPeerStateDao()
+        peers.persistPending(book.url, account, 0.4, "Reading", 1_500L)
+        peers.persistPending(book.url, "$account/dev-a", 0.8, "Reading", 1_600L)
+
+        assertEquals(ResolveOutcome.Done, deviceB.positionSync.keepLocalPosition(book.url))
+        assertEquals(0L, peers.get(book.url, account)!!.ackedRevision)
+        val bundle = deviceB.collectPeaks()
+        assertTrue(bundle.records.any { it.d == DriveWireCodec.DOMAIN_POSITION })
+    }
+
+    @Test
+    fun `accepting a legacy conflict does not acknowledge the adopted position`() = runTest {
+        deviceB.connect()
+        val book = peakBook("legacy-adopt-delivery", "9780547928227")
+        deviceB.addBook(book, "a".repeat(64))
+        deviceB.read(book.url, 0.4, 1_000L)
+        deviceB.workIdentity.resolveBook(PERM_ID, book)
+        val account = DriveLibrarySync.accountPeerId(PERM_ID)
+        val peers = deviceB.liseurDb.syncPeerStateDao()
+        val revision = deviceB.liseurDb.readingProgressDao().get(book.url)!!.localRevision
+        peers.settlePositionRevision(book.url, account, revision)
+        peers.persistPending(book.url, account, 0.6, "Reading", 1_500L)
+        val preview = deviceB.positionSync.preservedConflict(book.url)!!
+
+        assertEquals(
+            ResolveOutcome.Done,
+            deviceB.positionSync.takeRemotePosition(book.url, revision, expectedAccountKey = preview.accountKey),
+        )
+        assertEquals(revision, peers.get(book.url, account)!!.ackedRevision)
+        assertTrue(deviceB.collectPeaks().records.any { it.d == DriveWireCodec.DOMAIN_POSITION })
+    }
+
+    @Test
+    fun `keeping local preserves a different exact position at the same percentage`() = runTest {
+        deviceB.connect()
+        val book = peakBook("keep-exact", "9780547928227")
+        val sha = "a".repeat(64)
+        deviceB.addBook(book, sha)
+        deviceB.read(book.url, 0.4, 1_000L)
+        deviceB.workIdentity.resolveBook(PERM_ID, book)
+        val account = DriveLibrarySync.accountPeerId(PERM_ID)
+        val peers = deviceB.liseurDb.syncPeerStateDao()
+        val first = """{"href":"ch.xhtml","type":"application/xhtml+xml","locations":{"liseurAnchor":1,"cssSelector":"p#a","totalProgression":0.8},"text":{"highlight":"first"}}"""
+        val second = """{"href":"ch.xhtml","type":"application/xhtml+xml","locations":{"liseurAnchor":1,"cssSelector":"p#b","totalProgression":0.8},"text":{"highlight":"second"}}"""
+        peers.persistPending(book.url, "$account/dev-a", 0.8, "Reading", 1_500L, locatorJson = first, editionSha = sha)
+        peers.persistPending(book.url, "$account/dev-c", 0.8, "Reading", 1_600L, locatorJson = second, editionSha = sha)
+
+        assertEquals(ResolveOutcome.Done, deviceB.positionSync.keepLocalPosition(book.url))
+        assertFalse(peers.get(book.url, "$account/dev-a")!!.hasPending)
+        assertTrue(peers.get(book.url, "$account/dev-c")!!.hasPending)
+    }
+
+    @Test
+    fun `a newer writer position replaces its identifiable legacy conflict`() = runTest {
+        deviceB.connect()
+        val book = peakBook("legacy-conflict", "9780547928227")
+        deviceB.addBook(book, "a".repeat(64))
+        deviceB.read(book.url, 0.4, 1_000L)
+        val alias = requireNotNull(deviceB.workIdentity.resolveBook(PERM_ID, book))
+        val account = DriveLibrarySync.accountPeerId(PERM_ID)
+        val peers = deviceB.liseurDb.syncPeerStateDao()
+        peers.persistPending(book.url, account, 0.6, "Reading", 1_500L)
+        val oldBody = DrivePositionBody(
+            workKey = alias.workId, deviceId = "dev-a", editionSha = null, locatorJson = "{}",
+            totalProgression = 0.6, status = "Reading", finishedOverride = "automatic",
+            coverage = null, unreadResetAt = null, readAt = 1_500L, updatedAt = 1_500L,
+        )
+        val oldMap = DriveWireCodec.encodePositionBody(oldBody)
+        val oldRecord = DriveWireCodec.putRecord(
+            DriveWireCodec.DOMAIN_POSITION, "${alias.workId}/dev-a", "0000000001500-0000-dev-a", oldMap,
+        )
+        deviceB.driveDb.recordStates().upsert(
+            DriveRecordState(
+                permissionId = PERM_ID, domain = DriveWireCodec.DOMAIN_POSITION, recordKey = oldRecord.k,
+                versionFp = oldRecord.fp, versionOp = DriveRecordState.OP_PUT, publishedFp = oldRecord.fp,
+                contentFp = DriveCanonicalJson.contentFp(oldMap), originDeviceId = "dev-a", originSeq = 1L,
+                ancestorsJson = "[]", resRefsJson = "[]", lastHlc = oldRecord.hlc,
+                bodyJson = DriveCanonicalJson.encode(oldMap),
+            ),
+        )
+        val newBody = oldBody.copy(totalProgression = 0.4, readAt = 2_000L, updatedAt = 2_000L)
+        val newRecord = DriveWireCodec.putRecord(
+            DriveWireCodec.DOMAIN_POSITION, oldRecord.k, "0000000002000-0000-dev-a", DriveWireCodec.encodePositionBody(newBody),
+        )
+        deviceB.positionSync.applyRemotePosition(PERM_ID, "dev-b", newRecord, "dev-a", 2L)
+
+        assertFalse(peers.get(book.url, account)!!.hasPending)
+        assertNull(deviceB.positionSync.preservedConflict(book.url))
+        assertEquals(0.4, deviceB.liseurDb.readingProgressDao().get(book.url)!!.totalProgression!!, 0.0001)
+    }
+
+    @Test
+    fun `identifiable legacy conflict is retired when the writer already has a pending position`() = runTest {
+        deviceB.connect()
+        val book = peakBook("legacy-writer-pending", "9780547928227")
+        deviceB.addBook(book, "a".repeat(64))
+        deviceB.read(book.url, 0.4, 1_000L)
+        val alias = requireNotNull(deviceB.workIdentity.resolveBook(PERM_ID, book))
+        val account = DriveLibrarySync.accountPeerId(PERM_ID)
+        val peers = deviceB.liseurDb.syncPeerStateDao()
+        peers.persistPending(book.url, account, 0.6, "Reading", 1_500L)
+        peers.persistPending(book.url, "$account/dev-a", 0.8, "Reading", 1_800L)
+        val oldBody = DrivePositionBody(
+            workKey = alias.workId, deviceId = "dev-a", editionSha = null, locatorJson = "{}",
+            totalProgression = 0.6, status = "Reading", finishedOverride = "automatic",
+            coverage = null, unreadResetAt = null, readAt = 1_500L, updatedAt = 1_500L,
+        )
+        val oldMap = DriveWireCodec.encodePositionBody(oldBody)
+        val oldRecord = DriveWireCodec.putRecord(
+            DriveWireCodec.DOMAIN_POSITION, "${alias.workId}/dev-a", "0000000001500-0000-dev-a", oldMap,
+        )
+        deviceB.driveDb.recordStates().upsert(
+            DriveRecordState(
+                permissionId = PERM_ID, domain = DriveWireCodec.DOMAIN_POSITION, recordKey = oldRecord.k,
+                versionFp = oldRecord.fp, versionOp = DriveRecordState.OP_PUT, publishedFp = oldRecord.fp,
+                contentFp = DriveCanonicalJson.contentFp(oldMap), originDeviceId = "dev-a", originSeq = 1L,
+                ancestorsJson = "[]", resRefsJson = "[]", lastHlc = oldRecord.hlc,
+                bodyJson = DriveCanonicalJson.encode(oldMap),
+            ),
+        )
+        deviceB.positionSync.seedUnseededAliases(PERM_ID, "dev-b")
+        assertTrue(peers.get(book.url, account)!!.hasPending)
+        assertEquals(0.8, peers.get(book.url, "$account/dev-a")!!.pendingProgression!!, 0.0001)
+        val newBody = oldBody.copy(totalProgression = 0.4, readAt = 2_000L, updatedAt = 2_000L)
+        val newRecord = DriveWireCodec.putRecord(
+            DriveWireCodec.DOMAIN_POSITION, oldRecord.k, "0000000002000-0000-dev-a", DriveWireCodec.encodePositionBody(newBody),
+        )
+        deviceB.positionSync.applyRemotePosition(PERM_ID, "dev-b", newRecord, "dev-a", 2L)
+        deviceB.read(book.url, 0.3, 3_000L)
+
+        assertFalse(peers.get(book.url, account)!!.hasPending)
+        assertNull(deviceB.positionSync.preservedConflict(book.url))
+    }
+
+    @Test
+    fun `an ambiguous legacy conflict is retained`() = runTest {
+        deviceB.connect()
+        val book = peakBook("ambiguous-legacy", "9780547928227")
+        deviceB.addBook(book, "a".repeat(64))
+        deviceB.read(book.url, 0.4, 1_000L)
+        val alias = requireNotNull(deviceB.workIdentity.resolveBook(PERM_ID, book))
+        val account = DriveLibrarySync.accountPeerId(PERM_ID)
+        val peers = deviceB.liseurDb.syncPeerStateDao()
+        peers.persistPending(book.url, account, 0.6, "Reading", 1_500L)
+        fun body(device: String, position: Double, at: Long) = DrivePositionBody(
+            workKey = alias.workId, deviceId = device, editionSha = null, locatorJson = "{}",
+            totalProgression = position, status = "Reading", finishedOverride = "automatic",
+            coverage = null, unreadResetAt = null, readAt = at, updatedAt = at,
+        )
+        for (device in listOf("dev-a", "dev-c")) {
+            val map = DriveWireCodec.encodePositionBody(body(device, 0.6, 1_500L))
+            val record = DriveWireCodec.putRecord(
+                DriveWireCodec.DOMAIN_POSITION, "${alias.workId}/$device", "0000000001500-0000-$device", map,
+            )
+            deviceB.driveDb.recordStates().upsert(
+                DriveRecordState(
+                    permissionId = PERM_ID, domain = DriveWireCodec.DOMAIN_POSITION, recordKey = record.k,
+                    versionFp = record.fp, versionOp = DriveRecordState.OP_PUT, publishedFp = record.fp,
+                    contentFp = DriveCanonicalJson.contentFp(map), originDeviceId = device, originSeq = 1L,
+                    ancestorsJson = "[]", resRefsJson = "[]", lastHlc = record.hlc,
+                    bodyJson = DriveCanonicalJson.encode(map),
+                ),
+            )
+        }
+        val update = DriveWireCodec.putRecord(
+            DriveWireCodec.DOMAIN_POSITION, "${alias.workId}/dev-a", "0000000002000-0000-dev-a",
+            DriveWireCodec.encodePositionBody(body("dev-a", 0.4, 2_000L)),
+        )
+        deviceB.positionSync.applyRemotePosition(PERM_ID, "dev-b", update, "dev-a", 2L)
+        assertTrue(peers.get(book.url, account)!!.hasPending)
+        assertEquals(0.6, deviceB.positionSync.preservedConflict(book.url)!!.remote!!, 0.0001)
+    }
+
+    @Test
+    fun `seeding compares cached and pending writer versions`() = runTest {
+        deviceB.connect()
+        val account = DriveLibrarySync.accountPeerId(PERM_ID)
+        val peers = deviceB.liseurDb.syncPeerStateDao()
+        val books = listOf(
+            peakBook("seed-newer-cache", "9780547928227"),
+            peakBook("seed-newer-pending", "9780618391110"),
+        )
+        for ((index, book) in books.withIndex()) {
+            deviceB.addBook(book, if (index == 0) "a".repeat(64) else "b".repeat(64))
+            deviceB.read(book.url, 0.4, 1_000L)
+            val alias = requireNotNull(deviceB.workIdentity.resolveBook(PERM_ID, book))
+            peers.persistPending(
+                book.url, "$account/dev-a", 0.6, "Reading", 1_500L,
+                hlc = if (index == 0) "0000000001500-0000-dev-a" else "0000000002500-0000-dev-a",
+            )
+            val body = DrivePositionBody(
+                workKey = alias.workId, deviceId = "dev-a", editionSha = null, locatorJson = "{}",
+                totalProgression = 0.8, status = "Reading", finishedOverride = "automatic",
+                coverage = null, unreadResetAt = null, readAt = 2_000L, updatedAt = 2_000L,
+            )
+            val map = DriveWireCodec.encodePositionBody(body)
+            val record = DriveWireCodec.putRecord(
+                DriveWireCodec.DOMAIN_POSITION, "${alias.workId}/dev-a", "0000000002000-0000-dev-a", map,
+            )
+            deviceB.driveDb.recordStates().upsert(
+                DriveRecordState(
+                    permissionId = PERM_ID, domain = DriveWireCodec.DOMAIN_POSITION, recordKey = record.k,
+                    versionFp = record.fp, versionOp = DriveRecordState.OP_PUT, publishedFp = record.fp,
+                    contentFp = DriveCanonicalJson.contentFp(map), originDeviceId = "dev-a", originSeq = 1L,
+                    ancestorsJson = "[]", resRefsJson = "[]", lastHlc = record.hlc,
+                    bodyJson = DriveCanonicalJson.encode(map),
+                ),
+            )
+        }
+        deviceB.positionSync.seedUnseededAliases(PERM_ID, "dev-b")
+        assertEquals(0.8, peers.get(books[0].url, "$account/dev-a")!!.pendingProgression!!, 0.0001)
+        assertEquals(0.6, peers.get(books[1].url, "$account/dev-a")!!.pendingProgression!!, 0.0001)
+    }
+
+    @Test
+    fun `a clean remote move settles pending writers at the previous position`() = runTest {
+        deviceB.connect()
+        val book = peakBook("pending-before-pull", "9780547928227")
+        deviceB.addBook(book, "a".repeat(64))
+        deviceB.read(book.url, 0.4, 1_000L)
+        val alias = requireNotNull(deviceB.workIdentity.resolveBook(PERM_ID, book))
+        val account = DriveLibrarySync.accountPeerId(PERM_ID)
+        val peers = deviceB.liseurDb.syncPeerStateDao()
+        val revision = deviceB.liseurDb.readingProgressDao().get(book.url)!!.localRevision
+        peers.persistPending(book.url, "$account/dev-a", 0.4, "Reading", 1_000L)
+        peers.settle(book.url, "$account/dev-c", revision, 0.4, "Reading", 1_000L)
+        val body = DrivePositionBody(
+            workKey = alias.workId, deviceId = "dev-c", editionSha = null, locatorJson = "{}",
+            totalProgression = 0.2, status = "Reading", finishedOverride = "automatic",
+            coverage = null, unreadResetAt = null, readAt = 2_000L, updatedAt = 2_000L,
+        )
+        val record = DriveWireCodec.putRecord(
+            DriveWireCodec.DOMAIN_POSITION, "${alias.workId}/dev-c", "0000000002000-0000-dev-c",
+            DriveWireCodec.encodePositionBody(body),
+        )
+        deviceB.positionSync.applyRemotePosition(PERM_ID, "dev-b", record, "dev-c", 1L)
+        assertEquals(0.2, deviceB.liseurDb.readingProgressDao().get(book.url)!!.totalProgression!!, 0.0001)
+        assertFalse(peers.get(book.url, "$account/dev-a")!!.hasPending)
+        assertNull(deviceB.positionSync.preservedConflict(book.url))
+    }
+
+    @Test
+    fun `an imported unread reset does not block a later reading position`() = runTest {
+        deviceB.connect()
+        val book = peakBook("imported-reset", "9780547928227")
+        deviceB.addBook(book, "a".repeat(64))
+        deviceB.read(book.url, 0.4, 1_000L)
+        val alias = requireNotNull(deviceB.workIdentity.resolveBook(PERM_ID, book))
+        val account = DriveLibrarySync.accountPeerId(PERM_ID)
+        val peers = deviceB.liseurDb.syncPeerStateDao()
+        val revision = deviceB.liseurDb.readingProgressDao().get(book.url)!!.localRevision
+        peers.settlePositionRevision(book.url, account, revision)
+        peers.settle(book.url, "$account/dev-a", revision, 0.4, "Reading", 1_000L)
+        peers.persistPending(book.url, "$account/dev-c", 0.4, "Reading", 1_000L)
+
+        suspend fun receive(position: Double, choice: String, at: Long) {
+            val body = DrivePositionBody(
+                workKey = alias.workId, deviceId = "dev-a", editionSha = null, locatorJson = "{}",
+                totalProgression = position, status = "Reading", finishedOverride = choice,
+                coverage = null, unreadResetAt = at.takeIf { choice == "unread" }, readAt = at, updatedAt = at,
+            )
+            val record = DriveWireCodec.putRecord(
+                DriveWireCodec.DOMAIN_POSITION, "${alias.workId}/dev-a",
+                String.format(java.util.Locale.ROOT, "%013d-0000-dev-a", at), DriveWireCodec.encodePositionBody(body),
+            )
+            deviceB.positionSync.applyRemotePosition(PERM_ID, "dev-b", record, "dev-a", at)
+        }
+        receive(0.0, "unread", 2_000L)
+        assertEquals(0.0, deviceB.liseurDb.readingProgressDao().get(book.url)!!.totalProgression!!, 0.0001)
+        assertFalse(peers.get(book.url, "$account/dev-c")!!.hasPending)
+        receive(0.3, "automatic", 3_000L)
+        assertEquals(0.3, deviceB.liseurDb.readingProgressDao().get(book.url)!!.totalProgression!!, 0.0001)
+    }
+
+    @Test
+    fun `a concurrent move survives an imported unread reset in either order`() = runTest {
+        for ((device, resetFirst) in listOf(deviceA to true, deviceB to false)) {
+            device.connect()
+            val book = peakBook("reset-order-${device.deviceId}", "9780547928227")
+            device.addBook(book, "a".repeat(64))
+            device.read(book.url, 0.4, 1_000L)
+            val alias = requireNotNull(device.workIdentity.resolveBook(PERM_ID, book))
+            val account = DriveLibrarySync.accountPeerId(PERM_ID)
+            val peers = device.liseurDb.syncPeerStateDao()
+            val revision = device.liseurDb.readingProgressDao().get(book.url)!!.localRevision
+            peers.settlePositionRevision(book.url, account, revision)
+            peers.settle(book.url, "$account/writer-a", revision, 0.4, "Reading", 1_000L)
+            peers.settle(book.url, "$account/writer-c", revision, 0.4, "Reading", 1_000L)
+            suspend fun receive(writer: String, position: Double, choice: String, at: Long) {
+                val body = DrivePositionBody(
+                    workKey = alias.workId, deviceId = writer, editionSha = null, locatorJson = "{}",
+                    totalProgression = position, status = "Reading", finishedOverride = choice,
+                    coverage = null, unreadResetAt = at.takeIf { choice == "unread" }, readAt = at, updatedAt = at,
+                )
+                val record = DriveWireCodec.putRecord(
+                    DriveWireCodec.DOMAIN_POSITION, "${alias.workId}/$writer",
+                    String.format(java.util.Locale.ROOT, "%013d-0000-%s", at, writer), DriveWireCodec.encodePositionBody(body),
+                )
+                device.positionSync.applyRemotePosition(PERM_ID, device.deviceId, record, writer, at)
+            }
+            if (resetFirst) {
+                receive("writer-a", 0.0, "unread", 3_000L)
+                receive("writer-c", 0.7, "automatic", 2_000L)
+                assertEquals(0.0, device.liseurDb.readingProgressDao().get(book.url)!!.totalProgression!!, 0.0001)
+                assertEquals(0.7, device.positionSync.preservedConflict(book.url)!!.remote!!, 0.0001)
+            } else {
+                receive("writer-c", 0.7, "automatic", 2_000L)
+                receive("writer-a", 0.0, "unread", 3_000L)
+                assertEquals(0.7, device.liseurDb.readingProgressDao().get(book.url)!!.totalProgression!!, 0.0001)
+                assertEquals(0.0, device.positionSync.preservedConflict(book.url)!!.remote!!, 0.0001)
+            }
+        }
+    }
+
+    @Test
+    fun `a legacy unread reset keeps a competing position when its origin is unknown`() = runTest {
+        deviceB.connect()
+        val book = peakBook("legacy-reset-origin", "9780547928227")
+        deviceB.addBook(book, "a".repeat(64))
+        deviceB.read(book.url, 0.4, 1_000L)
+        val alias = requireNotNull(deviceB.workIdentity.resolveBook(PERM_ID, book))
+        val account = DriveLibrarySync.accountPeerId(PERM_ID)
+        val peers = deviceB.liseurDb.syncPeerStateDao()
+        val revision = deviceB.liseurDb.readingProgressDao().get(book.url)!!.localRevision
+        peers.settlePositionRevision(book.url, account, revision)
+        peers.settle(book.url, "$account/writer-a", revision, 0.4, "Reading", 1_000L)
+        peers.settle(book.url, "$account/writer-c", revision, 0.4, "Reading", 1_000L)
+        val reset = DrivePositionBody(
+            workKey = alias.workId, deviceId = "writer-a", editionSha = null, locatorJson = "{}",
+            totalProgression = 0.0, status = "ReadyToRead", finishedOverride = "unread",
+            coverage = null, unreadResetAt = 3_000L, readAt = 3_000L, updatedAt = 3_000L,
+        )
+        val resetRecord = DriveWireCodec.putRecord(
+            DriveWireCodec.DOMAIN_POSITION, "${alias.workId}/writer-a", "0000000003000-0000-writer-a",
+            DriveWireCodec.encodePositionBody(reset),
+        )
+        deviceB.positionSync.applyRemotePosition(PERM_ID, "dev-b", resetRecord, "writer-a", 1L)
+        val resetRevision = deviceB.liseurDb.readingProgressDao().get(book.url)!!.unreadResetRevision!!
+        peers.setDriveImportedResetRevision(book.url, account, -resetRevision - 1)
+        val move = reset.copy(
+            deviceId = "writer-c", totalProgression = 0.7, status = "Reading", finishedOverride = "automatic",
+            unreadResetAt = null, readAt = 2_000L, updatedAt = 2_000L,
+        )
+        val moveRecord = DriveWireCodec.putRecord(
+            DriveWireCodec.DOMAIN_POSITION, "${alias.workId}/writer-c", "0000000002000-0000-writer-c",
+            DriveWireCodec.encodePositionBody(move),
+        )
+        deviceB.positionSync.applyRemotePosition(PERM_ID, "dev-b", moveRecord, "writer-c", 1L)
+        assertEquals(0.0, deviceB.liseurDb.readingProgressDao().get(book.url)!!.totalProgression!!, 0.0001)
+        assertEquals(0.7, deviceB.positionSync.preservedConflict(book.url)!!.remote!!, 0.0001)
+    }
+
+    @Test
+    fun `an unread reset preserves a position that has not been uploaded`() = runTest {
+        deviceB.connect()
+        val book = peakBook("undelivered-reset", "9780547928227")
+        deviceB.addBook(book, "a".repeat(64))
+        deviceB.read(book.url, 0.4, 1_000L)
+        val alias = requireNotNull(deviceB.workIdentity.resolveBook(PERM_ID, book))
+        val account = DriveLibrarySync.accountPeerId(PERM_ID)
+        val peers = deviceB.liseurDb.syncPeerStateDao()
+        val revision = deviceB.liseurDb.readingProgressDao().get(book.url)!!.localRevision
+        peers.settle(book.url, "$account/dev-a", revision, 0.4, "Reading", 1_000L)
+        val body = DrivePositionBody(
+            workKey = alias.workId, deviceId = "dev-a", editionSha = null, locatorJson = "{}",
+            totalProgression = 0.0, status = "ReadyToRead", finishedOverride = "unread",
+            coverage = null, unreadResetAt = 2_000L, readAt = 2_000L, updatedAt = 2_000L,
+        )
+        val record = DriveWireCodec.putRecord(
+            DriveWireCodec.DOMAIN_POSITION, "${alias.workId}/dev-a", "0000000002000-0000-dev-a",
+            DriveWireCodec.encodePositionBody(body),
+        )
+        deviceB.positionSync.applyRemotePosition(PERM_ID, "dev-b", record, "dev-a", 1L)
+        assertEquals(0.4, deviceB.liseurDb.readingProgressDao().get(book.url)!!.totalProgression!!, 0.0001)
+        assertEquals(0.0, peers.get(book.url, "$account/dev-a")!!.pendingProgression!!, 0.0001)
+        assertEquals(0L, peers.get(book.url, account)?.ackedRevision ?: 0L)
+    }
+
+    @Test
+    fun `a deferred unread reset does not move the position without its status`() = runTest {
+        deviceB.connect()
+        val book = peakBook("deferred-unread", "9780547928227")
+        deviceB.addBook(book, "a".repeat(64))
+        deviceB.read(book.url, 0.4, 1_000L)
+        val alias = requireNotNull(deviceB.workIdentity.resolveBook(PERM_ID, book))
+        val account = DriveLibrarySync.accountPeerId(PERM_ID)
+        val peers = deviceB.liseurDb.syncPeerStateDao()
+        val before = deviceB.liseurDb.readingProgressDao().get(book.url)!!
+        peers.settle(book.url, "$account/dev-a", before.localRevision, 0.4, "Reading", 1_000L)
+        deviceB.finishedState.setReadingChoice(book.url, ReadingStatusChoice.FINISHED)
+        val after = deviceB.liseurDb.readingProgressDao().get(book.url)!!
+        peers.settlePositionRevision(book.url, account, after.localRevision)
+        peers.settleStatus(book.url, account, after.statusRevision)
+        val body = DrivePositionBody(
+            workKey = alias.workId, deviceId = "dev-a", editionSha = null, locatorJson = "{}",
+            totalProgression = 0.0, status = "ReadyToRead", finishedOverride = "unread",
+            coverage = null, unreadResetAt = 2_000L, readAt = 2_000L, updatedAt = 2_000L,
+        )
+        val record = DriveWireCodec.putRecord(
+            DriveWireCodec.DOMAIN_POSITION, "${alias.workId}/dev-a", "0000000002000-0000-dev-a",
+            DriveWireCodec.encodePositionBody(body),
+        )
+        deviceB.positionSync.applyRemotePosition(PERM_ID, "dev-b", record, "dev-a", 1L)
+        val progress = deviceB.liseurDb.readingProgressDao().get(book.url)!!
+        assertEquals(0.4, progress.totalProgression!!, 0.0001)
+        assertEquals(FinishedOverride.FINISHED, progress.override)
+        assertEquals(0.0, peers.get(book.url, "$account/dev-a")!!.pendingProgression!!, 0.0001)
+        assertTrue(peers.get(book.url, account)!!.hasPendingStatus)
+    }
+
+    @Test
+    fun `an older unread reset does not replace the position under a newer status`() = runTest {
+        deviceB.connect()
+        val book = peakBook("older-unread", "9780547928227")
+        deviceB.addBook(book, "a".repeat(64))
+        deviceB.read(book.url, 0.4, 1_000L)
+        val alias = requireNotNull(deviceB.workIdentity.resolveBook(PERM_ID, book))
+        val account = DriveLibrarySync.accountPeerId(PERM_ID)
+        val peers = deviceB.liseurDb.syncPeerStateDao()
+        val revision = deviceB.liseurDb.readingProgressDao().get(book.url)!!.localRevision
+        peers.settlePositionRevision(book.url, account, revision)
+        peers.settle(book.url, "$account/dev-a", revision, 0.4, "Reading", 1_000L)
+        fun record(writer: String, position: Double, choice: String, at: Long): DriveWireRecord {
+            val body = DrivePositionBody(
+                workKey = alias.workId, deviceId = writer, editionSha = null, locatorJson = "{}",
+                totalProgression = position, status = "Reading", finishedOverride = choice,
+                coverage = null, unreadResetAt = at.takeIf { choice == "unread" }, readAt = at, updatedAt = at,
+            )
+            return DriveWireCodec.putRecord(
+                DriveWireCodec.DOMAIN_POSITION, "${alias.workId}/$writer",
+                String.format(java.util.Locale.ROOT, "%013d-0000-%s", at, writer), DriveWireCodec.encodePositionBody(body),
+            )
+        }
+        deviceB.positionSync.applyRemotePosition(PERM_ID, "dev-b", record("dev-c", 0.4, "finished", 3_000L), "dev-c", 1L)
+        deviceB.positionSync.applyRemotePosition(PERM_ID, "dev-b", record("dev-a", 0.0, "unread", 2_000L), "dev-a", 1L)
+
+        val progress = deviceB.liseurDb.readingProgressDao().get(book.url)!!
+        assertEquals(0.4, progress.totalProgression!!, 0.0001)
+        assertEquals(FinishedOverride.FINISHED, progress.override)
+        assertEquals(0.0, peers.get(book.url, "$account/dev-a")!!.pendingProgression!!, 0.0001)
     }
 
     @Test
@@ -1767,7 +2567,7 @@ class DrivePhase3EndToEndTest {
             val progressB = deviceB.liseurDb.readingProgressDao().get(bookB.url)!!
             assertEquals(0.30, progressB.totalProgression!!, 0.0001)
             assertTrue(progressB.locatorJson.contains("ch3.xhtml"))
-            val pending = deviceB.liseurDb.syncPeerStateDao().get(bookB.url, DriveLibrarySync.accountPeerId(PERM_ID))!!
+            val pending = deviceB.liseurDb.syncPeerStateDao().get(bookB.url, "${DriveLibrarySync.accountPeerId(PERM_ID)}/dev-a")!!
             assertTrue(pending.hasPending)
             assertEquals(0.70, pending.pendingProgression!!, 0.0001)
         } finally {
@@ -2318,7 +3118,7 @@ class DrivePhase3EndToEndTest {
             // Late response MUST NOT clobber the open reader's locator; remote 0.72 stays pending.
             val progressB = deviceB.liseurDb.readingProgressDao().get(bookB.url)!!
             assertEquals(0.25, progressB.totalProgression!!, 0.0001)
-            val peerState = deviceB.liseurDb.syncPeerStateDao().get(bookB.url, DriveLibrarySync.accountPeerId(PERM_ID))!!
+            val peerState = deviceB.liseurDb.syncPeerStateDao().get(bookB.url, "${DriveLibrarySync.accountPeerId(PERM_ID)}/dev-a")!!
             assertTrue(peerState.hasPending)
             assertEquals(0.72, peerState.pendingProgression!!, 0.0001)
         } finally {
