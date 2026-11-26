@@ -170,4 +170,12 @@ interface BookAnnotationDao {
     /** Drops every mark on a book, for when the file no longer holds it. */
     @Query("DELETE FROM annotations WHERE book_id = :bookId")
     suspend fun deleteForBook(bookId: String)
+
+    /** Book keys starting with [prefix], to find marks retained under a synthetic key. */
+    @Query("SELECT DISTINCT book_id FROM annotations WHERE book_id LIKE :prefix || '%'")
+    suspend fun bookKeysWithPrefix(prefix: String): List<String>
+
+    /** Re-points marks retained for a work onto the book that now represents it. */
+    @Query("UPDATE annotations SET book_id = :to WHERE book_id = :from")
+    suspend fun moveBook(from: String, to: String)
 }

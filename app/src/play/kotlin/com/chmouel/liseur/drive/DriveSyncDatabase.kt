@@ -30,7 +30,7 @@ import androidx.sqlite.execSQL
         DriveSessionAck::class,
         DriveUpload::class,
     ],
-    version = 5,
+    version = 6,
     exportSchema = true,
 )
 abstract class DriveSyncDatabase : RoomDatabase() {
@@ -93,7 +93,18 @@ abstract class DriveSyncDatabase : RoomDatabase() {
             }
         }
 
-        val MIGRATIONS: Array<Migration> get() = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+        /**
+         * Adds the held marker: a record retained for a work whose catalog tombstone arrived
+         * before its book, so restoring the work later still has its history and lineage.
+         */
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL("ALTER TABLE drive_record_state ADD COLUMN held INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
+        val MIGRATIONS: Array<Migration>
+            get() = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
 
         fun open(context: Context): DriveSyncDatabase =
             Room.databaseBuilder(context.applicationContext, DriveSyncDatabase::class.java, NAME)

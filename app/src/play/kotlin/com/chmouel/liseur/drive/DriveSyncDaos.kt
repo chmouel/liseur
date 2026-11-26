@@ -248,6 +248,12 @@ interface DriveRecordStateDao {
     @Query("SELECT * FROM drive_record_state WHERE permission_id = :permissionId ORDER BY domain, record_key")
     suspend fun forAccount(permissionId: String): List<DriveRecordState>
 
+    @Query(
+        "SELECT * FROM drive_record_state WHERE permission_id = :permissionId AND held = 1 " +
+            "ORDER BY domain, record_key",
+    )
+    suspend fun heldForAccount(permissionId: String): List<DriveRecordState>
+
     @Upsert
     suspend fun upsert(state: DriveRecordState)
 
@@ -342,6 +348,16 @@ interface DriveConflictDao {
             "WHERE permission_id = :permissionId AND conflict_id = :conflictId AND state = 'RESOLVING'",
     )
     suspend fun reopen(permissionId: String, conflictId: String)
+
+    /**
+     * Gives bookless conflicts their book once the work has one again, so a competition that
+     * was parked while nothing could hold it becomes the reader's to settle.
+     */
+    @Query(
+        "UPDATE drive_conflict SET book_url = :bookUrl WHERE permission_id = :permissionId " +
+            "AND domain = :domain AND record_key = :recordKey AND state = 'OPEN' AND book_url IS NULL",
+    )
+    suspend fun attachBookUrl(permissionId: String, domain: String, recordKey: String, bookUrl: String)
 
     @Query(
         "UPDATE drive_conflict SET state = 'RESOLVED', choice = :choice, resolution_fp = :resolutionFp, " +

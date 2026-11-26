@@ -141,6 +141,9 @@ internal class DriveAnnotationSync(
                 val contentFp = DriveWireCodec.annotationContentFp(body)
                 val existingState = recordStates.get(permissionId, DriveWireCodec.DOMAIN_ANNOTATION, ann.id)
                 val syncRow = annotationSync.get(peerId, ann.id)
+                if (existingState != null && existingState.publishedFp == existingState.versionFp &&
+                    contentFp == baselineContentFp(existingState, workKey)
+                ) continue
 
                 // Crash recovery: if liseur.db already acked this exact contentFp before Tx 2 committed.
                 if (syncRow?.ackedFingerprint == contentFp &&
@@ -169,10 +172,6 @@ internal class DriveAnnotationSync(
                             bodyJson = bodyJson,
                         ),
                     )
-                    continue
-                }
-
-                if (existingState != null && existingState.contentFp == contentFp && existingState.publishedFp == existingState.versionFp) {
                     continue
                 }
 
@@ -389,17 +388,20 @@ internal class DriveAnnotationSync(
         } else {
             null
         }
-        val incomingContentFp = decodedBody?.let(DriveWireCodec::annotationContentFp)
         val canonicalWorkKey = decodedBody?.workKey?.let { workIdentity.canonicalWorkKey(permissionId, it) }
+        val incomingContentFp = decodedBody?.let {
+            DriveWireCodec.annotationContentFp(it.copy(workKey = canonicalWorkKey!!))
+        }
 
         val liveRow = annotations.byId(record.k)
         val syncRow = annotationSync.get(peerId, record.k)
         val targetBookUrl = liveRow?.bookId
             ?: syncRow?.bookId
             ?: canonicalWorkKey?.let { findBookUrlForWorkKey(permissionId, it) }
+            ?: canonicalWorkKey?.takeIf { workIdentity.hasDeletedCatalogEntry(permissionId, decodedBody.workKey) }
+                ?.let(DriveWorkIdentity::driveBookUrl)
 
-        // Per docs/DRIVE_SYNC.md §4: skip put records for an unknown workKey until the book exists locally.
-        if (!isIncomingDelete && targetBookUrl == null) return true
+        if (!isIncomingDelete && targetBookUrl == null) return false
 
         val effectiveWorkKey = canonicalWorkKey
             ?: syncRow?.workId
@@ -451,7 +453,7 @@ internal class DriveAnnotationSync(
                 val bookUrl = targetBookUrl
                     ?: findBookUrlForWorkKey(permissionId, workIdentity.canonicalWorkKey(permissionId, body.workKey))
                     ?: return true
-                val bodyContentFp = DriveWireCodec.annotationContentFp(body)
+                val bodyContentFp = DriveWireCodec.annotationContentFp(body.copy(workKey = effectiveWorkKey))
                 appliedContentFp = bodyContentFp
                 database.withTransaction {
                     if (annotations.byId(record.k) != liveRow || annotationSync.get(peerId, record.k) != syncRow) {
@@ -877,6 +879,14 @@ internal class DriveAnnotationSync(
         resolveLocalConflict(permissionId, conflict, choice, localDeviceId, nextHlc)
     }
 
+    private fun baselineContentFp(state: DriveRecordState, workKey: String): String? {
+        if (state.contentFp == null) return null
+        val body = state.bodyJson?.let { raw ->
+            runCatching { DriveWireCodec.decodeAnnotationBody(JSONObject(raw)) }.getOrNull()
+        } ?: return state.contentFp
+        return DriveWireCodec.annotationContentFp(body.copy(workKey = workKey))
+    }
+
     private suspend fun buildLocalRecordView(
         permissionId: String,
         recordKey: String,
@@ -942,6 +952,7 @@ internal class DriveAnnotationSync(
             )
         }
 
+        val baselineFp = baselineContentFp(existingState, workKey)
         val stateResRefs = DriveWorkIdentity.decodeStringArray(existingState.resRefsJson)
         val stateIsLivePut = when (existingState.versionOp) {
             DriveRecordState.OP_PUT -> true
@@ -954,7 +965,7 @@ internal class DriveAnnotationSync(
         }
 
         // Detect an unpublished local edit made after `existingState` was persisted.
-        if (liveRow != null && liveContentFp != null && liveContentFp != existingState.contentFp) {
+        if (liveRow != null && liveContentFp != null && liveContentFp != baselineFp) {
             val editAnc = (listOf(existingState.versionFp) + stateAnc)
                 .distinct()
                 .filter { it != liveContentFp }
@@ -1002,7 +1013,7 @@ internal class DriveAnnotationSync(
             )
         }
 
-        val matches = (stateIsLivePut && liveRow != null && liveContentFp == existingState.contentFp) ||
+        val matches = (stateIsLivePut && liveRow != null && liveContentFp == baselineFp) ||
             (!stateIsLivePut && liveRow == null)
 
         return LocalRecordView(
@@ -1010,7 +1021,7 @@ internal class DriveAnnotationSync(
             versionOp = existingState.versionOp,
             isLivePut = stateIsLivePut,
             publishedFp = existingState.publishedFp,
-            contentFp = existingState.contentFp,
+            contentFp = baselineFp,
             originDeviceId = existingState.originDeviceId,
             originSeq = existingState.originSeq,
             ancestors = stateAnc,

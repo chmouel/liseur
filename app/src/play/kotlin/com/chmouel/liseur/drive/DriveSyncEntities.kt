@@ -169,6 +169,13 @@ data class DriveRecordState(
     @ColumnInfo(name = "res_refs_json", defaultValue = "'[]'") val resRefsJson: String = "[]",
     @ColumnInfo(name = "last_hlc") val lastHlc: String,
     @ColumnInfo(name = "body_json") val bodyJson: String? = null,
+    /**
+     * The version is retained but deliberately not materialized: its `workKey` has no local
+     * book yet (`docs/DRIVE_SYNC.md` §4). The row is the record's causal baseline and is never
+     * published by this device; materialization replays it as an incoming record once the
+     * catalog gives the work a book, and clears the flag.
+     */
+    @ColumnInfo(name = "held", defaultValue = "0") val held: Boolean = false,
 ) {
     companion object {
         const val OP_PUT = "put"

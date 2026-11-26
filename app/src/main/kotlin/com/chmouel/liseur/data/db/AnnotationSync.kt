@@ -131,6 +131,14 @@ interface AnnotationSyncDao {
     @Query("DELETE FROM annotation_sync WHERE book_id = :bookId")
     suspend fun forgetBook(bookId: String)
 
+    /** Book keys starting with [prefix], to find agreements retained under a synthetic key. */
+    @Query("SELECT DISTINCT book_id FROM annotation_sync WHERE book_id LIKE :prefix || '%'")
+    suspend fun bookKeysWithPrefix(prefix: String): List<String>
+
+    /** Re-points the agreements retained for a work onto the book that now represents it. */
+    @Query("UPDATE annotation_sync SET book_id = :to WHERE book_id = :from")
+    suspend fun moveBook(from: String, to: String)
+
     /** Forgets everything one server had confirmed. */
     @Query("DELETE FROM annotation_sync WHERE peer_id = :peerId")
     suspend fun forgetPeer(peerId: String)

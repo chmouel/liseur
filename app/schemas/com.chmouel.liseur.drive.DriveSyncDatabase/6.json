@@ -1,0 +1,836 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 6,
+    "identityHash": "2b4330f0c35dceb26d7c2f0ebb79a77e",
+    "entities": [
+      {
+        "tableName": "drive_install",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER NOT NULL, `device_id` TEXT NOT NULL, `created_at` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "deviceId",
+            "columnName": "device_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "drive_account",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`permission_id` TEXT NOT NULL, `email` TEXT NOT NULL, `state` TEXT NOT NULL, `connected_at` INTEGER NOT NULL, `last_success_at` INTEGER, `last_error` TEXT, `folder_id` TEXT, `start_page_token` TEXT, `next_seq` INTEGER NOT NULL DEFAULT 1, `manifest_file_id` TEXT, `snapshot_through_seq` INTEGER NOT NULL DEFAULT 0, `deltas_since_snapshot` INTEGER NOT NULL DEFAULT 0, `hlc_wall_ms` INTEGER NOT NULL DEFAULT 0, `hlc_counter` INTEGER NOT NULL DEFAULT 0, `metered_transfers` INTEGER NOT NULL DEFAULT 0, `upload_selection_at` INTEGER, `pending_switch_previous_state` TEXT, PRIMARY KEY(`permission_id`))",
+        "fields": [
+          {
+            "fieldPath": "permissionId",
+            "columnName": "permission_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "email",
+            "columnName": "email",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "state",
+            "columnName": "state",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "connectedAt",
+            "columnName": "connected_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSuccessAt",
+            "columnName": "last_success_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "lastError",
+            "columnName": "last_error",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "folderId",
+            "columnName": "folder_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "startPageToken",
+            "columnName": "start_page_token",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "nextSeq",
+            "columnName": "next_seq",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "1"
+          },
+          {
+            "fieldPath": "manifestFileId",
+            "columnName": "manifest_file_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "snapshotThroughSeq",
+            "columnName": "snapshot_through_seq",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "deltasSinceSnapshot",
+            "columnName": "deltas_since_snapshot",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "hlcWallMs",
+            "columnName": "hlc_wall_ms",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "hlcCounter",
+            "columnName": "hlc_counter",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "meteredTransfers",
+            "columnName": "metered_transfers",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "uploadSelectionAt",
+            "columnName": "upload_selection_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "pendingSwitchPreviousState",
+            "columnName": "pending_switch_previous_state",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "permission_id"
+          ]
+        }
+      },
+      {
+        "tableName": "drive_device",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`permission_id` TEXT NOT NULL, `device_id` TEXT NOT NULL, `label` TEXT NOT NULL, `manifest_file_id` TEXT, `app_version_code` INTEGER NOT NULL DEFAULT 0, `snapshot_through_seq` INTEGER NOT NULL DEFAULT 0, `last_seen_at` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`permission_id`, `device_id`))",
+        "fields": [
+          {
+            "fieldPath": "permissionId",
+            "columnName": "permission_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "deviceId",
+            "columnName": "device_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "label",
+            "columnName": "label",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "manifestFileId",
+            "columnName": "manifest_file_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "appVersionCode",
+            "columnName": "app_version_code",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "snapshotThroughSeq",
+            "columnName": "snapshot_through_seq",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "lastSeenAt",
+            "columnName": "last_seen_at",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "permission_id",
+            "device_id"
+          ]
+        }
+      },
+      {
+        "tableName": "drive_cursor",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`permission_id` TEXT NOT NULL, `device_id` TEXT NOT NULL, `domain` TEXT NOT NULL, `applied_seq` INTEGER NOT NULL DEFAULT 0, `paused_schema_version` INTEGER, PRIMARY KEY(`permission_id`, `device_id`, `domain`))",
+        "fields": [
+          {
+            "fieldPath": "permissionId",
+            "columnName": "permission_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "deviceId",
+            "columnName": "device_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "domain",
+            "columnName": "domain",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "appliedSeq",
+            "columnName": "applied_seq",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "pausedSchemaVersion",
+            "columnName": "paused_schema_version",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "permission_id",
+            "device_id",
+            "domain"
+          ]
+        }
+      },
+      {
+        "tableName": "drive_file",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`permission_id` TEXT NOT NULL, `file_id` TEXT NOT NULL, `name` TEXT NOT NULL, `kind` TEXT NOT NULL, `device_id` TEXT, `seq` INTEGER, `sha256` TEXT, `size` INTEGER, `md5` TEXT, `trashed` INTEGER NOT NULL DEFAULT 0, `created_time` TEXT, PRIMARY KEY(`permission_id`, `file_id`))",
+        "fields": [
+          {
+            "fieldPath": "permissionId",
+            "columnName": "permission_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fileId",
+            "columnName": "file_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "kind",
+            "columnName": "kind",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "deviceId",
+            "columnName": "device_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "seq",
+            "columnName": "seq",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "sha256",
+            "columnName": "sha256",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "size",
+            "columnName": "size",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "md5",
+            "columnName": "md5",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "trashed",
+            "columnName": "trashed",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "createdTime",
+            "columnName": "created_time",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "permission_id",
+            "file_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_drive_file_permission_id_kind_sha256",
+            "unique": false,
+            "columnNames": [
+              "permission_id",
+              "kind",
+              "sha256"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_drive_file_permission_id_kind_sha256` ON `${TABLE_NAME}` (`permission_id`, `kind`, `sha256`)"
+          }
+        ]
+      },
+      {
+        "tableName": "drive_outbox",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`permission_id` TEXT NOT NULL, `seq` INTEGER NOT NULL, `batch_id` TEXT NOT NULL, `payload` TEXT NOT NULL, `state` TEXT NOT NULL, `file_id` TEXT, `created_at` INTEGER NOT NULL, `ack_metadata_json` TEXT, PRIMARY KEY(`permission_id`, `seq`))",
+        "fields": [
+          {
+            "fieldPath": "permissionId",
+            "columnName": "permission_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "seq",
+            "columnName": "seq",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "batchId",
+            "columnName": "batch_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "payload",
+            "columnName": "payload",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "state",
+            "columnName": "state",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fileId",
+            "columnName": "file_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ackMetadataJson",
+            "columnName": "ack_metadata_json",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "permission_id",
+            "seq"
+          ]
+        }
+      },
+      {
+        "tableName": "drive_record_state",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`permission_id` TEXT NOT NULL, `domain` TEXT NOT NULL, `record_key` TEXT NOT NULL, `version_fp` TEXT NOT NULL, `version_op` TEXT NOT NULL, `published_fp` TEXT, `content_fp` TEXT, `last_synced_revision` INTEGER, `origin_device_id` TEXT, `origin_seq` INTEGER, `ancestors_json` TEXT NOT NULL DEFAULT '[]', `res_refs_json` TEXT NOT NULL DEFAULT '[]', `last_hlc` TEXT NOT NULL, `body_json` TEXT, `held` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`permission_id`, `domain`, `record_key`))",
+        "fields": [
+          {
+            "fieldPath": "permissionId",
+            "columnName": "permission_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "domain",
+            "columnName": "domain",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "recordKey",
+            "columnName": "record_key",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "versionFp",
+            "columnName": "version_fp",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "versionOp",
+            "columnName": "version_op",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "publishedFp",
+            "columnName": "published_fp",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "contentFp",
+            "columnName": "content_fp",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "lastSyncedRevision",
+            "columnName": "last_synced_revision",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "originDeviceId",
+            "columnName": "origin_device_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "originSeq",
+            "columnName": "origin_seq",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "ancestorsJson",
+            "columnName": "ancestors_json",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'[]'"
+          },
+          {
+            "fieldPath": "resRefsJson",
+            "columnName": "res_refs_json",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'[]'"
+          },
+          {
+            "fieldPath": "lastHlc",
+            "columnName": "last_hlc",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "bodyJson",
+            "columnName": "body_json",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "held",
+            "columnName": "held",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "permission_id",
+            "domain",
+            "record_key"
+          ]
+        }
+      },
+      {
+        "tableName": "drive_resolution",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`permission_id` TEXT NOT NULL, `domain` TEXT NOT NULL, `record_key` TEXT NOT NULL, `resolution_fp` TEXT NOT NULL, `resolved_fps_json` TEXT NOT NULL, `outcome` TEXT NOT NULL, `hlc` TEXT NOT NULL, `author_device_id` TEXT NOT NULL, `created_at` INTEGER NOT NULL, PRIMARY KEY(`permission_id`, `domain`, `record_key`, `resolution_fp`))",
+        "fields": [
+          {
+            "fieldPath": "permissionId",
+            "columnName": "permission_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "domain",
+            "columnName": "domain",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "recordKey",
+            "columnName": "record_key",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "resolutionFp",
+            "columnName": "resolution_fp",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "resolvedFpsJson",
+            "columnName": "resolved_fps_json",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "outcome",
+            "columnName": "outcome",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "hlc",
+            "columnName": "hlc",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "authorDeviceId",
+            "columnName": "author_device_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "permission_id",
+            "domain",
+            "record_key",
+            "resolution_fp"
+          ]
+        }
+      },
+      {
+        "tableName": "drive_conflict",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`permission_id` TEXT NOT NULL, `conflict_id` TEXT NOT NULL, `domain` TEXT NOT NULL, `record_key` TEXT NOT NULL, `book_url` TEXT, `kind` TEXT NOT NULL, `local_fp` TEXT NOT NULL, `remote_fp` TEXT NOT NULL, `remote_json` TEXT, `remote_device_id` TEXT NOT NULL, `remote_hlc` TEXT NOT NULL, `remote_op` TEXT, `remote_seq` INTEGER, `remote_anc_json` TEXT, `remote_res_refs_json` TEXT, `state` TEXT NOT NULL, `choice` TEXT, `resolution_fp` TEXT, `opened_at` INTEGER NOT NULL, `resolved_at` INTEGER, PRIMARY KEY(`permission_id`, `conflict_id`))",
+        "fields": [
+          {
+            "fieldPath": "permissionId",
+            "columnName": "permission_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "conflictId",
+            "columnName": "conflict_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "domain",
+            "columnName": "domain",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "recordKey",
+            "columnName": "record_key",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "bookUrl",
+            "columnName": "book_url",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "kind",
+            "columnName": "kind",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "localFp",
+            "columnName": "local_fp",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "remoteFp",
+            "columnName": "remote_fp",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "remoteJson",
+            "columnName": "remote_json",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "remoteDeviceId",
+            "columnName": "remote_device_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "remoteHlc",
+            "columnName": "remote_hlc",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "remoteOp",
+            "columnName": "remote_op",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "remoteSeq",
+            "columnName": "remote_seq",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "remoteAncJson",
+            "columnName": "remote_anc_json",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "remoteResRefsJson",
+            "columnName": "remote_res_refs_json",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "state",
+            "columnName": "state",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "choice",
+            "columnName": "choice",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "resolutionFp",
+            "columnName": "resolution_fp",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "openedAt",
+            "columnName": "opened_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "resolvedAt",
+            "columnName": "resolved_at",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "permission_id",
+            "conflict_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_drive_conflict_permission_id_state",
+            "unique": false,
+            "columnNames": [
+              "permission_id",
+              "state"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_drive_conflict_permission_id_state` ON `${TABLE_NAME}` (`permission_id`, `state`)"
+          },
+          {
+            "name": "index_drive_conflict_permission_id_domain_record_key",
+            "unique": false,
+            "columnNames": [
+              "permission_id",
+              "domain",
+              "record_key"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_drive_conflict_permission_id_domain_record_key` ON `${TABLE_NAME}` (`permission_id`, `domain`, `record_key`)"
+          }
+        ]
+      },
+      {
+        "tableName": "drive_session_ack",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`permission_id` TEXT NOT NULL, `remote_session_id` TEXT NOT NULL, `batch_seq` INTEGER NOT NULL, `acked_at` INTEGER NOT NULL, PRIMARY KEY(`permission_id`, `remote_session_id`))",
+        "fields": [
+          {
+            "fieldPath": "permissionId",
+            "columnName": "permission_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "remoteSessionId",
+            "columnName": "remote_session_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "batchSeq",
+            "columnName": "batch_seq",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ackedAt",
+            "columnName": "acked_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "permission_id",
+            "remote_session_id"
+          ]
+        }
+      },
+      {
+        "tableName": "drive_upload",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`permission_id` TEXT NOT NULL, `sha256` TEXT NOT NULL, `book_url` TEXT NOT NULL, `size_bytes` INTEGER NOT NULL, `state` TEXT NOT NULL, `session_uri` TEXT, `bytes_sent` INTEGER NOT NULL DEFAULT 0, `file_id` TEXT, `selected_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, `auto_selected` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`permission_id`, `sha256`))",
+        "fields": [
+          {
+            "fieldPath": "permissionId",
+            "columnName": "permission_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sha256",
+            "columnName": "sha256",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "bookUrl",
+            "columnName": "book_url",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sizeBytes",
+            "columnName": "size_bytes",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "state",
+            "columnName": "state",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sessionUri",
+            "columnName": "session_uri",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "bytesSent",
+            "columnName": "bytes_sent",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "fileId",
+            "columnName": "file_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "selectedAt",
+            "columnName": "selected_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "autoSelected",
+            "columnName": "auto_selected",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "permission_id",
+            "sha256"
+          ]
+        }
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '2b4330f0c35dceb26d7c2f0ebb79a77e')"
+    ]
+  }
+}

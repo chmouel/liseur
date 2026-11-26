@@ -38,6 +38,8 @@ internal class DriveSeriesSync(
         for (state in recordStates.forDomain(permissionId, DriveWireCodec.DOMAIN_SERIES)) {
             if (state.versionOp != DriveRecordState.OP_RESOLVE) continue
             if (state.publishedFp == state.versionFp) continue
+            // A held version was not minted here: this device never owed it as a publication.
+            if (state.held) continue
             val res = resolutions.get(permissionId, DriveWireCodec.DOMAIN_SERIES, state.recordKey, state.versionFp)
                 ?: continue
             val workKey = workIdentity.canonicalWorkKey(permissionId, state.recordKey)
@@ -87,6 +89,8 @@ internal class DriveSeriesSync(
             }
 
             val existingState = recordStates.get(permissionId, DriveWireCodec.DOMAIN_SERIES, workKey)
+            // Never publish over a version retained for a work that has not materialized yet.
+            if (existingState?.held == true) continue
             val existingBody = existingState?.bodyJson?.let {
                 runCatching { DriveWireCodec.decodeSeriesBody(JSONObject(it)) }.getOrNull()
             }
@@ -255,8 +259,10 @@ internal class DriveSeriesSync(
         }
         val rawWorkKey = decodedBody?.workKey ?: record.k
         val canonicalWorkKey = workIdentity.canonicalWorkKey(permissionId, rawWorkKey)
-        val bookUrl = findBookUrlForWorkKey(permissionId, canonicalWorkKey) ?: return true
-        val book = books.getByUrl(bookUrl) ?: return true
+        // A catalog tombstone counts as a known catalog entry, so this record is not deferred.
+        // Without a local book there is nothing to write to: retain it as held history (§4).
+        val bookUrl = findBookUrlForWorkKey(permissionId, canonicalWorkKey)
+        val book = bookUrl?.let { books.getByUrl(it) }
         val normalizedBody = decodedBody?.copy(workKey = canonicalWorkKey)
         val incomingContentFp = normalizedBody?.let {
             DriveCanonicalJson.contentFp(DriveWireCodec.encodeSeriesBody(it))
@@ -266,16 +272,21 @@ internal class DriveSeriesSync(
         val existingResolutions = resolutions.forRecord(permissionId, DriveWireCodec.DOMAIN_SERIES, canonicalWorkKey)
         val unsettledConflicts = conflicts.unsettledForRecord(permissionId, DriveWireCodec.DOMAIN_SERIES, canonicalWorkKey)
 
-        val localView = buildLocalRecordView(
-            book = book,
-            workKey = canonicalWorkKey,
-            existingState = existingState,
-            existingResolutions = existingResolutions,
-            incoming = record,
-            incomingContentFp = incomingContentFp,
-            isIncomingDelete = isIncomingDelete,
-            nextHlc = nextHlc,
-        )
+        val localView = if (book == null) {
+            DriveHeldRecords.localView(existingState)
+        } else {
+            buildLocalRecordView(
+                book = book,
+                workKey = canonicalWorkKey,
+                // A held row is retained history, not data in this book, so nothing local matches it.
+                existingState = existingState?.takeUnless { it.held },
+                existingResolutions = existingResolutions,
+                incoming = record,
+                incomingContentFp = incomingContentFp,
+                isIncomingDelete = isIncomingDelete,
+                nextHlc = nextHlc,
+            )
+        }
 
         val result = DriveConflictEngine.reconcileIncoming(
             permissionId = permissionId,
@@ -293,28 +304,29 @@ internal class DriveSeriesSync(
         )
 
         var staleLocal = false
-        // Transaction 1 (`liseur.db`): apply series columns atomically.
+        // Transaction 1 (`liseur.db`): apply series columns atomically. A held record has no
+        // book to write to and only its causal state is retained.
         var appliedContentFp: String? = null
         when (val action = result.dataAction) {
-            is ReconciliationDataAction.ApplyPut -> {
+            is ReconciliationDataAction.ApplyPut -> if (book != null) {
                 // A parked successor can win over the incoming resolution, so apply the body the engine chose.
                 val body = DriveWireCodec.decodeSeriesBody(action.body)?.copy(workKey = canonicalWorkKey) ?: return true
                 appliedContentFp = DriveCanonicalJson.contentFp(DriveWireCodec.encodeSeriesBody(body))
                 database.withTransaction {
-                    if (books.getByUrl(bookUrl)?.let(::seriesEditState) != seriesEditState(book)) {
+                    if (books.getByUrl(book.url)?.let(::seriesEditState) != seriesEditState(book)) {
                         staleLocal = true
                         return@withTransaction
                     }
-                    applySeriesBodyToBook(bookUrl, body)
+                    applySeriesBodyToBook(book.url, body)
                 }
             }
-            ReconciliationDataAction.ApplyDelete -> {
+            ReconciliationDataAction.ApplyDelete -> if (book != null) {
                 database.withTransaction {
-                    if (books.getByUrl(bookUrl)?.let(::seriesEditState) != seriesEditState(book)) {
+                    if (books.getByUrl(book.url)?.let(::seriesEditState) != seriesEditState(book)) {
                         staleLocal = true
                         return@withTransaction
                     }
-                    clearSeriesOverridesOnBook(bookUrl)
+                    clearSeriesOverridesOnBook(book.url)
                 }
             }
             ReconciliationDataAction.NoDataChange -> Unit
@@ -339,7 +351,9 @@ internal class DriveSeriesSync(
             }
             result.conflictToOpen?.let { conflicts.upsert(it) }
             result.updatedRecordState?.let { updated ->
-                recordStates.upsert(appliedContentFp?.let { updated.copy(contentFp = it) } ?: updated)
+                var persisted = appliedContentFp?.let { updated.copy(contentFp = it) } ?: updated
+                if (bookUrl == null) persisted = persisted.copy(held = true)
+                recordStates.upsert(persisted)
             }
         }
         return true

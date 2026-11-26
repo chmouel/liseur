@@ -88,6 +88,7 @@ internal class DriveChangeEngine(
     private val cursors get() = store.cursors()
     private val files get() = store.files()
     private val outbox get() = store.outbox()
+    private val recordStates get() = store.recordStates()
     private val resolutions get() = store.resolutions()
     private val conflicts get() = store.conflicts()
 
@@ -312,6 +313,13 @@ internal class DriveChangeEngine(
         if (!isAccountActive(permissionId)) {
             return DriveSyncRunSummary(SyncOutcome.NotApplicable)
         }
+
+        // Retained history whose work got its book back during this pull (or a previous,
+        // interrupted one) replays now, before local diffing can publish over it.
+        materializeHeldRecords(permissionId, localDeviceId, accessToken)
+
+        // History kept under a synthetic key follows the work onto the book that now answers for it.
+        workIdentity.reattachHiddenHistory(permissionId)
 
         // 1b. Reconcile any interrupted pending snapshot publication against the remote manifest
         // BEFORE `publishPending` rewrites the manifest, so a crash between remote manifest
@@ -1000,8 +1008,9 @@ internal class DriveChangeEngine(
         accessToken: String,
         record: DriveWireRecord,
         batchObserved: Map<String, Long>? = null,
+        observeHlc: Boolean = true,
     ): Boolean {
-        observeRemoteHlc(permissionId, record.hlc)
+        if (observeHlc) observeRemoteHlc(permissionId, record.hlc)
         // A malformed record is dropped, not deferred: replaying it would never make it valid.
         if (!DriveWireCodec.bodyMatchesKey(record)) return true
         if (record.d in CATALOG_GATED_DOMAINS) {
@@ -1127,6 +1136,56 @@ internal class DriveChangeEngine(
             DriveWireCodec.DOMAIN_METADATA, DriveWireCodec.DOMAIN_EVALUATION -> record.k.substringBeforeLast('/', "")
             else -> ""
         }.trim()
+    }
+
+    /**
+     * Replays every retained (`held`) record whose work has a local book again.
+     *
+     * A fresh device can receive a catalog tombstone before the records of that work, so a
+     * `series`, `evaluation` or `metadata` record is retained instead of dropped (§4). Once the
+     * book comes back — a later catalog version, a re-import, or another device restoring it —
+     * the retained version is replayed as an ordinary incoming record. Its own row is only the
+     * baseline the record was decided against while it was held: the replay compares it with
+     * whatever the restored book holds now, so intervening local edits are reconciled instead
+     * of being mistaken for agreement. The flag clears only when that apply commits, so an
+     * interrupted run retries on the next one even when no fresh traffic arrives.
+     */
+    internal suspend fun materializeHeldRecords(
+        permissionId: String,
+        localDeviceId: String,
+        accessToken: String,
+    ) {
+        val held = recordStates.heldForAccount(permissionId)
+        if (held.isEmpty()) return
+        for (state in held) {
+            if (state.domain !in DriveHeldRecords.HELD_DOMAINS) continue
+            val workKey = DriveHeldRecords.workKeyFor(state.domain, state.recordKey)
+            if (workKey.isEmpty() || !workIdentity.hasLocalBookFor(permissionId, workKey)) continue
+            // A competition parked while the work had no book is the reader's once it has one.
+            workIdentity.liveBookUrlFor(permissionId, workKey)?.let { bookUrl ->
+                conflicts.attachBookUrl(permissionId, state.domain, state.recordKey, bookUrl)
+            }
+            val resolution = if (state.versionOp == DriveRecordState.OP_RESOLVE) {
+                resolutions.get(permissionId, state.domain, state.recordKey, state.versionFp)
+            } else {
+                null
+            }
+            val record = DriveHeldRecords.toWireRecord(
+                domain = state.domain,
+                state = state,
+                outcome = resolution?.outcome,
+                resolvedFps = resolution?.let { DriveWorkIdentity.decodeStringArray(it.resolvedFpsJson) }.orEmpty(),
+            ) ?: continue
+            applySingleRecord(
+                permissionId = permissionId,
+                localDeviceId = localDeviceId,
+                remoteDeviceId = state.originDeviceId ?: localDeviceId,
+                remoteSeq = state.originSeq ?: 0L,
+                accessToken = accessToken,
+                record = record,
+                observeHlc = false,
+            )
+        }
     }
 
     private suspend fun recoverResolvingConflicts(

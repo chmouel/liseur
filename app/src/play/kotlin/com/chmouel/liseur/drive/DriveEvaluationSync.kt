@@ -44,6 +44,8 @@ internal class DriveEvaluationSync(
         for (state in recordStates.forDomain(permissionId, DriveWireCodec.DOMAIN_EVALUATION)) {
             if (state.versionOp != DriveRecordState.OP_RESOLVE) continue
             if (state.publishedFp == state.versionFp) continue
+            // A held version was not minted here: this device never owed it as a publication.
+            if (state.held) continue
             val res = resolutions.get(permissionId, DriveWireCodec.DOMAIN_EVALUATION, state.recordKey, state.versionFp)
                 ?: continue
             val (rawWorkKey, field) = parseRecordKey(state.recordKey) ?: continue
@@ -122,6 +124,9 @@ internal class DriveEvaluationSync(
                 )
 
                 if (row == null) continue
+                // Never publish over a version retained for a work that has not materialized yet:
+                // the deferred apply must reconcile against it, not replace it unseen.
+                if (existingState?.held == true) continue
                 val needsPublish = row.owed(sync) ||
                     (existingState != null && existingState.versionFp != existingState.publishedFp)
                 if (!needsPublish) continue
@@ -357,14 +362,16 @@ internal class DriveEvaluationSync(
 
         val canonicalWorkKey = workIdentity.canonicalWorkKey(permissionId, rawWorkKey)
         val canonicalKey = recordKey(canonicalWorkKey, field)
-        val bookUrl = findBookUrlForWorkKey(permissionId, canonicalWorkKey) ?: return true
-        val book = books.getByUrl(bookUrl)
+        // A catalog tombstone counts as a known catalog entry, so this record is not deferred.
+        // Without a local book there is nothing to write to: retain it as held history (§4).
+        val bookUrl = findBookUrlForWorkKey(permissionId, canonicalWorkKey)
+        val book = bookUrl?.let { books.getByUrl(it) }
         val incomingContentFp = decodedBody?.let {
             DriveCanonicalJson.contentFp(DriveWireCodec.encodeEvaluationBody(it.copy(workKey = canonicalWorkKey)))
         }
 
-        val row = evaluations.get(bookUrl, field)
-        val sync = evaluations.state(peerId, bookUrl, field)
+        val row = bookUrl?.let { evaluations.get(it, field) }
+        val sync = bookUrl?.let { evaluations.state(peerId, it, field) }
 
         // Always run revision-to-fp crash recovery BEFORE reconciling incoming record.
         val existingState = recoverFromRevisionSync(
@@ -379,19 +386,25 @@ internal class DriveEvaluationSync(
         val existingResolutions = resolutions.forRecord(permissionId, DriveWireCodec.DOMAIN_EVALUATION, canonicalKey)
         val unsettledConflicts = conflicts.unsettledForRecord(permissionId, DriveWireCodec.DOMAIN_EVALUATION, canonicalKey)
 
-        val localView = buildLocalRecordView(
-            workKey = canonicalWorkKey,
-            field = field,
-            recordKey = canonicalKey,
-            row = row,
-            sync = sync,
-            existingState = existingState,
-            existingResolutions = existingResolutions,
-            incoming = record,
-            incomingContentFp = incomingContentFp,
-            isIncomingDelete = isIncomingDelete,
-            nextHlc = nextHlc,
-        )
+        val localView = if (bookUrl == null) {
+            DriveHeldRecords.localView(existingState)
+        } else {
+            buildLocalRecordView(
+                workKey = canonicalWorkKey,
+                field = field,
+                recordKey = canonicalKey,
+                row = row,
+                sync = sync,
+                // A held row is retained history, not data in this book, so nothing local matches it.
+                existingState = existingState?.takeUnless { it.held },
+                existingResolutions = existingResolutions,
+                incoming = record,
+                incomingContentFp = incomingContentFp,
+                isIncomingDelete = isIncomingDelete,
+                nextHlc = nextHlc,
+                heldReplay = existingState?.held == true,
+            )
+        }
 
         val result = DriveConflictEngine.reconcileIncoming(
             permissionId = permissionId,
@@ -417,8 +430,9 @@ internal class DriveEvaluationSync(
         val ackOp = appliedState?.versionOp ?: record.op
         var appliedContentFp: String? = null
         // Transaction 1 (`liseur.db`): atomic data + `evaluation_sync` revision-to-fp ack.
+        // A held record has no book to write to and only its causal state is retained.
         when (val action = result.dataAction) {
-            is ReconciliationDataAction.ApplyPut -> {
+            is ReconciliationDataAction.ApplyPut -> if (bookUrl != null) {
                 val body = DriveWireCodec.decodeEvaluationBody(action.body) ?: return true
                 val bodyContentFp = DriveCanonicalJson.contentFp(
                     DriveWireCodec.encodeEvaluationBody(body.copy(workKey = canonicalWorkKey)),
@@ -465,7 +479,7 @@ internal class DriveEvaluationSync(
                     appliedRev = revApplied
                 }
             }
-            ReconciliationDataAction.ApplyDelete -> {
+            ReconciliationDataAction.ApplyDelete -> if (bookUrl != null) {
                 database.withTransaction {
                     if (evaluations.get(bookUrl, field)?.revision != row?.revision) {
                         staleLocal = true
@@ -531,6 +545,7 @@ internal class DriveEvaluationSync(
             result.updatedRecordState?.let { updated ->
                 var persisted = if (appliedRev != null) updated.copy(lastSyncedRevision = appliedRev) else updated
                 appliedContentFp?.let { persisted = persisted.copy(contentFp = it) }
+                if (bookUrl == null) persisted = persisted.copy(held = true)
                 recordStates.upsert(persisted)
             }
         }
@@ -892,6 +907,7 @@ internal class DriveEvaluationSync(
         incomingContentFp: String?,
         isIncomingDelete: Boolean,
         nextHlc: suspend () -> String,
+        heldReplay: Boolean = false,
     ): LocalRecordView {
         val liveBodyMap = row?.value?.takeIf { PersonalEvaluation.valid(field, it) }?.let { v ->
             DriveWireCodec.encodeEvaluationBody(DriveEvaluationBody(workKey, field, v, row.updatedAt))
@@ -915,6 +931,18 @@ internal class DriveEvaluationSync(
                     localRowMatchesContentFp = true,
                     postCrashAckMatchesIncoming = postCrashAckMatchesIncoming,
                     hasPostCrashLocalEdit = hasPostCrashLocalEdit,
+                )
+            }
+            // A rating the reader cleared is a real revisioned deletion, not absent data. Replaying a
+            // retained version must see it as a competing edit instead of overwriting the clear.
+            if (heldReplay && row.revision > 0L) {
+                return LocalRecordView(
+                    versionFp = DriveCanonicalJson.delFp(DriveWireCodec.DOMAIN_EVALUATION, recordKey, nextHlc()),
+                    versionOp = DriveRecordState.OP_DEL,
+                    isLivePut = false,
+                    contentFp = null,
+                    bodyJson = null,
+                    localRowMatchesContentFp = true,
                 )
             }
             return LocalRecordView(versionFp = null)
