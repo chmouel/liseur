@@ -111,6 +111,70 @@ internal class DrivePositionSync(
     override suspend fun previewBook(bookUrl: String): PreviewOutcome =
         previewKnownBook(bookUrl)
 
+    private suspend fun pendingPositionState(
+        bookUrl: String,
+        drivePeerId: String,
+        stored: ReadingProgress?,
+        alias: WorkAlias?,
+        excludingPeerId: String? = null,
+    ): SyncPeerState? = peerStateDao.pendingForDriveBook(bookUrl, drivePeerId)
+        .filter { it.peerId != excludingPeerId && !pendingPositionAgrees(it, stored, alias) }
+        .maxWithOrNull(compareBy<SyncPeerState> { it.pendingProgression }.thenByDescending { it.peerId })
+
+    private fun pendingPositionAgrees(state: SyncPeerState, stored: ReadingProgress?, alias: WorkAlias?): Boolean {
+        val exact = state.exactLocatorFor(alias)
+        return SyncPreview(
+            local = stored?.totalProgression,
+            remote = state.pendingProgression,
+            remoteAt = state.remoteUpdatedAt,
+            exactPositionAgreement = ExactLocatorAnchor.agreement(stored?.locatorJson, exact),
+        ).agrees
+    }
+
+    private fun samePendingPosition(first: SyncPeerState, second: SyncPeerState): Boolean {
+        if (first.pendingEditionSha != second.pendingEditionSha) return false
+        if (first.pendingEditionSha == null &&
+            (ExactLocatorAnchor.isExactJson(first.pendingLocatorJson) || ExactLocatorAnchor.isExactJson(second.pendingLocatorJson))
+        ) return false
+        val exact = if (first.pendingEditionSha != null) {
+            ExactLocatorAnchor.agreement(first.pendingLocatorJson, second.pendingLocatorJson)
+        } else {
+            null
+        }
+        return SyncPreview(
+            local = first.pendingProgression,
+            remote = second.pendingProgression,
+            remoteAt = second.remoteUpdatedAt,
+            exactPositionAgreement = exact,
+        ).agrees
+    }
+
+    private suspend fun settleAgreeingPositions(
+        bookUrl: String,
+        drivePeerId: String,
+        progress: ReadingProgress,
+        alias: WorkAlias?,
+        status: ReadingStatus,
+        now: Long,
+    ) {
+        for (state in peerStateDao.pendingForDriveBook(bookUrl, drivePeerId)) {
+            if (pendingPositionAgrees(state, progress, alias)) {
+                if (state.peerId == drivePeerId) {
+                    peerStateDao.clearPending(bookUrl, drivePeerId)
+                    continue
+                }
+                peerStateDao.settle(
+                    bookUrl = bookUrl,
+                    peerId = state.peerId,
+                    ackedRevision = progress.localRevision,
+                    progression = progress.totalProgression,
+                    status = status.wireName,
+                    now = now,
+                )
+            }
+        }
+    }
+
     override suspend fun previewKnownBook(bookUrl: String): PreviewOutcome {
         val account = activeAccount() ?: return PreviewOutcome.NotSynced
         val drivePeerId = DriveLibrarySync.accountPeerId(account.permissionId)
@@ -119,7 +183,8 @@ internal class DrivePositionSync(
             ?.takeIf { it.usable }
             ?: return PreviewOutcome.NotSynced
         val stored = progressDao.get(bookUrl)
-        val peerState = peerStateDao.get(bookUrl, drivePeerId)
+        val peerState = pendingPositionState(bookUrl, drivePeerId, stored, alias)
+        val deliveryState = peerStateDao.get(bookUrl, drivePeerId)
         val destination = furthestDestination(account.permissionId, bookUrl, alias)
         val hasPending = peerState?.hasPending == true && peerState.pendingProgression != null
         if (!hasPending && destination == null) return PreviewOutcome.NotSynced
@@ -137,7 +202,7 @@ internal class DrivePositionSync(
                 } else {
                     null
                 },
-                accountKey = drivePeerId,
+                accountKey = peerState?.peerId ?: drivePeerId,
                 remoteStatus = if (hasPending) peerState.pendingStatus else null,
                 remoteLocatorJson = if (hasPending) peerState.restorableLocatorFor(alias) else null,
                 localRevision = stored?.localRevision,
@@ -145,7 +210,7 @@ internal class DrivePositionSync(
                 furthest = destination,
                 localLocatorJson = stored?.locatorJson,
                 furthestUptoSeq = knownMaxSeq(account.permissionId, alias.workId),
-                localUnreadResetPending = stored?.hasPendingUnreadReset(peerState?.ackedRevision ?: 0L) == true,
+                localUnreadResetPending = stored?.hasPendingUnreadReset(deliveryState?.ackedRevision ?: 0L) == true,
             ),
         )
     }
@@ -153,11 +218,10 @@ internal class DrivePositionSync(
     override suspend fun preservedConflict(bookUrl: String, peerId: String?): SyncPreview? {
         val account = activeAccount() ?: return null
         val drivePeerId = DriveLibrarySync.accountPeerId(account.permissionId)
-        val state = peerStateDao.get(bookUrl, drivePeerId) ?: return null
-        if (!state.hasPending) return null
-        val there = state.pendingProgression ?: return null
         val stored = progressDao.get(bookUrl)
         val alias = identities.alias(bookUrl, drivePeerId)
+        val state = pendingPositionState(bookUrl, drivePeerId, stored, alias) ?: return null
+        val there = state.pendingProgression ?: return null
         val exact = state.exactLocatorFor(alias)
         return SyncPreview(
             local = stored?.totalProgression,
@@ -166,11 +230,13 @@ internal class DrivePositionSync(
             excerpt = ExactLocatorAnchor.excerpt(exact),
             confidence = if (exact != null) ResumeConfidence.EXACT else ResumeConfidence.APPROXIMATE,
             exactPositionAgreement = ExactLocatorAnchor.agreement(stored?.locatorJson, exact),
-            accountKey = drivePeerId,
+            accountKey = state.peerId,
             remoteStatus = state.pendingStatus,
             remoteLocatorJson = state.restorableLocatorFor(alias),
             localRevision = stored?.localRevision,
-            localUnreadResetPending = stored?.hasPendingUnreadReset(state.ackedRevision) == true,
+            localUnreadResetPending = stored?.hasPendingUnreadReset(
+                peerStateDao.get(bookUrl, drivePeerId)?.ackedRevision ?: 0L,
+            ) == true,
         ).takeIf { !it.agrees }
     }
 
@@ -186,10 +252,16 @@ internal class DrivePositionSync(
             ResolveOutcome.Done
         }
         val drivePeerId = DriveLibrarySync.accountPeerId(account.permissionId)
-        if (expectedAccountKey != null && expectedAccountKey != drivePeerId) {
+        if (expectedAccountKey != null && expectedAccountKey != drivePeerId &&
+            !expectedAccountKey.startsWith("$drivePeerId/")
+        ) {
             return ResolveOutcome.Superseded
         }
-        val state = peerStateDao.get(bookUrl, drivePeerId) ?: return if (expectedAccountKey != null) {
+        val state = if (expectedAccountKey != null) {
+            peerStateDao.get(bookUrl, expectedAccountKey)
+        } else {
+            pendingPositionState(bookUrl, drivePeerId, progressDao.get(bookUrl), identities.alias(bookUrl, drivePeerId))
+        } ?: return if (expectedAccountKey != null) {
             ResolveOutcome.Superseded
         } else {
             ResolveOutcome.Done
@@ -206,6 +278,7 @@ internal class DrivePositionSync(
         val now = clock()
         var applied = false
         database.withTransaction {
+            val before = progressDao.get(bookUrl)
             applied = progressDao.applyPeerPull(
                 bookUrl = bookUrl,
                 expectedRevision = atRevision,
@@ -217,14 +290,27 @@ internal class DrivePositionSync(
                 coverage = state.pendingCoverage,
             )
             if (applied) {
-                peerStateDao.settle(
-                    bookUrl = bookUrl,
-                    peerId = drivePeerId,
-                    ackedRevision = atRevision + 1L,
-                    progression = progression,
-                    status = status.wireName,
-                    now = now,
-                )
+                if (before != null) {
+                    settleAgreeingPositions(
+                        bookUrl, drivePeerId, before, alias,
+                        readingStatusFor(before.totalProgression, partialCoverage = before.partialCoverage), now,
+                    )
+                }
+                if (state.peerId == drivePeerId) {
+                    peerStateDao.clearPending(bookUrl, drivePeerId)
+                } else {
+                    peerStateDao.settle(
+                        bookUrl = bookUrl,
+                        peerId = state.peerId,
+                        ackedRevision = atRevision + 1L,
+                        progression = progression,
+                        status = status.wireName,
+                        now = now,
+                    )
+                }
+                progressDao.get(bookUrl)?.let {
+                    settleAgreeingPositions(bookUrl, drivePeerId, it, alias, status, now)
+                }
             }
         }
         if (!applied) return ResolveOutcome.Superseded
@@ -235,7 +321,22 @@ internal class DrivePositionSync(
     override suspend fun keepLocalPosition(bookUrl: String, peerId: String?): ResolveOutcome {
         val account = activeAccount() ?: return ResolveOutcome.Done
         val drivePeerId = DriveLibrarySync.accountPeerId(account.permissionId)
-        peerStateDao.clearPending(bookUrl, drivePeerId)
+        database.withTransaction {
+            val progress = progressDao.get(bookUrl)
+            val alias = identities.alias(bookUrl, drivePeerId)
+            val state = pendingPositionState(bookUrl, drivePeerId, progress, alias) ?: return@withTransaction
+            if (progress != null) {
+                settleAgreeingPositions(
+                    bookUrl, drivePeerId, progress, alias,
+                    readingStatusFor(progress.totalProgression, partialCoverage = progress.partialCoverage), clock(),
+                )
+            }
+            for (pending in peerStateDao.pendingForDriveBook(bookUrl, drivePeerId)) {
+                if (state.peerId == pending.peerId || samePendingPosition(state, pending)) {
+                    peerStateDao.clearPending(bookUrl, pending.peerId)
+                }
+            }
+        }
         return ResolveOutcome.Done
     }
 
@@ -263,6 +364,7 @@ internal class DrivePositionSync(
                 destination.progression,
                 partialCoverage = destination.coverage == NarrativeCoverage.PARTIAL,
             )
+            val before = progressDao.get(bookUrl)
             applied = progressDao.applyPeerPull(
                 bookUrl = bookUrl,
                 expectedRevision = atRevision,
@@ -274,7 +376,14 @@ internal class DrivePositionSync(
                 coverage = destination.coverage?.wireName,
             )
             if (applied) {
-                peerStateDao.clearPending(bookUrl, drivePeerId)
+                if (before != null) {
+                    settleAgreeingPositions(
+                        bookUrl, drivePeerId, before, alias,
+                        readingStatusFor(before.totalProgression, partialCoverage = before.partialCoverage), now,
+                    )
+                }
+                val progress = progressDao.get(bookUrl) ?: return@withTransaction
+                settleAgreeingPositions(bookUrl, drivePeerId, progress, alias, status, now)
             }
         }
         if (!applied) return ResolveOutcome.Superseded
@@ -991,27 +1100,12 @@ internal class DrivePositionSync(
         peakAcks: List<DrivePeakAckMeta>,
     ) {
         val drivePeerId = DriveLibrarySync.accountPeerId(permissionId)
-        val now = clock()
 
         // Transaction 1 (`liseur.db`): advance per-peer position/status/peak delivery acks.
         if (positionAcks.isNotEmpty() || peakAcks.isNotEmpty()) {
             database.withTransaction {
                 for (ack in positionAcks) {
-                    val currentPeerState = peerStateDao.get(ack.bookUrl, drivePeerId)
-                    if (currentPeerState?.hasPending == true) {
-                        // Preserve unresolved remote conflict until the reader chooses;
-                        // only advance delivery revision so this device stops re-uploading.
-                        peerStateDao.settlePositionRevision(ack.bookUrl, drivePeerId, ack.localRevision)
-                    } else if (currentPeerState == null || currentPeerState.ackedRevision <= ack.localRevision) {
-                        peerStateDao.settle(
-                            bookUrl = ack.bookUrl,
-                            peerId = drivePeerId,
-                            ackedRevision = ack.localRevision,
-                            progression = ack.progression,
-                            status = ack.status,
-                            now = now,
-                        )
-                    }
+                    peerStateDao.settlePositionRevision(ack.bookUrl, drivePeerId, ack.localRevision)
                     if (ack.statusRevision > 0L) {
                         peerStateDao.settleStatus(ack.bookUrl, drivePeerId, ack.statusRevision)
                     }
@@ -1066,27 +1160,23 @@ internal class DrivePositionSync(
         if (existing != null && record.hlc <= existing.lastHlc) return
 
         val canonicalWorkKey = workIdentity.canonicalWorkKey(permissionId, body.workKey)
-        val incoming = RemotePosition(lastHlc = record.hlc, recordKey = record.k, body = body)
-        val stored = selectWinningRemotePosition(permissionId, localDeviceId, canonicalWorkKey)
-        // Only apply when this record is the current winning remote position across all writers,
-        // so an older writer delivered after a newer one never overwrites the newer resume point.
-        if (stored == null || remotePositionOrder.compare(incoming, stored) > 0) {
-            val drivePeerId = DriveLibrarySync.accountPeerId(permissionId)
-            val matchingAliases = identities.aliasesFor(drivePeerId).filter { alias ->
-                alias.usable && workIdentity.canonicalWorkKey(permissionId, alias.workId) == canonicalWorkKey
-            }
-            val now = clock()
-
-            // Transaction 1 (`liseur.db`) before Transaction 2 (`drive_sync.db`): a crash in
-            // between must leave the record unpublished so the replay applies it, instead of
-            // storing it as done while the reading position was never reconciled.
+        val incoming = RemotePosition(record.hlc, record.k, body)
+        val previousPositions = remotePositions(permissionId, localDeviceId)
+            .filter { workIdentity.canonicalWorkKey(permissionId, it.body.workKey) == canonicalWorkKey }
+        val previousHead = previousPositions.filter { it.body.deviceId == body.deviceId && it.recordKey != record.k }
+            .maxWithOrNull(remotePositionOrder)
+        val statusHead = previousPositions.maxWithOrNull(remotePositionOrder)
+        val handleStatus = statusHead == null || remotePositionOrder.compare(incoming, statusHead) > 0
+        val drivePeerId = DriveLibrarySync.accountPeerId(permissionId)
+        val matchingAliases = identities.aliasesFor(drivePeerId).filter { alias ->
+            alias.usable && workIdentity.canonicalWorkKey(permissionId, alias.workId) == canonicalWorkKey
+        }
+        val now = clock()
+        // Reconcile before recording receipt so a crash replays the position.
+        if (previousHead == null || remotePositionOrder.compare(incoming, previousHead) > 0) {
             for (alias in matchingAliases) {
-                reconcileIncomingPositionForBook(
-                    drivePeerId = drivePeerId,
-                    alias = alias,
-                    body = incoming.body,
-                    now = now,
-                )
+                migrateLegacyPending(drivePeerId, alias, previousPositions, supersedingWriter = body.deviceId)
+                reconcileIncomingPositionForBook(drivePeerId, alias, body, now, handleStatus, record.hlc)
             }
         }
 
@@ -1118,7 +1208,7 @@ internal class DrivePositionSync(
     }
 
     /**
-     * Applies the current winning remote position already stored for each work to Drive aliases
+     * Applies stored remote positions for each work to Drive aliases
      * not yet seeded: a book matched, merged or re-keyed after those records arrived would
      * otherwise never see them, since their stream cursors have moved on.
      */
@@ -1126,63 +1216,87 @@ internal class DrivePositionSync(
         val drivePeerId = DriveLibrarySync.accountPeerId(permissionId)
         val unseeded = identities.aliasesFor(drivePeerId).filter { it.usable && !it.seeded }
         if (unseeded.isEmpty()) return
-        val winningByWork = linkedMapOf<String, RemotePosition>()
-        for (state in recordStates.forDomain(permissionId, DriveWireCodec.DOMAIN_POSITION)) {
-            if (state.versionOp != DriveRecordState.OP_PUT) continue
-            val body = state.bodyJson
-                ?.let { runCatching { DriveWireCodec.decodePositionBody(JSONObject(it)) }.getOrNull() }
-                ?.takeIf { it.deviceId != localDeviceId }
-                ?: continue
-            val canonical = workIdentity.canonicalWorkKey(permissionId, body.workKey)
-            val candidate = RemotePosition(lastHlc = state.lastHlc, recordKey = state.recordKey, body = body)
-            val current = winningByWork[canonical]
-            if (current == null || remotePositionOrder.compare(candidate, current) > 0) {
-                winningByWork[canonical] = candidate
+        val positionsByWork = linkedMapOf<String, MutableMap<String, RemotePosition>>()
+        for (position in remotePositions(permissionId, localDeviceId)) {
+            val canonical = workIdentity.canonicalWorkKey(permissionId, position.body.workKey)
+            val writers = positionsByWork.getOrPut(canonical) { mutableMapOf() }
+            val previous = writers[position.body.deviceId]
+            if (previous == null || remotePositionOrder.compare(position, previous) > 0) {
+                writers[position.body.deviceId] = position
             }
         }
         val now = clock()
         for (alias in unseeded) {
             val canonical = workIdentity.canonicalWorkKey(permissionId, alias.workId)
-            val winner = winningByWork[canonical]
-            if (winner != null) {
-                reconcileIncomingPositionForBook(
-                    drivePeerId = drivePeerId,
-                    alias = alias,
-                    body = winner.body,
-                    now = now,
-                )
+            val positions = positionsByWork[canonical].orEmpty().values.sortedWith(remotePositionOrder)
+            migrateLegacyPending(drivePeerId, alias, positions)
+            for ((index, position) in positions.withIndex()) {
+                val writerPeerId = "$drivePeerId/${position.body.deviceId}"
+                val pending = peerStateDao.get(alias.bookUrl, writerPeerId)
+                if (pending?.hasPending == true && (pending.pendingHlc == null || pending.pendingHlc >= position.lastHlc)) continue
+                reconcileIncomingPositionForBook(drivePeerId, alias, position.body, now, index == positions.lastIndex, position.lastHlc)
             }
             identities.markSeeded(alias.bookUrl, drivePeerId)
         }
     }
 
-    /** A remote writer's position, comparable without first storing it. */
     private class RemotePosition(
         val lastHlc: String,
         val recordKey: String,
         val body: DrivePositionBody,
     )
 
-    private suspend fun selectWinningRemotePosition(
-        permissionId: String,
-        localDeviceId: String,
-        canonicalWorkKey: String,
-    ): RemotePosition? {
-        var winner: RemotePosition? = null
-        for (state in recordStates.forDomain(permissionId, DriveWireCodec.DOMAIN_POSITION)) {
-            if (state.versionOp != DriveRecordState.OP_PUT) continue
+    private suspend fun migrateLegacyPending(
+        drivePeerId: String,
+        alias: WorkAlias,
+        positions: List<RemotePosition>,
+        supersedingWriter: String? = null,
+    ) {
+        database.withTransaction {
+            val legacy = peerStateDao.get(alias.bookUrl, drivePeerId)?.takeIf { it.hasPending } ?: return@withTransaction
+            val matches = positions.filter { position ->
+                val body = position.body
+                val status = body.totalProgression?.let {
+                    readingStatusFor(it, partialCoverage = body.coverage == NarrativeCoverage.PARTIAL.wireName)
+                } ?: ReadingStatus.fromWire(body.status)
+                legacy.pendingProgression == body.totalProgression &&
+                    legacy.pendingStatus == status.wireName &&
+                    legacy.pendingUpdatedAt == (body.readAt ?: body.updatedAt) &&
+                    legacy.pendingLocatorJson == body.locatorJson.takeUnless { it == ReadingProgress.EMPTY_LOCATOR } &&
+                    legacy.pendingEditionSha == body.editionSha && legacy.pendingCoverage == body.coverage
+            }
+            val matchingWriters = matches.map { it.body.deviceId }.distinct()
+            val writer = matchingWriters.singleOrNull() ?: return@withTransaction
+            val writerPeerId = "$drivePeerId/$writer"
+            if (peerStateDao.get(alias.bookUrl, writerPeerId)?.hasPending == true) {
+                if (writer == supersedingWriter) peerStateDao.clearPending(alias.bookUrl, drivePeerId)
+                return@withTransaction
+            }
+            peerStateDao.persistPending(
+                bookUrl = alias.bookUrl,
+                peerId = writerPeerId,
+                progression = legacy.pendingProgression,
+                status = legacy.pendingStatus,
+                remoteUpdatedAt = legacy.pendingUpdatedAt,
+                locatorJson = legacy.pendingLocatorJson,
+                editionSha = legacy.pendingEditionSha,
+                seq = legacy.pendingSeq,
+                coverage = legacy.pendingCoverage,
+                hlc = matches.filter { it.body.deviceId == writer }.maxOfOrNull { it.lastHlc },
+            )
+            peerStateDao.clearPending(alias.bookUrl, drivePeerId)
+        }
+    }
+
+    private suspend fun remotePositions(permissionId: String, localDeviceId: String): List<RemotePosition> =
+        recordStates.forDomain(permissionId, DriveWireCodec.DOMAIN_POSITION).mapNotNull { state ->
+            if (state.versionOp != DriveRecordState.OP_PUT) return@mapNotNull null
             val body = state.bodyJson
                 ?.let { runCatching { DriveWireCodec.decodePositionBody(JSONObject(it)) }.getOrNull() }
                 ?.takeIf { it.deviceId != localDeviceId }
-                ?: continue
-            if (workIdentity.canonicalWorkKey(permissionId, body.workKey) != canonicalWorkKey) continue
-            val candidate = RemotePosition(lastHlc = state.lastHlc, recordKey = state.recordKey, body = body)
-            if (winner == null || remotePositionOrder.compare(candidate, winner) > 0) {
-                winner = candidate
-            }
+                ?: return@mapNotNull null
+            RemotePosition(state.lastHlc, state.recordKey, body)
         }
-        return winner
-    }
 
     private val remotePositionOrder = compareBy<RemotePosition>(
         { maxOf(it.body.readAt ?: 0L, it.body.updatedAt) },
@@ -1270,10 +1384,15 @@ internal class DrivePositionSync(
         alias: WorkAlias,
         body: DrivePositionBody,
         now: Long,
+        handleStatus: Boolean,
+        hlc: String,
     ) {
         val bookUrl = alias.bookUrl
         var stored = progressDao.get(bookUrl)
-        var peerState = peerStateDao.get(bookUrl, drivePeerId)
+        val writerPeerId = "$drivePeerId/${body.deviceId}"
+        var peerState = peerStateDao.get(bookUrl, writerPeerId)
+        if (peerState?.hasPending == true && peerState.pendingHlc != null && peerState.pendingHlc >= hlc) return
+        val deliveryState = peerStateDao.get(bookUrl, drivePeerId)
         val localEditionSha = identities.fingerprint(bookUrl)?.sha256?.lowercase(Locale.ROOT)
             ?: alias.editionSha?.lowercase(Locale.ROOT)
         val sameEdition = !body.editionSha.isNullOrBlank() &&
@@ -1284,106 +1403,144 @@ internal class DrivePositionSync(
         // Capture pre-adoption position debt before any status adoption bumps localRevision,
         // so adopting a remote status never silently acknowledges unrelated local movement.
         val hadPositionDebt = stored != null && (peerState == null || peerState.isDirty(stored.localRevision))
-        val statusDirty = stored != null && (peerState == null || peerState.owesStatus(stored.statusRevision))
+        val hadDeliveryDebt = stored != null && stored.localRevision > (deliveryState?.ackedRevision ?: 0L)
+        val statusDirty = stored != null && stored.statusRevision > (deliveryState?.ackedStatusRevision ?: 0L)
 
-        // Handle explicit remote unread reset first.
-        if (body.unreadResetAt != null || remoteChoice == ReadingStatusChoice.UNREAD) {
-            if (!hadPositionDebt && !statusDirty) {
-                val applied = progressDao.openBooks.unlessOpen(bookUrl) {
-                    database.withTransaction {
-                        progressDao.setFinishedOverride(
-                            bookUrl = bookUrl,
-                            override = FinishedOverride.UNREAD.ordinal,
-                            status = ReadingStatus.READY_TO_READ.wireName,
-                            progression = 0.0,
-                            now = now,
-                            resetPosition = true,
-                        )
-                        val refreshed = progressDao.get(bookUrl)
-                        peerStateDao.settle(
-                            bookUrl = bookUrl,
-                            peerId = drivePeerId,
-                            ackedRevision = refreshed?.localRevision ?: 1L,
-                            progression = 0.0,
-                            status = ReadingStatus.READY_TO_READ.wireName,
-                            now = now,
-                        )
-                        if (refreshed != null && refreshed.statusRevision > 0L) {
-                            peerStateDao.settleStatus(bookUrl, drivePeerId, refreshed.statusRevision)
-                        }
-                    }
-                    true
-                } == true
-                if (applied) {
-                    finishedState.refreshFromProgress(bookUrl)
-                    return
-                }
-            }
-            peerStateDao.persistPendingStatus(
+        if (!handleStatus && (body.unreadResetAt != null || remoteChoice == ReadingStatusChoice.UNREAD)) {
+            peerStateDao.persistPending(
                 bookUrl = bookUrl,
-                peerId = drivePeerId,
-                choice = ReadingStatusChoice.UNREAD.wireName,
-                remoteUpdatedAt = body.updatedAt,
+                peerId = writerPeerId,
+                progression = 0.0,
+                status = ReadingStatus.READY_TO_READ.wireName,
+                remoteUpdatedAt = body.readAt ?: body.updatedAt,
+                locatorJson = null,
+                editionSha = body.editionSha,
+                coverage = body.coverage,
+                hlc = hlc,
             )
-            if (!hadPositionDebt && !statusDirty) {
-                peerStateDao.persistPending(
+            return
+        }
+        if (handleStatus) {
+            // Handle explicit remote unread reset first.
+            if (body.unreadResetAt != null || remoteChoice == ReadingStatusChoice.UNREAD) {
+                if (!hadPositionDebt && !statusDirty && !hadDeliveryDebt) {
+                    val applied = progressDao.openBooks.unlessOpen(bookUrl) {
+                        database.withTransaction {
+                            if (progressDao.get(bookUrl)?.localRevision != stored?.localRevision) {
+                                return@withTransaction false
+                            }
+                            if (pendingPositionState(bookUrl, drivePeerId, stored, alias, writerPeerId) != null) {
+                                return@withTransaction false
+                            }
+                            if (stored != null) {
+                                settleAgreeingPositions(
+                                    bookUrl, drivePeerId, stored, alias,
+                                    readingStatusFor(stored.totalProgression, partialCoverage = stored.partialCoverage), now,
+                                )
+                            }
+                            progressDao.setFinishedOverride(
+                                bookUrl = bookUrl,
+                                override = FinishedOverride.UNREAD.ordinal,
+                                status = ReadingStatus.READY_TO_READ.wireName,
+                                progression = 0.0,
+                                now = now,
+                                resetPosition = true,
+                            )
+                            val refreshed = progressDao.get(bookUrl)
+                            if (refreshed != null) {
+                                peerStateDao.settlePositionRevision(bookUrl, drivePeerId, refreshed.localRevision)
+                                peerStateDao.setDriveImportedResetRevision(bookUrl, drivePeerId, refreshed.localRevision)
+                            }
+                            peerStateDao.settle(
+                                bookUrl = bookUrl,
+                                peerId = writerPeerId,
+                                ackedRevision = refreshed?.localRevision ?: 1L,
+                                progression = 0.0,
+                                status = ReadingStatus.READY_TO_READ.wireName,
+                                now = now,
+                            )
+                            if (refreshed != null && refreshed.statusRevision > 0L) {
+                                peerStateDao.settleStatus(bookUrl, drivePeerId, refreshed.statusRevision)
+                            }
+                            true
+                        }
+                    } == true
+                    if (applied) {
+                        finishedState.refreshFromProgress(bookUrl)
+                        return
+                    }
+                }
+                peerStateDao.persistPendingStatus(
                     bookUrl = bookUrl,
                     peerId = drivePeerId,
+                    choice = ReadingStatusChoice.UNREAD.wireName,
+                    remoteUpdatedAt = body.updatedAt,
+                )
+                peerStateDao.persistPending(
+                    bookUrl = bookUrl,
+                    peerId = writerPeerId,
                     progression = 0.0,
                     status = ReadingStatus.READY_TO_READ.wireName,
                     remoteUpdatedAt = body.readAt ?: body.updatedAt,
                     locatorJson = null,
                     editionSha = body.editionSha,
                     coverage = body.coverage,
+                    hlc = hlc,
                 )
                 return
-            }
-        } else {
-            val localOverride = stored?.override ?: FinishedOverride.NONE
-            if (localOverride != remoteChoice.override) {
-                if (!statusDirty) {
-                    val expectedBefore = stored?.localRevision ?: 0L
-                    val adopted = finishedState.adoptRemoteStatus(
-                        bookUrl = bookUrl,
-                        expectedStatusRevision = stored?.statusRevision ?: 0L,
-                        account = drivePeerId,
-                        override = remoteChoice.override,
-                        status = resolvedStatus(remoteChoice, stored),
-                        finishedAt = body.updatedAt.takeIf { remoteChoice == ReadingStatusChoice.FINISHED },
-                        expectedLocalRevision = expectedBefore,
-                        keepUnreadReset = true,
-                        handOverOwnership = true,
-                    )
-                    if (adopted) {
-                        val after = progressDao.get(bookUrl)
-                        if (after != null) {
-                            peerStateDao.settleStatus(bookUrl, drivePeerId, after.statusRevision)
-                            peerStateDao.clearPendingStatus(bookUrl, drivePeerId)
-                            // Taking a status is not a position move: only settle localRevision
-                            // when the local position had no unsent debt prior to adoption.
-                            if (!hadPositionDebt && after.localRevision == expectedBefore + 1L) {
-                                peerStateDao.settlePositionRevision(bookUrl, drivePeerId, after.localRevision)
+            } else {
+                val localOverride = stored?.override ?: FinishedOverride.NONE
+                if (localOverride != remoteChoice.override) {
+                    if (!statusDirty) {
+                        val expectedBefore = stored?.localRevision ?: 0L
+                        val adopted = finishedState.adoptRemoteStatus(
+                            bookUrl = bookUrl,
+                            expectedStatusRevision = stored?.statusRevision ?: 0L,
+                            account = drivePeerId,
+                            override = remoteChoice.override,
+                            status = resolvedStatus(remoteChoice, stored),
+                            finishedAt = body.updatedAt.takeIf { remoteChoice == ReadingStatusChoice.FINISHED },
+                            expectedLocalRevision = expectedBefore,
+                            keepUnreadReset = true,
+                            handOverOwnership = true,
+                        )
+                        if (adopted) {
+                            val after = progressDao.get(bookUrl)
+                            if (after != null) {
+                                peerStateDao.settleStatus(bookUrl, drivePeerId, after.statusRevision)
+                                peerStateDao.clearPendingStatus(bookUrl, drivePeerId)
+                                // A status adoption does not settle earlier position debt.
+                                if (after.localRevision == expectedBefore + 1L) {
+                                    if (!hadDeliveryDebt) {
+                                        peerStateDao.settlePositionRevision(bookUrl, drivePeerId, after.localRevision)
+                                    }
+                                    if (!hadPositionDebt) {
+                                        peerStateDao.settlePositionRevision(bookUrl, writerPeerId, after.localRevision)
+                                    }
+                                }
+                                if (after.localRevision != expectedBefore + 1L) {
+                                    preserveRacedPosition(bookUrl, writerPeerId, body, hlc)
+                                    return
+                                }
+                                stored = after
+                                peerState = peerStateDao.get(bookUrl, writerPeerId)
                             }
-                            if (after.localRevision != expectedBefore + 1L) {
-                                // A page turned concurrently during adoption; abandon this pass.
-                                return
-                            }
-                            stored = after
-                            peerState = peerStateDao.get(bookUrl, drivePeerId)
+                        } else if ((progressDao.get(bookUrl)?.localRevision ?: 0L) != expectedBefore) {
+                            peerStateDao.persistPendingStatus(bookUrl, drivePeerId, remoteChoice.wireName, body.updatedAt)
+                            preserveRacedPosition(bookUrl, writerPeerId, body, hlc)
+                            return
                         }
-                    } else if ((progressDao.get(bookUrl)?.localRevision ?: 0L) != expectedBefore) {
-                        // A page turned concurrently before adoption; abandon this pass.
-                        return
+                    } else {
+                        peerStateDao.persistPendingStatus(
+                            bookUrl = bookUrl,
+                            peerId = drivePeerId,
+                            choice = remoteChoice.wireName,
+                            remoteUpdatedAt = body.updatedAt,
+                        )
                     }
-                } else {
-                    peerStateDao.persistPendingStatus(
-                        bookUrl = bookUrl,
-                        peerId = drivePeerId,
-                        choice = remoteChoice.wireName,
-                        remoteUpdatedAt = body.updatedAt,
-                    )
                 }
             }
+
         }
 
         val remotePosStatus = if (body.totalProgression != null) {
@@ -1428,13 +1585,17 @@ internal class DrivePositionSync(
             null
         }
 
+        val resetRevision = stored?.unreadResetRevision
+        val resetOrigin = deliveryState?.driveImportedResetRevision
+        val importedReset = resetRevision != null && resetOrigin != null &&
+            (resetRevision == resetOrigin || resetOrigin < 0 && resetRevision <= -resetOrigin - 1)
         val decision = reconcileReadingState(
             local = localState,
             remote = remoteState,
             baseline = baseline,
             localDirty = hadPositionDebt,
-            localUnreadOverride = stored?.override == FinishedOverride.UNREAD,
-            unreadResetUndelivered = stored?.hasPendingUnreadReset(peerState?.ackedRevision ?: 0L) == true,
+            localUnreadOverride = stored?.override == FinishedOverride.UNREAD && !importedReset,
+            unreadResetUndelivered = stored?.hasPendingUnreadReset(deliveryState?.ackedRevision ?: 0L) == true && !importedReset,
             exactPositionAgreement = ExactLocatorAnchor.agreement(stored?.locatorJson, exactRemote),
         )
 
@@ -1442,7 +1603,7 @@ internal class DrivePositionSync(
             SyncDecision.InSync -> {
                 peerStateDao.settle(
                     bookUrl = bookUrl,
-                    peerId = drivePeerId,
+                    peerId = writerPeerId,
                     ackedRevision = stored?.localRevision ?: 0L,
                     progression = stored?.totalProgression,
                     status = localState?.status?.wireName,
@@ -1461,20 +1622,28 @@ internal class DrivePositionSync(
                 database.withTransaction {
                     // Always respect the open-reader fence for automatic imports (including
                     // book-scoped syncs); direct applyPeerPull is reserved for explicit reader resolutions.
-                    applied = progressDao.applyUnattendedPeerPull(
-                        bookUrl = bookUrl,
-                        expectedRevision = expected,
-                        progression = progression,
-                        status = effectiveStatus.wireName,
-                        now = now,
-                        locatorJson = restorableRemote,
-                        remoteUpdatedAt = body.readAt ?: body.updatedAt,
-                        coverage = body.coverage,
-                    )
+                    if (pendingPositionState(bookUrl, drivePeerId, stored, alias, writerPeerId) == null) {
+                        applied = progressDao.applyUnattendedPeerPull(
+                            bookUrl = bookUrl,
+                            expectedRevision = expected,
+                            progression = progression,
+                            status = effectiveStatus.wireName,
+                            now = now,
+                            locatorJson = restorableRemote,
+                            remoteUpdatedAt = body.readAt ?: body.updatedAt,
+                            coverage = body.coverage,
+                        )
+                    }
                     if (applied) {
+                        if (stored != null) {
+                            settleAgreeingPositions(
+                                bookUrl, drivePeerId, stored, alias,
+                                readingStatusFor(stored.totalProgression, partialCoverage = stored.partialCoverage), now,
+                            )
+                        }
                         peerStateDao.settle(
                             bookUrl = bookUrl,
-                            peerId = drivePeerId,
+                            peerId = writerPeerId,
                             ackedRevision = expected + 1L,
                             progression = progression,
                             status = decision.state.status.wireName,
@@ -1484,13 +1653,14 @@ internal class DrivePositionSync(
                         // Book is open or moved concurrently: preserve pending for next open.
                         peerStateDao.persistPending(
                             bookUrl = bookUrl,
-                            peerId = drivePeerId,
+                            peerId = writerPeerId,
                             progression = progression,
                             status = decision.state.status.wireName,
                             remoteUpdatedAt = body.readAt ?: body.updatedAt,
                             locatorJson = body.locatorJson.takeUnless { it == ReadingProgress.EMPTY_LOCATOR },
                             editionSha = body.editionSha,
                             coverage = body.coverage,
+                            hlc = hlc,
                         )
                     }
                 }
@@ -1502,21 +1672,38 @@ internal class DrivePositionSync(
             }
             is SyncDecision.Push -> {
                 // Local moved (including intentional backward moves); keep local state for outbound publish.
-                peerStateDao.clearPending(bookUrl, drivePeerId)
+                peerStateDao.clearPending(bookUrl, writerPeerId)
             }
             is SyncDecision.Conflict -> {
                 peerStateDao.persistPending(
                     bookUrl = bookUrl,
-                    peerId = drivePeerId,
+                    peerId = writerPeerId,
                     progression = decision.remote.progression,
                     status = decision.remote.status.wireName,
                     remoteUpdatedAt = body.readAt ?: body.updatedAt,
                     locatorJson = body.locatorJson.takeUnless { it == ReadingProgress.EMPTY_LOCATOR },
                     editionSha = body.editionSha,
                     coverage = body.coverage,
+                    hlc = hlc,
                 )
             }
         }
+    }
+
+    private suspend fun preserveRacedPosition(bookUrl: String, writerPeerId: String, body: DrivePositionBody, hlc: String) {
+        val progression = body.totalProgression ?: return
+        val status = readingStatusFor(progression, partialCoverage = body.coverage == NarrativeCoverage.PARTIAL.wireName)
+        peerStateDao.persistPending(
+            bookUrl = bookUrl,
+            peerId = writerPeerId,
+            progression = progression,
+            status = status.wireName,
+            remoteUpdatedAt = body.readAt ?: body.updatedAt,
+            locatorJson = body.locatorJson.takeUnless { it == ReadingProgress.EMPTY_LOCATOR },
+            editionSha = body.editionSha,
+            coverage = body.coverage,
+            hlc = hlc,
+        )
     }
 
     private fun resolvedStatus(choice: ReadingStatusChoice, stored: ReadingProgress?): ReadingStatus =

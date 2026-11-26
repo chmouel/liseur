@@ -82,6 +82,8 @@ data class SyncPeerState(
     /** The partner's own timestamp, for display. Never compared with ours. */
     @ColumnInfo(name = "remote_updated_at") val remoteUpdatedAt: Long? = null,
     @ColumnInfo(name = "synced_at") val syncedAt: Long? = null,
+    @ColumnInfo(name = "pending_hlc") val pendingHlc: String? = null,
+    @ColumnInfo(name = "drive_imported_reset_revision") val driveImportedResetRevision: Long? = null,
 ) {
     /** True when this device has read on since this partner last confirmed. */
     fun isDirty(localRevision: Long): Boolean = localRevision > ackedRevision
@@ -108,6 +110,16 @@ abstract class SyncPeerStateDao {
 
     @Query("SELECT * FROM sync_peer_state WHERE peer_id = :peerId")
     abstract suspend fun forPeer(peerId: String): List<SyncPeerState>
+
+    @Query(
+        """
+        SELECT * FROM sync_peer_state WHERE book_url = :bookUrl AND has_pending = 1
+          AND pending_progression IS NOT NULL
+          AND (peer_id = :account OR substr(peer_id, 1, length(:account) + 1) = :account || '/')
+        ORDER BY peer_id
+        """,
+    )
+    abstract suspend fun pendingForDriveBook(bookUrl: String, account: String): List<SyncPeerState>
 
     /** Disagreements this partner reported and nobody has settled. */
     @Query("SELECT * FROM sync_peer_state WHERE peer_id = :peerId AND has_pending = 1")
@@ -143,6 +155,7 @@ abstract class SyncPeerStateDao {
             pending_coverage = :coverage,
             pending_updated_at = :remoteUpdatedAt,
             pending_seq = :seq,
+            pending_hlc = :hlc,
             has_pending = 1,
             remote_updated_at = :remoteUpdatedAt
         WHERE book_url = :bookUrl AND peer_id = :peerId
@@ -158,6 +171,7 @@ abstract class SyncPeerStateDao {
         editionSha: String? = null,
         seq: Long? = null,
         coverage: String? = null,
+        hlc: String? = null,
     ): Int
 
     @Query(
@@ -165,11 +179,11 @@ abstract class SyncPeerStateDao {
         INSERT OR IGNORE INTO sync_peer_state (
             book_url, peer_id, acked_revision,
             pending_progression, pending_locator_json, pending_edition_sha,
-            pending_status, pending_coverage, pending_updated_at, pending_seq,
+            pending_status, pending_coverage, pending_updated_at, pending_seq, pending_hlc,
             has_pending, remote_updated_at
         )
         VALUES (:bookUrl, :peerId, 0, :progression, :locatorJson, :editionSha,
-                :status, :coverage, :remoteUpdatedAt, :seq, 1,
+                :status, :coverage, :remoteUpdatedAt, :seq, :hlc, 1,
                 :remoteUpdatedAt)
         """,
     )
@@ -183,6 +197,7 @@ abstract class SyncPeerStateDao {
         editionSha: String? = null,
         seq: Long? = null,
         coverage: String? = null,
+        hlc: String? = null,
     )
 
     @Transaction
@@ -196,6 +211,7 @@ abstract class SyncPeerStateDao {
         editionSha: String? = null,
         seq: Long? = null,
         coverage: String? = null,
+        hlc: String? = null,
     ) {
         val updated = updatePending(
             bookUrl = bookUrl,
@@ -207,6 +223,7 @@ abstract class SyncPeerStateDao {
             editionSha = editionSha,
             seq = seq,
             coverage = coverage,
+            hlc = hlc,
         )
         if (updated == 0) {
             insertPending(
@@ -219,6 +236,7 @@ abstract class SyncPeerStateDao {
                 editionSha = editionSha,
                 seq = seq,
                 coverage = coverage,
+                hlc = hlc,
             )
         }
     }
@@ -229,7 +247,7 @@ abstract class SyncPeerStateDao {
             pending_progression = NULL, pending_locator_json = NULL,
             pending_edition_sha = NULL, pending_status = NULL,
             pending_coverage = NULL,
-            pending_updated_at = NULL, pending_seq = NULL, has_pending = 0
+            pending_updated_at = NULL, pending_seq = NULL, pending_hlc = NULL, has_pending = 0
         WHERE book_url = :bookUrl AND peer_id = :peerId
         """,
     )
@@ -454,7 +472,7 @@ abstract class SyncPeerStateDao {
             pending_edition_sha = NULL,
             pending_status = NULL,
             pending_coverage = NULL,
-            pending_updated_at = NULL, pending_seq = NULL,
+            pending_updated_at = NULL, pending_seq = NULL, pending_hlc = NULL,
             has_pending = 0,
             synced_at = :now
         WHERE book_url = :bookUrl AND peer_id = :peerId
@@ -518,6 +536,9 @@ abstract class SyncPeerStateDao {
 
     @Query("DELETE FROM sync_peer_state WHERE book_url = :bookUrl")
     abstract suspend fun forget(bookUrl: String)
+
+    @Query("UPDATE sync_peer_state SET drive_imported_reset_revision = :revision WHERE book_url = :bookUrl AND peer_id = :peerId")
+    abstract suspend fun setDriveImportedResetRevision(bookUrl: String, peerId: String, revision: Long)
 
     @Query("DELETE FROM sync_peer_state WHERE book_url IN (:bookUrls)")
     abstract suspend fun forgetBooks(bookUrls: List<String>)

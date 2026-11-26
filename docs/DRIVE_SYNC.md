@@ -1224,7 +1224,12 @@ with outcome `delete`) when it reaches those records:
     `Pull` raises `local_revision`, so a second stream with a different
     position opens `Conflict` in either enumeration order. Required tests:
     upload before pull, three devices (C19), and fresh-device reconstruction
-    in both enumeration orders.
+    in both enumeration orders. The wire format cannot prove that a writer
+    saw another writer's position before moving on, so a sequential handoff
+    can also require a choice when the intermediate agreement was not seen.
+    A pending writer position retains its HLC so seeding cannot replace a
+    newer conflict with an older cached record. The account row records the
+    revision of an imported unread reset separately from a local reset.
 - **`del` semantics:** Not used ("Mark unread" is a `put` with
   `finishedOverride = "unread"` and non-null `unreadResetAt`).
 - **Room mapping (`liseur.db`):**
