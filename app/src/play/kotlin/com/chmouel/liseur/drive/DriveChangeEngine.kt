@@ -1009,6 +1009,7 @@ internal class DriveChangeEngine(
         record: DriveWireRecord,
         batchObserved: Map<String, Long>? = null,
         observeHlc: Boolean = true,
+        replayingHeld: Boolean = false,
     ): Boolean {
         if (observeHlc) observeRemoteHlc(permissionId, record.hlc)
         // A malformed record is dropped, not deferred: replaying it would never make it valid.
@@ -1017,6 +1018,11 @@ internal class DriveChangeEngine(
             val workKey = gatedWorkKey(record)
             if (workKey.isNotEmpty() && workIdentity.awaitsCatalogEntry(permissionId, workKey)) {
                 return false
+            }
+            // A book restored earlier in this run must get its retained version replayed before a
+            // version that happens to arrive later, or the newer retained state is replaced unseen.
+            if (!replayingHeld) {
+                materializeHeldBefore(permissionId, localDeviceId, accessToken, record)
             }
         }
         return when (record.d) {
@@ -1161,30 +1167,89 @@ internal class DriveChangeEngine(
             if (state.domain !in DriveHeldRecords.HELD_DOMAINS) continue
             val workKey = DriveHeldRecords.workKeyFor(state.domain, state.recordKey)
             if (workKey.isEmpty() || !workIdentity.hasLocalBookFor(permissionId, workKey)) continue
-            // A competition parked while the work had no book is the reader's once it has one.
+            if (!replayHeldRecord(permissionId, localDeviceId, accessToken, state)) continue
+            retireHeldRowStoredUnderAnotherKey(permissionId, state)
+        }
+    }
+
+    /**
+     * Replays the retained version of the record [record] names, if one is retained and its work
+     * already has a book. Called before that record is decided, so a version that happens to
+     * arrive after the book was restored cannot replace the newer retained state unseen.
+     */
+    private suspend fun materializeHeldBefore(
+        permissionId: String,
+        localDeviceId: String,
+        accessToken: String,
+        record: DriveWireRecord,
+    ) {
+        if (record.d !in DriveHeldRecords.HELD_DOMAINS) return
+        val workKey = gatedWorkKey(record)
+        if (workKey.isEmpty() || !workIdentity.hasLocalBookFor(permissionId, workKey)) return
+        val canonical = workIdentity.canonicalWorkKey(permissionId, workKey)
+        val recordKey = when (record.d) {
+            DriveWireCodec.DOMAIN_SERIES -> canonical
+            else -> {
+                val field = record.body?.optString("field")?.trim()?.takeIf { it.isNotEmpty() }
+                    ?: record.k.substringAfterLast('/', "")
+                if (field.isEmpty()) return
+                "$canonical/$field"
+            }
+        }
+        val held = recordStates.get(permissionId, record.d, recordKey)?.takeIf { it.held } ?: return
+        if (!replayHeldRecord(permissionId, localDeviceId, accessToken, held)) return
+        retireHeldRowStoredUnderAnotherKey(permissionId, held)
+    }
+
+    /** Applies a retained version to whatever its work now holds locally. */
+    private suspend fun replayHeldRecord(
+        permissionId: String,
+        localDeviceId: String,
+        accessToken: String,
+        state: DriveRecordState,
+    ): Boolean {
+        // A competition parked while the work had no book is the reader's once it has one.
+        val workKey = DriveHeldRecords.workKeyFor(state.domain, state.recordKey)
+        if (workKey.isNotEmpty()) {
             workIdentity.liveBookUrlFor(permissionId, workKey)?.let { bookUrl ->
                 conflicts.attachBookUrl(permissionId, state.domain, state.recordKey, bookUrl)
             }
-            val resolution = if (state.versionOp == DriveRecordState.OP_RESOLVE) {
-                resolutions.get(permissionId, state.domain, state.recordKey, state.versionFp)
-            } else {
-                null
-            }
-            val record = DriveHeldRecords.toWireRecord(
-                domain = state.domain,
-                state = state,
-                outcome = resolution?.outcome,
-                resolvedFps = resolution?.let { DriveWorkIdentity.decodeStringArray(it.resolvedFpsJson) }.orEmpty(),
-            ) ?: continue
-            applySingleRecord(
-                permissionId = permissionId,
-                localDeviceId = localDeviceId,
-                remoteDeviceId = state.originDeviceId ?: localDeviceId,
-                remoteSeq = state.originSeq ?: 0L,
-                accessToken = accessToken,
-                record = record,
-                observeHlc = false,
-            )
+        }
+        val resolution = if (state.versionOp == DriveRecordState.OP_RESOLVE) {
+            resolutions.get(permissionId, state.domain, state.recordKey, state.versionFp)
+        } else {
+            null
+        }
+        val record = DriveHeldRecords.toWireRecord(
+            domain = state.domain,
+            state = state,
+            outcome = resolution?.outcome,
+            resolvedFps = resolution?.let { DriveWorkIdentity.decodeStringArray(it.resolvedFpsJson) }.orEmpty(),
+        ) ?: return false
+        return applySingleRecord(
+            permissionId = permissionId,
+            localDeviceId = localDeviceId,
+            remoteDeviceId = state.originDeviceId ?: localDeviceId,
+            remoteSeq = state.originSeq ?: 0L,
+            accessToken = accessToken,
+            record = record,
+            observeHlc = false,
+            replayingHeld = true,
+        )
+    }
+
+    /**
+     * A work-key merge after retention makes the replay store its result under the canonical key,
+     * leaving the source row behind. Retire it once the apply committed, or every later run would
+     * replay a version that is already history there.
+     */
+    private suspend fun retireHeldRowStoredUnderAnotherKey(
+        permissionId: String,
+        state: DriveRecordState,
+    ) {
+        val after = recordStates.get(permissionId, state.domain, state.recordKey) ?: return
+        if (after.held && after.versionFp == state.versionFp) {
+            recordStates.delete(permissionId, state.domain, state.recordKey)
         }
     }
 

@@ -1431,6 +1431,196 @@ class DrivePhase5EndToEndTest {
     }
 
     @Test
+    fun `a version older than the retained one cannot land on a book restored in the same run`() = runTest {
+        val server = Phase5FakeDriveServer()
+        val source = "dev-s-source"
+        val fresh = createDevice("dev-u-fresh", File(tempDir, "snap-older"), server)
+        try {
+            fresh.connect(PERM_A, "a@example.com")
+            val key = "isbn:9780156027601"
+            val hlc = "0017450000000-0001-dev-s-source"
+            fun catalogBody() = DriveCatalogBody(
+                workKey = key,
+                title = "Solaris",
+                author = "Stanislaw Lem",
+                identifiers = emptyList(),
+                editions = emptyList(),
+                fileSeriesName = null,
+                fileSeriesIndex = null,
+                addedAt = 1_000L,
+                archivedAt = null,
+                updatedAt = 1_000L,
+            )
+            val catalogPut = DriveWireCodec.putRecord(
+                DriveWireCodec.DOMAIN_CATALOG, key, hlc, DriveWireCodec.encodeCatalogBody(catalogBody()),
+            )
+            val deletion = DriveWireCodec.delRecord(
+                DriveWireCodec.DOMAIN_CATALOG, key, hlc, ancestors = listOf(catalogPut.fp),
+            )
+            fun seriesBody(name: String) = DriveSeriesBody(
+                workKey = key,
+                seriesOverridden = true,
+                userSeriesName = name,
+                indexOverridden = false,
+                userSeriesIndex = null,
+                seriesKey = name.lowercase(),
+                updatedAt = 1_000L,
+            )
+            val older = DriveWireCodec.putRecord(
+                DriveWireCodec.DOMAIN_SERIES, key, hlc, DriveWireCodec.encodeSeriesBody(seriesBody("Old Shelf")),
+            )
+            val newer = DriveWireCodec.putRecord(
+                DriveWireCodec.DOMAIN_SERIES, key, "0017450000000-0002-dev-s-source",
+                DriveWireCodec.encodeSeriesBody(seriesBody("Solaris Cycle")),
+                ancestors = listOf(older.fp),
+            )
+
+            suspend fun apply(deviceId: String, records: List<DriveWireRecord>, seq: Long) {
+                val batch = DriveDeltaBatch(
+                    batchId = "snapshot-$deviceId",
+                    deviceId = deviceId,
+                    seq = seq,
+                    createdHlc = hlc,
+                    domains = DriveWireCodec.SUPPORTED_DOMAIN_VERSIONS,
+                    records = records,
+                )
+                val bytes = JSONObject(DriveWireCodec.encodeDeltaBatch(batch))
+                    .put("throughSeq", seq).put("partIndex", 0).put("partCount", 1)
+                    .toString().toByteArray()
+                val file = server.clientFor(deviceId)
+                    .createAppDataFile("token", "snapshot-$deviceId.json", "application/json", bytes, emptyMap())
+                fresh.changeEngine.applySnapshot(
+                    PERM_A, "dev-u-fresh", deviceId,
+                    DriveSnapshotRef(
+                        seq,
+                        listOf(
+                            DriveSnapshotPartRef(
+                                "snapshot-$deviceId.json",
+                                file.id,
+                                DriveCanonicalJson.sha256Hex(bytes),
+                                records.size,
+                                0,
+                            ),
+                        ),
+                    ),
+                    "token",
+                )
+            }
+
+            // The tombstone lands first and the newer series version is retained.
+            apply(source, listOf(deletion, newer), 1L)
+            assertNull(fresh.liseurDb.bookDao().getByUrl("drive:$key"))
+            assertTrue(fresh.driveDb.recordStates().get(PERM_A, DriveWireCodec.DOMAIN_SERIES, key)!!.held)
+
+            // Another device restores the work and still carries the older version in its snapshot.
+            val restoringPut = DriveWireCodec.putRecord(
+                DriveWireCodec.DOMAIN_CATALOG, key, "0017450000000-0003-dev-o-older",
+                DriveWireCodec.encodeCatalogBody(catalogBody().copy(updatedAt = 3_000L)),
+                ancestors = listOf(deletion.fp),
+            )
+            apply("dev-o-older", listOf(restoringPut, older), 2L)
+
+            val restored = fresh.liseurDb.bookDao().getByUrl("drive:$key")
+            assertNotNull(restored)
+            assertEquals("Solaris Cycle", restored!!.userSeriesName)
+            assertTrue(fresh.driveDb.recordStates().get(PERM_A, DriveWireCodec.DOMAIN_SERIES, key)?.held != true)
+        } finally {
+            fresh.close()
+        }
+    }
+
+    @Test
+    fun `a series the reader reset is not reinstated when the retained version replays`() = runTest {
+        deviceA.connect(PERM_A, "a@example.com")
+        val key = "isbn:9780156027601"
+        val hlc = "0017450000000-0001-dev-a"
+        deviceA.driveDb.recordStates().upsert(
+            DriveRecordState(PERM_A, DriveWireCodec.DOMAIN_CATALOG, key, "deleted", DriveRecordState.OP_DEL, lastHlc = hlc),
+        )
+        val identity = DriveWorkIdentity(deviceA.liseurDb, deviceA.driveDb)
+        val sync = DriveSeriesSync(deviceA.liseurDb, deviceA.driveDb, identity)
+        val body = DriveSeriesBody(
+            workKey = key,
+            seriesOverridden = true,
+            userSeriesName = "Solaris Cycle",
+            indexOverridden = false,
+            userSeriesIndex = null,
+            seriesKey = "solaris cycle",
+            updatedAt = 1_000L,
+        )
+        assertTrue(
+            sync.applyRemoteRecord(
+                PERM_A,
+                DriveWireCodec.putRecord(DriveWireCodec.DOMAIN_SERIES, key, hlc, DriveWireCodec.encodeSeriesBody(body)),
+                "dev-a",
+                1L,
+            ) { hlc },
+        )
+
+        // The book returns and the reader drops the series before the retained version replays.
+        val book = restoredBook("drive:$key")
+        deviceA.liseurDb.bookDao().upsert(book.copy(userSeriesUpdatedAt = 2_000L))
+
+        deviceA.changeEngine.materializeHeldRecords(PERM_A, "dev-a", "token")
+
+        val restored = deviceA.liseurDb.bookDao().getByUrl("drive:$key")!!
+        assertFalse(restored.seriesOverridden)
+        assertNull(restored.userSeriesName)
+        assertEquals(
+            1,
+            deviceA.driveDb.conflicts().unsettledForRecord(PERM_A, DriveWireCodec.DOMAIN_SERIES, key).size,
+        )
+    }
+
+    @Test
+    fun `a retained record survives a work key merge and stops being retained once applied`() = runTest {
+        val alias = "sha:old"
+        val key = "isbn:9780156027601"
+        val hlc = "0017450000000-0001-dev-a"
+        deviceA.driveDb.recordStates().upsert(
+            DriveRecordState(PERM_A, DriveWireCodec.DOMAIN_CATALOG, alias, "deleted", DriveRecordState.OP_DEL, lastHlc = hlc),
+        )
+        val identity = DriveWorkIdentity(deviceA.liseurDb, deviceA.driveDb)
+        val sync = DriveSeriesSync(deviceA.liseurDb, deviceA.driveDb, identity)
+        val body = DriveSeriesBody(
+            workKey = alias,
+            seriesOverridden = true,
+            userSeriesName = "Solaris Cycle",
+            indexOverridden = false,
+            userSeriesIndex = null,
+            seriesKey = "solaris cycle",
+            updatedAt = 1_000L,
+        )
+        assertTrue(
+            sync.applyRemoteRecord(
+                PERM_A,
+                DriveWireCodec.putRecord(DriveWireCodec.DOMAIN_SERIES, alias, hlc, DriveWireCodec.encodeSeriesBody(body)),
+                "dev-a",
+                1L,
+            ) { hlc },
+        )
+        assertTrue(deviceA.driveDb.recordStates().get(PERM_A, DriveWireCodec.DOMAIN_SERIES, alias)!!.held)
+
+        // The work key is merged into an ISBN after retention, and the book comes back under it.
+        identity.applyRemoteRecord(
+            PERM_A,
+            DriveWireCodec.putRecord(
+                DriveWireCodec.DOMAIN_WORK_ALIAS, "merge:$alias", hlc,
+                DriveWireCodec.encodeWorkAliasBody(DriveWorkAliasBody.Merge(alias, key, 1L)),
+            ),
+            "dev-a",
+            2L,
+        )
+        deviceA.liseurDb.bookDao().upsert(restoredBook("drive:$key"))
+
+        deviceA.changeEngine.materializeHeldRecords(PERM_A, "dev-a", "token")
+
+        assertEquals("Solaris Cycle", deviceA.liseurDb.bookDao().getByUrl("drive:$key")?.userSeriesName)
+        assertNull(deviceA.driveDb.recordStates().get(PERM_A, DriveWireCodec.DOMAIN_SERIES, alias))
+        assertTrue(deviceA.driveDb.recordStates().get(PERM_A, DriveWireCodec.DOMAIN_SERIES, key)?.held != true)
+    }
+
+    @Test
     fun `a rating the reader cleared is not overwritten when the retained version replays`() = runTest {
         deviceA.connect(PERM_A, "a@example.com")
         val key = "isbn:9780156027601"

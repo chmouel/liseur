@@ -285,6 +285,7 @@ internal class DriveSeriesSync(
                 incomingContentFp = incomingContentFp,
                 isIncomingDelete = isIncomingDelete,
                 nextHlc = nextHlc,
+                heldReplay = existingState?.held == true,
             )
         }
 
@@ -660,6 +661,7 @@ internal class DriveSeriesSync(
         incomingContentFp: String?,
         isIncomingDelete: Boolean,
         nextHlc: suspend () -> String,
+        heldReplay: Boolean = false,
     ): LocalRecordView {
         val hasOverride = book.seriesOverridden || book.indexOverridden
         val existingBody = existingState?.bodyJson?.let {
@@ -690,7 +692,25 @@ internal class DriveSeriesSync(
             )
 
         if (existingState == null) {
-            if (!hasOverride) return LocalRecordView(versionFp = null)
+            if (!hasOverride) {
+                // A series the reader reset is a real recorded deletion, not absent data. Replaying
+                // a retained version must see it as a competing edit instead of reinstating it.
+                if (heldReplay && (book.userSeriesUpdatedAt ?: 0L) > 0L) {
+                    return LocalRecordView(
+                        versionFp = DriveCanonicalJson.delFp(
+                            DriveWireCodec.DOMAIN_SERIES,
+                            workKey,
+                            nextHlc(),
+                        ),
+                        versionOp = DriveRecordState.OP_DEL,
+                        isLivePut = false,
+                        contentFp = null,
+                        bodyJson = null,
+                        localRowMatchesContentFp = true,
+                    )
+                }
+                return LocalRecordView(versionFp = null)
+            }
             return LocalRecordView(
                 versionFp = liveContentFp,
                 versionOp = DriveRecordState.OP_PUT,
