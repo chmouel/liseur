@@ -1186,9 +1186,42 @@ internal class DriveChangeEngine(
         for ((_, group) in grouped) {
             val heads = prepareHeldGroup(permissionId, group)
             for (prepared in heads) {
+                // A version whose disagreement is already parked is the reader's to settle;
+                // replaying it again would open a second question about the same older value.
+                if (heldVersionAlreadyParked(permissionId, prepared)) {
+                    attachParkedConflicts(permissionId, prepared)
+                    continue
+                }
                 if (!replayHeldRecord(permissionId, localDeviceId, accessToken, prepared)) continue
                 retireHeldRowStoredUnderAnotherKey(permissionId, prepared)
             }
+        }
+    }
+
+    /**
+     * True when an unsettled conflict for this record already covers [state]'s version, either as
+     * one of its two sides or inside the lineage of the version that arrived with it.
+     */
+    private suspend fun heldVersionAlreadyParked(
+        permissionId: String,
+        state: DriveRecordState,
+    ): Boolean {
+        val canonicalKey = canonicalResolutionKey(permissionId, state.domain, state.recordKey)
+        val parked = conflicts.unsettledForRecord(permissionId, state.domain, canonicalKey) +
+            if (canonicalKey != state.recordKey) {
+                conflicts.unsettledForRecord(permissionId, state.domain, state.recordKey)
+            } else {
+                emptyList()
+            }
+        return parked.any { conflict ->
+            // A held version that is the local side still has to be materialized: the parked
+            // question is about it. The duplicate risk is the older value that a parked successor
+            // already carried, which only shows up on the remote side or in its lineage.
+            conflict.localFp != state.versionFp && (
+                conflict.remoteFp == state.versionFp ||
+                    state.versionFp in DriveWorkIdentity.decodeStringArray(conflict.remoteAncJson) ||
+                    state.versionFp in DriveWorkIdentity.decodeStringArray(conflict.remoteResRefsJson)
+                )
         }
     }
 
@@ -1235,6 +1268,7 @@ internal class DriveChangeEngine(
                 }
                 continue
             }
+            if (heldVersionAlreadyParked(permissionId, prepared)) continue
             if (!replayHeldRecord(permissionId, localDeviceId, accessToken, prepared)) return false
             retireHeldRowStoredUnderAnotherKey(permissionId, prepared)
         }
