@@ -164,6 +164,24 @@ class DriveSuccessorBeforeResolutionTest {
     }
 
     @Test
+    fun `parked successor retains resolution ancestry and observed clock`() = runTest {
+        val ancestor = fp("resolution ancestor")
+        val resolution = res1.copy(anc = res1.anc + ancestor)
+        val observed = "0017450000900-0001-dev-a"
+        val initial = localAt(e1, "edit-A").copy(lastHlc = observed)
+        val parked = deliver(initial, succ, "dev-c", 2L)
+        val applied = deliver(parked.updatedRecordState!!.toView(), resolution, "dev-c", 1L)
+        val state = applied.updatedRecordState!!
+        assertTrue(ancestor in DriveWorkIdentity.decodeStringArray(state.ancestorsJson))
+        assertEquals(observed, state.lastHlc)
+        assertEquals(succ.hlc, state.versionHlc)
+        val replay = deliver(state.toView(), succ.copy(fp = ancestor, anc = emptyList(), body = body("resolution ancestor")), "dev-b", 1L)
+        assertEquals(ReconciliationCase.STALE, replay.reconciliationCase)
+        assertEquals(ReconciliationDataAction.NoDataChange, replay.dataAction)
+        assertNull(replay.conflictToOpen)
+    }
+
+    @Test
     fun `local edit made between runs is never overwritten and meets the successor in a fresh conflict`() = runTest {
         val first = deliver(localAt(e1, "edit-A"), succ, "dev-c", 2L)
         val e1b = fp("edit-A-again")
@@ -216,6 +234,6 @@ class DriveSuccessorBeforeResolutionTest {
         originDeviceId = originDeviceId, originSeq = originSeq,
         ancestors = DriveWorkIdentity.decodeStringArray(ancestorsJson),
         resRefs = DriveWorkIdentity.decodeStringArray(resRefsJson),
-        lastHlc = lastHlc, bodyJson = bodyJson,
+        lastHlc = lastHlc, versionHlc = versionHlc, bodyJson = bodyJson,
     )
 }
