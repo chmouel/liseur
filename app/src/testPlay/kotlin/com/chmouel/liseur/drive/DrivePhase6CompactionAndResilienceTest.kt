@@ -2333,6 +2333,449 @@ class DrivePhase6CompactionAndResilienceTest {
         assertEquals(resA.hlc, resolveRecords.single().hlc)
     }
 
+    @Test
+    fun `equal-content put winner keeps authoring HLC across persistence, replay, and snapshot compaction`() = runTest {
+        val devA = createDevice(deviceId = "dev-a", compactionDeltaThreshold = 3)
+        devA.connect()
+
+        val bookA = seedBook(devA, "eq-hlc.epub", "9780142437249", "Equal HLC Book", "Author")
+        val baseTime = 1_746_600_000_000L
+        val hA = "0017450000100-0001-dev-a"
+        val hB = "0017450000200-0001-dev-b"
+        val hObs = "0017450000300-0001-dev-c"
+
+        // Seed book + initial annotation on devA so devA has authored `ann-eq-hlc` in its stream.
+        val initialAnn = BookAnnotation(
+            id = "ann-eq-hlc",
+            bookId = bookA.url,
+            kind = AnnotationKind.NOTE.name,
+            locatorJson = """{"href":"ch01.xhtml"}""",
+            text = "Same quote",
+            note = "seed",
+            createdAt = baseTime,
+            updatedAt = baseTime * 1_000L,
+        )
+        devA.liseurDb.annotationDao().upsert(initialAnn)
+        assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
+
+        val workKey = devA.driveSync.workIdentity.canonicalWorkKey(
+            PERM_ID,
+            requireNotNull(devA.liseurDb.workIdentityDao().alias(bookA.url, DriveLibrarySync.accountPeerId(PERM_ID))).workId,
+        )
+        val editionSha = devA.liseurDb.workIdentityDao().fingerprint(bookA.url)!!.sha256
+
+        // Pick a note whose canonical body produces putFp(body, hA) > putFp(body, hB).
+        val chosen = (0..100).asSequence().map { i ->
+            val ann = initialAnn.copy(note = "same-$i", updatedAt = (baseTime + 1_000L) * 1_000L)
+            val bodyMap = DriveWireCodec.encodeAnnotationBody(devA.driveSync.annotationSync.toWireBody(ann, workKey, editionSha))
+            val bodyObj = JSONObject(DriveCanonicalJson.encode(bodyMap))
+            Triple(ann, bodyMap, bodyObj)
+        }.first { (_, _, bodyObj) ->
+            DriveCanonicalJson.putFp(bodyObj, hA) > DriveCanonicalJson.putFp(bodyObj, hB)
+        }
+        val (ann, bodyMap, bodyObj) = chosen
+        val contentFp = DriveWireCodec.annotationContentFp(devA.driveSync.annotationSync.toWireBody(ann, workKey, editionSha))
+        val fpA = DriveCanonicalJson.putFp(bodyObj, hA)
+        val fpB = DriveCanonicalJson.putFp(bodyObj, hB)
+        assertTrue(fpA > fpB)
+
+        val ancestorFp = DriveCanonicalJson.contentFp(mapOf("id" to ann.id, "note" to "ancestor"))
+        devA.liseurDb.annotationDao().upsert(ann)
+        devA.driveDb.recordStates().upsert(
+            DriveRecordState(
+                permissionId = PERM_ID,
+                domain = DriveWireCodec.DOMAIN_ANNOTATION,
+                recordKey = ann.id,
+                versionFp = fpA,
+                versionOp = DriveRecordState.OP_PUT,
+                publishedFp = fpA,
+                contentFp = contentFp,
+                originDeviceId = null,
+                originSeq = null,
+                ancestorsJson = DriveCanonicalJson.encode(listOf(ancestorFp)),
+                resRefsJson = "[]",
+                lastHlc = hA,
+                versionHlc = hA,
+                bodyJson = DriveCanonicalJson.encode(bodyMap),
+            ),
+        )
+
+        // Raise devA's lastHlc to hObs via a stale observation while retaining fpA / versionHlc = hA.
+        val staleObs = DriveWireRecord(
+            d = DriveWireCodec.DOMAIN_ANNOTATION,
+            k = ann.id,
+            op = DriveRecordState.OP_PUT,
+            hlc = hObs,
+            fp = ancestorFp,
+            body = JSONObject(DriveCanonicalJson.encode(bodyMap + ("note" to "ancestor"))),
+        )
+        devA.driveSync.annotationSync.applyRemoteRecord(
+            permissionId = PERM_ID,
+            record = staleObs,
+            remoteDeviceId = "dev-c",
+            remoteSeq = 1L,
+            nextHlc = { hObs },
+        )
+        val afterObs = devA.driveDb.recordStates().get(PERM_ID, DriveWireCodec.DOMAIN_ANNOTATION, ann.id)!!
+        assertEquals(fpA, afterObs.versionFp)
+        assertEquals(hA, afterObs.versionHlc)
+        assertEquals(hObs, afterObs.lastHlc)
+
+        // Deliver B's equal-content PUT (hB = 200 < hObs = 300, fpB < fpA); reload from Room.
+        val putB = DriveWireCodec.putRecordWithFp(
+            domain = DriveWireCodec.DOMAIN_ANNOTATION,
+            key = ann.id,
+            hlc = hB,
+            fp = fpB,
+            bodyMap = bodyMap,
+        )
+        devA.driveSync.annotationSync.applyRemoteRecord(
+            permissionId = PERM_ID,
+            record = putB,
+            remoteDeviceId = "dev-b",
+            remoteSeq = 1L,
+            nextHlc = { hObs },
+        )
+        val afterB = devA.driveDb.recordStates().get(PERM_ID, DriveWireCodec.DOMAIN_ANNOTATION, ann.id)!!
+        assertEquals(fpB, afterB.versionFp)
+        assertEquals(hB, afterB.versionHlc)
+        assertEquals(hObs, afterB.lastHlc)
+        assertTrue(devA.driveDb.conflicts().openForAccount(PERM_ID).isEmpty())
+
+        // Replay the losing PUT (fpA, hA) once more: identity and clocks must stay stable.
+        val putA = DriveWireCodec.putRecordWithFp(
+            domain = DriveWireCodec.DOMAIN_ANNOTATION,
+            key = ann.id,
+            hlc = hA,
+            fp = fpA,
+            bodyMap = bodyMap,
+        )
+        devA.driveSync.annotationSync.applyRemoteRecord(
+            permissionId = PERM_ID,
+            record = putA,
+            remoteDeviceId = "dev-a",
+            remoteSeq = 2L,
+            nextHlc = { hObs },
+        )
+        val afterReplay = devA.driveDb.recordStates().get(PERM_ID, DriveWireCodec.DOMAIN_ANNOTATION, ann.id)!!
+        assertEquals(fpB, afterReplay.versionFp)
+        assertEquals(hB, afterReplay.versionHlc)
+        assertEquals(hObs, afterReplay.lastHlc)
+        assertTrue(devA.driveDb.conflicts().openForAccount(PERM_ID).isEmpty())
+
+        // Verify snapshot compaction on the winning author (devB) emits fpB with authoring HLC hB
+        // even after devB's lastHlc was raised to hObs.
+        val devB = createDevice(deviceId = "dev-b", compactionDeltaThreshold = 3)
+        devB.connect()
+        val bookB = seedBook(devB, "eq-hlc-b.epub", "9780142437249", "Equal HLC Book", "Author")
+        val annB = ann.copy(bookId = bookB.url)
+        devB.liseurDb.annotationDao().upsert(annB)
+        devB.driveDb.recordStates().upsert(
+            DriveRecordState(
+                permissionId = PERM_ID,
+                domain = DriveWireCodec.DOMAIN_ANNOTATION,
+                recordKey = ann.id,
+                versionFp = fpB,
+                versionOp = DriveRecordState.OP_PUT,
+                publishedFp = fpB,
+                contentFp = contentFp,
+                originDeviceId = null,
+                originSeq = null,
+                ancestorsJson = DriveCanonicalJson.encode(listOf(ancestorFp)),
+                resRefsJson = "[]",
+                lastHlc = hB,
+                versionHlc = hB,
+                bodyJson = DriveCanonicalJson.encode(bodyMap),
+            ),
+        )
+        // Deliver losing putA and a higher-clock stale observation to devB.
+        devB.driveSync.annotationSync.applyRemoteRecord(
+            permissionId = PERM_ID,
+            record = putA,
+            remoteDeviceId = "dev-a",
+            remoteSeq = 1L,
+            nextHlc = { hB },
+        )
+        devB.driveSync.annotationSync.applyRemoteRecord(
+            permissionId = PERM_ID,
+            record = staleObs,
+            remoteDeviceId = "dev-c",
+            remoteSeq = 1L,
+            nextHlc = { hObs },
+        )
+        val devBState = devB.driveDb.recordStates().get(PERM_ID, DriveWireCodec.DOMAIN_ANNOTATION, ann.id)!!
+        assertEquals(fpB, devBState.versionFp)
+        assertEquals(hB, devBState.versionHlc)
+        assertEquals(hObs, devBState.lastHlc)
+        assertTrue(devB.driveDb.conflicts().openForAccount(PERM_ID).isEmpty())
+
+        for (i in 1..4) {
+            devB.liseurDb.annotationDao().upsert(
+                BookAnnotation(
+                    id = "ann-eq-pad-$i",
+                    bookId = bookB.url,
+                    kind = AnnotationKind.NOTE.name,
+                    locatorJson = """{"href":"ch0$i.xhtml"}""",
+                    text = "pad",
+                    note = "p$i",
+                    createdAt = baseTime + 10_000L + i * 100L,
+                    updatedAt = (baseTime + 10_000L + i * 100L) * 1_000L,
+                ),
+            )
+            assertEquals(SyncOutcome.Success, devB.changeEngine.sync().outcome)
+        }
+
+        val snapB = server.decodeManifestFor("dev-b")!!.snapshot!!
+        val snapRecords = snapB.parts.flatMap { ref ->
+            DriveWireCodec.decodeSnapshotPart(server.rawBytes(ref.fileId)!!.toString(Charsets.UTF_8)).records
+        }.filter { it.d == DriveWireCodec.DOMAIN_ANNOTATION && it.k == ann.id }
+        assertEquals(1, snapRecords.size)
+        assertEquals(fpB, snapRecords.single().fp)
+        assertEquals(hB, snapRecords.single().hlc)
+    }
+
+    @Test
+    fun `migrated row with unknown versionHlc exports unknown clock in snapshot and never forges bumped lastHlc`() = runTest {
+        val devA = createDevice(deviceId = "dev-a", compactionDeltaThreshold = 3)
+        devA.connect()
+
+        val bookA = seedBook(devA, "migrated-snap.epub", "9780142437250", "Migrated Snap", "Author")
+        val baseTime = 1_746_700_000_000L
+        val hA = "0017450000100-0001-dev-a"
+        val hB = "0017450000200-0001-dev-b"
+        val hObs = "0017450000300-0001-dev-c"
+
+        val ann = BookAnnotation(
+            id = "ann-migrated-snap",
+            bookId = bookA.url,
+            kind = AnnotationKind.NOTE.name,
+            locatorJson = """{"href":"ch01.xhtml"}""",
+            text = "Quote",
+            note = "same",
+            createdAt = baseTime,
+            updatedAt = baseTime * 1_000L,
+        )
+        // Sync once with no annotation so the book's work identity is established.
+        assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
+        devA.liseurDb.annotationDao().upsert(ann)
+
+        val workKey = devA.driveSync.workIdentity.canonicalWorkKey(
+            PERM_ID,
+            requireNotNull(devA.liseurDb.workIdentityDao().alias(bookA.url, DriveLibrarySync.accountPeerId(PERM_ID))).workId,
+        )
+        val editionSha = devA.liseurDb.workIdentityDao().fingerprint(bookA.url)!!.sha256
+        val bodyMap = DriveWireCodec.encodeAnnotationBody(devA.driveSync.annotationSync.toWireBody(ann, workKey, editionSha))
+        val bodyObj = JSONObject(DriveCanonicalJson.encode(bodyMap))
+        val contentFp = DriveWireCodec.annotationContentFp(devA.driveSync.annotationSync.toWireBody(ann, workKey, editionSha))
+        val fpA = DriveCanonicalJson.putFp(bodyObj, hA)
+        val fpB = DriveCanonicalJson.putFp(bodyObj, hB)
+
+        // Simulate a migrated row whose original authoring clock could not be recovered (`versionHlc = null`)
+        // and whose `lastHlc` was bumped to `hObs`.
+        devA.driveDb.recordStates().upsert(
+            DriveRecordState(
+                permissionId = PERM_ID,
+                domain = DriveWireCodec.DOMAIN_ANNOTATION,
+                recordKey = ann.id,
+                versionFp = fpA,
+                versionOp = DriveRecordState.OP_PUT,
+                publishedFp = fpA,
+                contentFp = contentFp,
+                originDeviceId = null,
+                originSeq = null,
+                ancestorsJson = "[]",
+                resRefsJson = "[]",
+                lastHlc = hObs,
+                versionHlc = null,
+                bodyJson = DriveCanonicalJson.encode(bodyMap),
+            ),
+        )
+
+        for (i in 1..4) {
+            devA.liseurDb.annotationDao().upsert(
+                BookAnnotation(
+                    id = "ann-mig-pad-$i",
+                    bookId = bookA.url,
+                    kind = AnnotationKind.NOTE.name,
+                    locatorJson = """{"href":"ch0$i.xhtml"}""",
+                    text = "pad",
+                    note = "p$i",
+                    createdAt = baseTime + 10_000L + i * 100L,
+                    updatedAt = (baseTime + 10_000L + i * 100L) * 1_000L,
+                ),
+            )
+            assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
+        }
+
+        val snapA = server.decodeManifestFor("dev-a")!!.snapshot!!
+        val exported = snapA.parts.flatMap { ref ->
+            DriveWireCodec.decodeSnapshotPart(server.rawBytes(ref.fileId)!!.toString(Charsets.UTF_8)).records
+        }.single { it.d == DriveWireCodec.DOMAIN_ANNOTATION && it.k == ann.id }
+        assertEquals(fpA, exported.fp)
+        assertEquals("", exported.hlc)
+
+        // A fresh peer adopting the unknown-clock snapshot record and then receiving B (hB = 200)
+        // must not silently select A via a forged clock.
+        val adopted = DriveConflictEngine.reconcileIncoming(
+            permissionId = PERM_ID,
+            domain = DriveWireCodec.DOMAIN_ANNOTATION,
+            recordKey = ann.id,
+            bookUrl = bookA.url,
+            local = LocalRecordView(versionFp = null),
+            existingResolutions = emptyList(),
+            unsettledConflicts = emptyList(),
+            incoming = exported,
+            incomingContentFp = contentFp,
+            remoteDeviceId = "dev-a",
+            remoteSeq = 1L,
+            now = baseTime,
+        )
+        val peerState = requireNotNull(adopted.updatedRecordState)
+        assertNull(peerState.versionHlc)
+        val putB = DriveWireCodec.putRecordWithFp(
+            domain = DriveWireCodec.DOMAIN_ANNOTATION,
+            key = ann.id,
+            hlc = hB,
+            fp = fpB,
+            bodyMap = bodyMap,
+        )
+        val vsB = DriveConflictEngine.reconcileIncoming(
+            permissionId = PERM_ID,
+            domain = DriveWireCodec.DOMAIN_ANNOTATION,
+            recordKey = ann.id,
+            bookUrl = bookA.url,
+            local = LocalRecordView(
+                versionFp = peerState.versionFp,
+                versionOp = peerState.versionOp,
+                publishedFp = peerState.publishedFp,
+                contentFp = peerState.contentFp,
+                lastHlc = peerState.lastHlc,
+                versionHlc = peerState.versionHlc,
+                bodyJson = peerState.bodyJson,
+            ),
+            existingResolutions = emptyList(),
+            unsettledConflicts = emptyList(),
+            incoming = putB,
+            incomingContentFp = contentFp,
+            remoteDeviceId = "dev-b",
+            remoteSeq = 1L,
+            now = baseTime + 1L,
+        )
+        assertEquals(ReconciliationCase.CONFLICT_EDIT_EDIT, vsB.reconciliationCase)
+    }
+
+    @Test
+    fun `unpublished resolution delta emits resolution HLC even after lastHlc is raised`() = runTest {
+        val devA = createDevice(deviceId = "dev-a")
+        val devB = createDevice(deviceId = "dev-b")
+        devA.connect()
+        devB.connect()
+
+        val bookA = seedBook(devA, "unpub-res-hlc.epub", "9780142437251", "Unpub Res", "Author")
+        val baseTime = 1_746_800_000_000L
+        val ann0 = BookAnnotation(
+            id = "ann-unpub-res",
+            bookId = bookA.url,
+            kind = AnnotationKind.NOTE.name,
+            locatorJson = """{"href":"ch01.xhtml"}""",
+            text = "Quote",
+            note = "f0",
+            createdAt = baseTime,
+            updatedAt = baseTime * 1_000L,
+        )
+        devA.liseurDb.annotationDao().upsert(ann0)
+        assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
+        assertEquals(SyncOutcome.Success, devB.changeEngine.sync().outcome)
+        devA.liseurDb.annotationDao().upsert(ann0.copy(note = "fA", updatedAt = (baseTime + 1_000L) * 1_000L))
+        devB.liseurDb.annotationDao().upsert(
+            devB.liseurDb.annotationDao().byId("ann-unpub-res")!!.copy(note = "fB", updatedAt = (baseTime + 2_000L) * 1_000L),
+        )
+        server.hideOtherDeviceDeltasFor("dev-a")
+        assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
+        server.hideOtherDeviceDeltasFor("dev-b")
+        assertEquals(SyncOutcome.Success, devB.changeEngine.sync().outcome)
+        server.unhideAll()
+        assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
+
+        // Resolve locally without syncing yet, then bump lastHlc on the unpublished OP_RESOLVE row.
+        devA.driveSync.resolveConflicts(
+            devA.driveDb.conflicts().openForAccount(PERM_ID),
+            DriveConflictChoice.KEEP_LOCAL,
+            syncAfter = false,
+        )
+        val resA = devA.driveDb.resolutions().forRecord(PERM_ID, DriveWireCodec.DOMAIN_ANNOTATION, "ann-unpub-res").single()
+        val unpubState = devA.driveDb.recordStates().get(PERM_ID, DriveWireCodec.DOMAIN_ANNOTATION, "ann-unpub-res")!!
+        val raisedHlc = "9999999999999" + resA.hlc.substring(13)
+        devA.driveDb.recordStates().upsert(unpubState.copy(lastHlc = raisedHlc))
+
+        val collected = devA.driveSync.annotationSync.collectDirtyRecords(
+            permissionId = PERM_ID,
+            nextHlc = { raisedHlc },
+        )
+        val emittedResolve = collected.records.single { it.op == DriveRecordState.OP_RESOLVE && it.k == "ann-unpub-res" }
+        assertEquals(resA.resolutionFp, emittedResolve.fp)
+        assertEquals(resA.hlc, emittedResolve.hlc)
+    }
+
+    @Test
+    fun `unpublished annotation put retry with unknown authoring clock does not emit bumped lastHlc`() = runTest {
+        val devA = createDevice(deviceId = "dev-a")
+        devA.connect()
+
+        val bookA = seedBook(devA, "unpub-put-hlc.epub", "9780142437252", "Unpub Put", "Author")
+        val baseTime = 1_746_800_000_000L
+        val ann0 = BookAnnotation(
+            id = "ann-unpub-put",
+            bookId = bookA.url,
+            kind = AnnotationKind.NOTE.name,
+            locatorJson = """{"href":"ch01.xhtml"}""",
+            text = "Quote",
+            note = "f0",
+            createdAt = baseTime,
+            updatedAt = baseTime * 1_000L,
+        )
+        devA.liseurDb.annotationDao().upsert(ann0)
+        assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
+
+        // Mint an unpublished put version locally (no upload, so liseur.db holds no ack for it).
+        devA.liseurDb.annotationDao().upsert(ann0.copy(note = "fA", updatedAt = (baseTime + 1_000L) * 1_000L))
+        val authoredHlc = "0017468000010-0000-dev-a"
+        val first = devA.driveSync.annotationSync.collectDirtyRecords(
+            permissionId = PERM_ID,
+            nextHlc = { authoredHlc },
+        )
+        val firstPut = first.records.single { it.k == "ann-unpub-put" }
+        val minted = devA.driveDb.recordStates().get(PERM_ID, DriveWireCodec.DOMAIN_ANNOTATION, "ann-unpub-put")!!
+        assertEquals(firstPut.fp, minted.versionFp)
+        assertNotEquals(minted.versionFp, minted.publishedFp)
+
+        // The authoring clock becomes unknown while lastHlc is bumped by an observed record.
+        val raisedHlc = "9999999999999" + authoredHlc.substring(13)
+        devA.driveDb.recordStates().upsert(minted.copy(versionHlc = null, lastHlc = raisedHlc))
+
+        // No peer has seen this version, so the retry gives it a fresh clock instead of the
+        // observed one, and keeps that clock for later retries.
+        val freshHlc = "9999999999999" + "-0001-dev-a"
+        val retried = devA.driveSync.annotationSync.collectDirtyRecords(
+            permissionId = PERM_ID,
+            nextHlc = { freshHlc },
+        )
+        val retriedPut = retried.records.single { it.k == "ann-unpub-put" }
+        assertEquals(DriveRecordState.OP_PUT, retriedPut.op)
+        assertEquals(minted.versionFp, retriedPut.fp)
+        assertNotEquals(raisedHlc, retriedPut.hlc)
+        assertEquals(freshHlc, retriedPut.hlc)
+        assertEquals(
+            freshHlc,
+            devA.driveDb.recordStates().get(PERM_ID, DriveWireCodec.DOMAIN_ANNOTATION, "ann-unpub-put")?.versionHlc,
+        )
+        val again = devA.driveSync.annotationSync.collectDirtyRecords(
+            permissionId = PERM_ID,
+            nextHlc = { error("the stored clock should be reused") },
+        )
+        assertEquals(freshHlc, again.records.single { it.k == "ann-unpub-put" }.hlc)
+    }
+
     // -- Harness helpers ------------------------------------------------------
 
     private suspend fun computeStats(db: LiseurDatabase, nowMs: Long) = run {

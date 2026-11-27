@@ -202,6 +202,7 @@ internal class DriveSessionSync(
                         ancestorsJson = "[]",
                         resRefsJson = "[]",
                         lastHlc = maxOf(existing?.lastHlc.orEmpty(), record.hlc),
+                        versionHlc = record.hlc.ifBlank { null },
                         bodyJson = record.body?.let { DriveCanonicalJson.encode(it) },
                     ),
                 )
@@ -294,6 +295,7 @@ internal class DriveSessionSync(
                     ancestorsJson = "[]",
                     resRefsJson = "[]",
                     lastHlc = maxOf(existing?.lastHlc.orEmpty(), record.hlc),
+                    versionHlc = record.hlc.ifBlank { null },
                     bodyJson = canonicalBody,
                 ),
             )

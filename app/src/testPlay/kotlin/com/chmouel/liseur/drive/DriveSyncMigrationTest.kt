@@ -2,6 +2,7 @@ package com.chmouel.liseur.drive
 
 import androidx.room.testing.MigrationTestHelper
 import androidx.test.platform.app.InstrumentationRegistry
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -140,6 +141,72 @@ class DriveSyncMigrationTest {
         }
     }
 
+    @Test
+    fun `record state migration backfills only verified version clocks and leaves bumped rows unknown`() {
+        val putBody = JSONObject(DriveCanonicalJson.encode(mapOf("id" to "ann-1", "note" to "hello")))
+        val putBodyJson = putBody.toString()
+        val h100 = "0017450000100-0001-dev-a"
+        val h300 = "0017450000300-0001-dev-c"
+        val verifiedPutFp = DriveCanonicalJson.putFp(putBody, h100)
+        val contentOnlyPutFp = DriveCanonicalJson.contentFp(putBody)
+        val verifiedDelFp = DriveCanonicalJson.delFp(DriveWireCodec.DOMAIN_ANNOTATION, "del-ok", h100)
+        val bumpedDelFp = DriveCanonicalJson.delFp(DriveWireCodec.DOMAIN_ANNOTATION, "del-bumped", h100)
+        val resFp = DriveCanonicalJson.resolveFp(
+            DriveResolution.OUTCOME_PUT,
+            listOf("fp-a", "fp-b"),
+            h100,
+            putBody,
+        )
+
+        helper.createDatabase(VERSION_HLC_DB, 6).use { old ->
+            fun insertState(
+                key: String,
+                fp: String,
+                op: String,
+                lastHlc: String,
+                bodyJson: String?,
+            ) {
+                val escapedBody = bodyJson?.replace("'", "''")?.let { "'$it'" } ?: "NULL"
+                old.execSQL(
+                    "INSERT INTO drive_record_state (permission_id, domain, record_key, version_fp, version_op, " +
+                        "published_fp, content_fp, last_synced_revision, origin_device_id, origin_seq, " +
+                        "ancestors_json, res_refs_json, last_hlc, body_json, held) " +
+                        "VALUES ('perm-a', 'annotation', '$key', '$fp', '$op', '$fp', NULL, NULL, 'dev-a', 1, " +
+                        "'[]', '[]', '$lastHlc', $escapedBody, 0)",
+                )
+            }
+
+            insertState("put-ok", verifiedPutFp, DriveRecordState.OP_PUT, h100, putBodyJson)
+            insertState("put-bumped", verifiedPutFp, DriveRecordState.OP_PUT, h300, putBodyJson)
+            insertState("put-content", contentOnlyPutFp, DriveRecordState.OP_PUT, h100, putBodyJson)
+            insertState("del-ok", verifiedDelFp, DriveRecordState.OP_DEL, h100, null)
+            insertState("del-bumped", bumpedDelFp, DriveRecordState.OP_DEL, h300, null)
+            insertState("res-ok", resFp, DriveRecordState.OP_RESOLVE, h300, putBodyJson)
+            old.execSQL(
+                "INSERT INTO drive_resolution (permission_id, domain, record_key, resolution_fp, " +
+                    "resolved_fps_json, outcome, hlc, author_device_id, created_at) " +
+                    "VALUES ('perm-a', 'annotation', 'res-ok', '$resFp', '[\"fp-a\",\"fp-b\"]', 'put', '$h100', 'dev-a', 1)",
+            )
+        }
+
+        helper.runMigrationsAndValidate(VERSION_HLC_DB, 7, true, *DriveSyncDatabase.MIGRATIONS).use { db ->
+            fun queryHlc(key: String): Pair<String, String?> =
+                db.query(
+                    "SELECT last_hlc, version_hlc FROM drive_record_state WHERE record_key = '$key'",
+                ).use { cursor ->
+                    assertTrue("Missing row for $key", cursor.moveToFirst())
+                    cursor.getString(0) to if (cursor.isNull(1)) null else cursor.getString(1)
+                }
+
+            assertEquals(h100 to h100, queryHlc("put-ok"))
+            assertEquals(h300 to null, queryHlc("put-bumped"))
+            assertEquals(h100 to null, queryHlc("put-content"))
+            assertEquals(h100 to h100, queryHlc("del-ok"))
+            assertEquals(h300 to null, queryHlc("del-bumped"))
+            assertEquals(h300 to h100, queryHlc("res-ok"))
+        }
+    }
+
     private companion object {
         const val ACCOUNTS_DB = "drive-sync-migration-accounts.db"
         const val OUTBOX_DB = "drive-sync-migration-outbox.db"
@@ -147,5 +214,6 @@ class DriveSyncMigrationTest {
         const val V2_OUTBOX_DB = "drive-sync-migration-v2-outbox.db"
         const val UPLOAD_SELECTION_DB = "drive-sync-migration-upload-selection.db"
         const val HELD_DB = "drive-sync-migration-held.db"
+        const val VERSION_HLC_DB = "drive-sync-migration-version-hlc.db"
     }
 }

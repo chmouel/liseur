@@ -81,7 +81,7 @@ internal class DriveAnnotationSync(
                 key = state.recordKey,
                 outcome = res.outcome,
                 resolvedFps = DriveWorkIdentity.decodeStringArray(res.resolvedFpsJson),
-                hlc = state.lastHlc,
+                hlc = res.hlc,
                 bodyMap = bodyMap,
                 ancestors = DriveWorkIdentity.decodeStringArray(state.ancestorsJson),
                 resRefs = DriveWorkIdentity.decodeStringArray(state.resRefsJson),
@@ -169,6 +169,7 @@ internal class DriveAnnotationSync(
                             ancestorsJson = existingState?.ancestorsJson ?: "[]",
                             resRefsJson = existingState?.resRefsJson ?: "[]",
                             lastHlc = existingState?.lastHlc ?: "",
+                            versionHlc = existingState?.versionHlc?.takeIf { existingState.versionFp == repairedFp },
                             bodyJson = bodyJson,
                         ),
                     )
@@ -179,7 +180,7 @@ internal class DriveAnnotationSync(
                 val ancestors: List<String>
                 val resRefs = DriveWorkIdentity.decodeStringArray(existingState?.resRefsJson)
                 if (existingState != null && existingState.versionOp == DriveRecordState.OP_PUT && existingState.versionFp == contentFp) {
-                    hlc = existingState.lastHlc.ifBlank { nextHlc() }
+                    hlc = recordStates.putRetryHlc(existingState, nextHlc)
                     ancestors = DriveWorkIdentity.decodeStringArray(existingState.ancestorsJson)
                 } else {
                     hlc = nextHlc()
@@ -200,7 +201,8 @@ internal class DriveAnnotationSync(
                             originSeq = null,
                             ancestorsJson = DriveCanonicalJson.encode(ancestors),
                             resRefsJson = DriveCanonicalJson.encode(resRefs),
-                            lastHlc = hlc,
+                            lastHlc = maxOf(existingState?.lastHlc.orEmpty(), hlc),
+                            versionHlc = hlc,
                             bodyJson = bodyJson,
                         ),
                     )
@@ -260,7 +262,7 @@ internal class DriveAnnotationSync(
             val delFp: String
             val ancestors: List<String>
             if (existingState != null && existingState.versionOp == DriveRecordState.OP_DEL && existingState.publishedFp != existingState.versionFp) {
-                hlc = existingState.lastHlc.ifBlank { nextHlc() }
+                hlc = existingState.versionHlc?.ifBlank { null } ?: ""
                 delFp = existingState.versionFp
                 ancestors = DriveWorkIdentity.decodeStringArray(existingState.ancestorsJson)
             } else {
@@ -284,7 +286,8 @@ internal class DriveAnnotationSync(
                         originSeq = null,
                         ancestorsJson = DriveCanonicalJson.encode(ancestors),
                         resRefsJson = DriveCanonicalJson.encode(resRefs),
-                        lastHlc = hlc,
+                        lastHlc = maxOf(existingState?.lastHlc.orEmpty(), hlc),
+                        versionHlc = hlc,
                         bodyJson = null,
                     ),
                 )
@@ -944,6 +947,7 @@ internal class DriveAnnotationSync(
             }
             if (liveRow != null && liveContentFp != null) {
                 return LocalRecordView(
+                    versionBuiltWithoutRecordState = true,
                     versionFp = liveContentFp,
                     versionOp = DriveRecordState.OP_PUT,
                     isLivePut = true,
@@ -959,6 +963,7 @@ internal class DriveAnnotationSync(
             val hlc = nextHlc()
             val delFp = DriveCanonicalJson.delFp(DriveWireCodec.DOMAIN_ANNOTATION, recordKey, hlc)
             return LocalRecordView(
+                versionBuiltWithoutRecordState = true,
                 versionFp = delFp,
                 versionOp = DriveRecordState.OP_DEL,
                 isLivePut = false,
@@ -989,6 +994,7 @@ internal class DriveAnnotationSync(
                 .filter { it != liveContentFp }
                 .take(DriveWireCodec.MAX_ANCESTORS)
             return LocalRecordView(
+                versionBuiltWithoutRecordState = true,
                 versionFp = liveContentFp,
                 versionOp = DriveRecordState.OP_PUT,
                 isLivePut = true,
@@ -999,6 +1005,7 @@ internal class DriveAnnotationSync(
                 ancestors = editAnc,
                 resRefs = stateResRefs,
                 lastHlc = existingState.lastHlc,
+                versionHlc = null,
                 bodyJson = liveBodyJson,
                 localRowMatchesContentFp = true,
                 postCrashAckMatchesIncoming = postCrashAckMatchesIncoming,
@@ -1014,6 +1021,7 @@ internal class DriveAnnotationSync(
                 .distinct()
                 .take(DriveWireCodec.MAX_ANCESTORS)
             return LocalRecordView(
+                versionBuiltWithoutRecordState = true,
                 versionFp = delFp,
                 versionOp = DriveRecordState.OP_DEL,
                 isLivePut = false,
@@ -1045,6 +1053,7 @@ internal class DriveAnnotationSync(
             ancestors = stateAnc,
             resRefs = stateResRefs,
             lastHlc = existingState.lastHlc,
+            versionHlc = existingState.versionHlc,
             bodyJson = existingState.bodyJson,
             localRowMatchesContentFp = matches,
             postCrashAckMatchesIncoming = postCrashAckMatchesIncoming,

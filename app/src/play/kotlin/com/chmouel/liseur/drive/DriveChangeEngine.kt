@@ -1494,6 +1494,7 @@ internal class DriveChangeEngine(
             state = state,
             outcome = resolution?.outcome,
             resolvedFps = resolution?.let { DriveWorkIdentity.decodeStringArray(it.resolvedFpsJson) }.orEmpty(),
+            resolutionHlc = resolution?.hlc,
         ) ?: return false
         return applySingleRecord(
             permissionId = permissionId,

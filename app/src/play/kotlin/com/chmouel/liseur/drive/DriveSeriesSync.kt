@@ -61,7 +61,7 @@ internal class DriveSeriesSync(
                     key = state.recordKey,
                     outcome = res.outcome,
                     resolvedFps = DriveWorkIdentity.decodeStringArray(res.resolvedFpsJson),
-                    hlc = state.lastHlc,
+                    hlc = res.hlc,
                     bodyMap = bodyMap,
                     ancestors = DriveWorkIdentity.decodeStringArray(state.ancestorsJson),
                     resRefs = DriveWorkIdentity.decodeStringArray(state.resRefsJson),
@@ -120,7 +120,7 @@ internal class DriveSeriesSync(
                 val hlc: String
                 val ancestors: List<String>
                 if (existingState != null && existingState.versionOp == DriveRecordState.OP_PUT && existingState.versionFp == contentFp) {
-                    hlc = existingState.lastHlc.ifBlank { nextHlc() }
+                    hlc = recordStates.putRetryHlc(existingState, nextHlc)
                     ancestors = DriveWorkIdentity.decodeStringArray(existingState.ancestorsJson)
                 } else {
                     hlc = nextHlc()
@@ -141,7 +141,8 @@ internal class DriveSeriesSync(
                             originSeq = null,
                             ancestorsJson = DriveCanonicalJson.encode(ancestors),
                             resRefsJson = DriveCanonicalJson.encode(resRefs),
-                            lastHlc = hlc,
+                            lastHlc = maxOf(existingState?.lastHlc.orEmpty(), hlc),
+                            versionHlc = hlc,
                             bodyJson = bodyJson,
                         ),
                     )
@@ -170,7 +171,7 @@ internal class DriveSeriesSync(
                 val delFp: String
                 val ancestors: List<String>
                 if (existingState.versionOp == DriveRecordState.OP_DEL && existingState.publishedFp != existingState.versionFp) {
-                    hlc = existingState.lastHlc.ifBlank { nextHlc() }
+                    hlc = existingState.versionHlc?.ifBlank { null } ?: ""
                     delFp = existingState.versionFp
                     ancestors = DriveWorkIdentity.decodeStringArray(existingState.ancestorsJson)
                 } else {
@@ -193,7 +194,8 @@ internal class DriveSeriesSync(
                             originSeq = null,
                             ancestorsJson = DriveCanonicalJson.encode(ancestors),
                             resRefsJson = DriveCanonicalJson.encode(resRefs),
-                            lastHlc = hlc,
+                            lastHlc = maxOf(existingState.lastHlc, hlc),
+                            versionHlc = hlc,
                             bodyJson = null,
                         ),
                     )
@@ -706,6 +708,7 @@ internal class DriveSeriesSync(
                 // a retained version must see it as a competing edit instead of reinstating it.
                 if (heldReplay && (book.userSeriesUpdatedAt ?: 0L) > 0L) {
                     return LocalRecordView(
+                        versionBuiltWithoutRecordState = true,
                         versionFp = DriveCanonicalJson.delFp(
                             DriveWireCodec.DOMAIN_SERIES,
                             workKey,
@@ -721,6 +724,7 @@ internal class DriveSeriesSync(
                 return LocalRecordView(versionFp = null)
             }
             return LocalRecordView(
+                versionBuiltWithoutRecordState = true,
                 versionFp = liveContentFp,
                 versionOp = DriveRecordState.OP_PUT,
                 isLivePut = true,
@@ -750,6 +754,7 @@ internal class DriveSeriesSync(
                 .filter { it != liveContentFp }
                 .take(DriveWireCodec.MAX_ANCESTORS)
             return LocalRecordView(
+                versionBuiltWithoutRecordState = true,
                 versionFp = liveContentFp,
                 versionOp = DriveRecordState.OP_PUT,
                 isLivePut = true,
@@ -760,6 +765,7 @@ internal class DriveSeriesSync(
                 ancestors = editAnc,
                 resRefs = stateResRefs,
                 lastHlc = existingState.lastHlc,
+                versionHlc = null,
                 bodyJson = liveBodyJson,
                 localRowMatchesContentFp = true,
                 postCrashAckMatchesIncoming = postCrashAgreement && incoming.fp != liveContentFp,
@@ -774,6 +780,7 @@ internal class DriveSeriesSync(
                 .distinct()
                 .take(DriveWireCodec.MAX_ANCESTORS)
             return LocalRecordView(
+                versionBuiltWithoutRecordState = true,
                 versionFp = delFp,
                 versionOp = DriveRecordState.OP_DEL,
                 isLivePut = false,
@@ -804,6 +811,7 @@ internal class DriveSeriesSync(
             ancestors = stateAnc,
             resRefs = stateResRefs,
             lastHlc = existingState.lastHlc,
+            versionHlc = existingState.versionHlc,
             bodyJson = existingState.bodyJson,
             localRowMatchesContentFp = matches,
             postCrashAckMatchesIncoming = postCrashAgreement && existingState.versionFp != incoming.fp,

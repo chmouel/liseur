@@ -58,6 +58,7 @@ internal object DriveHeldRecords {
             ancestors = DriveWorkIdentity.decodeStringArray(state.ancestorsJson),
             resRefs = DriveWorkIdentity.decodeStringArray(state.resRefsJson),
             lastHlc = state.lastHlc,
+            versionHlc = state.versionHlc,
             bodyJson = state.bodyJson,
             localRowMatchesContentFp = true,
         )
@@ -73,6 +74,7 @@ internal object DriveHeldRecords {
         state: DriveRecordState,
         outcome: String? = null,
         resolvedFps: List<String> = emptyList(),
+        resolutionHlc: String? = null,
     ): DriveWireRecord? {
         if (state.versionOp == DriveRecordState.OP_RESOLVE && outcome == null) return null
         val storedBody = state.bodyJson?.let { raw ->
@@ -90,11 +92,15 @@ internal object DriveHeldRecords {
                 JSONObject(json.toString()).put("workKey", workKey)
             }
         }
+        // Preserve unknown authoring HLC ("") rather than substituting a potentially bumped lastHlc.
+        val hlc = state.versionHlc?.ifBlank { null }
+            ?: resolutionHlc?.ifBlank { null }
+            ?: ""
         return DriveWireRecord(
             d = domain,
             k = state.recordKey,
             op = state.versionOp,
-            hlc = state.lastHlc,
+            hlc = hlc,
             fp = state.versionFp,
             anc = DriveWorkIdentity.decodeStringArray(state.ancestorsJson),
             resRefs = DriveWorkIdentity.decodeStringArray(state.resRefsJson),

@@ -168,6 +168,12 @@ data class DriveRecordState(
     @ColumnInfo(name = "ancestors_json", defaultValue = "'[]'") val ancestorsJson: String = "[]",
     @ColumnInfo(name = "res_refs_json", defaultValue = "'[]'") val resRefsJson: String = "[]",
     @ColumnInfo(name = "last_hlc") val lastHlc: String,
+    /**
+     * Authoring HLC that belongs to [versionFp]. `null` means the authoring clock is unknown or
+     * unverified, e.g. after migration, crash recovery, or adopting an incoming record whose
+     * `hlc` was blank.
+     */
+    @ColumnInfo(name = "version_hlc") val versionHlc: String? = null,
     @ColumnInfo(name = "body_json") val bodyJson: String? = null,
     /**
      * The version is retained but deliberately not materialized: its `workKey` has no local
@@ -177,6 +183,9 @@ data class DriveRecordState(
      */
     @ColumnInfo(name = "held", defaultValue = "0") val held: Boolean = false,
 ) {
+    /** Authoring HLC for [versionFp], falling back to [lastHlc] only when unrecovered. */
+    val authoringHlc: String get() = versionHlc?.ifBlank { null } ?: lastHlc
+
     companion object {
         const val OP_PUT = "put"
         const val OP_DEL = "del"

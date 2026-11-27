@@ -74,7 +74,7 @@ internal class DriveCatalogSync(
                 DriveWireCodec.delRecord(
                     domain = DriveWireCodec.DOMAIN_CATALOG,
                     key = state.recordKey,
-                    hlc = state.lastHlc.ifBlank { nextHlc() },
+                    hlc = state.authoringHlc.ifBlank { nextHlc() },
                     ancestors = DriveWorkIdentity.decodeStringArray(state.ancestorsJson),
                     resRefs = DriveWorkIdentity.decodeStringArray(state.resRefsJson),
                     explicitFp = state.versionFp,
@@ -231,7 +231,7 @@ internal class DriveCatalogSync(
                     out.add(
                         DriveWireRecord(
                             d = DriveWireCodec.DOMAIN_CATALOG, k = workKey, op = DriveRecordState.OP_PUT,
-                            hlc = existingState.lastHlc, fp = existingState.versionFp,
+                            hlc = existingState.authoringHlc, fp = existingState.versionFp,
                             anc = DriveWorkIdentity.decodeStringArray(existingState.ancestorsJson),
                             resRefs = DriveWorkIdentity.decodeStringArray(existingState.resRefsJson),
                             body = JSONObject(requireNotNull(existingState.bodyJson)),
@@ -273,6 +273,7 @@ internal class DriveCatalogSync(
                     ancestorsJson = DriveCanonicalJson.encode(ancestors),
                     resRefsJson = existingState?.resRefsJson ?: "[]",
                     lastHlc = hlc,
+                    versionHlc = hlc,
                     bodyJson = DriveCanonicalJson.encode(finalMap),
                 ),
             )
@@ -345,6 +346,7 @@ internal class DriveCatalogSync(
                         ancestorsJson = DriveCanonicalJson.encode(anc),
                         resRefsJson = DriveCanonicalJson.encode(record.resRefs.distinct().sorted()),
                         lastHlc = maxOf(existing?.lastHlc ?: "", record.hlc),
+                        versionHlc = record.hlc.ifBlank { null },
                         bodyJson = pendingTrash,
                     ),
                 )
@@ -412,7 +414,7 @@ internal class DriveCatalogSync(
         val useExisting = !useIncoming && existingState?.versionOp == DriveRecordState.OP_PUT && existingState.contentFp == mergedFp
         val versionHlc = when {
             useIncoming -> record.hlc
-            useExisting -> requireNotNull(existingState).lastHlc
+            useExisting -> requireNotNull(existingState).authoringHlc
             else -> nextHlc()
         }
         val versionFp = when {
@@ -573,6 +575,7 @@ internal class DriveCatalogSync(
                     ancestorsJson = DriveCanonicalJson.encode(anc),
                     resRefsJson = DriveCanonicalJson.encode(record.resRefs.distinct().sorted()),
                     lastHlc = versionHlc,
+                    versionHlc = versionHlc.ifBlank { null },
                     bodyJson = mergedJson,
                 ),
             )
@@ -760,6 +763,7 @@ internal class DriveCatalogSync(
                         ancestorsJson = DriveCanonicalJson.encode(anc),
                         resRefsJson = existingState?.resRefsJson ?: "[]",
                         lastHlc = hlc,
+                        versionHlc = hlc,
                         bodyJson = tombstonePayload.encode(),
                     ),
                 )
@@ -913,6 +917,7 @@ internal class DriveCatalogSync(
                                 .distinct().take(DriveWireCodec.MAX_ANCESTORS),
                         ),
                         lastHlc = hlc,
+                        versionHlc = hlc,
                         bodyJson = DriveCanonicalJson.encode(map),
                     ),
                 )

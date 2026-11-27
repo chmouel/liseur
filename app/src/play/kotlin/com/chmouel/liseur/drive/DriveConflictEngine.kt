@@ -16,12 +16,18 @@ internal data class LocalRecordView(
     val ancestors: List<String> = emptyList(),
     val resRefs: List<String> = emptyList(),
     val lastHlc: String = "",
+    val versionHlc: String? = lastHlc.ifBlank { null },
     val bodyJson: String? = null,
     val localRowMatchesContentFp: Boolean = true,
     /** True when `liseur.db` already holds the atomic per-peer ack for this incoming record after a crash. */
     val postCrashAckMatchesIncoming: Boolean = false,
     /** True when the reader edited `liseur.db` again after Tx 1 committed `R` and before Tx 2 ran. */
     val hasPostCrashLocalEdit: Boolean = false,
+    /**
+     * True when the version was derived from `liseur.db` (no row yet, or an edit newer than the
+     * row) rather than read back from `drive_record_state`.
+     */
+    val versionBuiltWithoutRecordState: Boolean = false,
 )
 
 /** One conflict settlement produced by Step 0 or competing-resolution arbitration. */
@@ -228,6 +234,7 @@ internal object DriveConflictEngine {
                 ancestorsJson = DriveCanonicalJson.encode(ancList.distinct().filter { it != incoming.fp }.take(DriveWireCodec.MAX_ANCESTORS)),
                 resRefsJson = DriveCanonicalJson.encode(resRefsList.distinct().sorted()),
                 lastHlc = maxOf(local.lastHlc, incoming.hlc),
+                versionHlc = incoming.hlc.ifBlank { null },
                 bodyJson = bodyJson,
             )
         }
@@ -240,6 +247,7 @@ internal object DriveConflictEngine {
             overridePublishedFp: String? = local.publishedFp,
             overrideVersionFp: String = requireNotNull(lFp),
             overrideVersionOp: String = local.versionOp,
+            overrideVersionHlc: String? = local.versionHlc,
             overrideLastHlc: String = maxOf(local.lastHlc, incoming.hlc),
             overrideContentFp: String? = local.contentFp,
             overrideBodyJson: String? = local.bodyJson,
@@ -266,6 +274,7 @@ internal object DriveConflictEngine {
                 ancestorsJson = DriveCanonicalJson.encode(mergedAnc),
                 resRefsJson = DriveCanonicalJson.encode(mergedResRefs),
                 lastHlc = overrideLastHlc,
+                versionHlc = overrideVersionHlc,
                 bodyJson = overrideBodyJson,
             )
         }
@@ -336,46 +345,89 @@ internal object DriveConflictEngine {
         val incomingDescendsFromLocal = lFp in incoming.anc || lFp in incoming.resolvedFps ||
             (local.versionOp == DriveRecordState.OP_RESOLVE && lFp in incoming.resRefs)
         val bothDeletions = !local.isLivePut && isIncomingDelete && !incomingKnownAncestorOrRetired && !incomingDescendsFromLocal
-        val sameContent = local.versionOp == DriveRecordState.OP_PUT && incoming.op == DriveRecordState.OP_PUT &&
+        val localVersionHlc = local.versionHlc?.ifBlank { null }
+        val incomingHlc = incoming.hlc.ifBlank { null }
+        val sameContentBase = local.versionOp == DriveRecordState.OP_PUT && incoming.op == DriveRecordState.OP_PUT &&
             local.contentFp != null && local.contentFp == incomingContentFp && local.localRowMatchesContentFp &&
             !local.hasPostCrashLocalEdit && !incomingKnownAncestorOrRetired && !incomingDescendsFromLocal
+        // Silent equal-content agreement requires both authoring clocks. `lastHlc` cannot stand in
+        // for an unknown one: adopting a clockless version leaves it unrelated to that version.
+        // Otherwise fall through to Case 5 so an upgraded device never picks a divergent winner.
+        val sameContent = sameContentBase && (
+            incoming.fp == lFp || (localVersionHlc != null && incomingHlc != null)
+            )
+        // Crash repair can persist a version with a blank clock. A content-only ack cannot
+        // order that version against an aliased put, even if their canonical bodies match.
+        val unprovenEqualContent = sameContentBase && !sameContent && !local.versionBuiltWithoutRecordState
         val postCrashReplayAgreement = local.postCrashAckMatchesIncoming &&
             !local.hasPostCrashLocalEdit &&
-            !incomingKnownAncestorOrRetired
+            !incomingKnownAncestorOrRetired &&
+            !unprovenEqualContent
         if (incoming.fp == lFp || ((bothDeletions || postCrashReplayAgreement || sameContent) && successors.isEmpty())) {
             val mergedResRefs = buildSet {
                 addAll(local.resRefs)
                 addAll(incoming.resRefs)
                 addAll(step0ResRefsToAdd)
             }
-            val (chosenFp, chosenOp, chosenHlc) = when {
-                sameContent -> if (compareHlcFp(local.lastHlc, lFp, incoming.hlc, incoming.fp) >= 0) {
-                    Triple(lFp, local.versionOp, local.lastHlc)
-                } else {
-                    Triple(incoming.fp, incoming.op, incoming.hlc)
+            val recoveredVersionHlc = if (incoming.fp == lFp && localVersionHlc == null && incomingHlc != null) {
+                when {
+                    local.versionOp == DriveRecordState.OP_PUT && incoming.op == DriveRecordState.OP_PUT ->
+                        incomingHlc.takeIf {
+                            incoming.body != null && DriveCanonicalJson.putFp(incoming.body, it) == lFp
+                        }
+                    local.versionOp == DriveRecordState.OP_DEL && incoming.op == DriveRecordState.OP_DEL ->
+                        incomingHlc.takeIf {
+                            // The tombstone fingerprint binds the key it was authored under, which may be an alias.
+                            DriveCanonicalJson.delFp(domain, incoming.k, it) == lFp ||
+                                DriveCanonicalJson.delFp(domain, recordKey, it) == lFp
+                        }
+                    local.versionOp == DriveRecordState.OP_RESOLVE && incoming.op == DriveRecordState.OP_RESOLVE ->
+                        allResolutions.find { it.resolutionFp == lFp }?.hlc ?: incomingHlc
+                    else -> null
+                }
+            } else {
+                null
+            }
+            val observedLastHlc = maxOf(local.lastHlc, incoming.hlc)
+            val (chosenFp, chosenOp, chosenVersionHlc) = when {
+                incoming.fp == lFp -> Triple(
+                    lFp,
+                    if (isIncomingResolve) DriveRecordState.OP_RESOLVE else local.versionOp,
+                    localVersionHlc ?: recoveredVersionHlc,
+                )
+                sameContent -> {
+                    val localWins = localVersionHlc != null && incomingHlc != null &&
+                        compareHlcFp(localVersionHlc, lFp, incomingHlc, incoming.fp) >= 0
+                    if (localWins) {
+                        Triple(lFp, local.versionOp, localVersionHlc)
+                    } else {
+                        Triple(incoming.fp, incoming.op, incomingHlc)
+                    }
                 }
                 isIncomingResolve && bothDeletions && local.versionOp == DriveRecordState.OP_RESOLVE -> {
-                    val localResolutionHlc = allResolutions.find { it.resolutionFp == lFp }?.hlc ?: local.lastHlc
+                    val localResolutionHlc = allResolutions.find { it.resolutionFp == lFp }?.hlc
+                        ?: localVersionHlc
+                        ?: local.lastHlc
                     val localWins = compareHlcFp(localResolutionHlc, lFp, incoming.hlc, incoming.fp) >= 0
                     if (localWins) {
-                        Triple(lFp, local.versionOp, local.lastHlc)
+                        Triple(lFp, local.versionOp, localVersionHlc ?: localResolutionHlc.ifBlank { null })
                     } else {
-                        Triple(incoming.fp, DriveRecordState.OP_RESOLVE, maxOf(local.lastHlc, incoming.hlc))
+                        Triple(incoming.fp, DriveRecordState.OP_RESOLVE, incomingHlc)
                     }
                 }
                 isIncomingResolve -> {
-                    Triple(incoming.fp, DriveRecordState.OP_RESOLVE, maxOf(local.lastHlc, incoming.hlc))
+                    Triple(incoming.fp, DriveRecordState.OP_RESOLVE, incomingHlc)
                 }
                 bothDeletions -> {
                     if (local.versionOp == DriveRecordState.OP_RESOLVE) {
-                        Triple(lFp, local.versionOp, maxOf(local.lastHlc, incoming.hlc))
+                        Triple(lFp, local.versionOp, localVersionHlc)
                     } else if (incoming.fp > lFp) {
-                        Triple(incoming.fp, incoming.op, maxOf(local.lastHlc, incoming.hlc))
+                        Triple(incoming.fp, incoming.op, incomingHlc)
                     } else {
-                        Triple(lFp, local.versionOp, maxOf(local.lastHlc, incoming.hlc))
+                        Triple(lFp, local.versionOp, localVersionHlc)
                     }
                 }
-                else -> Triple(incoming.fp, incoming.op, maxOf(local.lastHlc, incoming.hlc))
+                else -> Triple(incoming.fp, incoming.op, incomingHlc)
             }
             val finalResRefs = if (chosenOp == DriveRecordState.OP_RESOLVE) {
                 mergedResRefs + chosenFp
@@ -406,7 +458,8 @@ internal object DriveConflictEngine {
                     overridePublishedFp = if (chosenFp == incoming.fp) incoming.fp else local.publishedFp,
                     overrideVersionFp = chosenFp,
                     overrideVersionOp = chosenOp,
-                    overrideLastHlc = chosenHlc,
+                    overrideVersionHlc = chosenVersionHlc,
+                    overrideLastHlc = observedLastHlc,
                     overrideContentFp = agreedContentFp,
                     overrideBodyJson = agreedBodyJson,
                     overrideOriginDeviceId = if (chosenFp == incoming.fp && lFp != chosenFp) remoteDeviceId else local.originDeviceId,
@@ -515,7 +568,8 @@ internal object DriveConflictEngine {
                                     .take(DriveWireCodec.MAX_ANCESTORS),
                             ),
                             resRefsJson = DriveCanonicalJson.encode(refs.distinct().sorted()),
-                            lastHlc = tip.remoteHlc,
+                            lastHlc = maxOf(local.lastHlc, maxOf(incoming.hlc, tip.remoteHlc)),
+                            versionHlc = tip.remoteHlc.ifBlank { null },
                             bodyJson = tipBody?.let(DriveCanonicalJson::encode),
                         ),
                         resolutionsToPersist = resolutionsToPersist,
@@ -828,7 +882,8 @@ internal object DriveConflictEngine {
             originSeq = null,
             ancestorsJson = DriveCanonicalJson.encode(newAnc),
             resRefsJson = DriveCanonicalJson.encode(newResRefs),
-            lastHlc = hlc,
+            lastHlc = maxOf(existingState?.lastHlc.orEmpty(), hlc),
+            versionHlc = hlc.ifBlank { null },
             bodyJson = bodyJson,
         )
         return resolution to state
@@ -964,4 +1019,20 @@ internal object DriveConflictEngine {
         val cmp = hlcA.compareTo(hlcB)
         return if (cmp != 0) cmp else fpA.compareTo(fpB)
     }
+}
+
+/**
+ * The clock to re-send an unchanged content-addressed put with. A version no peer has seen yet
+ * gets a fresh clock, stored with it so later retries agree; a published version keeps an
+ * unknown clock unknown, because peers may already hold it under another one.
+ */
+internal suspend fun DriveRecordStateDao.putRetryHlc(
+    state: DriveRecordState,
+    nextHlc: suspend () -> String,
+): String {
+    state.versionHlc?.ifBlank { null }?.let { return it }
+    if (state.publishedFp == state.versionFp) return ""
+    val hlc = nextHlc()
+    upsert(state.copy(versionHlc = hlc, lastHlc = maxOf(state.lastHlc, hlc)))
+    return hlc
 }

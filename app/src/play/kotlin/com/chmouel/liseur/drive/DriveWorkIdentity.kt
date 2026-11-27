@@ -583,6 +583,7 @@ internal class DriveWorkIdentity(
                     ancestorsJson = DriveCanonicalJson.encode(ancestors),
                     resRefsJson = existing?.resRefsJson ?: "[]",
                     lastHlc = hlc,
+                    versionHlc = hlc,
                     bodyJson = bodyJson,
                 ),
             )
@@ -623,6 +624,7 @@ internal class DriveWorkIdentity(
                     publishedFp = rejectionKey,
                     contentFp = rejectionKey,
                     lastHlc = hlc,
+                    versionHlc = hlc,
                 ),
             )
             database.withTransaction {
@@ -663,6 +665,7 @@ internal class DriveWorkIdentity(
                     ancestorsJson = DriveCanonicalJson.encode(ancestors),
                     resRefsJson = existing?.resRefsJson ?: "[]",
                     lastHlc = hlc,
+                    versionHlc = hlc,
                     bodyJson = bodyJson,
                 ),
             )
@@ -753,6 +756,7 @@ internal class DriveWorkIdentity(
                 publishedFp = fp,
                 contentFp = fp,
                 lastHlc = hlc,
+                versionHlc = hlc,
                 bodyJson = bodyJson,
             ),
         )
@@ -791,7 +795,7 @@ internal class DriveWorkIdentity(
                 d = DriveWireCodec.DOMAIN_WORK_ALIAS,
                 k = state.recordKey,
                 op = state.versionOp,
-                hlc = state.lastHlc,
+                hlc = state.authoringHlc,
                 fp = state.versionFp,
                 anc = decodeStringArray(state.ancestorsJson),
                 resRefs = decodeStringArray(state.resRefsJson),
@@ -895,6 +899,7 @@ internal class DriveWorkIdentity(
                             ancestorsJson = DriveCanonicalJson.encode(anc),
                             resRefsJson = DriveCanonicalJson.encode(record.resRefs.distinct().sorted()),
                             lastHlc = record.hlc,
+                            versionHlc = record.hlc.ifBlank { null },
                             bodyJson = chosenBody,
                         ),
                     )
@@ -939,6 +944,7 @@ internal class DriveWorkIdentity(
                             ancestorsJson = DriveCanonicalJson.encode(record.anc.take(DriveWireCodec.MAX_ANCESTORS)),
                             resRefsJson = DriveCanonicalJson.encode(record.resRefs.distinct().sorted()),
                             lastHlc = record.hlc,
+                            versionHlc = record.hlc.ifBlank { null },
                             bodyJson = canonicalBody,
                         ),
                     )
@@ -970,6 +976,7 @@ internal class DriveWorkIdentity(
                     ancestorsJson = DriveCanonicalJson.encode(buildAncestors(existing)),
                     resRefsJson = existing?.resRefsJson ?: "[]",
                     lastHlc = hlc,
+                    versionHlc = hlc,
                     bodyJson = DriveCanonicalJson.encode(bodyMap),
                 ),
             )

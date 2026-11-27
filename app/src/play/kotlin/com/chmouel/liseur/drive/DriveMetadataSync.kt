@@ -97,7 +97,7 @@ internal class DriveMetadataSync(
                 key = state.recordKey,
                 outcome = res.outcome,
                 resolvedFps = DriveWorkIdentity.decodeStringArray(res.resolvedFpsJson),
-                hlc = state.lastHlc,
+                hlc = res.hlc,
                 bodyMap = bodyMap,
                 ancestors = DriveWorkIdentity.decodeStringArray(state.ancestorsJson),
                 resRefs = DriveWorkIdentity.decodeStringArray(state.resRefsJson),
@@ -215,7 +215,7 @@ internal class DriveMetadataSync(
                     val hlc: String
                     val ancestors: List<String>
                     if (existingState != null && existingState.versionOp == DriveRecordState.OP_PUT && existingState.versionFp == contentFp) {
-                        hlc = existingState.lastHlc.ifBlank { nextHlc() }
+                        hlc = recordStates.putRetryHlc(existingState, nextHlc)
                         ancestors = DriveWorkIdentity.decodeStringArray(existingState.ancestorsJson)
                     } else {
                         hlc = nextHlc()
@@ -237,7 +237,8 @@ internal class DriveMetadataSync(
                                 originSeq = null,
                                 ancestorsJson = DriveCanonicalJson.encode(ancestors),
                                 resRefsJson = DriveCanonicalJson.encode(resRefs),
-                                lastHlc = hlc,
+                                lastHlc = maxOf(existingState?.lastHlc.orEmpty(), hlc),
+                                versionHlc = hlc,
                                 bodyJson = bodyJson,
                             ),
                         )
@@ -277,7 +278,7 @@ internal class DriveMetadataSync(
                     val delFp: String
                     val ancestors: List<String>
                     if (existingState != null && existingState.versionOp == DriveRecordState.OP_DEL && existingState.publishedFp != existingState.versionFp) {
-                        hlc = existingState.lastHlc.ifBlank { nextHlc() }
+                        hlc = existingState.versionHlc?.ifBlank { null } ?: ""
                         delFp = existingState.versionFp
                         ancestors = DriveWorkIdentity.decodeStringArray(existingState.ancestorsJson)
                     } else {
@@ -301,7 +302,8 @@ internal class DriveMetadataSync(
                                 originSeq = null,
                                 ancestorsJson = DriveCanonicalJson.encode(ancestors),
                                 resRefsJson = DriveCanonicalJson.encode(resRefs),
-                                lastHlc = hlc,
+                                lastHlc = maxOf(existingState?.lastHlc.orEmpty(), hlc),
+                                versionHlc = hlc,
                                 bodyJson = null,
                             ),
                         )
@@ -1083,6 +1085,7 @@ internal class DriveMetadataSync(
                 ancestorsJson = DriveCanonicalJson.encode(mergedAnc),
                 resRefsJson = existing?.resRefsJson ?: "[]",
                 lastHlc = existing?.lastHlc ?: "",
+                versionHlc = existing?.versionHlc?.takeIf { existing.versionFp == vfp },
                 bodyJson = bodyMap?.let(DriveCanonicalJson::encode) ?: existing?.bodyJson,
             )
             recordStates.upsert(repaired)
@@ -1108,6 +1111,7 @@ internal class DriveMetadataSync(
                 ancestorsJson = DriveCanonicalJson.encode(mergedAnc),
                 resRefsJson = existing?.resRefsJson ?: "[]",
                 lastHlc = existing?.lastHlc ?: "",
+                versionHlc = existing?.versionHlc?.takeIf { existing.versionFp == sentMeta.vfp },
                 bodyJson = existing?.bodyJson,
             )
             recordStates.upsert(seeded)
@@ -1147,6 +1151,7 @@ internal class DriveMetadataSync(
                 // overwriting the removal.
                 if (heldReplay && revRow != null && revRow.revision > 0L) {
                     return LocalRecordView(
+                        versionBuiltWithoutRecordState = true,
                         versionFp = DriveCanonicalJson.delFp(DriveWireCodec.DOMAIN_METADATA, recordKey, nextHlc()),
                         versionOp = DriveRecordState.OP_DEL,
                         isLivePut = false,
@@ -1159,6 +1164,7 @@ internal class DriveMetadataSync(
             }
             if (liveContentFp != null) {
                 return LocalRecordView(
+                    versionBuiltWithoutRecordState = true,
                     versionFp = liveContentFp,
                     versionOp = DriveRecordState.OP_PUT,
                     isLivePut = true,
@@ -1197,6 +1203,7 @@ internal class DriveMetadataSync(
                     .filter { it != liveContentFp }
                     .take(DriveWireCodec.MAX_ANCESTORS)
                 return LocalRecordView(
+                    versionBuiltWithoutRecordState = true,
                     versionFp = liveContentFp,
                     versionOp = DriveRecordState.OP_PUT,
                     isLivePut = true,
@@ -1208,6 +1215,7 @@ internal class DriveMetadataSync(
                     ancestors = editAnc,
                     resRefs = stateResRefs,
                     lastHlc = existingState.lastHlc,
+                    versionHlc = null,
                     bodyJson = liveBodyJson,
                     localRowMatchesContentFp = true,
                     postCrashAckMatchesIncoming = postCrashAckMatchesIncoming,
@@ -1220,6 +1228,7 @@ internal class DriveMetadataSync(
                     .distinct()
                     .take(DriveWireCodec.MAX_ANCESTORS)
                 return LocalRecordView(
+                    versionBuiltWithoutRecordState = true,
                     versionFp = delFp,
                     versionOp = DriveRecordState.OP_DEL,
                     isLivePut = false,
@@ -1254,6 +1263,7 @@ internal class DriveMetadataSync(
             ancestors = stateAnc,
             resRefs = stateResRefs,
             lastHlc = existingState.lastHlc,
+            versionHlc = existingState.versionHlc,
             bodyJson = existingState.bodyJson,
             localRowMatchesContentFp = matches,
             postCrashAckMatchesIncoming = postCrashAckMatchesIncoming,
