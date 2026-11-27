@@ -857,6 +857,7 @@ internal class DriveAccountController(
             keyB = match.candidateWorkKey,
             hlc = hlc,
         )
+        driveSync.positionSync.reconcileMergedResets(active.permissionId, driveSync.ensureInstall().deviceId)
         runCatching { driveSync.changeEngine.sync() }
     }
 
