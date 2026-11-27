@@ -104,6 +104,19 @@ class DrivePhase5EndToEndTest {
     }
 
     @Test
+    fun `Google Drive sync leaves vocabulary on its device`() = runTest {
+        deviceA.connect(PERM_A, "a@example.com")
+        deviceB.connect(PERM_A, "a@example.com")
+        VocabularyRepository(deviceA.liseurDb).collect(
+            VocabularyLookup("lune", "fr", null), "moon", "en", now = 1_745_000_000_000L,
+        )
+        assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+        assertNotNull(deviceA.liseurDb.vocabularyDao().findWord("lune", "fr"))
+        assertNull(deviceB.liseurDb.vocabularyDao().findWord("lune", "fr"))
+    }
+
+    @Test
     fun `vocabulary words, occurrences, legacy baseline, and retired ownerAccount sync and merge cleanly`() = runTest {
         deviceA.connect(PERM_A, "a@example.com")
         deviceB.connect(PERM_A, "a@example.com")

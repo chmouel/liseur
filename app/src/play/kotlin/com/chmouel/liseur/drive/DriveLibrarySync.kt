@@ -245,7 +245,6 @@ internal class DriveLibrarySync(
             evaluationSync = evaluationSync,
             metadataSync = metadataSync,
             seriesSync = seriesSync,
-            vocabularySync = vocabularySync,
             sessionSync = sessionSync,
             compactionDeltaThreshold = compactionDeltaThreshold,
             compactionBytesThreshold = compactionBytesThreshold,
