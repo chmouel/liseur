@@ -107,13 +107,57 @@ class DrivePhase5EndToEndTest {
     fun `Google Drive sync leaves vocabulary on its device`() = runTest {
         deviceA.connect(PERM_A, "a@example.com")
         deviceB.connect(PERM_A, "a@example.com")
+        seedBook(deviceA, "local-vocab.epub", "9780141439518", "Book", "Author")
         VocabularyRepository(deviceA.liseurDb).collect(
             VocabularyLookup("lune", "fr", null), "moon", "en", now = 1_745_000_000_000L,
         )
         assertEquals(SyncOutcome.Success, deviceA.changeEngine.sync().outcome)
         assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync().outcome)
+        val batches = deviceA.driveDb.outbox().forAccount(PERM_A)
+        assertTrue(batches.isNotEmpty())
+        assertTrue(batches.flatMap { DriveWireCodec.decodeDeltaBatch(it.payload).records }.none {
+            it.d in setOf(DriveWireCodec.DOMAIN_VOCAB_WORD, DriveWireCodec.DOMAIN_VOCAB_OCCURRENCE, DriveWireCodec.DOMAIN_VOCAB_REVIEW)
+        })
         assertNotNull(deviceA.liseurDb.vocabularyDao().findWord("lune", "fr"))
         assertNull(deviceB.liseurDb.vocabularyDao().findWord("lune", "fr"))
+
+        val hlc = "0017450000000-0001-dev-c"
+        val word = DriveVocabWordBody("fr", "lune", "lune", "remote", "en", "", false, 0L, 0L, 1_745_000_000_000L, null)
+        val record = DriveWireCodec.putRecord(
+            DriveWireCodec.DOMAIN_VOCAB_WORD, DriveVocabularySync.wordKey("fr", "lune"), hlc,
+            DriveWireCodec.encodeVocabWordBody(word),
+        )
+        val snapshot = DriveSnapshotPart(
+            deviceId = "dev-c", throughSeq = 1L, partIndex = 0, partCount = 1, createdHlc = hlc,
+            domains = DriveWireCodec.SUPPORTED_DOMAIN_VERSIONS, records = listOf(record),
+        )
+        val bytes = DriveWireCodec.encodeSnapshotPart(snapshot).toByteArray()
+        val file = serverA.clientFor("dev-c").createAppDataFile("token", "vocab.json", "application/json", bytes, emptyMap())
+        deviceB.changeEngine.applySnapshot(
+            PERM_A, "dev-b", "dev-c", DriveSnapshotRef(1L, listOf(
+                DriveSnapshotPartRef("vocab.json", file.id, DriveCanonicalJson.sha256Hex(bytes), 1, 0),
+            )), "token",
+        )
+        assertNull(deviceB.liseurDb.vocabularyDao().findWord("lune", "fr"))
+
+        VocabularyRepository(deviceB.liseurDb).collect(
+            VocabularyLookup("soleil", "fr", null), "sun", "en", now = 1_745_000_000_000L,
+        )
+        val delete = DriveWireCodec.delRecord(
+            DriveWireCodec.DOMAIN_VOCAB_WORD, DriveVocabularySync.wordKey("fr", "soleil"), hlc,
+        )
+        val batch = DriveDeltaBatch(
+            batchId = DriveCanonicalJson.batchId("dev-d", 1L), deviceId = "dev-d", seq = 1L,
+            createdHlc = hlc, domains = DriveWireCodec.SUPPORTED_DOMAIN_VERSIONS, records = listOf(record, delete),
+        )
+        serverA.clientFor("dev-d").createAppDataFile(
+            "token", DriveWireCodec.deltaFileName("dev-d", 1L), "application/json",
+            DriveWireCodec.encodeDeltaBatch(batch).toByteArray(), DriveWireCodec.deltaAppProperties("dev-d", 1L, batch.batchId),
+        )
+        assertEquals(SyncOutcome.Success, deviceB.changeEngine.sync(forceManifestRescan = true).outcome)
+        assertEquals(1L, deviceB.driveDb.cursors().get(PERM_A, "dev-d", DriveWireCodec.DOMAIN_VOCAB_WORD)?.appliedSeq)
+        assertNull(deviceB.liseurDb.vocabularyDao().findWord("lune", "fr"))
+        assertEquals("sun", deviceB.liseurDb.vocabularyDao().findWord("soleil", "fr")?.definition)
     }
 
 
