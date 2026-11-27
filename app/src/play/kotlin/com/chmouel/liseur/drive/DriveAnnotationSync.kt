@@ -444,6 +444,11 @@ internal class DriveAnnotationSync(
             remoteDeviceId = remoteDeviceId,
             remoteSeq = remoteSeq,
             now = clock(),
+            parkedPutContentFp = { body ->
+                DriveWireCodec.decodeAnnotationBody(body)?.let {
+                    DriveWireCodec.annotationContentFp(it.copy(workKey = effectiveWorkKey))
+                }
+            },
         )
 
         var staleLocal = false

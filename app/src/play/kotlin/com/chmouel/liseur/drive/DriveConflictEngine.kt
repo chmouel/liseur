@@ -113,6 +113,7 @@ internal object DriveConflictEngine {
         remoteDeviceId: String,
         remoteSeq: Long,
         now: Long,
+        parkedPutContentFp: (JSONObject) -> String? = DriveCanonicalJson::contentFp,
     ): ReconciliationResult {
         val isIncomingResolve = incoming.op == DriveRecordState.OP_RESOLVE
         val isIncomingDelete = incoming.op == DriveRecordState.OP_DEL ||
@@ -532,17 +533,27 @@ internal object DriveConflictEngine {
                 if (tip != null && settledBySuccessor.isNotEmpty()) {
                     val allSettlements = (settlements + settledBySuccessor).associateBy { it.conflictId }.values.toList()
                     val refs = local.resRefs + incoming.resRefs + step0ResRefsToAdd + incoming.fp + decodeList(tip.remoteResRefsJson)
+                    val ancestors = listOf(lFp) + decodeList(tip.remoteAncJson) + incoming.fp + incoming.anc
                     if (lFp == tip.remoteFp) {
                         return ReconciliationResult(
                             reconciliationCase = ReconciliationCase.RESOLVE_STALE,
                             dataAction = ReconciliationDataAction.NoDataChange,
-                            updatedRecordState = stateKeepingLocal(extraResRefs = refs),
+                            updatedRecordState = stateKeepingLocal(extraAnc = ancestors, extraResRefs = refs),
                             resolutionsToPersist = resolutionsToPersist,
                             conflictsToSettle = allSettlements,
                         )
                     }
                     val tipBody = tip.remoteJson?.let(::JSONObject)
-                    val tipContentFp = tipBody?.let(DriveCanonicalJson::contentFp)
+                    val tipContentFp = tipBody?.let(parkedPutContentFp)
+                    if (tipBody != null && tipContentFp == null) {
+                        return ReconciliationResult(
+                            reconciliationCase = ReconciliationCase.RESOLVE_STALE,
+                            dataAction = ReconciliationDataAction.NoDataChange,
+                            updatedRecordState = stateKeepingLocal(includeCandidateRefs = false),
+                            resolutionsToPersist = resolutionsToPersist,
+                            conflictsToSettle = settlements,
+                        )
+                    }
                     return ReconciliationResult(
                         reconciliationCase = ReconciliationCase.RESOLUTION_BRIDGED_SUPERSESSION,
                         dataAction = if (tipBody != null && tipContentFp != null) {
@@ -562,7 +573,7 @@ internal object DriveConflictEngine {
                             originDeviceId = tip.remoteDeviceId,
                             originSeq = tip.remoteSeq,
                             ancestorsJson = DriveCanonicalJson.encode(
-                                (listOf(lFp) + decodeList(tip.remoteAncJson) + incoming.fp + local.ancestors)
+                                (ancestors + local.ancestors)
                                     .distinct()
                                     .filter { it != tip.remoteFp }
                                     .take(DriveWireCodec.MAX_ANCESTORS),
