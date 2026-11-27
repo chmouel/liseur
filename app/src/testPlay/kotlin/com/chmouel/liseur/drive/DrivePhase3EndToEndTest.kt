@@ -2307,6 +2307,92 @@ class DrivePhase3EndToEndTest {
     }
 
     @Test
+    fun `interrupted forget on merged work settles book when revision guard rejects replay`() = runTest {
+        deviceA.connect()
+        val sha = "b".repeat(64)
+        val book = peakBook("merged-interrupted-forget")
+        deviceA.addBook(book, sha)
+        deviceA.read(book.url, 0.8, 1_000L)
+        deviceA.workIdentity.resolveBook(PERM_ID, book)
+        val published = deviceA.collectPeaks()
+        val peak = published.records.single { it.d == DriveWireCodec.DOMAIN_FURTHEST }
+        val seq = peak.peakSeq()
+        deviceA.positionSync.acknowledgePublished(PERM_ID, published.records, published.positionAcks, published.peakAcks)
+        deviceA.workIdentity.confirmMerge(PERM_ID, book.url, "sha:$sha", "isbn:9780547928227", "0017450000000-0002-dev-a")
+
+        val progressAtForget = deviceA.liseurDb.readingProgressDao().get(book.url)!!
+        val resetKey = DrivePositionSync.resetRecordKey("isbn:9780547928227", "interrupted-1")
+        val resetBody = DriveFurthestBody.Reset(
+            workKey = "isbn:9780547928227",
+            resetId = "interrupted-1",
+            floors = sortedMapOf("dev-a" to seq),
+            resetAt = 1_500L,
+        )
+        val bodyMap = DriveWireCodec.encodeFurthestBody(resetBody)
+        val fp = DriveCanonicalJson.putFp(bodyMap, "0017450000000-0003-dev-a")
+        deviceA.driveDb.recordStates().upsert(
+            DriveRecordState(
+                permissionId = PERM_ID,
+                domain = DriveWireCodec.DOMAIN_FURTHEST,
+                recordKey = resetKey,
+                versionFp = fp,
+                versionOp = DriveRecordState.OP_PUT,
+                publishedFp = null,
+                contentFp = DriveCanonicalJson.contentFp(bodyMap),
+                ancestorsJson = "[]",
+                resRefsJson = "[]",
+                lastHlc = "0017450000000-0003-dev-a",
+                bodyJson = DriveCanonicalJson.encode(bodyMap),
+            ),
+        )
+        deviceA.driveDb.recordStates().upsert(
+            DriveRecordState(
+                permissionId = PERM_ID,
+                domain = "_furthest_reset_pending",
+                recordKey = resetKey,
+                versionFp = fp,
+                versionOp = DriveRecordState.OP_PUT,
+                lastHlc = "0017450000000-0003-dev-a",
+                bodyJson = """{"revisions":{"${book.url}":${progressAtForget.localRevision}}}""",
+            ),
+        )
+
+        // Reader backtracks before pending replay runs; recovery must preserve the 80% peak.
+        deviceA.read(book.url, 0.5, 2_000L)
+        deviceA.positionSync.reapplyPendingResets(PERM_ID, deviceA.deviceId)
+        deviceA.positionSync.reconcileMergedResets(PERM_ID, deviceA.deviceId)
+        assertEquals(0.8, deviceA.liseurDb.readingProgressDao().get(book.url)!!.peakProgression!!, 0.0001)
+    }
+
+    @Test
+    fun `copy read after merged reset does not inherit already covered winner sequence`() = runTest {
+        deviceA.connect()
+        val sha = "c".repeat(64)
+        val first = peakBook("merged-post-reset-a")
+        val second = peakBook("merged-post-reset-b")
+        deviceA.addBook(first, sha)
+        deviceA.read(first.url, 0.8, 1_000L)
+        deviceA.workIdentity.resolveBook(PERM_ID, first)
+        val published = deviceA.collectPeaks()
+        val peak = published.records.single { it.d == DriveWireCodec.DOMAIN_FURTHEST }
+        val seq = peak.peakSeq()
+        deviceA.positionSync.acknowledgePublished(PERM_ID, published.records, published.positionAcks, published.peakAcks)
+        deviceA.workIdentity.confirmMerge(PERM_ID, first.url, "sha:$sha", "isbn:9780547928227", "0017450000000-0002-dev-a")
+
+        deviceA.applyFurthest(remoteReset("isbn:9780547928227", "post-reset-1", mapOf("dev-a" to seq)), "dev-c")
+        assertEquals(0.8, deviceA.liseurDb.readingProgressDao().get(first.url)!!.peakProgression!!, 0.0001)
+
+        // A second copy first read after the reset must keep its peak after backtracking and sync.
+        deviceA.addBook(second, sha)
+        deviceA.read(second.url, 0.6, 2_000L)
+        deviceA.read(second.url, 0.2, 3_000L)
+        deviceA.workIdentity.resolveBook(PERM_ID, second)
+        deviceA.collectPeaks()
+        deviceA.positionSync.reconcileMergedResets(PERM_ID, deviceA.deviceId)
+        assertEquals(0.6, deviceA.liseurDb.readingProgressDao().get(second.url)!!.peakProgression!!, 0.0001)
+    }
+
+    @Test
     fun `two local books of one edition publish one deterministic peak and a forget resets both`() = runTest {
         deviceA.connect()
         deviceB.connect()
