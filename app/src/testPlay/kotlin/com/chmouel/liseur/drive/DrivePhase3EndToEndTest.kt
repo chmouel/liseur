@@ -279,6 +279,13 @@ class DrivePhase3EndToEndTest {
         assertNotNull(downloadedBook1.localUri)
         assertEquals(fp1.sha256, deviceB.liseurDb.workIdentityDao().fingerprint(stub1After.url)?.sha256)
 
+        val duplicate = book1.copy(url = "file:///duplicate.epub", localUri = book1File.toURI().toString())
+        val missing = book2.copy(url = "file:///missing.epub", localUri = File(deviceB.booksDir, "missing.epub").toURI().toString())
+        val personal = book2.copy(url = "file:///personal.epub", localUri = book2File.toURI().toString())
+        deviceB.liseurDb.bookDao().upsertAll(listOf(duplicate, missing, personal))
+        assertEquals(listOf(personal.url), deviceB.epubTransfers.listUploadCandidates(PERM_ID).map { it.bookUrl })
+        deviceB.liseurDb.bookDao().deleteByUrls(listOf(duplicate.url, missing.url, personal.url))
+
         // Device A reads to 42% with exact locator and syncs.
         val exactLocator = """{"href":"ch04.xhtml","locations":{"liseurAnchor":1,"cssSelector":"p#p4","progression":0.5,"totalProgression":0.42},"text":{"highlight":"In a hole"},"type":"application/xhtml+xml"}"""
         deviceA.liseurDb.readingProgressDao().recordLocal(

@@ -28,6 +28,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 
 /** Row displayed in the Play-only "Upload EPUB files" picker UI. */
@@ -123,14 +124,21 @@ internal class DriveEpubTransferManager(
 
     /** Lists all locally available books eligible for the "Upload EPUB files" picker. */
     suspend fun listUploadCandidates(permissionId: String): List<DriveUploadCandidate> = withContext(Dispatchers.IO) {
+        val held = heldEpubSha256s(
+            driveFiles.observeLiveEpubFiles(permissionId).first(),
+            store.recordStates().forDomain(permissionId, DriveWireCodec.DOMAIN_CATALOG),
+        )
         val localBooks = books.allOnce()
-            .filter { it.browseServerId == null && it.openableUrl != null }
+            .filter { it.browseServerId == null && it.openableUrl != null && !isDriveBook(it) }
             .sortedBy { it.title.lowercase(Locale.ROOT) }
         val existingUploads = uploads.forAccount(permissionId)
         val byBookUrl = existingUploads.associateBy { it.bookUrl }
         val bySha = existingUploads.associateBy { it.sha256.lowercase(Locale.ROOT) }
 
-        localBooks.map { book ->
+        localBooks.mapNotNull { book ->
+            if (runCatching { openBookStream(book)?.use { true } ?: false }.getOrDefault(false).not()) return@mapNotNull null
+            val currentFingerprint = if (held.isNotEmpty()) fingerprintStore.of(book) else null
+            if (currentFingerprint?.sha256?.lowercase(Locale.ROOT) in held) return@mapNotNull null
             val fp = identities.fingerprint(book.url)
             val sha = fp?.sha256?.lowercase(Locale.ROOT)
             val upload = sha?.let { bySha[it] } ?: byBookUrl[book.url]
@@ -1143,6 +1151,10 @@ internal class DriveEpubTransferManager(
         }
     }
 }
+
+internal fun isDriveBook(book: Book): Boolean =
+    book.url.startsWith(DriveWorkIdentity.DRIVE_BOOK_URL_PREFIX) ||
+        DriveCatalogSync.fileIdFromHref(book.downloadHref) != null
 
 /**
  * What the main-side upload offer needs to know about the `drive_upload` queue
