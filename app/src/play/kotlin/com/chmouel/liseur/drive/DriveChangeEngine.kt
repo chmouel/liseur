@@ -271,6 +271,7 @@ internal class DriveChangeEngine(
 
         // Finish forgets interrupted after their reset was persisted, before pulls can restore the peak.
         positionSync.reapplyPendingResets(permissionId, localDeviceId)
+        positionSync.reconcileMergedResets(permissionId, localDeviceId)
 
         // Clear any persisted domain/stream pauses whose advertised schema versions
         // are now supported by this build, preserving appliedSeq for replay.
@@ -308,6 +309,7 @@ internal class DriveChangeEngine(
         }
 
         // Catch newly matched or re-keyed books up on remote positions received earlier.
+        positionSync.reconcileMergedResets(permissionId, localDeviceId)
         positionSync.seedUnseededAliases(permissionId, localDeviceId)
 
         if (!isAccountActive(permissionId)) {

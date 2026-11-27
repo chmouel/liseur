@@ -2049,6 +2049,172 @@ class DrivePhase3EndToEndTest {
         positionSync.applyRemoteFurthest(PERM_ID, deviceId, record, origin, remoteSeq = 1L)
 
     @Test
+    fun `work merge preserves an earlier remote furthest destination`() = runTest {
+        deviceB.connect()
+        val sha = "a".repeat(64)
+        val isbn = "9780547928227"
+        val book = peakBook("merged-peak", isbn)
+        deviceB.addBook(book, sha)
+        deviceB.read(book.url, 0.2, 1_000L)
+        deviceB.workIdentity.resolveBook(PERM_ID, book)
+        deviceB.applyFurthest(remotePeak("sha:$sha", sha, "dev-a", 7L, 0.8), "dev-a")
+        deviceB.workIdentity.confirmMerge(PERM_ID, book.url, "isbn:$isbn", "sha:$sha", "0000000001000-0000-dev-b")
+        val preview = deviceB.positionSync.previewKnownBook(book.url) as com.chmouel.liseur.data.remote.PreviewOutcome.Ready
+        assertEquals(0.8, preview.preview.furthest!!.progression, 0.0001)
+    }
+
+    @Test
+    fun `work merge retains reset floors and rejects stale peaks from either key`() = runTest {
+        deviceB.connect()
+        val sha = "b".repeat(64)
+        val isbn = "9780547928227"
+        val book = peakBook("merged-floor", isbn)
+        deviceB.addBook(book, sha)
+        deviceB.workIdentity.resolveBook(PERM_ID, book)
+        deviceB.applyFurthest(remoteReset("sha:$sha", "reset-before-merge", mapOf("dev-a" to 10L)), "dev-c")
+        deviceB.workIdentity.confirmMerge(PERM_ID, book.url, "isbn:$isbn", "sha:$sha", "0000000001000-0000-dev-b")
+        assertEquals(10L, deviceB.positionSync.getPersistedFloor(PERM_ID, "isbn:$isbn", "dev-a"))
+        deviceB.applyFurthest(remotePeak("isbn:$isbn", sha, "dev-a", 9L, 0.9), "dev-a")
+        deviceB.applyFurthest(remotePeak("sha:$sha", sha, "dev-a", 10L, 0.8), "dev-a")
+        assertTrue(deviceB.observed("isbn:$isbn").isEmpty())
+        deviceB.applyFurthest(remotePeak("sha:$sha", sha, "dev-a", 11L, 0.4), "dev-a")
+        assertEquals(0.4, deviceB.observed("isbn:$isbn").single().progression, 0.0001)
+    }
+
+    @Test
+    fun `reset after a work merge removes observations under the old key`() = runTest {
+        deviceB.connect()
+        val sha = "c".repeat(64)
+        val isbn = "9780547928227"
+        val book = peakBook("merged-reset", isbn)
+        deviceB.addBook(book, sha)
+        deviceB.workIdentity.resolveBook(PERM_ID, book)
+        deviceB.applyFurthest(remotePeak("sha:$sha", sha, "dev-a", 7L, 0.8), "dev-a")
+        deviceB.workIdentity.confirmMerge(PERM_ID, book.url, "isbn:$isbn", "sha:$sha", "0000000001000-0000-dev-b")
+        deviceB.applyFurthest(remoteReset("isbn:$isbn", "merged-reset", mapOf("dev-a" to 7L)), "dev-c")
+        assertTrue(deviceB.observed("sha:$sha").isEmpty())
+        assertTrue(deviceB.observed("isbn:$isbn").isEmpty())
+    }
+
+    @Test
+    fun `remote transitive merges preserve reset floors on replay`() = runTest {
+        deviceB.connect()
+        val sha = "d".repeat(64)
+        val oldKey = "sha:$sha"
+        val middleKey = "isbn:9780547928227"
+        val canonicalKey = "dc:book"
+        deviceB.applyFurthest(remoteReset(oldKey, "before-merge", mapOf("dev-a" to 10L)), "dev-c")
+        suspend fun merge(from: String, to: String) {
+            val body = DriveWorkAliasBody.Merge(from, to, 1_000L)
+            val record = DriveWireCodec.putRecord(
+                DriveWireCodec.DOMAIN_WORK_ALIAS, "merge:$from", "0017450000000-0001-dev-c",
+                DriveWireCodec.encodeWorkAliasBody(body),
+            )
+            deviceB.workIdentity.applyRemoteRecord(PERM_ID, record, "dev-c", 1L)
+            deviceB.workIdentity.applyRemoteRecord(PERM_ID, record, "dev-c", 1L)
+        }
+        merge(oldKey, middleKey)
+        merge(middleKey, canonicalKey)
+        assertEquals(10L, deviceB.positionSync.getPersistedFloor(PERM_ID, canonicalKey, "dev-a"))
+        deviceB.applyFurthest(remotePeak(canonicalKey, sha, "dev-a", 10L, 0.9), "dev-a")
+        assertTrue(deviceB.observed(canonicalKey).isEmpty())
+        deviceB.applyFurthest(remotePeak(oldKey, sha, "dev-a", 11L, 0.4), "dev-a")
+        assertEquals(0.4, deviceB.observed(canonicalKey).single().progression, 0.0001)
+    }
+
+    @Test
+    fun `work merge preserves peak delivery without suppressing a newer peak`() = runTest {
+        deviceB.connect()
+        val sha = "e".repeat(64)
+        val book = peakBook("merged-delivery")
+        deviceB.addBook(book, sha)
+        deviceB.read(book.url, 0.4, 1_000L)
+        deviceB.workIdentity.resolveBook(PERM_ID, book)
+        val first = deviceB.positionSync.collectDirtyRecords(PERM_ID, deviceB.deviceId) { "0017450000000-0001-dev-b" }
+        assertTrue(first.records.any { it.d == DriveWireCodec.DOMAIN_FURTHEST })
+        deviceB.positionSync.acknowledgePublished(PERM_ID, first.records, first.positionAcks, first.peakAcks)
+        deviceB.workIdentity.confirmMerge(PERM_ID, book.url, "sha:$sha", "isbn:9780547928227", "0017450000000-0002-dev-b")
+        val unchanged = deviceB.positionSync.collectDirtyRecords(PERM_ID, deviceB.deviceId) { "0017450000000-0003-dev-b" }
+        assertTrue(unchanged.records.none { it.d == DriveWireCodec.DOMAIN_FURTHEST })
+        deviceB.read(book.url, 0.8, 2_000L)
+        val newer = deviceB.positionSync.collectDirtyRecords(PERM_ID, deviceB.deviceId) { "0017450000000-0004-dev-b" }
+        assertTrue(newer.records.any { it.d == DriveWireCodec.DOMAIN_FURTHEST })
+    }
+
+    @Test
+    fun `a reset received before a merge clears the covered local peak on reconciliation`() = runTest {
+        deviceB.connect()
+        val sha = "f".repeat(64)
+        val book = peakBook("merged-local-reset")
+        deviceB.addBook(book, sha)
+        deviceB.read(book.url, 0.8, 1_000L)
+        deviceB.workIdentity.resolveBook(PERM_ID, book)
+        val bundle = deviceB.positionSync.collectDirtyRecords(PERM_ID, deviceB.deviceId) { "0017450000000-0001-dev-b" }
+        val peak = bundle.records.single { it.d == DriveWireCodec.DOMAIN_FURTHEST }
+        val seq = (DriveWireCodec.decodeFurthestBody(peak.body!!) as DriveFurthestBody.Peak).seq
+        deviceB.positionSync.acknowledgePublished(PERM_ID, bundle.records, bundle.positionAcks, bundle.peakAcks)
+        deviceB.read(book.url, 0.2, 1_500L)
+        deviceB.applyFurthest(remoteReset("isbn:9780547928227", "local-before-merge", mapOf("dev-b" to seq)), "dev-c")
+        assertEquals(0.8, deviceB.liseurDb.readingProgressDao().get(book.url)!!.peakProgression!!, 0.0001)
+        deviceB.workIdentity.confirmMerge(PERM_ID, book.url, "sha:$sha", "isbn:9780547928227", "0017450000000-0002-dev-b")
+        deviceB.positionSync.reconcileMergedResets(PERM_ID, deviceB.deviceId)
+        assertEquals(0.2, deviceB.liseurDb.readingProgressDao().get(book.url)!!.peakProgression!!, 0.0001)
+        deviceB.read(book.url, 0.9, 2_000L)
+        deviceB.positionSync.reconcileMergedResets(PERM_ID, deviceB.deviceId)
+        assertEquals(0.9, deviceB.liseurDb.readingProgressDao().get(book.url)!!.peakProgression!!, 0.0001)
+    }
+
+    @Test
+    fun `snapshot merge and reset suppress stale peaks on either work key`() = runTest {
+        deviceB.connect()
+        val sha = "7".repeat(64)
+        val isbn = "9780547928227"
+        val book = peakBook("snapshot-merged-reset", isbn)
+        deviceB.addBook(book, sha)
+        deviceB.workIdentity.resolveBook(PERM_ID, book)
+        val oldKey = "sha:$sha"
+        val canonical = "isbn:$isbn"
+        val hlc = "0017450000000-0001-dev-c"
+        val merge = DriveWireCodec.putRecord(
+            DriveWireCodec.DOMAIN_WORK_ALIAS, "merge:$oldKey", hlc,
+            DriveWireCodec.encodeWorkAliasBody(DriveWorkAliasBody.Merge(oldKey, canonical, 1_000L)),
+        )
+        val reset = remoteReset(oldKey, "snapshot-reset", mapOf("dev-a" to 10L))
+        val part = DriveSnapshotPart(
+            deviceId = "dev-c", throughSeq = 5L, partIndex = 0, partCount = 1, createdHlc = hlc,
+            domains = DriveWireCodec.SUPPORTED_DOMAIN_VERSIONS, records = listOf(merge, reset),
+        )
+        val bytes = DriveWireCodec.encodeSnapshotPart(part).toByteArray()
+        val file = driveServer.createAppDataFile("token", "merged-reset.json", "application/json", bytes, emptyMap())
+        val ref = DriveSnapshotRef(5L, listOf(DriveSnapshotPartRef(
+            "merged-reset.json", file.id, DriveCanonicalJson.sha256Hex(bytes), 2, 0,
+        )))
+        deviceB.changeEngine.applySnapshot(PERM_ID, "dev-b", "dev-c", ref, "token")
+        assertEquals(10L, deviceB.positionSync.getPersistedFloor(PERM_ID, canonical, "dev-a"))
+        deviceB.applyFurthest(remotePeak(oldKey, sha, "dev-a", 10L, 0.8), "dev-a")
+        assertTrue(deviceB.observed(canonical).isEmpty())
+        deviceB.applyFurthest(remotePeak(canonical, sha, "dev-a", 11L, 0.4), "dev-a")
+        assertEquals(0.4, deviceB.observed(canonical).single().progression, 0.0001)
+    }
+
+    @Test
+    fun `merged reset retires an unpublished peak under the old work key`() = runTest {
+        deviceB.connect()
+        val sha = "8".repeat(64)
+        val book = peakBook("merged-unpublished-reset")
+        deviceB.addBook(book, sha)
+        deviceB.read(book.url, 0.8, 1_000L)
+        deviceB.workIdentity.resolveBook(PERM_ID, book)
+        val bundle = deviceB.positionSync.collectDirtyRecords(PERM_ID, deviceB.deviceId) { "0017450000000-0001-dev-b" }
+        val peak = bundle.records.single { it.d == DriveWireCodec.DOMAIN_FURTHEST }
+        val seq = (DriveWireCodec.decodeFurthestBody(peak.body!!) as DriveFurthestBody.Peak).seq
+        deviceB.applyFurthest(remoteReset("isbn:9780547928227", "unpublished-reset", mapOf("dev-b" to seq)), "dev-c")
+        deviceB.workIdentity.confirmMerge(PERM_ID, book.url, "sha:$sha", "isbn:9780547928227", "0017450000000-0002-dev-b")
+        deviceB.positionSync.reconcileMergedResets(PERM_ID, deviceB.deviceId)
+        assertNull(deviceB.driveDb.recordStates().get(PERM_ID, DriveWireCodec.DOMAIN_FURTHEST, peak.k))
+    }
+
+    @Test
     fun `a newer lower peak survives a reset that covers the higher peak whatever the delivery order`() = runTest {
         deviceB.connect()
         val sha = "6".repeat(64)
@@ -2087,6 +2253,32 @@ class DrivePhase3EndToEndTest {
         deviceB.applyFurthest(remotePeak(workKey3, sha3, "dev-a", seq = 10L, progression = 0.80), "dev-a")
         deviceB.applyFurthest(remotePeak(workKey3, sha3, "dev-a", seq = 11L, progression = 0.30), "dev-a")
         assertEquals(0.30, deviceB.observed(workKey3).single().progression, 0.0001)
+    }
+
+    @Test
+    fun `merged acknowledged winner binds dominated copies for a later reset`() = runTest {
+        deviceA.connect()
+        val sha = "9".repeat(64)
+        val first = peakBook("merged-dominated-a")
+        val second = peakBook("merged-dominated-b")
+        deviceA.addBook(first, sha)
+        deviceA.read(first.url, 0.8, 1_000L)
+        deviceA.read(first.url, 0.2, 2_000L)
+        deviceA.workIdentity.resolveBook(PERM_ID, first)
+        val published = deviceA.collectPeaks()
+        val peak = published.records.single { it.d == DriveWireCodec.DOMAIN_FURTHEST }
+        val seq = peak.peakSeq()
+        deviceA.positionSync.acknowledgePublished(PERM_ID, published.records, published.positionAcks, published.peakAcks)
+        deviceA.workIdentity.confirmMerge(PERM_ID, first.url, "sha:$sha", "isbn:9780547928227", "0017450000000-0002-dev-a")
+        deviceA.addBook(second, sha)
+        deviceA.read(second.url, 0.6, 3_000L)
+        deviceA.read(second.url, 0.2, 4_000L)
+        deviceA.workIdentity.resolveBook(PERM_ID, second)
+        val afterMerge = deviceA.collectPeaks()
+        assertTrue(afterMerge.records.none { it.d == DriveWireCodec.DOMAIN_FURTHEST && it.k.startsWith("peak/") })
+        deviceA.applyFurthest(remoteReset("isbn:9780547928227", "merged-dominated", mapOf("dev-a" to seq)), "dev-c")
+        assertEquals(0.2, deviceA.liseurDb.readingProgressDao().get(first.url)!!.peakProgression!!, 0.0001)
+        assertEquals(0.2, deviceA.liseurDb.readingProgressDao().get(second.url)!!.peakProgression!!, 0.0001)
     }
 
     @Test

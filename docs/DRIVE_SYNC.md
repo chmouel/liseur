@@ -1258,6 +1258,9 @@ with outcome `delete`) when it reaches those records:
 
 - **Purpose:** Track per-device furthest reading peaks and propagate explicit
   furthest-position resets ("Start furthest over from here").
+- When work keys merge, observations and delivery acknowledgements remain
+  associated with the same work. Reset floors apply across all equivalent
+  keys, including to peaks received before the merge.
 - **Sub-record A — Peak (`k = "peak/<workKey>/<editionSha>/<deviceId>"`):**
   ```json
   {

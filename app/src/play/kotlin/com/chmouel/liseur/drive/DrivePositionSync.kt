@@ -413,7 +413,8 @@ internal class DrivePositionSync(
         val now = clock()
         val permissionId = account.permissionId
         val workKey = workIdentity.canonicalWorkKey(permissionId, alias.workId)
-        val observed = furthestDao.forWork(drivePeerId, workKey)
+        val observed = workIdentity.equivalentWorkKeys(permissionId, workKey)
+            .flatMap { furthestDao.forWork(drivePeerId, it) }
         val editions = localEditions(permissionId, drivePeerId, workKey)
         val templates = peakWinners(workKey, devId, editions).map { (edition, template) ->
             edition.progress.peakRevision!! to template
@@ -517,6 +518,19 @@ internal class DrivePositionSync(
         }
     }
 
+    suspend fun reconcileMergedResets(permissionId: String, localDeviceId: String) {
+        for (state in recordStates.forDomain(permissionId, DriveWireCodec.DOMAIN_FURTHEST)) {
+            if (!state.recordKey.startsWith(RESET_KEY_PREFIX)) continue
+            val reset = state.bodyJson
+                ?.let { runCatching { DriveWireCodec.decodeFurthestBody(JSONObject(it)) }.getOrNull() }
+                as? DriveFurthestBody.Reset ?: continue
+            val canonical = workIdentity.canonicalWorkKey(permissionId, reset.workKey)
+            if (workIdentity.equivalentWorkKeys(permissionId, canonical).size > 1) {
+                applyFloorsLocally(permissionId, canonical, reset.floors, localDeviceId)
+            }
+        }
+    }
+
     private fun pendingRevisions(bodyJson: String?): Map<String, Long> {
         val revisions = bodyJson
             ?.let { runCatching { JSONObject(it).optJSONObject(PENDING_REVISIONS) }.getOrNull() }
@@ -538,6 +552,7 @@ internal class DrivePositionSync(
         guardRevisions: Map<String, Long>? = null,
     ) {
         val drivePeerId = DriveLibrarySync.accountPeerId(permissionId)
+        val equivalentKeys = workIdentity.equivalentWorkKeys(permissionId, workKey)
         val localFloor = floors[localDeviceId]
         val covered = mutableListOf<Triple<String, String?, Long>>()
         val coveredPeakKeys = mutableListOf<String?>()
@@ -553,21 +568,27 @@ internal class DrivePositionSync(
                     workKey, localDeviceId, member.bookUrl, member.editionSha, member.progress,
                 ) ?: continue
                 val peakRev = member.progress.peakRevision!!
-                val wireSeq = if (member.bookUrl in winners) {
-                    boundPeakSeq(
-                        recordStates.get(
-                            permissionId,
-                            DriveWireCodec.DOMAIN_FURTHEST,
-                            peakRecordKey(workKey, template.editionSha, localDeviceId),
-                        ),
-                        peakRev,
-                        template,
-                    )
+                val boundWirePeak = if (member.bookUrl in winners) {
+                    equivalentKeys.mapNotNull { key ->
+                        val keyTemplate = template.copy(workKey = key)
+                        val peakKey = peakRecordKey(key, template.editionSha, localDeviceId)
+                        boundPeakSeq(
+                            recordStates.get(
+                                permissionId,
+                                DriveWireCodec.DOMAIN_FURTHEST,
+                                peakKey,
+                            ),
+                            peakRev,
+                            keyTemplate,
+                        )?.let { peakKey to it }
+                    }.maxByOrNull { it.second }
                 } else {
                     null
                 }
-                val ownSeq = boundBookPeakSeq(permissionId, workKey, member.bookUrl, peakRev, template)
-                if (wireSeq != null && wireSeq <= localFloor) {
+                val ownSeq = equivalentKeys.mapNotNull { key ->
+                    boundBookPeakSeq(permissionId, key, member.bookUrl, peakRev, template.copy(workKey = key))
+                }.maxOrNull()
+                if (boundWirePeak != null && boundWirePeak.second <= localFloor) {
                     // A forget captured these revisions, so every same-edition peak it saw is at or
                     // below the bound winner.
                     val members = if (guardRevisions != null) {
@@ -575,10 +596,9 @@ internal class DrivePositionSync(
                     } else {
                         listOf(member)
                     }
-                    val peakKey = peakRecordKey(workKey, template.editionSha, localDeviceId)
                     for (m in members) {
                         covered.add(Triple(m.bookUrl, m.editionSha, m.progress.peakRevision!!))
-                        coveredPeakKeys.add(peakKey)
+                        coveredPeakKeys.add(boundWirePeak.first)
                     }
                 } else if (ownSeq != null && ownSeq <= localFloor) {
                     covered.add(Triple(member.bookUrl, member.editionSha, peakRev))
@@ -592,7 +612,7 @@ internal class DrivePositionSync(
         val retiredPeakKeys = mutableListOf<String>()
         database.withTransaction {
             for ((origin, floor) in floors) {
-                furthestDao.deleteUpToForOrigin(drivePeerId, workKey, origin, floor)
+                for (key in equivalentKeys) furthestDao.deleteUpToForOrigin(drivePeerId, key, origin, floor)
             }
             for (peak in retained) observePeak(drivePeerId, workKey, peak)
             for ((index, item) in covered.withIndex()) {
@@ -602,7 +622,7 @@ internal class DrivePositionSync(
                     (guardRevisions == null || guardRevisions[bookUrl] == current.localRevision)
                 ) {
                     progressDao.resetPeak(bookUrl, editionSha)
-                    furthestDao.deleteDelivery(drivePeerId, bookUrl, workKey)
+                    for (key in equivalentKeys) furthestDao.deleteDelivery(drivePeerId, bookUrl, key)
                     coveredPeakKeys[index]?.let { retiredPeakKeys.add(it) }
                 }
             }
@@ -914,8 +934,9 @@ internal class DrivePositionSync(
         val peakRev = entry.progress.peakRevision ?: return
         val template = peakTemplate(workKey, deviceId, entry.book.url, entry.aliasEditionSha, entry.progress)
             ?: return
-        val delivered = furthestDao.delivered(drivePeerId, entry.book.url, workKey)
-        if (delivered?.acknowledged == true && delivered.revision >= peakRev) return
+        val delivered = workIdentity.equivalentWorkKeys(permissionId, workKey)
+            .mapNotNull { furthestDao.delivered(drivePeerId, entry.book.url, it) }
+        if (delivered.any { it.acknowledged && it.revision >= peakRev }) return
 
         val peakKey = peakRecordKey(workKey, template.editionSha, deviceId)
         // Allocation and binding commit together so a retry re-sends the same sequence.
@@ -962,15 +983,17 @@ internal class DrivePositionSync(
                 val template = peakTemplate(workKey, deviceId, edition.bookUrl, edition.editionSha, edition.progress)
                     ?: continue
                 val winner = winners.firstOrNull { it.second.editionSha == template.editionSha } ?: continue
-                val wireSeq = boundPeakSeq(
-                    recordStates.get(
-                        permissionId,
-                        DriveWireCodec.DOMAIN_FURTHEST,
-                        peakRecordKey(workKey, template.editionSha, deviceId),
-                    ),
-                    winner.first.progress.peakRevision!!,
-                    winner.second,
-                ) ?: continue
+                val wireSeq = workIdentity.equivalentWorkKeys(permissionId, workKey).mapNotNull { key ->
+                    boundPeakSeq(
+                        recordStates.get(
+                            permissionId,
+                            DriveWireCodec.DOMAIN_FURTHEST,
+                            peakRecordKey(key, template.editionSha, deviceId),
+                        ),
+                        winner.first.progress.peakRevision!!,
+                        winner.second.copy(workKey = key),
+                    )
+                }.maxOrNull() ?: continue
                 store.withTransaction {
                     if (boundBookPeakSeq(permissionId, workKey, edition.bookUrl, peakRev, template) == null) {
                         recordStates.upsert(
@@ -1746,7 +1769,10 @@ internal class DrivePositionSync(
         )
 
         val candidates = mutableListOf<Candidate>()
-        for (row in furthestDao.forWork(drivePeerId, workKey)) {
+        val observations = workIdentity.equivalentWorkKeys(permissionId, workKey)
+            .flatMap { furthestDao.forWork(drivePeerId, it) }
+        for (row in observations) {
+            if (row.seq <= getPersistedFloor(permissionId, workKey, row.origin)) continue
             val payload = runCatching { JSONObject(row.payload) }.getOrNull()
             val loc = payload?.optString("locatorJson")?.takeIf { it.isNotBlank() && it != ReadingProgress.EMPTY_LOCATOR }
             val cov = payload?.takeIf { it.has("coverage") && !it.isNull("coverage") }
@@ -1811,7 +1837,8 @@ internal class DrivePositionSync(
     private suspend fun knownMaxSeq(permissionId: String, workKey: String): Long {
         val drivePeerId = DriveLibrarySync.accountPeerId(permissionId)
         val canonical = workIdentity.canonicalWorkKey(permissionId, workKey)
-        val observedMax = furthestDao.forWork(drivePeerId, canonical).maxOfOrNull { it.seq } ?: 0L
+        val observedMax = workIdentity.equivalentWorkKeys(permissionId, canonical)
+            .flatMap { furthestDao.forWork(drivePeerId, it) }.maxOfOrNull { it.seq } ?: 0L
         return observedMax
     }
 
@@ -1820,8 +1847,10 @@ internal class DrivePositionSync(
         workKey: String,
         originDeviceId: String,
     ): Long {
-        val state = recordStates.get(permissionId, FLOOR_STATE_DOMAIN, floorRecordKey(workKey, originDeviceId))
-        return state?.lastSyncedRevision ?: 0L
+        return workIdentity.equivalentWorkKeys(permissionId, workKey).maxOfOrNull { key ->
+            recordStates.get(permissionId, FLOOR_STATE_DOMAIN, floorRecordKey(key, originDeviceId))
+                ?.lastSyncedRevision ?: 0L
+        } ?: 0L
     }
 
     private suspend fun raisePersistedFloor(

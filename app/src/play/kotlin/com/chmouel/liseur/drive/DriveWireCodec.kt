@@ -46,6 +46,23 @@ internal data class DriveManifest(
     val appliedVector: Map<String, Long> = emptyMap(),
 )
 
+internal data class DriveVocabRestore(
+    val fp: String,
+    val hlc: String,
+    val body: JSONObject,
+)
+
+internal data class DriveVocabOrigin(
+    val deviceId: String,
+    val seq: Long,
+)
+
+internal data class DriveVocabRevival(
+    val del: String,
+    val restore: String,
+    val delRecord: JSONObject,
+)
+
 internal data class DriveWireRecord(
     val d: String,
     val k: String,
@@ -58,6 +75,10 @@ internal data class DriveWireRecord(
     val outcome: String? = null,
     val resolvedFps: List<String> = emptyList(),
     val observed: Map<String, Long>? = null,
+    val restore: DriveVocabRestore? = null,
+    val revives: DriveVocabRevival? = null,
+    val origin: DriveVocabOrigin? = null,
+    val originPresent: Boolean = false,
     /**
      * Snapshot records only: the author's publication seq of this version, so provenance
      * checks (vocabulary delete observed vectors) do not mistake it for `throughSeq`.
@@ -1734,6 +1755,15 @@ internal object DriveWireCodec {
         if (record.observed != null) {
             put("observed", record.observed)
         }
+        record.restore?.let {
+            put("restore", mapOf("fp" to it.fp, "hlc" to it.hlc, "body" to it.body))
+        }
+        record.revives?.let {
+            put("revives", mapOf("del" to it.del, "restore" to it.restore, "delRecord" to it.delRecord))
+        }
+        if (record.originPresent || record.origin != null) {
+            put("origin", record.origin?.let { mapOf("deviceId" to it.deviceId, "seq" to it.seq) })
+        }
         if (record.seq != null) {
             put("seq", record.seq)
         }
@@ -1776,6 +1806,32 @@ internal object DriveWireCodec {
                         } else {
                             null
                         },
+                        restore = obj.optJSONObject("restore")?.let { restore ->
+                            val restoreFp = restore.optString("fp").takeIf { it.isNotBlank() }
+                            val restoreHlc = restore.optString("hlc").takeIf { it.isNotBlank() }
+                            val restoreBody = restore.optJSONObject("body")
+                            if (restoreFp != null && restoreHlc != null && restoreBody != null) {
+                                DriveVocabRestore(restoreFp, restoreHlc, restoreBody)
+                            } else {
+                                null
+                            }
+                        },
+                        revives = obj.optJSONObject("revives")?.let { revival ->
+                            val deleteFp = revival.optString("del").takeIf { it.isNotBlank() }
+                            val restoreFp = revival.optString("restore").takeIf { it.isNotBlank() }
+                            val deleteRecord = revival.optJSONObject("delRecord")
+                            if (deleteFp != null && restoreFp != null && deleteRecord != null) {
+                                DriveVocabRevival(deleteFp, restoreFp, deleteRecord)
+                            } else {
+                                null
+                            }
+                        },
+                        origin = obj.optJSONObject("origin")?.let { origin ->
+                            val device = origin.optString("deviceId").takeIf { it.isNotBlank() }
+                            val seq = origin.optLong("seq").takeIf { it > 0L }
+                            if (device != null && seq != null) DriveVocabOrigin(device, seq) else null
+                        },
+                        originPresent = obj.has("origin"),
                         seq = obj.optNullableLong("seq")?.takeIf { it > 0L },
                     ),
                 )

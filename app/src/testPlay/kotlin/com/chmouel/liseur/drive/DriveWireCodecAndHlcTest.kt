@@ -481,6 +481,45 @@ class DriveWireCodecAndHlcTest {
     }
 
     @Test
+    fun `vocabulary recovery envelopes survive a delta round trip`() {
+        val body = JSONObject("""{"language":"fr","normalized":"lune","word":"lune"}""")
+        val delete = DriveWireCodec.delRecord(
+            DriveWireCodec.DOMAIN_VOCAB_WORD, "2:fr:lune", "0017450000000-0004-dev-a",
+        ).copy(restore = DriveVocabRestore("word-fp", "0017450000000-0001-dev-a", body))
+        val revival = DriveWireCodec.putRecord(
+            DriveWireCodec.DOMAIN_VOCAB_WORD, "2:fr:lune", "0017450000000-0005-dev-a",
+            mapOf("language" to "fr", "normalized" to "lune", "word" to "lune"),
+        ).copy(revives = DriveVocabRevival(delete.fp, "word-fp", JSONObject("""{"observed":{"dev-b":3}}""")))
+        val child = DriveWireCodec.putRecord(
+            DriveWireCodec.DOMAIN_VOCAB_REVIEW, "review-1", "0017450000000-0006-dev-a",
+            mapOf("syncId" to "review-1"),
+        )
+        val batch = DriveDeltaBatch(
+            batchId = DriveCanonicalJson.batchId("dev-a", 2L), deviceId = "dev-a", seq = 2L,
+            createdHlc = "0017450000000-0006-dev-a", domains = DriveWireCodec.SUPPORTED_DOMAIN_VERSIONS,
+            records = listOf(delete, revival, child.copy(origin = DriveVocabOrigin("dev-b", 3L)),
+                child.copy(originPresent = true), child),
+        )
+        val records = DriveWireCodec.decodeDeltaBatch(DriveWireCodec.encodeDeltaBatch(batch)).records
+        assertEquals("word-fp", records[0].restore!!.fp)
+        assertEquals("lune", records[0].restore!!.body.getString("word"))
+        assertEquals(delete.fp, records[1].revives!!.del)
+        assertEquals(3, records[1].revives!!.delRecord.getJSONObject("observed").getInt("dev-b"))
+        assertEquals(DriveVocabOrigin("dev-b", 3L), records[2].origin)
+        assertTrue(records[3].originPresent)
+        assertNull(records[3].origin)
+        assertFalse(records[4].originPresent)
+
+        val snapshot = DriveSnapshotPart(
+            deviceId = "dev-a", throughSeq = 2L, partIndex = 0, partCount = 1,
+            createdHlc = batch.createdHlc, domains = batch.domains, records = listOf(delete, revival),
+        )
+        val snapshotRecords = DriveWireCodec.decodeSnapshotPart(DriveWireCodec.encodeSnapshotPart(snapshot)).records
+        assertEquals("lune", snapshotRecords[0].restore!!.body.getString("word"))
+        assertEquals(delete.fp, snapshotRecords[1].revives!!.del)
+    }
+
+    @Test
     fun `present non-object observed decodes to empty while missing stays null`() {
         val batch = DriveDeltaBatch(
             batchId = DriveCanonicalJson.batchId("dev-a", 3L),
