@@ -499,6 +499,7 @@ internal class DrivePositionSync(
     /** Completes the local effects of forgets whose reset was persisted but not yet applied. */
     suspend fun reapplyPendingResets(permissionId: String, localDeviceId: String) {
         for (marker in recordStates.forDomain(permissionId, RESET_PENDING_DOMAIN)) {
+            val guardRevisions = pendingRevisions(marker.bodyJson)
             val reset = recordStates.get(permissionId, DriveWireCodec.DOMAIN_FURTHEST, marker.recordKey)
                 ?.bodyJson
                 ?.let { runCatching { DriveWireCodec.decodeFurthestBody(JSONObject(it)) }.getOrNull() }
@@ -510,10 +511,27 @@ internal class DrivePositionSync(
                     marker.recordKey,
                     reset.floors,
                     localDeviceId,
-                    guardRevisions = pendingRevisions(marker.bodyJson),
+                    guardRevisions = guardRevisions,
                 )
             }
             store.withTransaction {
+                for ((bookUrl, revision) in guardRevisions) {
+                    val appliedKey = resetAppliedKey(marker.recordKey, bookUrl)
+                    if (recordStates.get(permissionId, RESET_APPLIED_DOMAIN, appliedKey) == null) {
+                        recordStates.upsert(
+                            DriveRecordState(
+                                permissionId = permissionId,
+                                domain = RESET_APPLIED_DOMAIN,
+                                recordKey = appliedKey,
+                                versionFp = revision.toString(),
+                                versionOp = DriveRecordState.OP_PUT,
+                                publishedFp = revision.toString(),
+                                lastSyncedRevision = revision,
+                                lastHlc = "",
+                            ),
+                        )
+                    }
+                }
                 recordStates.delete(permissionId, RESET_PENDING_DOMAIN, marker.recordKey)
             }
         }
@@ -1000,6 +1018,7 @@ internal class DrivePositionSync(
         byWork: Map<String, List<LocalEdition>>,
     ) {
         for ((workKey, editions) in byWork) {
+            val floor = getPersistedFloor(permissionId, workKey, deviceId)
             val winners = peakWinners(workKey, deviceId, editions)
             for (edition in editions) {
                 val peakRev = edition.progress.peakRevision ?: continue
@@ -1016,7 +1035,7 @@ internal class DrivePositionSync(
                         winner.first.progress.peakRevision!!,
                         winner.second.copy(workKey = key),
                     )
-                }.maxOrNull() ?: continue
+                }.maxOrNull()?.takeIf { it > floor } ?: continue
                 store.withTransaction {
                     if (boundBookPeakSeq(permissionId, workKey, edition.bookUrl, peakRev, template) == null) {
                         recordStates.upsert(
