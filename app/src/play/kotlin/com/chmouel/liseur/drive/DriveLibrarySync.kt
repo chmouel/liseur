@@ -408,9 +408,7 @@ internal class DriveLibrarySync(
         return now - last >= FOREGROUND_SYNC_FRESH_FOR_MS
     }
 
-    override fun ownsBook(book: Book): Boolean =
-        book.url.startsWith(DriveWorkIdentity.DRIVE_BOOK_URL_PREFIX) ||
-            DriveCatalogSync.fileIdFromHref(book.downloadHref) != null
+    override fun ownsBook(book: Book): Boolean = isDriveBook(book)
 
     override suspend fun canDownloadAgain(book: Book): Boolean {
         if (!ownsBook(book) || !hasStore()) return false

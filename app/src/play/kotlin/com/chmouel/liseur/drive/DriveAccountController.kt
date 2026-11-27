@@ -569,7 +569,18 @@ internal class DriveAccountController(
      */
     private suspend fun presentInitialUploadSelection() {
         val active = if (driveSync.hasStore()) driveSync.store.accounts().active() else null
-        if (active != null && active.uploadSelectionAt == null) openUploadPicker()
+        if (active == null || active.uploadSelectionAt != null) return
+        val candidates = driveSync.epubTransfers.listUploadCandidates(active.permissionId)
+        if (candidates.isNotEmpty()) {
+            ephemeral.value = ephemeral.value.copy(uploadPickerVisible = true, uploadCandidates = candidates)
+        } else {
+            driveSync.epubTransfers.queueSelectedBooks(active.permissionId, emptySet(), clock())
+            if (driveSync.store.uploads().workCount(active.permissionId) > 0) {
+                driveSync.triggerEpubUploads(active.meteredTransfers)
+            } else {
+                driveSync.cancelEpubUploads()
+            }
+        }
     }
 
     /** Updates whether bulk EPUB transfers may use metered mobile networks (default: unmetered only). */
