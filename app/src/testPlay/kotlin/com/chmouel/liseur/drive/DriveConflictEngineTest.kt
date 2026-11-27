@@ -68,6 +68,317 @@ class DriveConflictEngineTest {
     }
 
     @Test
+    fun `equal concurrent puts still agree on later author after earlier author observes a higher clock`() {
+        val hA = "0017450000100-0001-dev-a"
+        val hB = "0017450000200-0001-dev-b"
+        val hObs = "0017450000300-0001-dev-c"
+        val body = (0..100).asSequence()
+            .map { putBody("same-$it") }
+            .first { DriveCanonicalJson.putFp(it, hA) > DriveCanonicalJson.putFp(it, hB) }
+        val content = DriveCanonicalJson.contentFp(body)
+        val fpA = DriveCanonicalJson.putFp(body, hA)
+        val fpB = DriveCanonicalJson.putFp(body, hB)
+        assertTrue("Expected fpA > fpB to catch fingerprint-only ordering", fpA > fpB)
+
+        val ancestorFp = putFp("ancestor")
+        val initialA = LocalRecordView(
+            versionFp = fpA,
+            publishedFp = fpA,
+            contentFp = content,
+            ancestors = listOf(ancestorFp),
+            bodyJson = body.toString(),
+            lastHlc = hA,
+        )
+        val observation = DriveWireRecord(
+            d = domain,
+            k = key,
+            op = DriveRecordState.OP_PUT,
+            hlc = hObs,
+            fp = ancestorFp,
+            body = putBody("ancestor"),
+        )
+        val observedOnA = reconcile(initialA, emptyList(), observation, ancestorFp)
+        assertEquals(ReconciliationCase.STALE, observedOnA.reconciliationCase)
+        val stateA = requireNotNull(observedOnA.updatedRecordState)
+        assertEquals(fpA, stateA.versionFp)
+        assertEquals(hA, stateA.versionHlc)
+        assertEquals(hObs, stateA.lastHlc)
+
+        val viewA = LocalRecordView(
+            versionFp = stateA.versionFp,
+            versionOp = stateA.versionOp,
+            publishedFp = stateA.publishedFp,
+            contentFp = stateA.contentFp,
+            ancestors = DriveWorkIdentity.decodeStringArray(stateA.ancestorsJson),
+            resRefs = DriveWorkIdentity.decodeStringArray(stateA.resRefsJson),
+            lastHlc = stateA.lastHlc,
+            versionHlc = stateA.versionHlc,
+            bodyJson = stateA.bodyJson,
+        )
+        val viewB = LocalRecordView(
+            versionFp = fpB,
+            publishedFp = fpB,
+            contentFp = content,
+            bodyJson = body.toString(),
+            lastHlc = hB,
+            versionHlc = hB,
+        )
+
+        val putA = DriveWireRecord(domain, key, DriveRecordState.OP_PUT, hA, fpA, body = body)
+        val putB = DriveWireRecord(domain, key, DriveRecordState.OP_PUT, hB, fpB, body = body)
+
+        val onA = reconcile(viewA, emptyList(), putB, content)
+        val onB = reconcile(viewB, emptyList(), putA, content)
+
+        assertEquals(ReconciliationCase.AGREEMENT, onA.reconciliationCase)
+        assertEquals(ReconciliationCase.AGREEMENT, onB.reconciliationCase)
+        assertEquals(fpB, onA.updatedRecordState?.versionFp)
+        assertEquals(fpB, onB.updatedRecordState?.versionFp)
+        assertEquals(hB, onA.updatedRecordState?.versionHlc)
+        assertEquals(hB, onB.updatedRecordState?.versionHlc)
+        assertEquals(hObs, onA.updatedRecordState?.lastHlc)
+        assertEquals(hB, onB.updatedRecordState?.lastHlc)
+    }
+
+    @Test
+    fun `migrated row with unknown clock recovers authoring clock from matching original put`() {
+        val hA = "0017450000100-0001-dev-a"
+        val hB = "0017450000200-0001-dev-b"
+        val hObs = "0017450000300-0001-dev-c"
+        val body = (0..100).asSequence()
+            .map { putBody("recover-$it") }
+            .first { DriveCanonicalJson.putFp(it, hA) > DriveCanonicalJson.putFp(it, hB) }
+        val content = DriveCanonicalJson.contentFp(body)
+        val fpA = DriveCanonicalJson.putFp(body, hA)
+        val fpB = DriveCanonicalJson.putFp(body, hB)
+
+        val migratedA = LocalRecordView(
+            versionFp = fpA,
+            publishedFp = fpA,
+            contentFp = content,
+            lastHlc = hObs,
+            versionHlc = null,
+            bodyJson = body.toString(),
+        )
+        val originalPutA = DriveWireRecord(domain, key, DriveRecordState.OP_PUT, hA, fpA, body = body)
+        val recovered = reconcile(migratedA, emptyList(), originalPutA, content)
+        assertEquals(ReconciliationCase.AGREEMENT, recovered.reconciliationCase)
+        val recoveredState = requireNotNull(recovered.updatedRecordState)
+        assertEquals(fpA, recoveredState.versionFp)
+        assertEquals(hA, recoveredState.versionHlc)
+        assertEquals(hObs, recoveredState.lastHlc)
+
+        val putB = DriveWireRecord(domain, key, DriveRecordState.OP_PUT, hB, fpB, body = body)
+        val afterRecovery = reconcile(
+            migratedA.copy(versionHlc = recoveredState.versionHlc, lastHlc = recoveredState.lastHlc),
+            emptyList(),
+            putB,
+            content,
+        )
+        assertEquals(ReconciliationCase.AGREEMENT, afterRecovery.reconciliationCase)
+        assertEquals(fpB, afterRecovery.updatedRecordState?.versionFp)
+        assertEquals(hB, afterRecovery.updatedRecordState?.versionHlc)
+        assertEquals(hObs, afterRecovery.updatedRecordState?.lastHlc)
+    }
+
+    @Test
+    fun `migrated row with unknown clock opens conflict instead of silently diverging from peer`() {
+        val hA = "0017450000100-0001-dev-a"
+        val hB = "0017450000200-0001-dev-b"
+        val hObs = "0017450000300-0001-dev-c"
+        val body = (0..100).asSequence()
+            .map { putBody("migrated-$it") }
+            .first { DriveCanonicalJson.putFp(it, hA) > DriveCanonicalJson.putFp(it, hB) }
+        val content = DriveCanonicalJson.contentFp(body)
+        val fpA = DriveCanonicalJson.putFp(body, hA)
+        val fpB = DriveCanonicalJson.putFp(body, hB)
+
+        val migratedA = LocalRecordView(
+            versionFp = fpA,
+            publishedFp = fpA,
+            contentFp = content,
+            lastHlc = hObs,
+            versionHlc = null,
+            bodyJson = body.toString(),
+        )
+        val viewB = LocalRecordView(
+            versionFp = fpB,
+            publishedFp = fpB,
+            contentFp = content,
+            lastHlc = hB,
+            versionHlc = hB,
+            bodyJson = body.toString(),
+        )
+        val putA = DriveWireRecord(domain, key, DriveRecordState.OP_PUT, hA, fpA, body = body)
+        val putB = DriveWireRecord(domain, key, DriveRecordState.OP_PUT, hB, fpB, body = body)
+
+        // Peer B knows both clocks and selects B; upgraded A does not know hA and cannot prove
+        // ordering against hB since lastHlc (300) >= hB (200), so A opens a conflict instead of
+        // silently picking a potentially divergent winner.
+        val onB = reconcile(viewB, emptyList(), putA, content)
+        val onA = reconcile(migratedA, emptyList(), putB, content)
+        assertEquals(ReconciliationCase.AGREEMENT, onB.reconciliationCase)
+        assertEquals(fpB, onB.updatedRecordState?.versionFp)
+        assertEquals(ReconciliationCase.CONFLICT_EDIT_EDIT, onA.reconciliationCase)
+        val conflictOnA = requireNotNull(onA.conflictToOpen)
+
+        // Resolving the conflict on A converges peer B to the same resolution.
+        val hRes = "0017450000400-0001-dev-a"
+        val (res, stateAfterResA) = DriveConflictEngine.buildLocalResolution(
+            permissionId = permId,
+            conflict = conflictOnA,
+            outcome = DriveResolution.OUTCOME_PUT,
+            chosenBodyMap = mapOf("id" to key, "note" to body.getString("note")),
+            chosenContentFp = content,
+            existingState = onA.updatedRecordState,
+            hlc = hRes,
+            localDeviceId = "dev-a",
+            now = 400L,
+        )
+        val resRecord = resolveRecord(res, body, emptyList())
+        val stateB = requireNotNull(onB.updatedRecordState)
+        val convergedOnB = reconcile(
+            LocalRecordView(
+                versionFp = stateB.versionFp,
+                versionOp = stateB.versionOp,
+                publishedFp = stateB.publishedFp,
+                contentFp = stateB.contentFp,
+                ancestors = DriveWorkIdentity.decodeStringArray(stateB.ancestorsJson),
+                resRefs = DriveWorkIdentity.decodeStringArray(stateB.resRefsJson),
+                lastHlc = stateB.lastHlc,
+                versionHlc = stateB.versionHlc,
+                bodyJson = stateB.bodyJson,
+            ),
+            emptyList(),
+            resRecord,
+            content,
+        )
+        assertEquals(ReconciliationCase.RESOLVE_APPLIED, convergedOnB.reconciliationCase)
+        assertEquals(stateAfterResA.versionFp, convergedOnB.updatedRecordState?.versionFp)
+        assertEquals(hRes, convergedOnB.updatedRecordState?.versionHlc)
+    }
+
+    @Test
+    fun `migrated row with unknown clock opens conflict even when post-crash ack matches incoming content`() {
+        val hA = "0017450000100-0001-dev-a"
+        val hB = "0017450000200-0001-dev-b"
+        val hObs = "0017450000300-0001-dev-c"
+        val body = putBody("post-crash-migrated")
+        val content = DriveCanonicalJson.contentFp(body)
+        val fpA = DriveCanonicalJson.putFp(body, hA)
+        val fpB = DriveCanonicalJson.putFp(body, hB)
+
+        val migratedA = LocalRecordView(
+            versionFp = fpA,
+            publishedFp = fpA,
+            contentFp = content,
+            lastHlc = hObs,
+            versionHlc = null,
+            bodyJson = body.toString(),
+            postCrashAckMatchesIncoming = true,
+        )
+        val putB = DriveWireRecord(domain, key, DriveRecordState.OP_PUT, hB, fpB, body = body)
+
+        val onA = reconcile(migratedA, emptyList(), putB, content)
+
+        assertEquals(ReconciliationCase.CONFLICT_EDIT_EDIT, onA.reconciliationCase)
+        assertNotNull(onA.conflictToOpen)
+
+        val blankClockA = migratedA.copy(lastHlc = "")
+        val onBlankA = reconcile(blankClockA, emptyList(), putB, content)
+        assertEquals(ReconciliationCase.CONFLICT_EDIT_EDIT, onBlankA.reconciliationCase)
+        assertEquals(fpA, onBlankA.conflictToOpen?.localFp)
+    }
+
+    @Test
+    fun `crash replay of a canonicalized put with no record state agrees instead of opening a conflict`() {
+        val hB = "0017450000200-0001-dev-b"
+        val canonicalBody = putBody("canonical-series")
+        val canonicalContent = DriveCanonicalJson.contentFp(canonicalBody)
+        // The wire body is keyed by an alias, so its fp differs from the canonical content fp
+        // that the synthetic local view carries as its version.
+        val aliasBody = putBody("alias-series")
+        val incomingFp = DriveCanonicalJson.putFp(aliasBody, hB)
+        val syntheticLocal = LocalRecordView(
+            versionBuiltWithoutRecordState = true,
+            versionFp = canonicalContent,
+            publishedFp = null,
+            contentFp = canonicalContent,
+            lastHlc = "",
+            versionHlc = null,
+            bodyJson = canonicalBody.toString(),
+            postCrashAckMatchesIncoming = true,
+        )
+        val putB = DriveWireRecord(domain, key, DriveRecordState.OP_PUT, hB, incomingFp, body = aliasBody)
+
+        val result = reconcile(syntheticLocal, emptyList(), putB, canonicalContent)
+
+        assertEquals(ReconciliationCase.AGREEMENT, result.reconciliationCase)
+        assertNull(result.conflictToOpen)
+        assertEquals(incomingFp, result.updatedRecordState?.versionFp)
+        assertEquals(hB, result.updatedRecordState?.versionHlc)
+
+        // Same replay when an older row already exists: the live version still comes from
+        // `liseur.db`, so the persisted observed clock must not turn it into a conflict.
+        val overOlderRow = syntheticLocal.copy(
+            publishedFp = putFp("older"),
+            ancestors = listOf(putFp("older")),
+            lastHlc = "0017450000900-0001-dev-a",
+        )
+        val replay = reconcile(overOlderRow, emptyList(), putB, canonicalContent)
+        assertEquals(ReconciliationCase.AGREEMENT, replay.reconciliationCase)
+        assertNull(replay.conflictToOpen)
+        assertEquals(incomingFp, replay.updatedRecordState?.versionFp)
+    }
+
+    @Test
+    fun `migrated tombstone recovers its clock when the original delete replays under an alias key`() {
+        val hA = "0017450000100-0001-dev-a"
+        val aliasKey = "alias-$key"
+        val delFp = DriveCanonicalJson.delFp(domain, aliasKey, hA)
+        val migrated = LocalRecordView(
+            versionFp = delFp,
+            versionOp = DriveRecordState.OP_DEL,
+            publishedFp = delFp,
+            lastHlc = "0017450000300-0001-dev-c",
+            versionHlc = null,
+        )
+        val replay = DriveWireRecord(domain, aliasKey, DriveRecordState.OP_DEL, hA, delFp)
+        val result = reconcile(migrated, emptyList(), replay, null)
+        assertEquals(ReconciliationCase.AGREEMENT, result.reconciliationCase)
+        assertEquals(hA, result.updatedRecordState?.versionHlc)
+    }
+
+    @Test
+    fun `migrated row with unknown clock opens conflict even when observed max is below incoming`() {
+        val hA = "0017450000100-0001-dev-a"
+        val hObs = "0017450000150-0001-dev-c"
+        val hB = "0017450000200-0001-dev-b"
+        val body = (0..100).asSequence()
+            .map { putBody("bounded-$it") }
+            .first { DriveCanonicalJson.putFp(it, hA) > DriveCanonicalJson.putFp(it, hB) }
+        val content = DriveCanonicalJson.contentFp(body)
+        val fpA = DriveCanonicalJson.putFp(body, hA)
+        val fpB = DriveCanonicalJson.putFp(body, hB)
+
+        val migratedA = LocalRecordView(
+            versionFp = fpA,
+            publishedFp = fpA,
+            contentFp = content,
+            lastHlc = hObs,
+            versionHlc = null,
+            bodyJson = body.toString(),
+        )
+        val putB = DriveWireRecord(domain, key, DriveRecordState.OP_PUT, hB, fpB, body = body)
+        val onA = reconcile(migratedA, emptyList(), putB, content)
+        // `lastHlc` does not bound an unknown authoring clock (a clockless version may have been
+        // adopted over it), so the order is unproven.
+        assertEquals(ReconciliationCase.CONFLICT_EDIT_EDIT, onA.reconciliationCase)
+        assertEquals(fpA, onA.updatedRecordState?.versionFp)
+        assertNull(onA.updatedRecordState?.versionHlc)
+    }
+
+    @Test
     fun `resolved live put conflicts with unrelated delete`() {
         val body = putBody("kept")
         val local = LocalRecordView(versionFp = "resolved", versionOp = DriveRecordState.OP_RESOLVE,
@@ -955,7 +1266,7 @@ class DriveConflictEngineTest {
     }
 
     @Test
-    fun `crash Agreement adopting a different incoming version also adopts its origin`() {
+    fun `equal-content agreement adopting a newer incoming version also adopts its origin`() {
         val fOld = putFp("old-local")
         val fNew = putFp("incoming-new")
         val incoming = DriveWireRecord(
@@ -976,6 +1287,9 @@ class DriveConflictEngineTest {
             contentFp = fNew,
             originDeviceId = "dev-old",
             originSeq = 5L,
+            // Known older authoring clock: the ordering against incoming is provable.
+            lastHlc = "0017450000100-0001-dev-old",
+            versionHlc = "0017450000100-0001-dev-old",
             postCrashAckMatchesIncoming = true,
             hasPostCrashLocalEdit = false,
         )
@@ -997,6 +1311,53 @@ class DriveConflictEngineTest {
         assertEquals(fNew, result.updatedRecordState!!.versionFp)
         assertEquals("dev-a", result.updatedRecordState!!.originDeviceId)
         assertEquals(75L, result.updatedRecordState!!.originSeq)
+    }
+
+    @Test
+    fun `crash Agreement adopting a different incoming version also adopts its origin`() {
+        val fOld = putFp("old-local")
+        val fNew = putFp("incoming-new")
+        val incoming = DriveWireRecord(
+            d = domain,
+            k = key,
+            op = DriveRecordState.OP_PUT,
+            hlc = "0017450000900-0001-dev-a",
+            fp = fNew,
+            anc = emptyList(),
+            resRefs = emptyList(),
+            body = putBody("incoming-new"),
+        )
+        val local = LocalRecordView(
+            versionFp = fOld,
+            publishedFp = fOld,
+            contentFp = fOld,
+            originDeviceId = "dev-old",
+            originSeq = 5L,
+            localRowMatchesContentFp = false,
+            postCrashAckMatchesIncoming = true,
+        )
+        fun reconcileCrash(view: LocalRecordView) = DriveConflictEngine.reconcileIncoming(
+            permissionId = permId,
+            domain = domain,
+            recordKey = key,
+            bookUrl = bookUrl,
+            local = view,
+            existingResolutions = emptyList(),
+            unsettledConflicts = emptyList(),
+            incoming = incoming,
+            incomingContentFp = fNew,
+            remoteDeviceId = "dev-a",
+            remoteSeq = 75L,
+            now = 11_000L,
+        )
+        val result = reconcileCrash(local)
+        assertEquals(ReconciliationCase.AGREEMENT, result.reconciliationCase)
+        assertEquals(fNew, result.updatedRecordState!!.versionFp)
+        assertEquals("dev-a", result.updatedRecordState!!.originDeviceId)
+        assertEquals(75L, result.updatedRecordState!!.originSeq)
+
+        val withoutCrashAck = reconcileCrash(local.copy(postCrashAckMatchesIncoming = false))
+        assertTrue(withoutCrashAck.reconciliationCase != ReconciliationCase.AGREEMENT)
     }
 
     @Test

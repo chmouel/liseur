@@ -471,6 +471,7 @@ internal class DrivePositionSync(
                     ancestorsJson = "[]",
                     resRefsJson = "[]",
                     lastHlc = hlc,
+                    versionHlc = hlc,
                     bodyJson = DriveCanonicalJson.encode(bodyMap),
                 ),
             )
@@ -850,7 +851,7 @@ internal class DrivePositionSync(
             val existing = recordStates.get(permissionId, DriveWireCodec.DOMAIN_POSITION, posKey)
             if (existing == null || existing.contentFp != contentFp || existing.publishedFp != existing.versionFp) {
                 val unchanged = existing?.versionOp == DriveRecordState.OP_PUT && existing.contentFp == contentFp
-                val hlc = if (unchanged) requireNotNull(existing).lastHlc else nextHlc()
+                val hlc = if (unchanged) requireNotNull(existing).authoringHlc else nextHlc()
                 val anc = buildList {
                     if (!unchanged) existing?.versionFp?.let(::add)
                     addAll(DriveWorkIdentity.decodeStringArray(existing?.ancestorsJson))
@@ -874,6 +875,7 @@ internal class DrivePositionSync(
                         ancestorsJson = DriveCanonicalJson.encode(anc),
                         resRefsJson = "[]",
                         lastHlc = hlc,
+                        versionHlc = hlc.ifBlank { null },
                         bodyJson = DriveCanonicalJson.encode(bodyMap),
                     ),
                 )
@@ -919,7 +921,7 @@ internal class DrivePositionSync(
                     d = DriveWireCodec.DOMAIN_FURTHEST,
                     k = state.recordKey,
                     op = DriveRecordState.OP_PUT,
-                    hlc = state.lastHlc,
+                    hlc = state.authoringHlc,
                     fp = state.versionFp,
                     anc = emptyList(),
                     resRefs = emptyList(),
@@ -990,7 +992,7 @@ internal class DrivePositionSync(
             DriveWireCodec.putRecord(
                 domain = DriveWireCodec.DOMAIN_FURTHEST,
                 key = peakKey,
-                hlc = bound.state.lastHlc,
+                hlc = bound.state.authoringHlc,
                 bodyMap = DriveWireCodec.encodeFurthestBody(bound.body),
                 ancestors = DriveWorkIdentity.decodeStringArray(bound.state.ancestorsJson),
             ),
@@ -1148,6 +1150,7 @@ internal class DrivePositionSync(
             ancestorsJson = DriveCanonicalJson.encode(anc),
             resRefsJson = "[]",
             lastHlc = allocatedAt,
+            versionHlc = allocatedAt,
             bodyJson = DriveCanonicalJson.encode(bodyMap),
         )
         recordStates.upsert(state)
@@ -1266,6 +1269,7 @@ internal class DrivePositionSync(
                     ancestorsJson = DriveCanonicalJson.encode(anc),
                     resRefsJson = "[]",
                     lastHlc = record.hlc,
+                    versionHlc = record.hlc.ifBlank { null },
                     bodyJson = DriveCanonicalJson.encode(DriveWireCodec.encodePositionBody(body)),
                 ),
             )
@@ -1407,6 +1411,7 @@ internal class DrivePositionSync(
                             ancestorsJson = "[]",
                             resRefsJson = "[]",
                             lastHlc = record.hlc,
+                            versionHlc = record.hlc.ifBlank { null },
                             bodyJson = DriveCanonicalJson.encode(DriveWireCodec.encodeFurthestBody(body)),
                         ),
                     )
@@ -1436,6 +1441,7 @@ internal class DrivePositionSync(
                             ancestorsJson = DriveCanonicalJson.encode(record.anc.take(DriveWireCodec.MAX_ANCESTORS)),
                             resRefsJson = "[]",
                             lastHlc = record.hlc,
+                            versionHlc = record.hlc.ifBlank { null },
                             bodyJson = DriveCanonicalJson.encode(DriveWireCodec.encodeFurthestBody(body)),
                         ),
                     )

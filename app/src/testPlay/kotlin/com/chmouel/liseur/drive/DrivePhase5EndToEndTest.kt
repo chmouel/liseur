@@ -577,6 +577,52 @@ class DrivePhase5EndToEndTest {
     }
 
     @Test
+    fun `annotation repaired with a blank clock conflicts with an equal put under an alias`() = runTest {
+        val key = "isbn:9780156027601"
+        val alias = "sha:old"
+        val hlc = "0017450000000-0001-dev-b"
+        val peerId = DriveLibrarySync.accountPeerId(PERM_A)
+        val book = seedRestoredBook(deviceA, key)
+        val identity = DriveWorkIdentity(deviceA.liseurDb, deviceA.driveDb)
+        identity.applyRemoteRecord(
+            PERM_A,
+            DriveWireCodec.putRecord(
+                DriveWireCodec.DOMAIN_WORK_ALIAS, "merge:$alias", hlc,
+                DriveWireCodec.encodeWorkAliasBody(DriveWorkAliasBody.Merge(alias, key, 1L)),
+            ),
+            "dev-b", 1L,
+        )
+        val sync = DriveAnnotationSync(deviceA.liseurDb, deviceA.driveDb, identity)
+        val note = BookAnnotation(
+            id = "note-repaired", bookId = book.url, kind = "BOOK_NOTE", locatorJson = "",
+            note = "Remember this", createdAt = 1_000L, updatedAt = 1_000L,
+        )
+        val body = sync.toWireBody(note, key, editionSha = null)
+        val localFp = DriveWireCodec.annotationContentFp(body)
+        deviceA.liseurDb.annotationDao().upsert(note)
+        deviceA.liseurDb.annotationSyncDao().upsert(
+            AnnotationSync(id = note.id, peerId = peerId, bookId = book.url, workId = key, ackedFingerprint = localFp),
+        )
+        val domain = DriveWireCodec.DOMAIN_ANNOTATION
+        sync.collectDirtyRecords(PERM_A) { error("Repair should reuse the acknowledgement") }
+        val repaired = requireNotNull(deviceA.driveDb.recordStates().get(PERM_A, domain, note.id))
+        assertEquals(localFp, repaired.versionFp)
+        assertEquals("", repaired.lastHlc)
+        assertNull(repaired.versionHlc)
+
+        val aliasBody = body.copy(workKey = alias)
+        val incoming = DriveWireCodec.putRecordWithFp(
+            domain, note.id, hlc, DriveWireCodec.annotationContentFp(aliasBody), DriveWireCodec.encodeAnnotationBody(aliasBody),
+        )
+        assertTrue(sync.applyRemoteRecord(PERM_A, incoming, "dev-b", 2L) { hlc })
+
+        val conflict = deviceA.driveDb.conflicts().unsettledForRecord(PERM_A, domain, note.id).single()
+        assertEquals(localFp, conflict.localFp)
+        assertEquals(incoming.fp, conflict.remoteFp)
+        assertEquals(localFp, deviceA.driveDb.recordStates().get(PERM_A, domain, note.id)?.versionFp)
+    }
+
+    @Test
     fun `hidden annotation under an alias accepts a later edit`() = runTest {
         val key = "isbn:9780156027601"
         val alias = "sha:old"
@@ -1281,6 +1327,45 @@ class DrivePhase5EndToEndTest {
         assertEquals("Solaris Cycle", deviceA.liseurDb.bookDao().getByUrl("drive:$key")?.userSeriesName)
         assertNull(deviceA.driveDb.recordStates().get(PERM_A, DriveWireCodec.DOMAIN_SERIES, alias))
         assertTrue(deviceA.driveDb.recordStates().get(PERM_A, DriveWireCodec.DOMAIN_SERIES, key)?.held != true)
+    }
+
+    @Test
+    fun `aliased series put replayed after a crash between Transaction 1 and Transaction 2 agrees without a conflict`() = runTest {
+        val alias = "sha:old"
+        val key = "isbn:9780156027601"
+        val hlc = "0017450000000-0001-dev-a"
+        val identity = DriveWorkIdentity(deviceA.liseurDb, deviceA.driveDb)
+        identity.applyRemoteRecord(
+            PERM_A,
+            DriveWireCodec.putRecord(
+                DriveWireCodec.DOMAIN_WORK_ALIAS, "merge:$alias", hlc,
+                DriveWireCodec.encodeWorkAliasBody(DriveWorkAliasBody.Merge(alias, key, 1L)),
+            ),
+            "dev-a",
+            1L,
+        )
+        val sync = DriveSeriesSync(deviceA.liseurDb, deviceA.driveDb, identity)
+        // Transaction 1 already applied the canonicalized body; the crash lost Transaction 2,
+        // so there is no series record state for the canonical key.
+        val applied = restoredBook("drive:$key").copy(
+            seriesOverridden = true,
+            userSeriesName = "Solaris Cycle",
+            userSeriesUpdatedAt = 1_000L,
+        )
+        deviceA.liseurDb.bookDao().upsert(applied)
+        val record = DriveWireCodec.putRecord(
+            DriveWireCodec.DOMAIN_SERIES, alias, hlc,
+            DriveWireCodec.encodeSeriesBody(sync.toWireBody(applied, alias, 1_000L)),
+        )
+        assertNull(deviceA.driveDb.recordStates().get(PERM_A, DriveWireCodec.DOMAIN_SERIES, key))
+
+        assertTrue(sync.applyRemoteRecord(PERM_A, record, "dev-a", 3L) { hlc })
+
+        assertTrue(deviceA.driveDb.conflicts().unsettledForRecord(PERM_A, DriveWireCodec.DOMAIN_SERIES, key).isEmpty())
+        val state = deviceA.driveDb.recordStates().get(PERM_A, DriveWireCodec.DOMAIN_SERIES, key)!!
+        assertEquals(record.fp, state.versionFp)
+        assertEquals(hlc, state.versionHlc)
+        assertEquals("Solaris Cycle", deviceA.liseurDb.bookDao().getByUrl("drive:$key")?.userSeriesName)
     }
 
     @Test

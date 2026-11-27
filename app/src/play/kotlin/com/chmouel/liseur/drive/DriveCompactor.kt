@@ -795,6 +795,14 @@ internal class DriveCompactor(
                 .distinct()
                 .sorted()
 
+            val snapshotHlc = state.versionHlc?.ifBlank { null }
+                ?: if (state.domain in MUTABLE_CONFLICT_DOMAINS) {
+                    // A pre-upgrade envelope may hold the observed clock, so it cannot vouch for this version.
+                    ""
+                } else {
+                    published?.record?.hlc?.ifBlank { null } ?: state.lastHlc
+                }
+
             val emitted: DriveWireRecord? = when (state.versionOp) {
                 DriveRecordState.OP_PUT -> {
                     val body = state.bodyJson?.let { raw ->
@@ -812,7 +820,7 @@ internal class DriveCompactor(
                             d = state.domain,
                             k = state.recordKey,
                             op = DriveRecordState.OP_PUT,
-                            hlc = state.lastHlc,
+                            hlc = snapshotHlc,
                             fp = state.versionFp,
                             anc = anc,
                             resRefs = resRefs,
@@ -841,7 +849,7 @@ internal class DriveCompactor(
                         d = state.domain,
                         k = state.recordKey,
                         op = DriveRecordState.OP_DEL,
-                        hlc = state.lastHlc,
+                        hlc = snapshotHlc,
                         fp = state.versionFp,
                         anc = anc,
                         resRefs = resRefs,
@@ -883,7 +891,7 @@ internal class DriveCompactor(
                             d = state.domain,
                             k = state.recordKey,
                             op = if (body != null) DriveRecordState.OP_PUT else DriveRecordState.OP_DEL,
-                            hlc = state.lastHlc,
+                            hlc = snapshotHlc,
                             fp = state.versionFp,
                             anc = anc,
                             resRefs = resRefs,
@@ -1302,6 +1310,7 @@ internal class DriveCompactor(
                 ancestorsJson = "[]",
                 resRefsJson = "[]",
                 lastHlc = hlc,
+                versionHlc = hlc.ifBlank { null },
                 bodyJson = json,
             ),
         )
@@ -1404,6 +1413,13 @@ internal class DriveCompactor(
     }
 
     companion object {
+        /** Domains reconciled by [DriveConflictEngine] where an unknown clock must not fall back to `lastHlc`. */
+        private val MUTABLE_CONFLICT_DOMAINS = setOf(
+            DriveWireCodec.DOMAIN_ANNOTATION,
+            DriveWireCodec.DOMAIN_EVALUATION,
+            DriveWireCodec.DOMAIN_METADATA,
+            DriveWireCodec.DOMAIN_SERIES,
+        )
         /** Domains whose snapshot records keep their publication seq for delete observed vectors. */
         internal val SEQ_CARRYING_DOMAINS = setOf(
             DriveWireCodec.DOMAIN_VOCAB_OCCURRENCE,
