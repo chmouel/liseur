@@ -2282,6 +2282,31 @@ class DrivePhase3EndToEndTest {
     }
 
     @Test
+    fun `merged reset does not reapply after backtracking`() = runTest {
+        deviceA.connect()
+        val sha = "a".repeat(64)
+        val book = peakBook("merged-backtrack")
+        deviceA.addBook(book, sha)
+        deviceA.read(book.url, 0.8, 1_000L)
+        deviceA.workIdentity.resolveBook(PERM_ID, book)
+        val published = deviceA.collectPeaks()
+        val peak = published.records.single { it.d == DriveWireCodec.DOMAIN_FURTHEST }
+        val seq = peak.peakSeq()
+        deviceA.positionSync.acknowledgePublished(PERM_ID, published.records, published.positionAcks, published.peakAcks)
+        deviceA.workIdentity.confirmMerge(PERM_ID, book.url, "sha:$sha", "isbn:9780547928227", "0017450000000-0002-dev-a")
+
+        deviceA.applyFurthest(remoteReset("isbn:9780547928227", "merged-backtrack-1", mapOf("dev-a" to seq)), "dev-c")
+        assertEquals(0.8, deviceA.liseurDb.readingProgressDao().get(book.url)!!.peakProgression!!, 0.0001)
+
+        deviceA.read(book.url, 0.5, 2_000L)
+        deviceA.positionSync.reconcileMergedResets(PERM_ID, deviceA.deviceId)
+        assertEquals(0.8, deviceA.liseurDb.readingProgressDao().get(book.url)!!.peakProgression!!, 0.0001)
+
+        deviceA.applyFurthest(remoteReset("isbn:9780547928227", "merged-backtrack-2", mapOf("dev-a" to seq)), "dev-c")
+        assertEquals(0.5, deviceA.liseurDb.readingProgressDao().get(book.url)!!.peakProgression!!, 0.0001)
+    }
+
+    @Test
     fun `two local books of one edition publish one deterministic peak and a forget resets both`() = runTest {
         deviceA.connect()
         deviceB.connect()

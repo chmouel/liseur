@@ -507,6 +507,7 @@ internal class DrivePositionSync(
                 applyFloorsLocally(
                     permissionId,
                     workIdentity.canonicalWorkKey(permissionId, reset.workKey),
+                    marker.recordKey,
                     reset.floors,
                     localDeviceId,
                     guardRevisions = pendingRevisions(marker.bodyJson),
@@ -526,7 +527,7 @@ internal class DrivePositionSync(
                 as? DriveFurthestBody.Reset ?: continue
             val canonical = workIdentity.canonicalWorkKey(permissionId, reset.workKey)
             if (workIdentity.equivalentWorkKeys(permissionId, canonical).size > 1) {
-                applyFloorsLocally(permissionId, canonical, reset.floors, localDeviceId)
+                applyFloorsLocally(permissionId, canonical, state.recordKey, reset.floors, localDeviceId)
             }
         }
     }
@@ -547,6 +548,7 @@ internal class DrivePositionSync(
     private suspend fun applyFloorsLocally(
         permissionId: String,
         workKey: String,
+        resetKey: String,
         floors: Map<String, Long>,
         localDeviceId: String,
         guardRevisions: Map<String, Long>? = null,
@@ -559,6 +561,11 @@ internal class DrivePositionSync(
         if (localFloor != null) {
             val eligible = localEditions(permissionId, drivePeerId, workKey).filter { edition ->
                 edition.progress.peakRevision != null &&
+                    recordStates.get(
+                        permissionId,
+                        RESET_APPLIED_DOMAIN,
+                        resetAppliedKey(resetKey, edition.bookUrl),
+                    ) == null &&
                     (guardRevisions == null ||
                         guardRevisions[edition.bookUrl] == edition.progress.localRevision)
             }
@@ -610,6 +617,7 @@ internal class DrivePositionSync(
         // same origin and edition arrived first, so rebuild them once the reset drops the rest.
         val retained = retainedRemotePeaks(permissionId, workKey, localDeviceId, floors)
         val retiredPeakKeys = mutableListOf<String>()
+        val appliedBooks = mutableListOf<Pair<String, Long>>()
         database.withTransaction {
             for ((origin, floor) in floors) {
                 for (key in equivalentKeys) furthestDao.deleteUpToForOrigin(drivePeerId, key, origin, floor)
@@ -624,18 +632,33 @@ internal class DrivePositionSync(
                     progressDao.resetPeak(bookUrl, editionSha)
                     for (key in equivalentKeys) furthestDao.deleteDelivery(drivePeerId, bookUrl, key)
                     coveredPeakKeys[index]?.let { retiredPeakKeys.add(it) }
+                    appliedBooks.add(bookUrl to peakRev)
                 }
             }
         }
         // A never-published peak the reset covered has nothing left to publish; keeping its row
         // would hold back snapshot compaction indefinitely.
-        if (retiredPeakKeys.isNotEmpty()) {
+        if (retiredPeakKeys.isNotEmpty() || appliedBooks.isNotEmpty()) {
             store.withTransaction {
                 for (key in retiredPeakKeys) {
                     val state = recordStates.get(permissionId, DriveWireCodec.DOMAIN_FURTHEST, key)
                     if (state != null && state.publishedFp == null) {
                         recordStates.delete(permissionId, DriveWireCodec.DOMAIN_FURTHEST, key)
                     }
+                }
+                for ((bookUrl, peakRev) in appliedBooks) {
+                    recordStates.upsert(
+                        DriveRecordState(
+                            permissionId = permissionId,
+                            domain = RESET_APPLIED_DOMAIN,
+                            recordKey = resetAppliedKey(resetKey, bookUrl),
+                            versionFp = peakRev.toString(),
+                            versionOp = DriveRecordState.OP_PUT,
+                            publishedFp = peakRev.toString(),
+                            lastSyncedRevision = peakRev,
+                            lastHlc = "",
+                        ),
+                    )
                 }
             }
         }
@@ -1345,7 +1368,7 @@ internal class DrivePositionSync(
         when (body) {
             is DriveFurthestBody.Reset -> {
                 // Transaction 1 (`liseur.db`): delete observations <= floor per origin & reset local peaks it covers.
-                applyFloorsLocally(permissionId, canonicalWorkKey, body.floors, localDeviceId)
+                applyFloorsLocally(permissionId, canonicalWorkKey, record.k, body.floors, localDeviceId)
                 // Transaction 2 (`drive_sync.db`): persist durable floors & reset record forever.
                 store.withTransaction {
                     for ((origin, floor) in body.floors) {
@@ -1907,6 +1930,7 @@ internal class DrivePositionSync(
         private const val PEAK_SEQ_KEY = "self"
         private const val BOOK_PEAK_DOMAIN = "_furthest_book_peak"
         private const val RESET_PENDING_DOMAIN = "_furthest_reset_pending"
+        private const val RESET_APPLIED_DOMAIN = "_furthest_reset_applied"
         private const val PENDING_REVISIONS = "revisions"
 
         /** Latest reading wins a shared `(workKey, deviceId)` slot; the URL keeps the choice stable. */
@@ -1928,6 +1952,7 @@ internal class DrivePositionSync(
         fun resetRecordKey(workKey: String, resetId: String): String =
             "$RESET_KEY_PREFIX$workKey/$resetId"
         private fun bookPeakKey(workKey: String, bookUrl: String): String = "$workKey/$bookUrl"
+        private fun resetAppliedKey(resetKey: String, bookUrl: String): String = "$resetKey/$bookUrl"
         private fun floorRecordKey(workKey: String, originDeviceId: String): String =
             "$workKey/$originDeviceId"
     }
