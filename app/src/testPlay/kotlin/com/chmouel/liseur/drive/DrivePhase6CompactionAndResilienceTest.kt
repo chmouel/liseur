@@ -110,7 +110,7 @@ class DrivePhase6CompactionAndResilienceTest {
     }
 
     @Test
-    fun `multi-part snapshot compaction prunes superseded deltas and old snapshots, bounds appData file count, and preserves tombstones and vocab delete observed vectors`() = runTest {
+    fun `multi-part snapshot compaction prunes superseded deltas and old snapshots, bounds appData file count, and preserves tombstones`() = runTest {
         val maxPartBytes = 2_400
         val devA = createDevice(
             deviceId = "dev-a",
@@ -122,12 +122,8 @@ class DrivePhase6CompactionAndResilienceTest {
         devB.connect()
 
         val bookA = seedBook(devA, "compact.epub", "9780547928227", "The Hobbit", "J.R.R. Tolkien")
-        val vocabRepoA = VocabularyRepository(devA.liseurDb)
-        val vocabRepoB = VocabularyRepository(devB.liseurDb)
         val baseTime = 1_745_000_000_000L
 
-        // Seed an annotation (that we'll delete later for tombstone preservation), a live annotation,
-        // and a vocabulary word (that A will delete while B stays untouched vs. a second word B reviews).
         val annLive = BookAnnotation(
             id = "ann-live",
             bookId = bookA.url,
@@ -151,39 +147,12 @@ class DrivePhase6CompactionAndResilienceTest {
         )
         devA.liseurDb.annotationDao().upsert(annLive)
         devA.liseurDb.annotationDao().upsert(annToDelete)
-        val wordDeletedId = vocabRepoA.collect(
-            lookup = VocabularyLookup("éphémère", "fr", null),
-            definition = "short-lived",
-            translationLanguage = "en",
-            now = baseTime,
-        )!!
-        val wordConcurrentReviewId = vocabRepoA.collect(
-            lookup = VocabularyLookup("lumière", "fr", null),
-            definition = "light",
-            translationLanguage = "en",
-            now = baseTime + 10L,
-        )!!
-
-        // Initial sync A -> B so B has both annotations and both vocab words.
         assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
         assertEquals(SyncOutcome.Success, devB.changeEngine.sync().outcome)
 
-        // Now B goes offline and reviews `lumière` (creating a concurrent review unknown to A's observed vector),
-        // while leaving `éphémère` and `ann-tombstone` untouched.
-        val wordBReview = devB.liseurDb.vocabularyDao().findWord("lumière", "fr")!!
-        vocabRepoB.review(
-            card = wordBReview,
-            rating = Recall.GOOD,
-            newLimit = 0,
-            reviewLimit = 0,
-            now = baseTime + 5_000L,
-        )
-
-        // A deletes `ann-tombstone`, deletes both vocab words, and then performs 18 edits on `ann-live`
+        // A deletes `ann-tombstone` and edits `ann-live`.
         // (1 delta per sync -> 20+ deltas total -> triggers >= 4 compactions with threshold = 5).
         devA.liseurDb.annotationDao().deleteById("ann-tombstone")
-        devA.liseurDb.vocabularyDao().deleteWord(wordDeletedId)
-        devA.liseurDb.vocabularyDao().deleteWord(wordConcurrentReviewId)
         assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
 
         var compactionCount = 0
@@ -261,13 +230,6 @@ class DrivePhase6CompactionAndResilienceTest {
         assertEquals(DriveRecordState.OP_DEL, annTombstoneRec!!.op)
         assertNull(annTombstoneRec.body)
 
-        val vocabDelRec = allSnapRecords.firstOrNull {
-            it.d == DriveWireCodec.DOMAIN_VOCAB_WORD && it.k == DriveVocabularySync.wordKey("fr", "lumière")
-        }
-        assertNotNull("VocabWord OP_DEL must survive compaction", vocabDelRec)
-        assertEquals(DriveRecordState.OP_DEL, vocabDelRec!!.op)
-        assertNotNull("VocabWord OP_DEL must preserve observed vector across compactions", vocabDelRec.observed)
-
         // Publish one more delta (seq = throughSeq + 1) AFTER compaction and verify manifest preserves snapshot pointers!
         devA.liseurDb.annotationDao().upsert(
             annLive.copy(
@@ -286,12 +248,8 @@ class DrivePhase6CompactionAndResilienceTest {
         // Also verify B handles a 404 if a stale indexed delta ID was pruned before B pulled.
         assertEquals(SyncOutcome.Success, devB.changeEngine.sync().outcome)
 
-        // B converged to tail delta #21, silently deleted `ann-tombstone` and `éphémère`,
-        // AND preserved `lumière` (add-wins because B had an unseen concurrent review)!
         assertEquals("Post-compaction tail delta #21", devB.liseurDb.annotationDao().byId("ann-live")!!.note)
         assertNull(devB.liseurDb.annotationDao().byId("ann-tombstone"))
-        assertNull(devB.liseurDb.vocabularyDao().findWord("ephemere", "fr"))
-        assertNotNull(devB.liseurDb.vocabularyDao().findWord("lumière", "fr"))
 
         // And bounded file count check: last compaction file count didn't grow linearly with edits.
         assertTrue(
@@ -666,7 +624,7 @@ class DrivePhase6CompactionAndResilienceTest {
     }
 
     @Test
-    fun `clean reinstall from compacted snapshots alone reconstructs all 12 domains and EPUB availability identically`() = runTest {
+    fun `clean reinstall from compacted snapshots alone reconstructs synced domains and EPUB availability identically`() = runTest {
         val devA = createDevice(deviceId = "dev-a", compactionDeltaThreshold = 4)
         devA.connect()
         val baseTime = 1_745_500_000_000L
@@ -796,53 +754,6 @@ class DrivePhase6CompactionAndResilienceTest {
         devA.liseurDb.bookDao().setSeriesOverride(book1.url, "Tolkien Legendarium", 1.5, baseTime + 400L)
         assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
 
-        // 6. Vocabulary word + legacy baseline + occurrence + reviews + derived schedule
-        val vocabRepoA = VocabularyRepository(devA.liseurDb)
-        val wordIdA = devA.liseurDb.vocabularyDao().insertWord(
-            VocabularyWord(
-                word = "dragon",
-                normalized = "dragon",
-                language = "en",
-                definition = "fire-breathing wyrm",
-                translationLanguage = "fr",
-                notes = "Smaug",
-                addedAt = baseTime,
-                dueAt = baseTime + 86_400_000L,
-                reviewedAt = baseTime + 60_000L,
-                streak = 1,
-                intervalMinutes = 1440,
-                repetitions = 1,
-                definitionEdited = true,
-                definitionUpdatedAt = baseTime + 5L,
-                notesUpdatedAt = baseTime + 6L,
-                baselineDueAt = baseTime + 86_400_000L,
-                baselineReviewedAt = baseTime + 60_000L,
-                baselineStreak = 1,
-                baselineIntervalMinutes = 1440,
-                baselineRepetitions = 1,
-            ),
-        )
-        devA.liseurDb.vocabularyDao().insertOccurrence(
-            VocabularyOccurrence(
-                wordId = wordIdA,
-                bookUrl = book1.url,
-                bookTitle = "The Hobbit",
-                locationKey = "ch12#p3",
-                locator = """{"href":"ch12.xhtml"}""",
-                sentence = "There he lay, a vast red-golden dragon.",
-                lastSeenAt = baseTime + 500L,
-                encounters = 3,
-            ),
-        )
-        vocabRepoA.review(
-            card = devA.liseurDb.vocabularyDao().word(wordIdA)!!,
-            rating = Recall.GOOD,
-            newLimit = 0,
-            reviewLimit = 0,
-            now = baseTime + 90_000_000L,
-        )
-        assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
-
         // 7. Reading sessions (multiple sessions so cross-device stats can be compared identically)
         devA.liseurDb.readingSessionDao().insert(
             ReadingSession(
@@ -898,10 +809,8 @@ class DrivePhase6CompactionAndResilienceTest {
             }
             .map { it.d }
             .toSet()
-        assertEquals(DriveWireCodec.SUPPORTED_DOMAIN_VERSIONS.keys, snapshotDomains)
+        assertEquals(DriveWireCodec.SUPPORTED_DOMAIN_VERSIONS.keys - setOf(DriveWireCodec.DOMAIN_VOCAB_WORD, DriveWireCodec.DOMAIN_VOCAB_OCCURRENCE, DriveWireCodec.DOMAIN_VOCAB_REVIEW), snapshotDomains)
 
-        // Capture A's expected stats & vocab schedule before fresh reinstall on Device D.
-        val wordA = devA.liseurDb.vocabularyDao().findWord("dragon", "en")!!
         val statsA = computeStats(devA.liseurDb, baseTime + 10_000_000L)
 
         // --- FRESH PLAY INSTALLATION (Device D) connects from scratch! ---
@@ -969,18 +878,6 @@ class DrivePhase6CompactionAndResilienceTest {
         assertEquals("10", ratingD?.value)
         assertEquals("Timeless adventure", reviewD?.value)
 
-        // Verify vocabulary + occurrence + derived SRS schedule
-        val wordD = devD.liseurDb.vocabularyDao().findWord("dragon", "en")!!
-        assertEquals(wordA.definition, wordD.definition)
-        assertEquals(wordA.notes, wordD.notes)
-        assertEquals(wordA.dueAt, wordD.dueAt)
-        assertEquals(wordA.streak, wordD.streak)
-        assertEquals(wordA.intervalMinutes, wordD.intervalMinutes)
-        assertEquals(wordA.repetitions, wordD.repetitions)
-        val occsD = devD.liseurDb.vocabularyDao().occurrencesList(wordD.id)
-        assertEquals(1, occsD.size)
-        assertEquals("There he lay, a vast red-golden dragon.", occsD.single().sentence)
-
         // Verify reading sessions & identical local cross-device statistics!
         val sessionsD = devD.liseurDb.readingSessionDao().allOnce()
         assertEquals(2, sessionsD.size)
@@ -1005,7 +902,7 @@ class DrivePhase6CompactionAndResilienceTest {
 
         val baseTime = 1_745_600_000_000L
         val bookA = seedBook(devA, "order.epub", "9780141439518", "Pride and Prejudice", "Jane Austen")
-        // Seq 1: catalog + session 1 + vocab word + review 1
+        // Seq 1: catalog + session 1
         devA.liseurDb.readingSessionDao().insert(
             ReadingSession(
                 bookUrl = bookA.url,
@@ -1018,9 +915,6 @@ class DrivePhase6CompactionAndResilienceTest {
                 idleMs = 0L,
             ),
         )
-        val vocabRepoA = VocabularyRepository(devA.liseurDb)
-        val wordId = vocabRepoA.collect(VocabularyLookup("ardent", "en", null), "passionate", "en", now = baseTime)!!
-        vocabRepoA.review(devA.liseurDb.vocabularyDao().word(wordId)!!, Recall.GOOD, 0, 0, now = baseTime + 1_000L)
         assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome) // seq = 1
 
         // Seq 2: annotation + session 2
@@ -1057,8 +951,6 @@ class DrivePhase6CompactionAndResilienceTest {
         assertEquals("From seq 2", devB.liseurDb.annotationDao().byId("ann-seq2")!!.note)
         assertEquals(2L, devB.driveDb.cursors().get(PERM_ID, "dev-a", DriveWireCodec.DOMAIN_ANNOTATION)!!.appliedSeq)
         assertEquals(2, devB.liseurDb.readingSessionDao().allOnce().size)
-        val wordB = devB.liseurDb.vocabularyDao().findWord("ardent", "en")!!
-        assertEquals(1, wordB.repetitions)
 
         // Duplicate delivery: reset B's cursors & startPageToken and replay seq 1 + seq 2 -> strictly idempotent!
         devB.driveDb.withTransaction {
@@ -1070,9 +962,6 @@ class DrivePhase6CompactionAndResilienceTest {
         assertEquals(SyncOutcome.Success, devB.changeEngine.sync().outcome)
         assertEquals(2, devB.liseurDb.readingSessionDao().allOnce().size)
         assertEquals(1_200_000L, devB.liseurDb.readingSessionDao().allOnce().sumOf { it.durationMs })
-        val wordBAfterDup = devB.liseurDb.vocabularyDao().findWord("ardent", "en")!!
-        assertEquals(wordB.repetitions, wordBAfterDup.repetitions)
-        assertEquals(wordB.dueAt, wordBAfterDup.dueAt)
     }
 
     @Test
@@ -1488,254 +1377,7 @@ class DrivePhase6CompactionAndResilienceTest {
         assertEquals(0, unprunedAfterRetry)
     }
 
-    @Test
-    fun `a delete that saw an occurrence still applies silently when that occurrence arrives through a later snapshot`() = runTest {
-        val devA = createDevice(deviceId = "dev-a", compactionDeltaThreshold = 3)
-        val devB = createDevice(deviceId = "dev-b")
-        devA.connect()
-        devB.connect()
-        val baseTime = 1_746_100_000_000L
-        val bookA = seedBook(devA, "vocab-seq.epub", "9780140449143", "Germinal", "Zola")
-        val wordIdA = devA.liseurDb.vocabularyDao().insertWord(
-            VocabularyWord(
-                word = "mine", normalized = "mine", language = "fr", definition = "mine",
-                translationLanguage = "en", notes = "", addedAt = baseTime, dueAt = baseTime,
-                definitionUpdatedAt = baseTime, notesUpdatedAt = baseTime,
-            ),
-        )
-        devA.liseurDb.vocabularyDao().insertOccurrence(
-            VocabularyOccurrence(
-                wordId = wordIdA, bookUrl = bookA.url, bookTitle = "Germinal", locationKey = "ch01#p1",
-                locator = """{"href":"ch01.xhtml"}""", sentence = "Au fond de la mine", lastSeenAt = baseTime,
-                encounters = 1, sentenceEdited = false, sentenceUpdatedAt = baseTime,
-            ),
-        )
-        assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
-        assertEquals(SyncOutcome.Success, devB.changeEngine.sync().outcome)
 
-        // B saw the occurrence and deletes the untouched word.
-        val wordB = devB.liseurDb.vocabularyDao().findWord("mine", "fr")!!
-        VocabularyRepository(devB.liseurDb).deleteWord(wordB.id)
-        assertEquals(SyncOutcome.Success, devB.changeEngine.sync().outcome)
-
-        // A, not seeing B's delete, compacts unrelated edits well past the occurrence's seq.
-        server.hideOtherDeviceDeltasFor("dev-a")
-        for (i in 1..10) {
-            devA.liseurDb.annotationDao().upsert(
-                BookAnnotation(
-                    id = "ann-seq-$i", bookId = bookA.url, kind = AnnotationKind.NOTE.name,
-                    locatorJson = """{"href":"ch02.xhtml"}""", text = "t$i", note = "n$i",
-                    createdAt = baseTime + i, updatedAt = (baseTime + i) * 1_000L,
-                ),
-            )
-            assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
-        }
-        server.unhideAll()
-        assertNotNull(devA.changeEngine.compactor.currentCompactionState(PERM_ID).snapshot)
-
-        // A fresh device reads A's snapshot, then B's delete: the occurrence was observed, so the delete wins.
-        val devC = createDevice(deviceId = "dev-c")
-        devC.connect()
-        assertEquals(SyncOutcome.Success, devC.changeEngine.sync().outcome)
-        assertEquals(SyncOutcome.Success, devC.changeEngine.sync().outcome)
-        assertNull(devC.liseurDb.vocabularyDao().findWord("mine", "fr"))
-    }
-
-    @Test
-    fun `converged two-device vocabulary word and occurrence survive repeated compactions on both devices and recover on fresh reinstall`() = runTest {
-        val devA = createDevice(deviceId = "dev-a", compactionDeltaThreshold = 5)
-        val devB = createDevice(deviceId = "dev-b", compactionDeltaThreshold = 5)
-        devA.connect()
-        devB.connect()
-
-        val baseTime = 1_746_000_000_000L
-        val bookA = seedBook(devA, "vocab-conv.epub", "9780140449136", "Les Misérables", "Victor Hugo")
-        val wordIdA = devA.liseurDb.vocabularyDao().insertWord(
-            VocabularyWord(
-                word = "sérénité",
-                normalized = "serenite",
-                language = "fr",
-                definition = "calm",
-                translationLanguage = "en",
-                notes = "initial note",
-                addedAt = baseTime,
-                dueAt = baseTime,
-                definitionUpdatedAt = baseTime,
-                notesUpdatedAt = baseTime,
-            ),
-        )
-        devA.liseurDb.vocabularyDao().insertOccurrence(
-            VocabularyOccurrence(
-                wordId = wordIdA,
-                bookUrl = bookA.url,
-                bookTitle = "Les Misérables",
-                locationKey = "ch01#p1",
-                locator = """{"href":"ch01.xhtml"}""",
-                sentence = "Initial context sentence",
-                lastSeenAt = baseTime,
-                encounters = 1,
-                sentenceEdited = false,
-                sentenceUpdatedAt = baseTime,
-            ),
-        )
-        // Also seed a helper annotation on each device to trigger subsequent compactions cleanly.
-        devA.liseurDb.annotationDao().upsert(
-            BookAnnotation(
-                id = "ann-compact-a",
-                bookId = bookA.url,
-                kind = AnnotationKind.NOTE.name,
-                locatorJson = """{"href":"ch01.xhtml"}""",
-                text = "A helper",
-                note = "a0",
-                createdAt = baseTime,
-                updatedAt = baseTime * 1_000L,
-            ),
-        )
-
-        // Converge initial state A -> B.
-        assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
-        assertEquals(SyncOutcome.Success, devB.changeEngine.sync().outcome)
-        val stubB = "drive:isbn:9780140449136"
-        devB.liseurDb.annotationDao().upsert(
-            BookAnnotation(
-                id = "ann-compact-b",
-                bookId = stubB,
-                kind = AnnotationKind.NOTE.name,
-                locatorJson = """{"href":"ch02.xhtml"}""",
-                text = "B helper",
-                note = "b0",
-                createdAt = baseTime,
-                updatedAt = baseTime * 1_000L,
-            ),
-        )
-        assertEquals(SyncOutcome.Success, devB.changeEngine.sync().outcome)
-        assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
-
-        // Concurrent field edits on BOTH the vocabulary word AND its occurrence:
-        // - Device A edits word `definition` and occurrence `sentence`.
-        // - Device B edits word `notes` and occurrence `encounters` / `lastSeenAt`.
-        val wordA0 = devA.liseurDb.vocabularyDao().findWord("serenite", "fr")!!
-        devA.liseurDb.vocabularyDao().updateWord(
-            wordA0.copy(
-                definition = "deep peace",
-                definitionEdited = true,
-                definitionUpdatedAt = baseTime + 10_000L,
-            ),
-        )
-        val occA0 = devA.liseurDb.vocabularyDao().occurrencesList(wordA0.id).single()
-        devA.liseurDb.vocabularyDao().deleteOccurrencesForWord(wordA0.id)
-        devA.liseurDb.vocabularyDao().insertOccurrence(
-            occA0.copy(
-                sentence = "A edited context sentence",
-                sentenceEdited = true,
-                sentenceUpdatedAt = baseTime + 10_000L,
-            ),
-        )
-
-        val wordB0 = devB.liseurDb.vocabularyDao().findWord("serenite", "fr")!!
-        devB.liseurDb.vocabularyDao().updateWord(
-            wordB0.copy(
-                notes = "B personal note",
-                notesUpdatedAt = baseTime + 20_000L,
-            ),
-        )
-        val occB0 = devB.liseurDb.vocabularyDao().occurrencesList(wordB0.id).single()
-        devB.liseurDb.vocabularyDao().deleteOccurrencesForWord(wordB0.id)
-        devB.liseurDb.vocabularyDao().insertOccurrence(
-            occB0.copy(
-                encounters = 5,
-                lastSeenAt = baseTime + 20_000L,
-            ),
-        )
-
-        // Both devices upload their concurrent edits while offline from each other.
-        server.hideOtherDeviceDeltasFor("dev-a")
-        assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
-        val seqABeforeMerge = devA.driveDb.accounts().get(PERM_ID)!!.nextSeq - 1L
-        server.hideOtherDeviceDeltasFor("dev-b")
-        assertEquals(SyncOutcome.Success, devB.changeEngine.sync().outcome)
-        server.unhideAll()
-
-        // A pulls B's edit, merges word + occurrence, and publishes the converged state (seqAMerge).
-        assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
-        val seqAMerge = devA.driveDb.accounts().get(PERM_ID)!!.nextSeq - 1L
-        assertTrue(seqAMerge > seqABeforeMerge)
-
-        // Hide A's merged batch so B independently pulls A's pre-merge edit, merges to the EXACT
-        // same converged content, and publishes its own converged batch (seqBMerge).
-        server.hideDeltaSeq("dev-a", seqAMerge)
-        assertEquals(SyncOutcome.Success, devB.changeEngine.sync().outcome)
-        server.unhideAll()
-
-        // Now cross-pull the converged batches on BOTH A and B!
-        assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
-        assertEquals(SyncOutcome.Success, devB.changeEngine.sync(forceManifestRescan = true).outcome)
-
-        // Verify both A and B converged AND preserved local authorship (originDeviceId == null).
-        val wordKey = DriveVocabularySync.wordKey("fr", "serenite")
-        val wordStateA = devA.driveDb.recordStates().get(PERM_ID, DriveWireCodec.DOMAIN_VOCAB_WORD, wordKey)!!
-        val wordStateB = devB.driveDb.recordStates().get(PERM_ID, DriveWireCodec.DOMAIN_VOCAB_WORD, wordKey)!!
-        assertNull("A must retain local origin on converged vocabWord", wordStateA.originDeviceId)
-        assertNull("B must retain local origin on converged vocabWord", wordStateB.originDeviceId)
-        val occStatesA = devA.driveDb.recordStates().forDomain(PERM_ID, DriveWireCodec.DOMAIN_VOCAB_OCCURRENCE)
-        val occStatesB = devB.driveDb.recordStates().forDomain(PERM_ID, DriveWireCodec.DOMAIN_VOCAB_OCCURRENCE)
-        assertEquals(1, occStatesA.size)
-        assertEquals(1, occStatesB.size)
-        assertNull("A must retain local origin on converged vocabOccurrence", occStatesA.single().originDeviceId)
-        assertNull("B must retain local origin on converged vocabOccurrence", occStatesB.single().originDeviceId)
-
-        // Repeatedly compact BOTH devices so all original vocabulary deltas are pruned!
-        var compactionsA = 0
-        var compactionsB = 0
-        for (i in 1..12) {
-            devA.liseurDb.annotationDao().upsert(
-                devA.liseurDb.annotationDao().byId("ann-compact-a")!!.copy(
-                    note = "a-compact-$i",
-                    updatedAt = (baseTime + 50_000L + i * 1_000L) * 1_000L,
-                ),
-            )
-            val runA = devA.changeEngine.sync()
-            assertEquals(SyncOutcome.Success, runA.outcome)
-            if (runA.compacted) compactionsA++
-
-            devB.liseurDb.annotationDao().upsert(
-                devB.liseurDb.annotationDao().byId("ann-compact-b")!!.copy(
-                    note = "b-compact-$i",
-                    updatedAt = (baseTime + 60_000L + i * 1_000L) * 1_000L,
-                ),
-            )
-            val runB = devB.changeEngine.sync()
-            assertEquals(SyncOutcome.Success, runB.outcome)
-            if (runB.compacted) compactionsB++
-        }
-        assertTrue("Expected >= 2 compactions on A, got $compactionsA", compactionsA >= 2)
-        assertTrue("Expected >= 2 compactions on B, got $compactionsB", compactionsB >= 2)
-
-        // Confirm original vocabulary deltas were pruned on BOTH A and B!
-        val survivingASeqs = server.liveAppDataFiles()
-            .filter { it.appProperties["kind"] == DriveFile.KIND_DELTA && it.appProperties["deviceId"] == "dev-a" }
-            .mapNotNull { it.appProperties["seq"]?.toLongOrNull() }
-        val survivingBSeqs = server.liveAppDataFiles()
-            .filter { it.appProperties["kind"] == DriveFile.KIND_DELTA && it.appProperties["deviceId"] == "dev-b" }
-            .mapNotNull { it.appProperties["seq"]?.toLongOrNull() }
-        assertTrue(survivingASeqs.all { it > seqAMerge })
-        assertFalse(1L in survivingBSeqs)
-
-        // Fresh Device D connects and recovers BOTH the converged word AND occurrence from compacted snapshots!
-        val devD = createDevice(deviceId = "dev-d-fresh")
-        devD.connect()
-        assertEquals(SyncOutcome.Success, devD.changeEngine.sync().outcome)
-
-        val recoveredWord = devD.liseurDb.vocabularyDao().findWord("serenite", "fr")
-        assertNotNull("Converged vocabulary word MUST be recovered on fresh install after both devices compact", recoveredWord)
-        assertEquals("deep peace", recoveredWord!!.definition)
-        assertEquals("B personal note", recoveredWord.notes)
-
-        val recoveredOccs = devD.liseurDb.vocabularyDao().occurrencesList(recoveredWord.id)
-        assertEquals("Converged vocabulary occurrence MUST be recovered on fresh install", 1, recoveredOccs.size)
-        assertEquals("A edited context sentence", recoveredOccs.single().sentence)
-        assertEquals(5, recoveredOccs.single().encounters)
-    }
 
     @Test
     fun `failure mid-multipart snapshot upload followed by retry reuses uploaded parts and leaves zero orphan snapshot parts`() = runTest {
@@ -2070,269 +1712,11 @@ class DrivePhase6CompactionAndResilienceTest {
         assertNotNull(devC.liseurDb.bookDao().allOnce().find { it.title == "Readded" })
     }
 
-    @Test
-    fun `snapshot does not restore an authored word after another device deletes it`() = runTest {
-        val devA = createDevice(deviceId = "dev-a", compactionDeltaThreshold = 2)
-        val devB = createDevice(deviceId = "dev-b")
-        devA.connect()
-        devB.connect()
-        val book = seedBook(devA, "deleted-word.epub", "9780451524936", "Book", "Author")
-        val repoA = VocabularyRepository(devA.liseurDb)
-        val repoB = VocabularyRepository(devB.liseurDb)
-        repoA.collect(VocabularyLookup("lumière", "fr", null), "light", "en", now = 1_746_000_000_000L)
-        assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
-        assertEquals(SyncOutcome.Success, devB.changeEngine.sync().outcome)
-        repoB.deleteWord(devB.liseurDb.vocabularyDao().findWord("lumière", "fr")!!.id)
-        assertEquals(SyncOutcome.Success, devB.changeEngine.sync().outcome)
-        assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
-        val wordKey = DriveVocabularySync.wordKey("fr", "lumière")
-        assertEquals(
-            DriveRecordState.OP_DEL,
-            devA.driveDb.recordStates().get(PERM_ID, DriveWireCodec.DOMAIN_VOCAB_WORD, wordKey)!!.versionOp,
-        )
 
-        repeat(3) { syncWithNewNoteUntilSnapshotAdvances(devA, book.url, "deleted-word-$it") }
-        val snapshot = restartedCompactionState(devA).snapshot!!
-        val records = snapshot.parts.flatMap {
-            DriveWireCodec.decodeSnapshotPart(server.rawBytes(it.fileId)!!.toString(Charsets.UTF_8)).records
-        }
-        assertTrue(records.none { it.d == DriveWireCodec.DOMAIN_VOCAB_WORD && it.k == wordKey && it.op == DriveRecordState.OP_PUT })
-    }
 
-    @Test
-    fun `snapshot omits covered authored occurrences but keeps later ones after remote agreement`() = runTest {
-        val devA = createDevice(deviceId = "dev-a", compactionDeltaThreshold = 2)
-        devA.connect()
-        val book = seedBook(devA, "occurrences.epub", "9780451524936", "Book", "Author")
-        val wordId = VocabularyRepository(devA.liseurDb).collect(
-            VocabularyLookup("mine", "fr", null), "mine", "en", now = 1_746_000_000_000L,
-        )!!
-        suspend fun addOccurrence(location: String) {
-            devA.liseurDb.vocabularyDao().insertOccurrence(
-                VocabularyOccurrence(
-                    wordId = wordId, bookUrl = book.url, bookTitle = "Book", locationKey = location,
-                    locator = """{"href":"ch01.xhtml"}""", sentence = location,
-                    lastSeenAt = 1_746_000_000_000L, encounters = 1,
-                ),
-            )
-            assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
-        }
-        addOccurrence("ch01#p1")
-        val covered = devA.driveDb.recordStates().forDomain(PERM_ID, DriveWireCodec.DOMAIN_VOCAB_OCCURRENCE).single()
-        val coveredSeq = requireNotNull(covered.originSeq)
-        addOccurrence("ch01#p2")
-        val occurrences = devA.driveDb.recordStates().forDomain(PERM_ID, DriveWireCodec.DOMAIN_VOCAB_OCCURRENCE)
-        val later = occurrences.single { it.recordKey != covered.recordKey }
-        assertTrue(later.originSeq!! > coveredSeq)
-        for (state in occurrences) {
-            val body = DriveWireCodec.decodeVocabOccurrenceBody(JSONObject(state.bodyJson!!))!!
-            val remote = DriveWireCodec.putRecord(
-                domain = state.domain, key = state.recordKey, hlc = "0017469999999-0000-dev-b",
-                bodyMap = DriveWireCodec.encodeVocabOccurrenceBody(body),
-            )
-            assertTrue(devA.driveSync.vocabularySync.applyRemoteOccurrence(PERM_ID, remote, "dev-b", 100L))
-            assertEquals(remote.fp, devA.driveDb.recordStates().get(PERM_ID, state.domain, state.recordKey)!!.versionFp)
-        }
-        val wordKey = DriveVocabularySync.wordKey("fr", "mine")
-        val wordState = devA.driveDb.recordStates().get(PERM_ID, DriveWireCodec.DOMAIN_VOCAB_WORD, wordKey)!!
-        val wordBody = DriveWireCodec.decodeVocabWordBody(JSONObject(wordState.bodyJson!!))!!
-        val wordRecord = DriveWireCodec.putRecord(
-            domain = DriveWireCodec.DOMAIN_VOCAB_WORD, key = wordKey, hlc = "0017469999999-0001-dev-b",
-            bodyMap = DriveWireCodec.encodeVocabWordBody(wordBody),
-        ).copy(observed = mapOf("dev-a" to coveredSeq))
-        devA.driveSync.vocabularySync.applyRemoteWord(PERM_ID, wordRecord, "dev-b", 101L)
 
-        repeat(3) { syncWithNewNoteUntilSnapshotAdvances(devA, book.url, "covered-occurrence-$it") }
-        val snapshot = restartedCompactionState(devA).snapshot!!
-        val records = snapshot.parts.flatMap {
-            DriveWireCodec.decodeSnapshotPart(server.rawBytes(it.fileId)!!.toString(Charsets.UTF_8)).records
-        }.filter { it.d == DriveWireCodec.DOMAIN_VOCAB_OCCURRENCE }.map { it.k }.toSet()
-        assertFalse("covered occurrence in snapshot: $records", covered.recordKey in records)
-        assertTrue(later.recordKey in records)
-    }
 
-    @Test
-    fun `snapshot keeps the exact local publication seq when agreement replaced provenance with a remote origin, even after outbox pruning`() = runTest {
-        val devA = createDevice(deviceId = "dev-a", compactionDeltaThreshold = 2)
-        devA.connect()
-        val book = seedBook(devA, "foreign-origin.epub", "9780451524936", "Foreign", "Author")
-        val repoA = VocabularyRepository(devA.liseurDb)
-        val baseTime = 1_746_400_000_000L
-        repoA.collect(VocabularyLookup("lumière", "fr", null), "light", "en", now = baseTime)
-        assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
-        val reviewId = reviewWord(devA, "fr", "lumière", baseTime + 1_000L)
-        assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
 
-        val states = devA.driveDb.recordStates()
-        val authored = states.get(PERM_ID, DriveWireCodec.DOMAIN_VOCAB_REVIEW, reviewId)!!
-        val localSeq = authored.originSeq!!
-        assertNull(authored.originDeviceId)
-        // A later agreement with dev-b replaced the provenance of the identical version.
-        states.upsert(authored.copy(originDeviceId = "dev-b", originSeq = 50L))
-
-        // Three snapshot generations: the review's batch is pruned from the outbox after the second.
-        repeat(3) { syncWithNewNoteUntilSnapshotAdvances(devA, book.url, "fo$it") }
-        assertNotNull(restartedCompactionState(devA).previousSnapshot)
-        assertTrue(
-            "the review's batch must be gone so only the persisted index can supply its seq",
-            devA.driveDb.outbox().forAccount(PERM_ID).none { it.seq == localSeq },
-        )
-
-        val devC = createDevice(deviceId = "dev-c")
-        devC.connect()
-        assertEquals(SyncOutcome.Success, devC.changeEngine.sync().outcome)
-        val received = devC.driveDb.recordStates().get(PERM_ID, DriveWireCodec.DOMAIN_VOCAB_REVIEW, reviewId)!!
-        assertEquals("dev-a", received.originDeviceId)
-        assertEquals(localSeq, received.originSeq)
-        assertEquals(setOf(reviewId), reviewSyncIds(devC, "fr", "lumière"))
-        val internalLeak = devC.driveDb.recordStates().forAccount(PERM_ID)
-            .any { it.domain.startsWith(DriveCompactor.AUTHORED_DOMAIN_PREFIX) }
-        assertFalse("snapshot receivers must not adopt the producer's internal index", internalLeak)
-    }
-
-    @Test
-    fun `delete then compact then fresh install then recollect drops covered reviews but keeps a concurrent unobserved review`() = runTest {
-        val devA = createDevice(deviceId = "dev-a", compactionDeltaThreshold = 2)
-        val devB = createDevice(deviceId = "dev-b")
-        devA.connect()
-        devB.connect()
-        val book = seedBook(devA, "delete-compact.epub", "9780451524936", "DeleteCompact", "Author")
-        val repoA = VocabularyRepository(devA.liseurDb)
-        val baseTime = 1_746_500_000_000L
-        val day = 86_400_000L
-        val lookup = VocabularyLookup("lumière", "fr", null)
-        repoA.collect(lookup, "light", "en", now = baseTime)
-        assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
-        assertEquals(SyncOutcome.Success, devB.changeEngine.sync().outcome)
-
-        val coveredA = reviewWord(devA, "fr", "lumière", baseTime + 1_000L)
-        assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
-        assertEquals(SyncOutcome.Success, devB.changeEngine.sync().outcome)
-        val coveredB = reviewWord(devB, "fr", "lumière", baseTime + 30 * day)
-        assertEquals(SyncOutcome.Success, devB.changeEngine.sync().outcome)
-        assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
-
-        // B reviews again but A never sees it before deleting.
-        val concurrent = reviewWord(devB, "fr", "lumière", baseTime + 90 * day)
-        server.hideOtherDeviceDeltasFor("dev-a")
-        assertEquals(SyncOutcome.Success, devB.changeEngine.sync().outcome)
-        val wordA = devA.liseurDb.vocabularyDao().findWord("lumière", "fr")!!
-        repoA.deleteWord(wordA.id)
-        assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
-        repeat(2) { syncWithNewNoteUntilSnapshotAdvances(devA, book.url, "dc$it") }
-        server.unhideAll()
-        assertNotNull(restartedCompactionState(devA).snapshot)
-
-        val boundaryRow = devA.driveDb.recordStates()
-            .get(PERM_ID, "_vocab_delete_boundary", DriveVocabularySync.wordKey("fr", "lumière"))!!
-        assertTrue("the delete must also cover A's own reviews", boundaryRow.bodyJson!!.contains("dev-a"))
-
-        // Fresh install reads A's snapshots + B's deltas in either order and then recollects the word.
-        val devC = createDevice(deviceId = "dev-c")
-        devC.connect()
-        repeat(3) { assertEquals(SyncOutcome.Success, devC.changeEngine.sync().outcome) }
-        assertNull(devC.liseurDb.vocabularyDao().findWord("lumière", "fr"))
-        // The word is collected again on another device; its word record reaches C remotely.
-        repoA.collect(lookup, "light", "en", now = baseTime + 120 * day)
-        assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
-        repeat(2) { assertEquals(SyncOutcome.Success, devC.changeEngine.sync().outcome) }
-
-        val recollected = reviewSyncIds(devC, "fr", "lumière")
-        assertFalse("A's covered review resurrected", coveredA in recollected)
-        assertFalse("B's covered review resurrected", coveredB in recollected)
-        assertEquals("concurrent unobserved review must survive", setOf(concurrent), recollected)
-
-        // A's own restart-free view: nothing leaked into A's snapshot either.
-        val restarted = DriveCompactor(devA.driveDb, server.clientFor("dev-a"))
-        assertNull(
-            restarted.loadAuthoredIndex(PERM_ID)[DriveWireCodec.DOMAIN_VOCAB_REVIEW to coveredA],
-        )
-    }
-
-    @Test
-    fun `recollect and pruning before a fresh device's first sync keep the delete boundary and the concurrent unobserved review`() = runTest {
-        val devA = createDevice(deviceId = "dev-a", compactionDeltaThreshold = 2)
-        val devB = createDevice(deviceId = "dev-b")
-        devA.connect()
-        devB.connect()
-        val book = seedBook(devA, "recollect-prune.epub", "9780451524936", "RecollectPrune", "Author")
-        val repoA = VocabularyRepository(devA.liseurDb)
-        val baseTime = 1_746_550_000_000L
-        val day = 86_400_000L
-        val lookup = VocabularyLookup("lumière", "fr", null)
-        repoA.collect(lookup, "light", "en", now = baseTime)
-        assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
-        assertEquals(SyncOutcome.Success, devB.changeEngine.sync().outcome)
-
-        val observedByA = reviewWord(devB, "fr", "lumière", baseTime + 30 * day)
-        assertEquals(SyncOutcome.Success, devB.changeEngine.sync().outcome)
-        assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
-        assertEquals(setOf(observedByA), reviewSyncIds(devA, "fr", "lumière"))
-
-        // B goes offline with a review A never sees.
-        val concurrent = reviewWord(devB, "fr", "lumière", baseTime + 90 * day)
-        server.hideOtherDeviceDeltasFor("dev-a")
-        assertEquals(SyncOutcome.Success, devB.changeEngine.sync().outcome)
-
-        repoA.deleteWord(devA.liseurDb.vocabularyDao().findWord("lumière", "fr")!!.id)
-        assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
-        repoA.collect(lookup, "light", "en", now = baseTime + 120 * day)
-        assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
-        val wordKey = DriveVocabularySync.wordKey("fr", "lumière")
-        val authored = devA.driveDb.recordStates().get(PERM_ID, DriveWireCodec.DOMAIN_VOCAB_WORD, wordKey)!!
-        val body = DriveWireCodec.decodeVocabWordBody(JSONObject(authored.bodyJson!!))!!
-        val equivalent = DriveWireCodec.putRecord(
-            domain = DriveWireCodec.DOMAIN_VOCAB_WORD,
-            key = wordKey,
-            hlc = "0017469999999-0000-dev-b",
-            bodyMap = DriveWireCodec.encodeVocabWordBody(body),
-        )
-        devA.driveSync.vocabularySync.applyRemoteWord(PERM_ID, equivalent, "dev-b", 100L)
-        assertEquals(equivalent.fp, devA.driveDb.recordStates().get(PERM_ID, DriveWireCodec.DOMAIN_VOCAB_WORD, wordKey)!!.versionFp)
-        assertNotEquals(authored.versionFp, equivalent.fp)
-        repeat(3) { syncWithNewNoteUntilSnapshotAdvances(devA, book.url, "rp$it") }
-        server.unhideAll()
-        val state = restartedCompactionState(devA)
-        assertNotNull(state.previousSnapshot)
-        val snapshotWord = state.snapshot!!.parts.flatMap {
-            DriveWireCodec.decodeSnapshotPart(server.rawBytes(it.fileId)!!.toString(Charsets.UTF_8)).records
-        }.single { it.d == DriveWireCodec.DOMAIN_VOCAB_WORD && it.k == wordKey }
-        assertTrue((snapshotWord.observed?.get("dev-b") ?: 0L) > 0L)
-
-        val devC = createDevice(deviceId = "dev-c")
-        devC.connect()
-        repeat(3) { assertEquals(SyncOutcome.Success, devC.changeEngine.sync().outcome) }
-        assertNotNull(devC.liseurDb.vocabularyDao().findWord("lumière", "fr"))
-        assertEquals(setOf(concurrent), reviewSyncIds(devC, "fr", "lumière"))
-    }
-
-    @Test
-    fun `snapshot word tombstone covers the author's own reviews`() = runTest {
-        val devA = createDevice(deviceId = "dev-a", compactionDeltaThreshold = 2)
-        devA.connect()
-        val book = seedBook(devA, "own-coverage.epub", "9780451524936", "OwnCoverage", "Author")
-        val repoA = VocabularyRepository(devA.liseurDb)
-        val baseTime = 1_746_560_000_000L
-        repoA.collect(VocabularyLookup("lumière", "fr", null), "light", "en", now = baseTime)
-        assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
-        val reviewId = reviewWord(devA, "fr", "lumière", baseTime + 1_000L)
-        assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
-        val reviewSeq = devA.driveDb.recordStates()
-            .get(PERM_ID, DriveWireCodec.DOMAIN_VOCAB_REVIEW, reviewId)!!.originSeq!!
-        repoA.deleteWord(devA.liseurDb.vocabularyDao().findWord("lumière", "fr")!!.id)
-        assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
-        syncWithNewNoteUntilSnapshotAdvances(devA, book.url, "oc")
-
-        val snapshot = restartedCompactionState(devA).snapshot!!
-        val tombstone = snapshot.parts
-            .flatMap { DriveWireCodec.decodeSnapshotPart(server.rawBytes(it.fileId)!!.toString(Charsets.UTF_8)).records }
-            .single { it.d == DriveWireCodec.DOMAIN_VOCAB_WORD && it.k == DriveVocabularySync.wordKey("fr", "lumière") }
-        assertEquals(DriveRecordState.OP_DEL, tombstone.op)
-        assertTrue(
-            "tombstone must cover the author's review: ${tombstone.observed}",
-            (tombstone.observed?.get("dev-a") ?: 0L) >= reviewSeq,
-        )
-    }
 
     @Test
     fun `compaction defers while a published key has an unpublished newer version`() = runTest {
@@ -2404,33 +1788,6 @@ class DrivePhase6CompactionAndResilienceTest {
         syncWithNewNoteUntilSnapshotAdvances(devA, book.url, "up")
     }
 
-    @Test
-    fun `review authored after a recollect is not covered by the earlier delete and survives snapshot reinstall`() = runTest {
-        val devA = createDevice(deviceId = "dev-a", compactionDeltaThreshold = 2)
-        devA.connect()
-        val book = seedBook(devA, "recollect.epub", "9780451524936", "Recollect", "Author")
-        val repoA = VocabularyRepository(devA.liseurDb)
-        val baseTime = 1_746_600_000_000L
-        val lookup = VocabularyLookup("lumière", "fr", null)
-        repoA.collect(lookup, "light", "en", now = baseTime)
-        assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
-        val old = reviewWord(devA, "fr", "lumière", baseTime + 1_000L)
-        assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
-        repoA.deleteWord(devA.liseurDb.vocabularyDao().findWord("lumière", "fr")!!.id)
-        assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
-        repoA.collect(lookup, "light", "en", now = baseTime + 10_000L)
-        assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
-        val fresh = reviewWord(devA, "fr", "lumière", baseTime + 86_400_000L * 30)
-        assertEquals(SyncOutcome.Success, devA.changeEngine.sync().outcome)
-        repeat(2) { syncWithNewNoteUntilSnapshotAdvances(devA, book.url, "rc$it") }
-
-        val devC = createDevice(deviceId = "dev-c")
-        devC.connect()
-        repeat(2) { assertEquals(SyncOutcome.Success, devC.changeEngine.sync().outcome) }
-        val reviews = reviewSyncIds(devC, "fr", "lumière")
-        assertTrue("post-recollect review must survive", fresh in reviews)
-        assertFalse("pre-delete review must not be resurrected", old in reviews)
-    }
 
     private suspend fun restartedCompactionState(device: Phase6Device): DriveCompactionState =
         DriveCompactor(device.driveDb, server.clientFor(device.deviceId)).currentCompactionState(PERM_ID)
