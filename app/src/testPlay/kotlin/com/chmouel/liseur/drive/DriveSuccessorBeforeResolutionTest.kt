@@ -62,7 +62,13 @@ class DriveSuccessorBeforeResolutionTest {
         localRowMatchesContentFp = !dirty,
     )
 
-    private suspend fun deliver(local: LocalRecordView, incoming: DriveWireRecord, device: String, seq: Long): ReconciliationResult {
+    private suspend fun deliver(
+        local: LocalRecordView,
+        incoming: DriveWireRecord,
+        device: String,
+        seq: Long,
+        parkedPutContentFp: (JSONObject) -> String? = DriveCanonicalJson::contentFp,
+    ): ReconciliationResult {
         val result = DriveConflictEngine.reconcileIncoming(
             permissionId = perm, domain = domain, recordKey = key, bookUrl = null, local = local,
             existingResolutions = db.resolutions().forRecord(perm, domain, key),
@@ -70,6 +76,7 @@ class DriveSuccessorBeforeResolutionTest {
             incoming = incoming,
             incomingContentFp = incoming.body?.let(DriveCanonicalJson::contentFp),
             remoteDeviceId = device, remoteSeq = seq, now = 5_000L,
+            parkedPutContentFp = parkedPutContentFp,
         )
         result.resolutionsToPersist.forEach { db.resolutions().upsert(it) }
         result.conflictToOpen?.let { db.conflicts().upsert(it) }
@@ -179,6 +186,30 @@ class DriveSuccessorBeforeResolutionTest {
         assertEquals(ReconciliationCase.STALE, replay.reconciliationCase)
         assertEquals(ReconciliationDataAction.NoDataChange, replay.dataAction)
         assertNull(replay.conflictToOpen)
+    }
+
+    @Test
+    fun `undecodable parked successor keeps local state and successor conflict while settling earlier conflict`() = runTest {
+        val editB = DriveWireRecord(
+            d = domain, k = key, op = DriveRecordState.OP_PUT, hlc = "0017450000200-0001-dev-b", fp = e2,
+            anc = listOf(fp("v0")), resRefs = emptyList(), body = body("edit-B"),
+        )
+        val first = deliver(localAt(e1, "edit-A"), editB, "dev-b", 1L)
+        val earlierConflict = first.conflictToOpen!!
+        val parked = deliver(first.updatedRecordState!!.toView(), succ, "dev-c", 2L)
+        val successorConflict = parked.conflictToOpen!!
+        val parkedView = parked.updatedRecordState!!.toView()
+
+        val result = deliver(parkedView, res1, "dev-c", 1L, parkedPutContentFp = { null })
+        val updated = result.updatedRecordState!!
+        assertEquals(ReconciliationCase.RESOLVE_STALE, result.reconciliationCase)
+        assertEquals(ReconciliationDataAction.NoDataChange, result.dataAction)
+        assertEquals(e1, updated.versionFp)
+        assertEquals(parkedView.bodyJson, updated.bodyJson)
+        assertEquals(parkedView.resRefs, DriveConflictEngine.decodeFps(updated.resRefsJson).toList())
+        assertEquals(listOf(res1Fp), result.resolutionsToPersist.map { it.resolutionFp })
+        assertEquals(listOf(earlierConflict.conflictId), result.conflictsToSettle.map { it.conflictId })
+        assertEquals(listOf(successorConflict.conflictId), db.conflicts().unsettledForRecord(perm, domain, key).map { it.conflictId })
     }
 
     @Test
