@@ -927,6 +927,70 @@ class DrivePhase5EndToEndTest {
     }
 
     @Test
+    fun `remote evaluation and metadata apply persists hlc for revision crash recovery`() = runTest {
+        deviceA.connect(PERM_A, "a@example.com")
+        val workKey = "isbn:9780156027601"
+        val book = seedRestoredBook(deviceA, workKey)
+        val identity = DriveWorkIdentity(deviceA.liseurDb, deviceA.driveDb)
+        val peerId = DriveLibrarySync.accountPeerId(PERM_A)
+
+        val evaluationSync = DriveEvaluationSync(deviceA.liseurDb, deviceA.driveDb, identity)
+        val evalHlc = "0017450000700-0001-dev-b"
+        val evalBody = DriveEvaluationBody(workKey = workKey, field = "rating", value = "8", updatedAt = 2_000L)
+        val evalMap = DriveWireCodec.encodeEvaluationBody(evalBody)
+        val evalFp = DriveWireCodec.putVersionFp(
+            DriveWireCodec.DOMAIN_EVALUATION,
+            JSONObject(DriveCanonicalJson.encode(evalMap)),
+            evalHlc,
+        )
+        val evalIncoming = DriveWireCodec.putRecordWithFp(
+            DriveWireCodec.DOMAIN_EVALUATION, "$workKey/rating", evalHlc, evalFp, evalMap,
+        )
+        assertTrue(evaluationSync.applyRemoteRecord(PERM_A, evalIncoming, "dev-b", 1L) { evalHlc })
+        deviceA.driveDb.recordStates().delete(PERM_A, DriveWireCodec.DOMAIN_EVALUATION, "$workKey/rating")
+        val evalRecovered = evaluationSync.recoverFromRevisionSync(
+            permissionId = PERM_A,
+            workKey = workKey,
+            field = "rating",
+            recordKey = "$workKey/rating",
+            row = deviceA.liseurDb.bookEvaluationDao().get(book.url, "rating"),
+            sync = deviceA.liseurDb.bookEvaluationDao().state(peerId, book.url, "rating"),
+            nextHlc = { error("remote apply sent_json clock should be reused") },
+        )
+        assertEquals(evalFp, evalRecovered?.versionFp)
+        assertEquals(evalHlc, evalRecovered?.versionHlc)
+
+        val metadataSync = deviceA.driveSync.metadataSync
+        val metaHlc = "0017450000800-0001-dev-b"
+        val metaBody = DriveMetadataBody.Text(
+            workKey = workKey, field = MetadataOverrideFields.TITLE, value = "Solaris Remote", updatedAt = 3_000L,
+        )
+        val metaMap = DriveWireCodec.encodeMetadataBody(metaBody)
+        val metaFp = DriveWireCodec.putVersionFp(
+            DriveWireCodec.DOMAIN_METADATA,
+            JSONObject(DriveCanonicalJson.encode(metaMap)),
+            metaHlc,
+        )
+        val metaIncoming = DriveWireCodec.putRecordWithFp(
+            DriveWireCodec.DOMAIN_METADATA, "$workKey/title", metaHlc, metaFp, metaMap,
+        )
+        assertTrue(metadataSync.applyRemoteRecord(PERM_A, "token", metaIncoming, "dev-b", 2L) { metaHlc })
+        deviceA.driveDb.recordStates().delete(PERM_A, DriveWireCodec.DOMAIN_METADATA, "$workKey/title")
+        val metaRecovered = metadataSync.recoverFromRevisionSync(
+            permissionId = PERM_A,
+            book = requireNotNull(deviceA.liseurDb.bookDao().getByUrl(book.url)),
+            workKey = workKey,
+            field = MetadataOverrideFields.TITLE,
+            recordKey = "$workKey/title",
+            revRow = deviceA.liseurDb.bookMetadataOverrideDao().revision(book.url, MetadataOverrideFields.TITLE),
+            syncRow = deviceA.liseurDb.bookMetadataOverrideDao().state(peerId, book.url, MetadataOverrideFields.TITLE),
+            nextHlc = { error("remote apply sent_json clock should be reused") },
+        )
+        assertEquals(metaFp, metaRecovered?.versionFp)
+        assertEquals(metaHlc, metaRecovered?.versionHlc)
+    }
+
+    @Test
     fun `published legacy evaluation owed again is resent with its legacy version fp unchanged`() = runTest {
         deviceA.connect(PERM_A, "a@example.com")
         val book = seedBook(deviceA, "legacy-eval.epub", "9780156027601", "Solaris", "Stanislaw Lem")

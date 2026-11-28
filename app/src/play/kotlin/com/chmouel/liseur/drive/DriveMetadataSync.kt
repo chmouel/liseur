@@ -536,6 +536,7 @@ internal class DriveMetadataSync(
         val appliedState = result.updatedRecordState?.takeIf { it.versionFp != record.fp }
         val ackVfp = appliedState?.versionFp ?: record.fp
         val ackOp = appliedState?.versionOp ?: record.op
+        val ackHlc = if (appliedState != null) appliedState.versionHlc else record.hlc.ifBlank { null }
 
         // For custom covers, download & SHA-256 verify BEFORE entering Transaction 1.
         // Retryable network/API errors propagate; null (not yet visible / hash mismatch) defers cursor advancement.
@@ -599,6 +600,7 @@ internal class DriveMetadataSync(
                                     cfp = appliedContentFp,
                                     rev = revApplied,
                                     op = ackOp,
+                                    hlc = ackHlc,
                                 ),
                             ),
                             sentRevision = revApplied,

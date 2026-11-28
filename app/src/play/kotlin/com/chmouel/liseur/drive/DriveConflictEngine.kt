@@ -380,19 +380,17 @@ internal object DriveConflictEngine {
                 addAll(incoming.resRefs)
                 addAll(step0ResRefsToAdd)
             }
-            val recoveredVersionHlc = if (incoming.fp == lFp && localVersionHlc == null && incomingHlc != null) {
+            val recoveredVersionHlc = if (incoming.fp == lFp && incomingHlc != null) {
                 when {
-                    local.versionOp == DriveRecordState.OP_PUT && incoming.op == DriveRecordState.OP_PUT ->
-                        incomingHlc.takeIf {
-                            incoming.body != null && DriveWireCodec.putVersionFp(domain, incoming.body, it) == lFp
-                        }
-                    local.versionOp == DriveRecordState.OP_DEL && incoming.op == DriveRecordState.OP_DEL ->
+                    local.versionOp == DriveRecordState.OP_PUT && incoming.op == DriveRecordState.OP_PUT && localPutHlc == null ->
+                        incomingPutHlc
+                    local.versionOp == DriveRecordState.OP_DEL && incoming.op == DriveRecordState.OP_DEL && localVersionHlc == null ->
                         incomingHlc.takeIf {
                             // The tombstone fingerprint binds the key it was authored under, which may be an alias.
                             DriveCanonicalJson.delFp(domain, incoming.k, it) == lFp ||
                                 DriveCanonicalJson.delFp(domain, recordKey, it) == lFp
                         }
-                    local.versionOp == DriveRecordState.OP_RESOLVE && incoming.op == DriveRecordState.OP_RESOLVE ->
+                    local.versionOp == DriveRecordState.OP_RESOLVE && incoming.op == DriveRecordState.OP_RESOLVE && localVersionHlc == null ->
                         allResolutions.find { it.resolutionFp == lFp }?.hlc ?: incomingHlc
                     else -> null
                 }
@@ -404,7 +402,7 @@ internal object DriveConflictEngine {
                 incoming.fp == lFp -> Triple(
                     lFp,
                     if (isIncomingResolve) DriveRecordState.OP_RESOLVE else local.versionOp,
-                    localVersionHlc ?: recoveredVersionHlc,
+                    recoveredVersionHlc ?: localVersionHlc,
                 )
                 sameContent -> {
                     val localWins = !local.versionBuiltWithoutRecordState &&
