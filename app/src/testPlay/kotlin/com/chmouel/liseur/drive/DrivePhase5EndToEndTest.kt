@@ -13,7 +13,10 @@ import com.chmouel.liseur.data.db.BookEvaluation
 import com.chmouel.liseur.data.db.BookFingerprintRow
 import com.chmouel.liseur.data.db.BookMetadata
 import com.chmouel.liseur.data.db.DownloadState
+import com.chmouel.liseur.data.db.EvaluationSync
 import com.chmouel.liseur.data.db.LiseurDatabase
+import com.chmouel.liseur.data.db.MetadataOverrideFields
+import com.chmouel.liseur.data.db.MetadataOverrideRevision
 import com.chmouel.liseur.data.db.ReadingSession
 import com.chmouel.liseur.data.db.WorkAlias
 import com.chmouel.liseur.data.library.BookRemoval
@@ -577,10 +580,11 @@ class DrivePhase5EndToEndTest {
     }
 
     @Test
-    fun `annotation repaired with a blank clock conflicts with an equal put under an alias`() = runTest {
+    fun `annotation ack without a record state republishes a clock-bound version with the ack as ancestor`() = runTest {
         val key = "isbn:9780156027601"
         val alias = "sha:old"
         val hlc = "0017450000000-0001-dev-b"
+        val republishHlc = "0017450000500-0002-dev-a"
         val peerId = DriveLibrarySync.accountPeerId(PERM_A)
         val book = seedRestoredBook(deviceA, key)
         val identity = DriveWorkIdentity(deviceA.liseurDb, deviceA.driveDb)
@@ -604,12 +608,23 @@ class DrivePhase5EndToEndTest {
             AnnotationSync(id = note.id, peerId = peerId, bookId = book.url, workId = key, ackedFingerprint = localFp),
         )
         val domain = DriveWireCodec.DOMAIN_ANNOTATION
-        sync.collectDirtyRecords(PERM_A) { error("Repair should reuse the acknowledgement") }
-        val repaired = requireNotNull(deviceA.driveDb.recordStates().get(PERM_A, domain, note.id))
-        assertEquals(localFp, repaired.versionFp)
-        assertEquals("", repaired.lastHlc)
-        assertNull(repaired.versionHlc)
+        // A content-only ack cannot name the version that was uploaded, so the record is republished
+        // with a new clock instead of being marked published under a made-up fingerprint.
+        val outbound = sync.collectDirtyRecords(PERM_A) { republishHlc }
+        val record = outbound.records.single()
+        val versionFp = DriveWireCodec.putVersionFp(domain, record.body!!, republishHlc)
+        assertEquals(versionFp, record.fp)
+        assertEquals(republishHlc, record.hlc)
+        assertEquals(versionFp, outbound.acks.single().recordFp)
+        assertEquals(localFp, outbound.acks.single().ackedFingerprint)
 
+        val repaired = requireNotNull(deviceA.driveDb.recordStates().get(PERM_A, domain, note.id))
+        assertEquals(versionFp, repaired.versionFp)
+        assertEquals(republishHlc, repaired.versionHlc)
+        assertEquals(listOf(localFp), DriveWorkIdentity.decodeStringArray(repaired.ancestorsJson))
+
+        // A legacy `fp` under an alias key names neither this version nor an ancestor of it, so the
+        // equal content is asked about rather than silently ordered by a clock nothing proves.
         val aliasBody = body.copy(workKey = alias)
         val incoming = DriveWireCodec.putRecordWithFp(
             domain, note.id, hlc, DriveWireCodec.annotationContentFp(aliasBody), DriveWireCodec.encodeAnnotationBody(aliasBody),
@@ -617,9 +632,9 @@ class DrivePhase5EndToEndTest {
         assertTrue(sync.applyRemoteRecord(PERM_A, incoming, "dev-b", 2L) { hlc })
 
         val conflict = deviceA.driveDb.conflicts().unsettledForRecord(PERM_A, domain, note.id).single()
-        assertEquals(localFp, conflict.localFp)
+        assertEquals(versionFp, conflict.localFp)
         assertEquals(incoming.fp, conflict.remoteFp)
-        assertEquals(localFp, deviceA.driveDb.recordStates().get(PERM_A, domain, note.id)?.versionFp)
+        assertEquals(versionFp, deviceA.driveDb.recordStates().get(PERM_A, domain, note.id)?.versionFp)
     }
 
     @Test
@@ -750,6 +765,217 @@ class DrivePhase5EndToEndTest {
         assertEquals("follow-up", deviceA.liseurDb.annotationDao().byId(localNote.id)?.note)
         assertEquals(followUp.fp, deviceA.driveDb.recordStates().get(PERM_A, domain, localNote.id)?.versionFp)
         assertTrue(deviceA.driveDb.conflicts().unsettledForRecord(PERM_A, domain, localNote.id).isEmpty())
+    }
+
+    @Test
+    fun `mutable domains emit clock-bound putVersionFp and retry reuses fp plus hlc`() = runTest {
+        deviceA.connect(PERM_A, "a@example.com")
+        val book = seedBook(deviceA, "mutable-domains.epub", "9780156027601", "Solaris", "Stanislaw Lem")
+        val workKey = "isbn:9780156027601"
+        val peerId = DriveLibrarySync.accountPeerId(PERM_A)
+        val identity = DriveWorkIdentity(deviceA.liseurDb, deviceA.driveDb)
+
+        val annotationSync = DriveAnnotationSync(deviceA.liseurDb, deviceA.driveDb, identity)
+        val annotation = BookAnnotation(
+            id = "note-stable",
+            bookId = book.url,
+            kind = "BOOK_NOTE",
+            locatorJson = "",
+            note = "mutable",
+            createdAt = 1_000L,
+            updatedAt = 1_000L,
+        )
+        deviceA.liseurDb.annotationDao().upsert(annotation)
+        val annFirst = annotationSync.collectDirtyRecords(PERM_A) { "0017450000100-0001-dev-a" }
+        val annRecord = annFirst.records.single { it.k == annotation.id }
+        val annState = requireNotNull(deviceA.driveDb.recordStates().get(PERM_A, DriveWireCodec.DOMAIN_ANNOTATION, annotation.id))
+        assertEquals(DriveWireCodec.putVersionFp(DriveWireCodec.DOMAIN_ANNOTATION, annRecord.body!!, annRecord.hlc), annRecord.fp)
+        assertEquals(annRecord.fp, annState.versionFp)
+        assertEquals(annRecord.hlc, annState.versionHlc)
+        val annRetry = annotationSync.collectDirtyRecords(PERM_A) { error("must reuse") }.records.single { it.k == annotation.id }
+        assertEquals(annRecord.fp, annRetry.fp)
+        assertEquals(annRecord.hlc, annRetry.hlc)
+
+        val evaluationSync = DriveEvaluationSync(deviceA.liseurDb, deviceA.driveDb, identity)
+        deviceA.liseurDb.bookEvaluationDao().upsert(
+            BookEvaluation(
+                bookUrl = book.url,
+                field = "rating",
+                value = "8",
+                title = book.title,
+                author = book.author.orEmpty(),
+                revision = 1L,
+                updatedAt = 2_000L,
+            ),
+        )
+        val evalFirst = evaluationSync.collectDirtyRecords(PERM_A) { "0017450000200-0001-dev-a" }
+        val evalRecord = evalFirst.records.single { it.k == "$workKey/rating" }
+        val evalState = requireNotNull(deviceA.driveDb.recordStates().get(PERM_A, DriveWireCodec.DOMAIN_EVALUATION, evalRecord.k))
+        assertEquals(DriveWireCodec.putVersionFp(DriveWireCodec.DOMAIN_EVALUATION, evalRecord.body!!, evalRecord.hlc), evalRecord.fp)
+        assertEquals(evalRecord.fp, evalState.versionFp)
+        assertEquals(evalRecord.hlc, evalState.versionHlc)
+        val evalRetry = evaluationSync.collectDirtyRecords(PERM_A) { error("must reuse") }.records.single { it.k == evalRecord.k }
+        assertEquals(evalRecord.fp, evalRetry.fp)
+        assertEquals(evalRecord.hlc, evalRetry.hlc)
+
+        val metadataBook = requireNotNull(deviceA.liseurDb.bookDao().getByUrl(book.url)).copy(
+            title = "Solaris (override)",
+            userTitle = "Solaris (override)",
+            titleOverridden = true,
+        )
+        deviceA.liseurDb.bookDao().upsert(metadataBook)
+        deviceA.liseurDb.bookMetadataOverrideDao().upsertRevision(
+            MetadataOverrideRevision(
+                bookUrl = book.url,
+                field = MetadataOverrideFields.TITLE,
+                revision = 1L,
+                updatedAt = 3_000L,
+            ),
+        )
+        val metadataSync = deviceA.driveSync.metadataSync
+        val metaFirst = metadataSync.collectDirtyRecords(PERM_A, "token") { "0017450000300-0001-dev-a" }
+        val metaRecord = metaFirst.records.single { it.k == "$workKey/title" }
+        val metaState = requireNotNull(deviceA.driveDb.recordStates().get(PERM_A, DriveWireCodec.DOMAIN_METADATA, metaRecord.k))
+        assertEquals(DriveWireCodec.putVersionFp(DriveWireCodec.DOMAIN_METADATA, metaRecord.body!!, metaRecord.hlc), metaRecord.fp)
+        assertEquals(metaRecord.fp, metaState.versionFp)
+        assertEquals(metaRecord.hlc, metaState.versionHlc)
+        val metaRetry = metadataSync.collectDirtyRecords(PERM_A, "token") { error("must reuse") }
+            .records.single { it.k == metaRecord.k }
+        assertEquals(metaRecord.fp, metaRetry.fp)
+        assertEquals(metaRecord.hlc, metaRetry.hlc)
+
+        val seriesBook = requireNotNull(deviceA.liseurDb.bookDao().getByUrl(book.url)).copy(
+            seriesOverridden = true,
+            userSeriesName = "Solaris Cycle",
+            indexOverridden = true,
+            userSeriesIndex = 2.0,
+            userSeriesUpdatedAt = 4_000L,
+        )
+        deviceA.liseurDb.bookDao().upsert(seriesBook)
+        val seriesSync = DriveSeriesSync(deviceA.liseurDb, deviceA.driveDb, identity)
+        val seriesFirst = seriesSync.collectDirtyRecords(PERM_A) { "0017450000400-0001-dev-a" }
+        val seriesRecord = seriesFirst.single { it.k == workKey }
+        val seriesState = requireNotNull(deviceA.driveDb.recordStates().get(PERM_A, DriveWireCodec.DOMAIN_SERIES, workKey))
+        assertEquals(DriveWireCodec.putVersionFp(DriveWireCodec.DOMAIN_SERIES, seriesRecord.body!!, seriesRecord.hlc), seriesRecord.fp)
+        assertEquals(seriesRecord.fp, seriesState.versionFp)
+        assertEquals(seriesRecord.hlc, seriesState.versionHlc)
+        val seriesRetry = seriesSync.collectDirtyRecords(PERM_A) { error("must reuse") }.single { it.k == workKey }
+        assertEquals(seriesRecord.fp, seriesRetry.fp)
+        assertEquals(seriesRecord.hlc, seriesRetry.hlc)
+
+        assertTrue(deviceA.liseurDb.annotationSyncDao().get(peerId, annotation.id) == null)
+    }
+
+    @Test
+    fun `evaluation and metadata recovery rebuilds proven version clocks from sent revision state`() = runTest {
+        deviceA.connect(PERM_A, "a@example.com")
+        val book = seedBook(deviceA, "recover-revision.epub", "9780156027601", "Solaris", "Stanislaw Lem")
+        val workKey = "isbn:9780156027601"
+        val identity = DriveWorkIdentity(deviceA.liseurDb, deviceA.driveDb)
+        val peerId = DriveLibrarySync.accountPeerId(PERM_A)
+
+        val evaluationSync = DriveEvaluationSync(deviceA.liseurDb, deviceA.driveDb, identity)
+        deviceA.liseurDb.bookEvaluationDao().upsert(
+            BookEvaluation(book.url, "rating", "7", book.title, book.author.orEmpty(), revision = 1L, updatedAt = 2_000L),
+        )
+        val evalBuilt = evaluationSync.collectDirtyRecords(PERM_A) { "0017450000500-0001-dev-a" }
+        val evalAck = evalBuilt.acks.single { it.recordKey == "$workKey/rating" }
+        val evalRecord = evalBuilt.records.single { it.k == evalAck.recordKey }
+        evaluationSync.acknowledgePublished(PERM_A, evalBuilt.records, evalBuilt.acks)
+        deviceA.driveDb.recordStates().delete(PERM_A, DriveWireCodec.DOMAIN_EVALUATION, evalAck.recordKey)
+        val evalRecovered = evaluationSync.recoverFromRevisionSync(
+            permissionId = PERM_A,
+            workKey = workKey,
+            field = "rating",
+            recordKey = evalAck.recordKey,
+            row = deviceA.liseurDb.bookEvaluationDao().get(book.url, "rating"),
+            sync = deviceA.liseurDb.bookEvaluationDao().state(peerId, book.url, "rating"),
+            nextHlc = { error("sent_json clock should be reused") },
+        )
+        assertEquals(evalRecord.fp, evalRecovered?.versionFp)
+        assertEquals(evalRecord.hlc, evalRecovered?.versionHlc)
+        assertTrue(evalRecovered!!.lastHlc >= evalRecovered.versionHlc!!)
+
+        val metadataBook = requireNotNull(deviceA.liseurDb.bookDao().getByUrl(book.url)).copy(
+            title = "Solaris Revised",
+            userTitle = "Solaris Revised",
+            titleOverridden = true,
+        )
+        deviceA.liseurDb.bookDao().upsert(metadataBook)
+        deviceA.liseurDb.bookMetadataOverrideDao().upsertRevision(
+            MetadataOverrideRevision(book.url, MetadataOverrideFields.TITLE, revision = 1L, updatedAt = 3_000L),
+        )
+        val metadataSync = deviceA.driveSync.metadataSync
+        val metaBuilt = metadataSync.collectDirtyRecords(PERM_A, "token") { "0017450000600-0001-dev-a" }
+        val metaAck = metaBuilt.acks.single { it.recordKey == "$workKey/title" }
+        val metaRecord = metaBuilt.records.single { it.k == metaAck.recordKey }
+        metadataSync.acknowledgePublished(PERM_A, metaBuilt.records, metaBuilt.acks)
+        deviceA.driveDb.recordStates().delete(PERM_A, DriveWireCodec.DOMAIN_METADATA, metaAck.recordKey)
+        val metaRecovered = metadataSync.recoverFromRevisionSync(
+            permissionId = PERM_A,
+            book = requireNotNull(deviceA.liseurDb.bookDao().getByUrl(book.url)),
+            workKey = workKey,
+            field = MetadataOverrideFields.TITLE,
+            recordKey = metaAck.recordKey,
+            revRow = deviceA.liseurDb.bookMetadataOverrideDao().revision(book.url, MetadataOverrideFields.TITLE),
+            syncRow = deviceA.liseurDb.bookMetadataOverrideDao().state(peerId, book.url, MetadataOverrideFields.TITLE),
+            nextHlc = { error("sent_json clock should be reused") },
+        )
+        assertEquals(metaRecord.fp, metaRecovered?.versionFp)
+        assertEquals(metaRecord.hlc, metaRecovered?.versionHlc)
+        assertTrue(metaRecovered!!.lastHlc >= metaRecovered.versionHlc!!)
+    }
+
+    @Test
+    fun `published legacy evaluation owed again is resent with its legacy version fp unchanged`() = runTest {
+        deviceA.connect(PERM_A, "a@example.com")
+        val book = seedBook(deviceA, "legacy-eval.epub", "9780156027601", "Solaris", "Stanislaw Lem")
+        val workKey = "isbn:9780156027601"
+        val recordKey = "$workKey/rating"
+        val peerId = DriveLibrarySync.accountPeerId(PERM_A)
+        val identity = DriveWorkIdentity(deviceA.liseurDb, deviceA.driveDb)
+        val sync = DriveEvaluationSync(deviceA.liseurDb, deviceA.driveDb, identity)
+
+        val bodyMap = DriveWireCodec.encodeEvaluationBody(DriveEvaluationBody(workKey, "rating", "9", 2_000L))
+        val legacyFp = DriveCanonicalJson.contentFp(bodyMap)
+        deviceA.liseurDb.bookEvaluationDao().upsert(
+            BookEvaluation(book.url, "rating", "9", book.title, book.author.orEmpty(), revision = 2L, updatedAt = 2_000L),
+        )
+        deviceA.liseurDb.bookEvaluationDao().upsertState(
+            EvaluationSync(
+                peerId = peerId,
+                bookUrl = book.url,
+                field = "rating",
+                workId = workKey,
+                ackedRevision = 1L,
+                sentJson = DriveWireCodec.encodeRevisionAckJson(
+                    DriveRevisionAckPayload(vfp = legacyFp, cfp = legacyFp, rev = 1L, op = DriveRecordState.OP_PUT),
+                ),
+                sentRevision = 1L,
+                polledAt = 1_000L,
+            ),
+        )
+        deviceA.driveDb.recordStates().upsert(
+            DriveRecordState(
+                permissionId = PERM_A,
+                domain = DriveWireCodec.DOMAIN_EVALUATION,
+                recordKey = recordKey,
+                versionFp = legacyFp,
+                versionOp = DriveRecordState.OP_PUT,
+                publishedFp = legacyFp,
+                contentFp = legacyFp,
+                lastSyncedRevision = 1L,
+                lastHlc = "",
+                versionHlc = null,
+                bodyJson = DriveCanonicalJson.encode(bodyMap),
+            ),
+        )
+
+        val outbound = sync.collectDirtyRecords(PERM_A) { error("must reuse") }
+        val resent = outbound.records.single { it.k == recordKey }
+
+        assertEquals(legacyFp, resent.fp)
+        assertEquals(legacyFp, deviceA.driveDb.recordStates().get(PERM_A, DriveWireCodec.DOMAIN_EVALUATION, recordKey)?.versionFp)
     }
 
     @Test

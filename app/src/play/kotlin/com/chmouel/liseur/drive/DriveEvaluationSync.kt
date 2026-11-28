@@ -144,24 +144,30 @@ internal class DriveEvaluationSync(
                     val bodyMap = DriveWireCodec.encodeEvaluationBody(body)
                     val bodyJson = DriveCanonicalJson.encode(bodyMap)
                     val contentFp = DriveCanonicalJson.contentFp(bodyMap)
+                    val bodyObject = JSONObject(bodyJson)
+                    val sameContent = existingState?.contentFp == contentFp
+                    val retryHlc = existingState?.putRetryHlc(DriveWireCodec.DOMAIN_EVALUATION, bodyObject, sameContent)
 
                     val hlc: String
+                    val fp: String
                     val ancestors: List<String>
-                    if (existingState != null && existingState.versionOp == DriveRecordState.OP_PUT && existingState.versionFp == contentFp) {
-                        hlc = recordStates.putRetryHlc(existingState, nextHlc)
+                    if (retryHlc != null) {
+                        hlc = retryHlc
+                        fp = requireNotNull(existingState).versionFp
                         ancestors = DriveWorkIdentity.decodeStringArray(existingState.ancestorsJson)
                     } else {
                         hlc = nextHlc()
+                        fp = DriveWireCodec.putVersionFp(DriveWireCodec.DOMAIN_EVALUATION, bodyObject, hlc)
                         ancestors = buildList {
-                            existingState?.versionFp?.takeIf { it != contentFp }?.let(::add)
+                            existingState?.versionFp?.let(::add)
                             addAll(DriveWorkIdentity.decodeStringArray(existingState?.ancestorsJson))
-                        }.distinct().take(DriveWireCodec.MAX_ANCESTORS)
+                        }.distinct().filter { it != fp }.take(DriveWireCodec.MAX_ANCESTORS)
                         recordStates.upsert(
                             DriveRecordState(
                                 permissionId = permissionId,
                                 domain = DriveWireCodec.DOMAIN_EVALUATION,
                                 recordKey = recordKey,
-                                versionFp = contentFp,
+                                versionFp = fp,
                                 versionOp = DriveRecordState.OP_PUT,
                                 publishedFp = existingState?.publishedFp,
                                 contentFp = contentFp,
@@ -181,7 +187,7 @@ internal class DriveEvaluationSync(
                             domain = DriveWireCodec.DOMAIN_EVALUATION,
                             key = recordKey,
                             hlc = hlc,
-                            fp = contentFp,
+                            fp = fp,
                             bodyMap = bodyMap,
                             ancestors = ancestors,
                             resRefs = resRefs,
@@ -195,7 +201,7 @@ internal class DriveEvaluationSync(
                             workKey = workKey,
                             targetRevision = row.revision,
                             recordKey = recordKey,
-                            recordFp = contentFp,
+                            recordFp = fp,
                             contentFp = contentFp,
                             recordOp = DriveRecordState.OP_PUT,
                         ),
@@ -289,6 +295,7 @@ internal class DriveEvaluationSync(
                             cfp = ack.contentFp,
                             rev = ack.targetRevision,
                             op = ack.recordOp,
+                            hlc = records.firstOrNull { it.k == ack.recordKey && it.fp == ack.recordFp }?.hlc,
                         ),
                     )
                     evaluations.upsertState(
@@ -852,6 +859,14 @@ internal class DriveEvaluationSync(
                 ?: recomputedCfp
                 ?: DriveCanonicalJson.delFp(DriveWireCodec.DOMAIN_EVALUATION, recordKey, nextHlc())
             val vop = sentMeta?.op ?: if (recomputedCfp != null) DriveRecordState.OP_PUT else DriveRecordState.OP_DEL
+            val recoveredVersionHlc = sentMeta?.hlc?.takeIf { hlc ->
+                vop == DriveRecordState.OP_PUT && recomputedBodyMap != null &&
+                    DriveWireCodec.putVersionFp(
+                        DriveWireCodec.DOMAIN_EVALUATION,
+                        JSONObject(DriveCanonicalJson.encode(recomputedBodyMap)),
+                        hlc,
+                    ) == vfp
+            }
             val mergedAnc = (priorAnc + listOfNotNull(vfp))
                 .distinct()
                 .filter { it != vfp }
@@ -869,8 +884,8 @@ internal class DriveEvaluationSync(
                 originSeq = existing?.originSeq?.takeIf { existing.versionFp == vfp },
                 ancestorsJson = DriveCanonicalJson.encode(mergedAnc),
                 resRefsJson = existing?.resRefsJson ?: "[]",
-                lastHlc = existing?.lastHlc ?: "",
-                versionHlc = existing?.versionHlc?.takeIf { existing.versionFp == vfp },
+                lastHlc = maxOf(existing?.lastHlc.orEmpty(), recoveredVersionHlc.orEmpty()),
+                versionHlc = existing?.versionHlc?.takeIf { existing.versionFp == vfp } ?: recoveredVersionHlc,
                 bodyJson = recomputedBodyMap?.let(DriveCanonicalJson::encode),
             )
             recordStates.upsert(repaired)

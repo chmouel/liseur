@@ -351,15 +351,25 @@ internal object DriveConflictEngine {
         val sameContentBase = local.versionOp == DriveRecordState.OP_PUT && incoming.op == DriveRecordState.OP_PUT &&
             local.contentFp != null && local.contentFp == incomingContentFp && local.localRowMatchesContentFp &&
             !local.hasPostCrashLocalEdit && !incomingKnownAncestorOrRetired && !incomingDescendsFromLocal
-        // Silent equal-content agreement requires both authoring clocks. `lastHlc` cannot stand in
-        // for an unknown one: adopting a clockless version leaves it unrelated to that version.
-        // Otherwise fall through to Case 5 so an upgraded device never picks a divergent winner.
+        // Only a clock that reproduces the version's own `fp` may order it. A legacy `fp` (a content
+        // fingerprint) never proves one, so it never orders anything.
+        val localPutHlc = provenPutHlc(
+            domain = domain,
+            fp = lFp,
+            body = local.bodyJson?.let { raw -> runCatching { JSONObject(raw) }.getOrNull() },
+            hlc = local.versionHlc,
+        ).takeIf { local.versionOp == DriveRecordState.OP_PUT }
+        val incomingPutHlc = provenPutHlc(domain, incoming.fp, incoming.body, incoming.hlc)
+            .takeIf { incoming.op == DriveRecordState.OP_PUT }
+        // A version built from `liseur.db` was never published, so taking the incoming one cannot
+        // split devices; equal content between two proven clocks is ordered by `(clock, fp)`, which
+        // depends on the version alone and therefore agrees on every device and in every order.
         val sameContent = sameContentBase && (
-            incoming.fp == lFp || (localVersionHlc != null && incomingHlc != null)
+            incoming.fp == lFp || local.versionBuiltWithoutRecordState ||
+                (localPutHlc != null && incomingPutHlc != null)
             )
-        // Crash repair can persist a version with a blank clock. A content-only ack cannot
-        // order that version against an aliased put, even if their canonical bodies match.
-        val unprovenEqualContent = sameContentBase && !sameContent && !local.versionBuiltWithoutRecordState
+        // Equal content under an unprovable clock cannot be ordered; ask the reader instead of guessing.
+        val unprovenEqualContent = sameContentBase && !sameContent
         val postCrashReplayAgreement = local.postCrashAckMatchesIncoming &&
             !local.hasPostCrashLocalEdit &&
             !incomingKnownAncestorOrRetired &&
@@ -374,7 +384,7 @@ internal object DriveConflictEngine {
                 when {
                     local.versionOp == DriveRecordState.OP_PUT && incoming.op == DriveRecordState.OP_PUT ->
                         incomingHlc.takeIf {
-                            incoming.body != null && DriveCanonicalJson.putFp(incoming.body, it) == lFp
+                            incoming.body != null && DriveWireCodec.putVersionFp(domain, incoming.body, it) == lFp
                         }
                     local.versionOp == DriveRecordState.OP_DEL && incoming.op == DriveRecordState.OP_DEL ->
                         incomingHlc.takeIf {
@@ -397,8 +407,9 @@ internal object DriveConflictEngine {
                     localVersionHlc ?: recoveredVersionHlc,
                 )
                 sameContent -> {
-                    val localWins = localVersionHlc != null && incomingHlc != null &&
-                        compareHlcFp(localVersionHlc, lFp, incomingHlc, incoming.fp) >= 0
+                    val localWins = !local.versionBuiltWithoutRecordState &&
+                        localPutHlc != null && incomingPutHlc != null &&
+                        compareHlcFp(localPutHlc, lFp, incomingPutHlc, incoming.fp) >= 0
                     if (localWins) {
                         Triple(lFp, local.versionOp, localVersionHlc)
                     } else {
@@ -1026,6 +1037,9 @@ internal object DriveConflictEngine {
         )
     }
 
+    private fun provenPutHlc(domain: String, fp: String, body: JSONObject?, hlc: String?): String? =
+        hlc?.ifBlank { null }?.takeIf { body != null && DriveWireCodec.putVersionFp(domain, body, it) == fp }
+
     private fun compareHlcFp(hlcA: String, fpA: String, hlcB: String, fpB: String): Int {
         val cmp = hlcA.compareTo(hlcB)
         return if (cmp != 0) cmp else fpA.compareTo(fpB)
@@ -1033,17 +1047,13 @@ internal object DriveConflictEngine {
 }
 
 /**
- * The clock to re-send an unchanged content-addressed put with. A version no peer has seen yet
- * gets a fresh clock, stored with it so later retries agree; a published version keeps an
- * unknown clock unknown, because peers may already hold it under another one.
+ * The clock to re-send an unchanged put with, or `null` when the record needs a new version.
+ *
+ * A version the peers have not seen keeps the clock it was authored with, so retries reproduce the
+ * same `fp`; an already-published legacy identity is re-sent as-is instead of being re-keyed.
  */
-internal suspend fun DriveRecordStateDao.putRetryHlc(
-    state: DriveRecordState,
-    nextHlc: suspend () -> String,
-): String {
-    state.versionHlc?.ifBlank { null }?.let { return it }
-    if (state.publishedFp == state.versionFp) return ""
-    val hlc = nextHlc()
-    upsert(state.copy(versionHlc = hlc, lastHlc = maxOf(state.lastHlc, hlc)))
-    return hlc
+internal fun DriveRecordState.putRetryHlc(domain: String, body: JSONObject, sameContent: Boolean): String? {
+    if (versionOp != DriveRecordState.OP_PUT || !sameContent) return null
+    versionHlc?.ifBlank { null }?.let { if (DriveWireCodec.putVersionFp(domain, body, it) == versionFp) return it }
+    return if (publishedFp == versionFp) versionHlc.orEmpty() else null
 }

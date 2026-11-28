@@ -145,55 +145,46 @@ internal class DriveAnnotationSync(
                     contentFp == baselineContentFp(existingState, workKey)
                 ) continue
 
-                // Crash recovery: if liseur.db already acked this exact contentFp before Tx 2 committed.
-                if (syncRow?.ackedFingerprint == contentFp &&
-                    (existingState == null || existingState.contentFp != contentFp || existingState.publishedFp != existingState.versionFp)
+                // Crash recovery for an already-published resolution: a resolve `fp` binds its clock,
+                // so this ack names the exact version. A put's content-only ack cannot, so an
+                // unpublished clock-bound put is resent with its own `(fp, clock)` instead.
+                if (existingState != null && existingState.versionOp == DriveRecordState.OP_RESOLVE &&
+                    existingState.contentFp == contentFp && syncRow?.ackedFingerprint == contentFp
                 ) {
-                    val repairedFp = if (existingState?.versionOp == DriveRecordState.OP_RESOLVE && existingState.contentFp == contentFp) {
-                        existingState.versionFp
-                    } else {
-                        contentFp
-                    }
-                    val repairedOp = if (repairedFp == contentFp) DriveRecordState.OP_PUT else DriveRecordState.OP_RESOLVE
                     recordStates.upsert(
-                        DriveRecordState(
-                            permissionId = permissionId,
-                            domain = DriveWireCodec.DOMAIN_ANNOTATION,
-                            recordKey = ann.id,
-                            versionFp = repairedFp,
-                            versionOp = repairedOp,
-                            publishedFp = repairedFp,
-                            contentFp = contentFp,
-                            originDeviceId = existingState?.originDeviceId?.takeIf { existingState.versionFp == repairedFp },
-                            originSeq = existingState?.originSeq?.takeIf { existingState.versionFp == repairedFp },
-                            ancestorsJson = existingState?.ancestorsJson ?: "[]",
-                            resRefsJson = existingState?.resRefsJson ?: "[]",
-                            lastHlc = existingState?.lastHlc ?: "",
-                            versionHlc = existingState?.versionHlc?.takeIf { existingState.versionFp == repairedFp },
-                            bodyJson = bodyJson,
-                        ),
+                        existingState.copy(publishedFp = existingState.versionFp, bodyJson = bodyJson),
                     )
                     continue
                 }
 
-                val hlc: String
-                val ancestors: List<String>
                 val resRefs = DriveWorkIdentity.decodeStringArray(existingState?.resRefsJson)
-                if (existingState != null && existingState.versionOp == DriveRecordState.OP_PUT && existingState.versionFp == contentFp) {
-                    hlc = recordStates.putRetryHlc(existingState, nextHlc)
+                val bodyObject = JSONObject(bodyJson)
+                val sameContent = existingState != null && baselineContentFp(existingState, workKey) == contentFp
+                val retryHlc = existingState?.putRetryHlc(DriveWireCodec.DOMAIN_ANNOTATION, bodyObject, sameContent)
+                val hlc: String
+                val fp: String
+                val ancestors: List<String>
+                if (retryHlc != null) {
+                    hlc = retryHlc
+                    fp = requireNotNull(existingState).versionFp
                     ancestors = DriveWorkIdentity.decodeStringArray(existingState.ancestorsJson)
                 } else {
                     hlc = nextHlc()
+                    fp = DriveWireCodec.putVersionFp(DriveWireCodec.DOMAIN_ANNOTATION, bodyObject, hlc)
                     ancestors = buildList {
-                        existingState?.versionFp?.takeIf { it != contentFp }?.let(::add)
+                        existingState?.versionFp?.let(::add)
+                        if (existingState == null) {
+                            // Without record state the acked content is the last version peers hold.
+                            syncRow?.ackedFingerprint?.takeIf { it != DELETED_ACK }?.let(::add)
+                        }
                         addAll(DriveWorkIdentity.decodeStringArray(existingState?.ancestorsJson))
-                    }.distinct().take(DriveWireCodec.MAX_ANCESTORS)
+                    }.distinct().filter { it != fp }.take(DriveWireCodec.MAX_ANCESTORS)
                     recordStates.upsert(
                         DriveRecordState(
                             permissionId = permissionId,
                             domain = DriveWireCodec.DOMAIN_ANNOTATION,
                             recordKey = ann.id,
-                            versionFp = contentFp,
+                            versionFp = fp,
                             versionOp = DriveRecordState.OP_PUT,
                             publishedFp = existingState?.publishedFp,
                             contentFp = contentFp,
@@ -213,7 +204,7 @@ internal class DriveAnnotationSync(
                         domain = DriveWireCodec.DOMAIN_ANNOTATION,
                         key = ann.id,
                         hlc = hlc,
-                        fp = contentFp,
+                        fp = fp,
                         bodyMap = bodyMap,
                         ancestors = ancestors,
                         resRefs = resRefs,
@@ -226,7 +217,7 @@ internal class DriveAnnotationSync(
                         bookId = ann.bookId,
                         workId = workKey,
                         ackedFingerprint = contentFp,
-                        recordFp = contentFp,
+                        recordFp = fp,
                     ),
                 )
             }

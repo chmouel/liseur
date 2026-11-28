@@ -444,6 +444,14 @@ internal object DriveWireCodec {
     const val DOMAIN_VOCAB_REVIEW = "vocabReview"
     const val DOMAIN_SESSION = "session"
 
+    /** Body keys excluded from a put's clock-bound `fp`; an annotation's edition is not its identity. */
+    private val PUT_VERSION_FP_EXCLUDED_KEYS: Map<String, Set<String>> = mapOf(
+        DOMAIN_ANNOTATION to setOf("workKey", "editionSha"),
+        DOMAIN_EVALUATION to setOf("workKey"),
+        DOMAIN_METADATA to setOf("workKey"),
+        DOMAIN_SERIES to setOf("workKey"),
+    )
+
     /** Domains actively published and applied in Phase 3. */
     val PHASE3_DOMAINS: Map<String, Int> = mapOf(
         DOMAIN_WORK_ALIAS to 1,
@@ -1605,6 +1613,22 @@ internal object DriveWireCodec {
             vocabReviewAcks = vocabReviewAcks,
             sessionAcks = sessionAcks,
         )
+    }
+
+    /**
+     * Clock-bound `fp` of a `put` for the mutable conflict domains.
+     *
+     * The body keys that the record key already names are left out, so a version keeps one
+     * fingerprint across an alias work key, a new edition fingerprint, a held replay that
+     * rewrote `workKey`, or an Agreement that kept the other device's equal-content body.
+     */
+    fun putVersionFp(domain: String, body: JSONObject, hlc: String): String {
+        val excluded = PUT_VERSION_FP_EXCLUDED_KEYS[domain].orEmpty()
+        if (excluded.isEmpty()) return DriveCanonicalJson.putFp(body, hlc)
+        val stripped = body.keys().asSequence()
+            .filter { it !in excluded }
+            .associateWith { key -> if (body.isNull(key)) null else body.get(key) }
+        return DriveCanonicalJson.putFp(stripped, hlc)
     }
 
     /** Creates a `put` [DriveWireRecord] with canonical fingerprint and capped ancestry. */

@@ -85,7 +85,11 @@ Identifiers:
   sorted keys, UTF-8, no whitespace, canonical numbers as specified in
   `docs/DRIVE_SYNC.md`):
   - For `op: "put"`: `putFp = sha256({"op":"put","body":<body>,"hlc":<hlc>})`.
-    The record's authoring `hlc` makes every put version unique, so a body
+    For the four mutable conflict domains (`annotation`, `evaluation`,
+    `metadata`, `series`), `body` omits `workKey` (and `editionSha` for
+    annotations), so a version keeps one `fp` across alias work keys,
+    held-record replays, and edition changes. The record's authoring `hlc`
+    makes every put version unique, so a body
     that recurs (a note changed X → Y → X under a regressing wall clock)
     never reuses an ancestor's `fp` and never makes two versions each
     other's ancestors. The `fp` is persisted (`drive_record_state.version_fp`,

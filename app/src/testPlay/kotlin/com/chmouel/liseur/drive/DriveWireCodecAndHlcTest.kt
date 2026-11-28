@@ -80,6 +80,74 @@ class DriveWireCodecAndHlcTest {
     }
 
     @Test
+    fun `putVersionFp strips key-bound fields for mutable domains without mutating body`() {
+        val h1 = "0017450000100-0001-dev-a"
+        val h2 = "0017450000200-0001-dev-a"
+
+        data class MutableCase(
+            val domain: String,
+            val body: JSONObject,
+            val excluded: Set<String>,
+            val alternateBody: JSONObject,
+        )
+
+        val cases = listOf(
+            MutableCase(
+                domain = DriveWireCodec.DOMAIN_ANNOTATION,
+                body = JSONObject("""{"id":"ann-1","workKey":"isbn:1","editionSha":"sha-a","note":"note"}"""),
+                excluded = setOf("workKey", "editionSha"),
+                alternateBody = JSONObject("""{"id":"ann-1","workKey":"isbn:2","editionSha":"sha-b","note":"note"}"""),
+            ),
+            MutableCase(
+                domain = DriveWireCodec.DOMAIN_EVALUATION,
+                body = JSONObject("""{"workKey":"isbn:1","field":"rating","value":"5","updatedAt":1}"""),
+                excluded = setOf("workKey"),
+                alternateBody = JSONObject("""{"workKey":"isbn:2","field":"rating","value":"5","updatedAt":1}"""),
+            ),
+            MutableCase(
+                domain = DriveWireCodec.DOMAIN_METADATA,
+                body = JSONObject("""{"workKey":"isbn:1","field":"title","value":"Solaris","updatedAt":1}"""),
+                excluded = setOf("workKey"),
+                alternateBody = JSONObject("""{"workKey":"isbn:2","field":"title","value":"Solaris","updatedAt":1}"""),
+            ),
+            MutableCase(
+                domain = DriveWireCodec.DOMAIN_SERIES,
+                body = JSONObject("""{"workKey":"isbn:1","seriesOverridden":true,"userSeriesName":"Solaris","indexOverridden":false,"userSeriesIndex":null,"seriesKey":"solaris","updatedAt":1}"""),
+                excluded = setOf("workKey"),
+                alternateBody = JSONObject("""{"workKey":"isbn:2","seriesOverridden":true,"userSeriesName":"Solaris","indexOverridden":false,"userSeriesIndex":null,"seriesKey":"solaris","updatedAt":1}"""),
+            ),
+        )
+
+        for (entry in cases) {
+            val before = DriveCanonicalJson.encode(entry.body)
+            val stripped = entry.body.keys().asSequence()
+                .filter { it !in entry.excluded }
+                .associateWith { key -> if (entry.body.isNull(key)) null else entry.body.get(key) }
+            val expected = DriveCanonicalJson.putFp(stripped, h1)
+
+            val v1 = DriveWireCodec.putVersionFp(entry.domain, entry.body, h1)
+            val v2 = DriveWireCodec.putVersionFp(entry.domain, entry.body, h2)
+            val alt = DriveWireCodec.putVersionFp(entry.domain, entry.alternateBody, h1)
+
+            assertEquals(expected, v1)
+            assertEquals(before, DriveCanonicalJson.encode(entry.body))
+            assertNotEquals(v1, v2)
+            assertEquals(v1, alt)
+            val contentBase = DriveCanonicalJson.contentFp(stripped)
+            val altStripped = entry.alternateBody.keys().asSequence()
+                .filter { it !in entry.excluded }
+                .associateWith { key -> if (entry.alternateBody.isNull(key)) null else entry.alternateBody.get(key) }
+            assertEquals(contentBase, DriveCanonicalJson.contentFp(altStripped))
+        }
+
+        val catalogBody = JSONObject("""{"workKey":"isbn:1","title":"Solaris"}""")
+        assertEquals(
+            DriveCanonicalJson.putFp(catalogBody, h1),
+            DriveWireCodec.putVersionFp(DriveWireCodec.DOMAIN_CATALOG, catalogBody, h1),
+        )
+    }
+
+    @Test
     fun `catalog rejects uploaded edition without availability clock`() {
         val body = JSONObject("""{"workKey":"isbn:1","editions":[{"sha256":"abc","driveFileId":"file-1"}]}""")
         assertNull(DriveWireCodec.decodeCatalogBody(body))

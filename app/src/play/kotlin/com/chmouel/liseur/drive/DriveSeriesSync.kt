@@ -117,23 +117,29 @@ internal class DriveSeriesSync(
                     continue
                 }
 
+                val bodyObject = JSONObject(bodyJson)
+                val sameContent = existingState?.contentFp == contentFp
+                val retryHlc = existingState?.putRetryHlc(DriveWireCodec.DOMAIN_SERIES, bodyObject, sameContent)
                 val hlc: String
+                val fp: String
                 val ancestors: List<String>
-                if (existingState != null && existingState.versionOp == DriveRecordState.OP_PUT && existingState.versionFp == contentFp) {
-                    hlc = recordStates.putRetryHlc(existingState, nextHlc)
+                if (retryHlc != null) {
+                    hlc = retryHlc
+                    fp = requireNotNull(existingState).versionFp
                     ancestors = DriveWorkIdentity.decodeStringArray(existingState.ancestorsJson)
                 } else {
                     hlc = nextHlc()
+                    fp = DriveWireCodec.putVersionFp(DriveWireCodec.DOMAIN_SERIES, bodyObject, hlc)
                     ancestors = buildList {
-                        existingState?.versionFp?.takeIf { it != contentFp }?.let(::add)
+                        existingState?.versionFp?.let(::add)
                         addAll(DriveWorkIdentity.decodeStringArray(existingState?.ancestorsJson))
-                    }.distinct().take(DriveWireCodec.MAX_ANCESTORS)
+                    }.distinct().filter { it != fp }.take(DriveWireCodec.MAX_ANCESTORS)
                     recordStates.upsert(
                         DriveRecordState(
                             permissionId = permissionId,
                             domain = DriveWireCodec.DOMAIN_SERIES,
                             recordKey = workKey,
-                            versionFp = contentFp,
+                            versionFp = fp,
                             versionOp = DriveRecordState.OP_PUT,
                             publishedFp = existingState?.publishedFp,
                             contentFp = contentFp,
@@ -153,7 +159,7 @@ internal class DriveSeriesSync(
                         domain = DriveWireCodec.DOMAIN_SERIES,
                         key = workKey,
                         hlc = hlc,
-                        fp = contentFp,
+                        fp = fp,
                         bodyMap = bodyMap,
                         ancestors = ancestors,
                         resRefs = resRefs,

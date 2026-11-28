@@ -26,6 +26,25 @@ class DriveConflictEngineTest {
     private fun putBody(text: String): JSONObject =
         JSONObject(DriveCanonicalJson.encode(mapOf("id" to key, "note" to text)))
 
+    private fun annotationBody(workKey: String, note: String, editionSha: String? = null): JSONObject =
+        JSONObject(
+            DriveCanonicalJson.encode(
+                mapOf(
+                    "id" to key,
+                    "workKey" to workKey,
+                    "editionSha" to editionSha,
+                    "note" to note,
+                ),
+            ),
+        )
+
+    private fun annotationContentFp(body: JSONObject): String {
+        val stripped = body.keys().asSequence()
+            .filter { it !in setOf("workKey", "editionSha") }
+            .associateWith { key -> if (body.isNull(key)) null else body.get(key) }
+        return DriveCanonicalJson.contentFp(stripped)
+    }
+
     private fun putFp(text: String): String =
         DriveCanonicalJson.contentFp(putBody(text))
 
@@ -350,6 +369,223 @@ class DriveConflictEngineTest {
     }
 
     @Test
+    fun `legacy content fp with a newer unverified clock never wins over a proven older put`() {
+        val workKey = "isbn:1"
+        val body = annotationBody(workKey, "same")
+        val content = annotationContentFp(body)
+        val legacyClock = "0017450000300-0001-dev-a"
+        val incomingClock = "0017450000200-0001-dev-b"
+        val incomingFp = DriveWireCodec.putVersionFp(domain, body, incomingClock)
+        val local = LocalRecordView(
+            versionFp = content,
+            publishedFp = content,
+            contentFp = content,
+            lastHlc = legacyClock,
+            versionHlc = legacyClock,
+            bodyJson = body.toString(),
+        )
+        val incoming = DriveWireRecord(domain, key, DriveRecordState.OP_PUT, incomingClock, incomingFp, body = body)
+
+        val result = reconcile(local, emptyList(), incoming, content)
+
+        assertEquals(ReconciliationCase.CONFLICT_EDIT_EDIT, result.reconciliationCase)
+        assertEquals(content, result.updatedRecordState?.versionFp)
+        assertEquals(content, result.conflictToOpen?.localFp)
+        assertEquals(incomingFp, result.conflictToOpen?.remoteFp)
+    }
+
+    @Test
+    fun `equal-content proven puts converge to the latest clock regardless of delivery order`() {
+        val w1 = "isbn:1"
+        val w2 = "sha:alias"
+        val body100 = annotationBody(w1, "same")
+        val body200 = annotationBody(w1, "same")
+        val body150Alias = annotationBody(w2, "same")
+        val content = annotationContentFp(body100)
+        val h100 = "0017450000100-0001-dev-a"
+        val h150 = "0017450000150-0001-dev-c"
+        val h200 = "0017450000200-0001-dev-b"
+        val fp100 = DriveWireCodec.putVersionFp(domain, body100, h100)
+        val fp150 = DriveWireCodec.putVersionFp(domain, body150Alias, h150)
+        val fp200 = DriveWireCodec.putVersionFp(domain, body200, h200)
+
+        val onA1 = reconcile(
+            LocalRecordView(versionFp = fp100, publishedFp = fp100, contentFp = content, bodyJson = body100.toString(), versionHlc = h100, lastHlc = h100),
+            emptyList(),
+            DriveWireRecord(domain, key, DriveRecordState.OP_PUT, h150, fp150, body = body150Alias),
+            content,
+        )
+        val stateA1 = requireNotNull(onA1.updatedRecordState)
+        val onA2 = reconcile(
+            LocalRecordView(
+                versionFp = stateA1.versionFp,
+                versionOp = stateA1.versionOp,
+                publishedFp = stateA1.publishedFp,
+                contentFp = stateA1.contentFp,
+                ancestors = DriveWorkIdentity.decodeStringArray(stateA1.ancestorsJson),
+                resRefs = DriveWorkIdentity.decodeStringArray(stateA1.resRefsJson),
+                lastHlc = stateA1.lastHlc,
+                versionHlc = stateA1.versionHlc,
+                bodyJson = stateA1.bodyJson,
+            ),
+            emptyList(),
+            DriveWireRecord(domain, key, DriveRecordState.OP_PUT, h200, fp200, body = body200),
+            content,
+        )
+
+        val onB1 = reconcile(
+            LocalRecordView(versionFp = fp150, publishedFp = fp150, contentFp = content, bodyJson = body150Alias.toString(), versionHlc = h150, lastHlc = h150),
+            emptyList(),
+            DriveWireRecord(domain, key, DriveRecordState.OP_PUT, h200, fp200, body = body200),
+            content,
+        )
+        val stateB1 = requireNotNull(onB1.updatedRecordState)
+        val onB2 = reconcile(
+            LocalRecordView(
+                versionFp = stateB1.versionFp,
+                versionOp = stateB1.versionOp,
+                publishedFp = stateB1.publishedFp,
+                contentFp = stateB1.contentFp,
+                ancestors = DriveWorkIdentity.decodeStringArray(stateB1.ancestorsJson),
+                resRefs = DriveWorkIdentity.decodeStringArray(stateB1.resRefsJson),
+                lastHlc = stateB1.lastHlc,
+                versionHlc = stateB1.versionHlc,
+                bodyJson = stateB1.bodyJson,
+            ),
+            emptyList(),
+            DriveWireRecord(domain, key, DriveRecordState.OP_PUT, h100, fp100, body = body100),
+            content,
+        )
+
+        assertEquals(ReconciliationCase.AGREEMENT, onA1.reconciliationCase)
+        assertEquals(ReconciliationCase.AGREEMENT, onA2.reconciliationCase)
+        assertEquals(ReconciliationCase.AGREEMENT, onB1.reconciliationCase)
+        assertEquals(ReconciliationCase.AGREEMENT, onB2.reconciliationCase)
+        assertEquals(fp200, onA2.updatedRecordState?.versionFp)
+        assertEquals(fp200, onB2.updatedRecordState?.versionFp)
+        assertEquals(h200, onA2.updatedRecordState?.versionHlc)
+        assertEquals(h200, onB2.updatedRecordState?.versionHlc)
+        assertNull(onA2.conflictToOpen)
+        assertNull(onB2.conflictToOpen)
+    }
+
+    @Test
+    fun `legacy equal-content locals with different clocks open the same conflict against a proven alias`() {
+        val canonical = annotationBody("isbn:1", "same")
+        val aliasBody = annotationBody("sha:alias", "same")
+        val content = annotationContentFp(canonical)
+        val incomingHlc = "0017450000150-0001-dev-b"
+        val incomingFp = DriveWireCodec.putVersionFp(domain, aliasBody, incomingHlc)
+        val incoming = DriveWireRecord(domain, key, DriveRecordState.OP_PUT, incomingHlc, incomingFp, body = aliasBody)
+
+        val localA = LocalRecordView(
+            versionFp = content,
+            publishedFp = content,
+            contentFp = content,
+            versionHlc = "0017450000100-0001-dev-a",
+            lastHlc = "0017450000100-0001-dev-a",
+            bodyJson = canonical.toString(),
+        )
+        val localB = localA.copy(
+            versionHlc = "0017450000200-0001-dev-c",
+            lastHlc = "0017450000200-0001-dev-c",
+        )
+
+        val onA = reconcile(localA, emptyList(), incoming, content)
+        val onB = reconcile(localB, emptyList(), incoming, content)
+
+        assertEquals(ReconciliationCase.CONFLICT_EDIT_EDIT, onA.reconciliationCase)
+        assertEquals(ReconciliationCase.CONFLICT_EDIT_EDIT, onB.reconciliationCase)
+        assertEquals(onA.conflictToOpen?.conflictId, onB.conflictToOpen?.conflictId)
+    }
+
+    @Test
+    fun `version built without record state agrees with equal-content clock-bound incoming put`() {
+        val body = annotationBody("isbn:1", "same")
+        val content = annotationContentFp(body)
+        val incomingHlc = "0017450000200-0001-dev-b"
+        val incomingFp = DriveWireCodec.putVersionFp(domain, body, incomingHlc)
+        val local = LocalRecordView(
+            versionBuiltWithoutRecordState = true,
+            versionFp = content,
+            publishedFp = null,
+            contentFp = content,
+            bodyJson = body.toString(),
+            lastHlc = "",
+            versionHlc = null,
+        )
+
+        val result = reconcile(
+            local,
+            emptyList(),
+            DriveWireRecord(domain, key, DriveRecordState.OP_PUT, incomingHlc, incomingFp, body = body),
+            content,
+        )
+
+        assertEquals(ReconciliationCase.AGREEMENT, result.reconciliationCase)
+        assertEquals(incomingFp, result.updatedRecordState?.versionFp)
+        assertEquals(incomingHlc, result.updatedRecordState?.versionHlc)
+        assertNull(result.conflictToOpen)
+    }
+
+    @Test
+    fun `stored versionHlc that does not reproduce local fp is treated as unproven`() {
+        val body = annotationBody("isbn:1", "same")
+        val content = annotationContentFp(body)
+        val trueLocalHlc = "0017450000100-0001-dev-a"
+        val wrongStoredHlc = "0017450000900-0001-dev-a"
+        val incomingHlc = "0017450000200-0001-dev-b"
+        val localFp = DriveWireCodec.putVersionFp(domain, body, trueLocalHlc)
+        val incomingFp = DriveWireCodec.putVersionFp(domain, body, incomingHlc)
+        val local = LocalRecordView(
+            versionFp = localFp,
+            publishedFp = localFp,
+            contentFp = content,
+            versionHlc = wrongStoredHlc,
+            lastHlc = wrongStoredHlc,
+            bodyJson = body.toString(),
+        )
+
+        val result = reconcile(
+            local,
+            emptyList(),
+            DriveWireRecord(domain, key, DriveRecordState.OP_PUT, incomingHlc, incomingFp, body = body),
+            content,
+        )
+
+        assertEquals(ReconciliationCase.CONFLICT_EDIT_EDIT, result.reconciliationCase)
+        assertEquals(localFp, result.updatedRecordState?.versionFp)
+        assertNotNull(result.conflictToOpen)
+    }
+
+    @Test
+    fun `equal version recovers versionHlc from putVersionFp when incoming body rewrote workKey`() {
+        val canonicalBody = annotationBody("isbn:1", "same")
+        val aliasBody = annotationBody("sha:alias", "same")
+        val hlc = "0017450000150-0001-dev-b"
+        val fp = DriveWireCodec.putVersionFp(domain, canonicalBody, hlc)
+        val content = annotationContentFp(canonicalBody)
+        val local = LocalRecordView(
+            versionFp = fp,
+            publishedFp = fp,
+            contentFp = content,
+            versionHlc = null,
+            lastHlc = "0017450000100-0001-dev-a",
+            bodyJson = canonicalBody.toString(),
+        )
+
+        val result = reconcile(
+            local,
+            emptyList(),
+            DriveWireRecord(domain, key, DriveRecordState.OP_PUT, hlc, fp, body = aliasBody),
+            content,
+        )
+
+        assertEquals(ReconciliationCase.AGREEMENT, result.reconciliationCase)
+        assertEquals(hlc, result.updatedRecordState?.versionHlc)
+    }
+
+    @Test
     fun `migrated row with unknown clock opens conflict even when observed max is below incoming`() {
         val hA = "0017450000100-0001-dev-a"
         val hObs = "0017450000150-0001-dev-c"
@@ -527,9 +763,9 @@ class DriveConflictEngineTest {
         )
         assertEquals(ReconciliationCase.CONFLICT_DELETE_EDIT, conflictResult.reconciliationCase)
         assertEquals(ReconciliationDataAction.NoDataChange, conflictResult.dataAction)
-        assertNotNull(conflictResult.conflictToOpen)
-        assertEquals(DriveConflict.KIND_DELETE_EDIT, conflictResult.conflictToOpen!!.kind)
-        assertNull(conflictResult.conflictToOpen!!.remoteJson)
+        val opened = requireNotNull(conflictResult.conflictToOpen)
+        assertEquals(DriveConflict.KIND_DELETE_EDIT, opened.kind)
+        assertNull(opened.remoteJson)
     }
 
     @Test
@@ -1267,29 +1503,34 @@ class DriveConflictEngineTest {
 
     @Test
     fun `equal-content agreement adopting a newer incoming version also adopts its origin`() {
-        val fOld = putFp("old-local")
-        val fNew = putFp("incoming-new")
+        val localHlc = "0017450000100-0001-dev-old"
+        val incomingHlc = "0017450000900-0001-dev-a"
+        val body = putBody("incoming-new")
+        val fContent = DriveCanonicalJson.contentFp(body)
+        val fOld = DriveCanonicalJson.putFp(body, localHlc)
+        val fNew = DriveCanonicalJson.putFp(body, incomingHlc)
         val incoming = DriveWireRecord(
             d = domain,
             k = key,
             op = DriveRecordState.OP_PUT,
-            hlc = "0017450000900-0001-dev-a",
+            hlc = incomingHlc,
             fp = fNew,
             anc = emptyList(),
             resRefs = emptyList(),
-            body = putBody("incoming-new"),
+            body = body,
         )
         val local = LocalRecordView(
             versionFp = fOld,
             versionOp = DriveRecordState.OP_PUT,
             isLivePut = true,
             publishedFp = fNew,
-            contentFp = fNew,
+            contentFp = fContent,
             originDeviceId = "dev-old",
             originSeq = 5L,
             // Known older authoring clock: the ordering against incoming is provable.
-            lastHlc = "0017450000100-0001-dev-old",
-            versionHlc = "0017450000100-0001-dev-old",
+            lastHlc = localHlc,
+            versionHlc = localHlc,
+            bodyJson = body.toString(),
             postCrashAckMatchesIncoming = true,
             hasPostCrashLocalEdit = false,
         )
@@ -1302,7 +1543,7 @@ class DriveConflictEngineTest {
             existingResolutions = emptyList(),
             unsettledConflicts = emptyList(),
             incoming = incoming,
-            incomingContentFp = fNew,
+            incomingContentFp = fContent,
             remoteDeviceId = "dev-a",
             remoteSeq = 75L,
             now = 11_000L,
@@ -1762,8 +2003,9 @@ class DriveConflictEngineTest {
         )
         val result = reconcile(local, listOf(resA), resolveRecord(resB, null, listOf(resB.resolutionFp)), null)
         assertEquals(ReconciliationCase.AGREEMENT, result.reconciliationCase)
-        assertEquals(resA.resolutionFp, result.updatedRecordState!!.versionFp)
-        assertNull(result.updatedRecordState!!.publishedFp)
+        val state = requireNotNull(result.updatedRecordState)
+        assertEquals(resA.resolutionFp, state.versionFp)
+        assertNull(state.publishedFp)
     }
 
     @Test
