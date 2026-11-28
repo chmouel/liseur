@@ -2103,4 +2103,46 @@ class DriveConflictEngineTest {
         )
         assertEquals(ReconciliationCase.STALE, replay.reconciliationCase)
     }
+
+    @Test
+    fun `matching replay replaces an unproven stored put clock so a later equal-content put agrees`() {
+        val authoredHlc = "0017450000100-0001-dev-a"
+        val bogusHlc = "0017450000300-0001-dev-a"
+        val newerHlc = "0017450000200-0001-dev-b"
+        val body = putBody("same-note")
+        val contentFp = DriveCanonicalJson.contentFp(body)
+        val fp100 = DriveWireCodec.putVersionFp(domain, body, authoredHlc)
+        val fp200 = DriveWireCodec.putVersionFp(domain, body, newerHlc)
+
+        val local = LocalRecordView(
+            versionFp = fp100,
+            versionOp = DriveRecordState.OP_PUT,
+            isLivePut = true,
+            publishedFp = fp100,
+            contentFp = contentFp,
+            lastHlc = bogusHlc,
+            versionHlc = bogusHlc,
+            bodyJson = body.toString(),
+        )
+        val replay = reconcile(
+            local = local,
+            resolutions = emptyList(),
+            incoming = DriveWireRecord(domain, key, DriveRecordState.OP_PUT, authoredHlc, fp100, body = body),
+            incomingContentFp = contentFp,
+        )
+        assertEquals(ReconciliationCase.AGREEMENT, replay.reconciliationCase)
+        assertEquals(authoredHlc, replay.updatedRecordState!!.versionHlc)
+
+        val repaired = local.copy(versionHlc = replay.updatedRecordState!!.versionHlc)
+        val later = reconcile(
+            local = repaired,
+            resolutions = emptyList(),
+            incoming = DriveWireRecord(domain, key, DriveRecordState.OP_PUT, newerHlc, fp200, body = body),
+            incomingContentFp = contentFp,
+        )
+        assertEquals(ReconciliationCase.AGREEMENT, later.reconciliationCase)
+        assertNull(later.conflictToOpen)
+        assertEquals(fp200, later.updatedRecordState!!.versionFp)
+        assertEquals(newerHlc, later.updatedRecordState!!.versionHlc)
+    }
 }

@@ -437,6 +437,7 @@ internal class DriveEvaluationSync(
         val appliedState = result.updatedRecordState?.takeIf { it.versionFp != record.fp }
         val ackVfp = appliedState?.versionFp ?: record.fp
         val ackOp = appliedState?.versionOp ?: record.op
+        val ackHlc = if (appliedState != null) appliedState.versionHlc else record.hlc.ifBlank { null }
         var appliedContentFp: String? = null
         // Transaction 1 (`liseur.db`): atomic data + `evaluation_sync` revision-to-fp ack.
         // A held record has no book to write to and only its causal state is retained.
@@ -479,6 +480,7 @@ internal class DriveEvaluationSync(
                                     cfp = bodyContentFp,
                                     rev = revApplied,
                                     op = ackOp,
+                                    hlc = ackHlc,
                                 ),
                             ),
                             sentRevision = revApplied,
