@@ -2364,19 +2364,20 @@ class DrivePhase6CompactionAndResilienceTest {
         )
         val editionSha = devA.liseurDb.workIdentityDao().fingerprint(bookA.url)!!.sha256
 
-        // Pick a note whose canonical body produces putFp(body, hA) > putFp(body, hB).
+        // Pick a note whose canonical body produces putVersionFp(body, hA) > putVersionFp(body, hB).
         val chosen = (0..100).asSequence().map { i ->
             val ann = initialAnn.copy(note = "same-$i", updatedAt = (baseTime + 1_000L) * 1_000L)
             val bodyMap = DriveWireCodec.encodeAnnotationBody(devA.driveSync.annotationSync.toWireBody(ann, workKey, editionSha))
             val bodyObj = JSONObject(DriveCanonicalJson.encode(bodyMap))
             Triple(ann, bodyMap, bodyObj)
         }.first { (_, _, bodyObj) ->
-            DriveCanonicalJson.putFp(bodyObj, hA) > DriveCanonicalJson.putFp(bodyObj, hB)
+            DriveWireCodec.putVersionFp(DriveWireCodec.DOMAIN_ANNOTATION, bodyObj, hA) >
+                DriveWireCodec.putVersionFp(DriveWireCodec.DOMAIN_ANNOTATION, bodyObj, hB)
         }
         val (ann, bodyMap, bodyObj) = chosen
         val contentFp = DriveWireCodec.annotationContentFp(devA.driveSync.annotationSync.toWireBody(ann, workKey, editionSha))
-        val fpA = DriveCanonicalJson.putFp(bodyObj, hA)
-        val fpB = DriveCanonicalJson.putFp(bodyObj, hB)
+        val fpA = DriveWireCodec.putVersionFp(DriveWireCodec.DOMAIN_ANNOTATION, bodyObj, hA)
+        val fpB = DriveWireCodec.putVersionFp(DriveWireCodec.DOMAIN_ANNOTATION, bodyObj, hB)
         assertTrue(fpA > fpB)
 
         val ancestorFp = DriveCanonicalJson.contentFp(mapOf("id" to ann.id, "note" to "ancestor"))
@@ -2567,8 +2568,8 @@ class DrivePhase6CompactionAndResilienceTest {
         val bodyMap = DriveWireCodec.encodeAnnotationBody(devA.driveSync.annotationSync.toWireBody(ann, workKey, editionSha))
         val bodyObj = JSONObject(DriveCanonicalJson.encode(bodyMap))
         val contentFp = DriveWireCodec.annotationContentFp(devA.driveSync.annotationSync.toWireBody(ann, workKey, editionSha))
-        val fpA = DriveCanonicalJson.putFp(bodyObj, hA)
-        val fpB = DriveCanonicalJson.putFp(bodyObj, hB)
+        val fpA = DriveWireCodec.putVersionFp(DriveWireCodec.DOMAIN_ANNOTATION, bodyObj, hA)
+        val fpB = DriveWireCodec.putVersionFp(DriveWireCodec.DOMAIN_ANNOTATION, bodyObj, hB)
 
         // Simulate a migrated row whose original authoring clock could not be recovered (`versionHlc = null`)
         // and whose `lastHlc` was bumped to `hObs`.
@@ -2718,7 +2719,7 @@ class DrivePhase6CompactionAndResilienceTest {
     }
 
     @Test
-    fun `unpublished annotation put retry with unknown authoring clock does not emit bumped lastHlc`() = runTest {
+    fun `unpublished annotation put retry with unknown authoring clock mints a new version over the old one`() = runTest {
         val devA = createDevice(deviceId = "dev-a")
         devA.connect()
 
@@ -2753,27 +2754,31 @@ class DrivePhase6CompactionAndResilienceTest {
         val raisedHlc = "9999999999999" + authoredHlc.substring(13)
         devA.driveDb.recordStates().upsert(minted.copy(versionHlc = null, lastHlc = raisedHlc))
 
-        // No peer has seen this version, so the retry gives it a fresh clock instead of the
-        // observed one, and keeps that clock for later retries.
+        // No peer can prove the lost clock, so the retry mints a fresh clock-bound version that
+        // supersedes the old one, and keeps that version for later retries.
         val freshHlc = "9999999999999" + "-0001-dev-a"
         val retried = devA.driveSync.annotationSync.collectDirtyRecords(
             permissionId = PERM_ID,
             nextHlc = { freshHlc },
         )
         val retriedPut = retried.records.single { it.k == "ann-unpub-put" }
+        val newFp = DriveWireCodec.putVersionFp(DriveWireCodec.DOMAIN_ANNOTATION, retriedPut.body!!, freshHlc)
         assertEquals(DriveRecordState.OP_PUT, retriedPut.op)
-        assertEquals(minted.versionFp, retriedPut.fp)
+        assertEquals(newFp, retriedPut.fp)
+        assertNotEquals(minted.versionFp, retriedPut.fp)
         assertNotEquals(raisedHlc, retriedPut.hlc)
         assertEquals(freshHlc, retriedPut.hlc)
-        assertEquals(
-            freshHlc,
-            devA.driveDb.recordStates().get(PERM_ID, DriveWireCodec.DOMAIN_ANNOTATION, "ann-unpub-put")?.versionHlc,
-        )
+        assertTrue(minted.versionFp in retriedPut.anc)
+        val retriedState = devA.driveDb.recordStates().get(PERM_ID, DriveWireCodec.DOMAIN_ANNOTATION, "ann-unpub-put")!!
+        assertEquals(newFp, retriedState.versionFp)
+        assertEquals(freshHlc, retriedState.versionHlc)
         val again = devA.driveSync.annotationSync.collectDirtyRecords(
             permissionId = PERM_ID,
             nextHlc = { error("the stored clock should be reused") },
         )
-        assertEquals(freshHlc, again.records.single { it.k == "ann-unpub-put" }.hlc)
+        val againPut = again.records.single { it.k == "ann-unpub-put" }
+        assertEquals(newFp, againPut.fp)
+        assertEquals(freshHlc, againPut.hlc)
     }
 
     // -- Harness helpers ------------------------------------------------------
