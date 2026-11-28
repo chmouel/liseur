@@ -669,6 +669,90 @@ class DrivePhase5EndToEndTest {
     }
 
     @Test
+    fun `parked annotation successor with editionSha preserves contentFp, clock, and ancestry for later edits`() = runTest {
+        val key = "isbn:9780156027601"
+        val domain = DriveWireCodec.DOMAIN_ANNOTATION
+        val peerId = DriveLibrarySync.accountPeerId(PERM_A)
+        val book = seedRestoredBook(deviceA, key)
+        val identity = DriveWorkIdentity(deviceA.liseurDb, deviceA.driveDb)
+        val sync = DriveAnnotationSync(deviceA.liseurDb, deviceA.driveDb, identity)
+
+        val localNote = BookAnnotation(
+            id = "note-parked-successor", bookId = book.url, kind = "BOOK_NOTE", locatorJson = "",
+            note = "edit-A", createdAt = 1_000L, noteCreatedAt = 1_000L, noteUpdatedAt = 1_000L, updatedAt = 1_000L,
+        )
+        val localBody = sync.toWireBody(localNote, key, editionSha = null)
+        val localFp = DriveWireCodec.annotationContentFp(localBody)
+        val observedHlc = "0017450000900-0001-dev-a"
+        deviceA.liseurDb.annotationDao().upsert(localNote)
+        deviceA.liseurDb.annotationSyncDao().upsert(
+            AnnotationSync(id = localNote.id, peerId = peerId, bookId = book.url, workId = key, ackedFingerprint = localFp),
+        )
+        deviceA.driveDb.recordStates().upsert(
+            DriveRecordState(
+                permissionId = PERM_A,
+                domain = domain,
+                recordKey = localNote.id,
+                versionFp = localFp,
+                versionOp = DriveRecordState.OP_PUT,
+                publishedFp = localFp,
+                contentFp = localFp,
+                lastHlc = observedHlc,
+                versionHlc = "0017450000100-0001-dev-a",
+                bodyJson = DriveCanonicalJson.encode(DriveWireCodec.encodeAnnotationBody(localBody)),
+            ),
+        )
+
+        val remoteBody = localBody.copy(note = "edit-B", noteUpdatedAt = 2_000L, updatedAt = 2_000L)
+        val remoteFp = DriveWireCodec.annotationContentFp(remoteBody)
+        val resolvedFps = listOf(localFp, remoteFp).sorted()
+        val resAncestor = DriveWireCodec.annotationContentFp(localBody.copy(note = "res-ancestor", updatedAt = 500L))
+        val resHlc = "0017450000300-0001-dev-c"
+        val resBody = localBody.copy(note = "merged", noteUpdatedAt = 3_000L, updatedAt = 3_000L)
+        val resJson = JSONObject(DriveCanonicalJson.encode(DriveWireCodec.encodeAnnotationBody(resBody)))
+        val resFp = DriveCanonicalJson.resolveFp(DriveResolution.OUTCOME_PUT, resolvedFps, resHlc, resJson)
+        val resolution = DriveWireRecord(
+            d = domain, k = localNote.id, op = DriveRecordState.OP_RESOLVE, hlc = resHlc, fp = resFp,
+            anc = resolvedFps + resAncestor, resRefs = listOf(resFp), body = resJson,
+            outcome = DriveResolution.OUTCOME_PUT, resolvedFps = resolvedFps,
+        )
+
+        val succBody = localBody.copy(
+            editionSha = "sha-edition-wire-only", note = "after-resolution", noteUpdatedAt = 4_000L, updatedAt = 4_000L,
+        )
+        val succJson = DriveWireCodec.encodeAnnotationBody(succBody)
+        val succContentFp = DriveWireCodec.annotationContentFp(succBody)
+        val succHlc = "0017450000400-0001-dev-c"
+        val successor = DriveWireCodec.putRecord(
+            domain, localNote.id, succHlc, succJson, ancestors = listOf(resFp), resRefs = listOf(resFp),
+        )
+
+        // Deliver successor before resolution, then deliver the resolution.
+        assertTrue(sync.applyRemoteRecord(PERM_A, successor, "dev-c", 2L) { observedHlc })
+        assertEquals(1, deviceA.driveDb.conflicts().unsettledForRecord(PERM_A, domain, localNote.id).size)
+
+        assertTrue(sync.applyRemoteRecord(PERM_A, resolution, "dev-c", 1L) { observedHlc })
+        val afterRes = requireNotNull(deviceA.driveDb.recordStates().get(PERM_A, domain, localNote.id))
+        assertEquals("after-resolution", deviceA.liseurDb.annotationDao().byId(localNote.id)?.note)
+        assertEquals(succContentFp, afterRes.contentFp)
+        assertEquals(observedHlc, afterRes.lastHlc)
+        assertTrue(resAncestor in DriveWorkIdentity.decodeStringArray(afterRes.ancestorsJson))
+        assertTrue(deviceA.driveDb.conflicts().unsettledForRecord(PERM_A, domain, localNote.id).isEmpty())
+
+        // A follow-up edit descending from the successor applies cleanly without a spurious conflict.
+        val followUpBody = succBody.copy(note = "follow-up", noteUpdatedAt = 5_000L, updatedAt = 5_000L)
+        val followUp = DriveWireCodec.putRecord(
+            domain, localNote.id, "0017450000500-0001-dev-c",
+            DriveWireCodec.encodeAnnotationBody(followUpBody),
+            ancestors = listOf(successor.fp),
+        )
+        assertTrue(sync.applyRemoteRecord(PERM_A, followUp, "dev-c", 3L) { observedHlc })
+        assertEquals("follow-up", deviceA.liseurDb.annotationDao().byId(localNote.id)?.note)
+        assertEquals(followUp.fp, deviceA.driveDb.recordStates().get(PERM_A, domain, localNote.id)?.versionFp)
+        assertTrue(deviceA.driveDb.conflicts().unsettledForRecord(PERM_A, domain, localNote.id).isEmpty())
+    }
+
+    @Test
     fun `series after a catalog deletion is retained and materialized when the book returns`() = runTest {
         val key = "isbn:9780156027601"
         val hlc = "0017450000000-0001-dev-a"
