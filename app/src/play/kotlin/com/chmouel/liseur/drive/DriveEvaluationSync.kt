@@ -887,7 +887,7 @@ internal class DriveEvaluationSync(
                 ancestorsJson = DriveCanonicalJson.encode(mergedAnc),
                 resRefsJson = existing?.resRefsJson ?: "[]",
                 lastHlc = maxOf(existing?.lastHlc.orEmpty(), recoveredVersionHlc.orEmpty()),
-                versionHlc = existing?.versionHlc?.takeIf { existing.versionFp == vfp } ?: recoveredVersionHlc,
+                versionHlc = recoveredVersionHlc ?: existing?.versionHlc?.ifBlank { null }?.takeIf { existing.versionFp == vfp },
                 bodyJson = recomputedBodyMap?.let(DriveCanonicalJson::encode),
             )
             recordStates.upsert(repaired)

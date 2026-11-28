@@ -1102,7 +1102,7 @@ internal class DriveMetadataSync(
                 ancestorsJson = DriveCanonicalJson.encode(mergedAnc),
                 resRefsJson = existing?.resRefsJson ?: "[]",
                 lastHlc = maxOf(existing?.lastHlc.orEmpty(), recoveredVersionHlc.orEmpty()),
-                versionHlc = existing?.versionHlc?.takeIf { existing.versionFp == vfp } ?: recoveredVersionHlc,
+                versionHlc = recoveredVersionHlc ?: existing?.versionHlc?.ifBlank { null }?.takeIf { existing.versionFp == vfp },
                 bodyJson = bodyMap?.let(DriveCanonicalJson::encode) ?: existing?.bodyJson,
             )
             recordStates.upsert(repaired)
